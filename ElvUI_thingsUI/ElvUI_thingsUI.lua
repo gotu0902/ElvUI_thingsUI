@@ -11,7 +11,7 @@ local TUI = E:NewModule("thingsUI", "AceHook-3.0", "AceEvent-3.0")
 ns.TUI = TUI
 
 -- Plugin version info
-TUI.version = "1.10.0"
+TUI.version = "1.10.1"
 TUI.name = "thingsUI"
 
 -- Defaults that get merged into ElvUI's profile
@@ -185,6 +185,7 @@ end
 
 local function SkinBuffBar(childFrame, forceUpdate)
     if not childFrame then return end
+    if InCombatLockdown() then return end -- Don't skin during combat
     
     local db = E.db.thingsUI.buffBars
     local bar = childFrame.Bar
@@ -310,24 +311,39 @@ end
 
 -- Check if a bar has an active aura (is actually tracking something)
 local function IsBarActive(childFrame)
-    if not childFrame or not childFrame:IsShown() then return false end
+    if not childFrame then return false end
     
-    -- Check if the bar has actual content (name text or duration)
-    local bar = childFrame.Bar
-    if bar then
-        -- Check if there's a spell name set
-        if bar.Name and bar.Name:GetText() and bar.Name:GetText() ~= "" then
-            return true
+    -- Use pcall to safely handle protected values during combat
+    local success, result = pcall(function()
+        if not childFrame:IsShown() then return false end
+        
+        -- Check if the bar has actual content (name text or duration)
+        local bar = childFrame.Bar
+        if bar then
+            -- Check if there's a spell name set
+            if bar.Name then
+                local text = bar.Name:GetText()
+                if text and text ~= "" then
+                    return true
+                end
+            end
+            -- Check if the bar has a value (duration progress)
+            local value = bar:GetValue()
+            local min, max = bar:GetMinMaxValues()
+            if max > 0 and value > 0 then
+                return true
+            end
         end
-        -- Check if the bar has a value (duration progress)
-        local value = bar:GetValue()
-        local min, max = bar:GetMinMaxValues()
-        if max > 0 and value > 0 then
-            return true
-        end
+        
+        return false
+    end)
+    
+    if success then
+        return result
+    else
+        -- If we can't access the values (combat lockdown), assume bar is active if shown
+        return childFrame:IsShown()
     end
-    
-    return false
 end
 
 -- Anchor the BuffBarCooldownViewer container
@@ -347,26 +363,26 @@ end
 
 local function UpdateBuffBarPositions()
     if not BuffBarCooldownViewer then return end
+    if InCombatLockdown() then return end -- Skip during combat
     
     local db = E.db.thingsUI.buffBars
     local visibleBars = {}
     
     for _, childFrame in ipairs({ BuffBarCooldownViewer:GetChildren() }) do
         -- Only include bars that are shown AND have active aura data
-        if childFrame and childFrame:IsShown() and IsBarActive(childFrame) then
+        if childFrame and IsBarActive(childFrame) then
             SkinBuffBar(childFrame)
             table.insert(visibleBars, childFrame)
-        elseif childFrame and childFrame:IsShown() and not IsBarActive(childFrame) then
-            -- Hide bars that are "shown" but don't have active auras
-            -- This handles the case where Blizzard shows inactive bars during config
-            -- Don't hide them, just don't position them - let Blizzard handle inactive ones
         end
     end
     
     if #visibleBars == 0 then return end
     
-    table.sort(visibleBars, function(a, b)
-        return (a.layoutIndex or 0) < (b.layoutIndex or 0)
+    -- Sort with pcall in case layoutIndex is protected
+    pcall(function()
+        table.sort(visibleBars, function(a, b)
+            return (a.layoutIndex or 0) < (b.layoutIndex or 0)
+        end)
     end)
     
     local spacing = db.spacing
