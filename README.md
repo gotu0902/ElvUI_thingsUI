@@ -89,12 +89,16 @@ To have buff bars grow upward from your player frame:
 
 ## Troubleshooting
 
+**Frames not positioning correctly?**
+- Click "Recalculate Now" in the Cluster Positioning settings
+- Ensure the target frames exist (e.g., you have a target selected for Target frame)
+
 **Profile switching issues?**
 - The addon automatically restores frames when switching to profiles with cluster disabled
 - If issues persist, `/reload` will reset everything
 
 **Buff bars not skinning?**
-- Make sure there are auras to skin in CDM.
+- Make sure BuffBarCooldownViewer is enabled in BCDM
 - Check that "Enable Buff Bar Skinning" is checked in thingsUI
 
 ## Support
@@ -107,7 +111,7 @@ MIT License - Feel free to modify and distribute.
 
 ## Credits
 
-- **useless_human** - Wrote things into ai website
-- **Claude** - Did all the work
-- **ElvUI Team** - For continuing the biggest QoL in WoW UI history imo. Try to do things, search and read the fucking pins. Give them money.
-- **BetterCooldownManager - Unhaulted** - For saving our asses. Should also give him money.
+- **things** - Author
+- **Anthropic Claude** - Development assistance
+- **ElvUI Team** - For the amazing UI framework
+- **BetterCooldownManager** - For the cooldown tracking foundation

@@ -11,7 +11,7 @@ local TUI = E:NewModule("thingsUI", "AceHook-3.0", "AceEvent-3.0")
 ns.TUI = TUI
 
 -- Plugin version info
-TUI.version = "1.10.1"
+TUI.version = "1.11.0"
 TUI.name = "thingsUI"
 
 -- Defaults that get merged into ElvUI's profile
@@ -48,19 +48,20 @@ P["thingsUI"] = {
         enabled = false,
         essentialIconWidth = 42,    -- Width per Essential icon
         essentialIconPadding = 1,   -- Padding between Essential icons
-        utilityIconWidth = 30,      -- Width per Utility icon (usually smaller)
+        utilityIconWidth = 35,      -- Width per Utility icon (for reference)
         utilityIconPadding = 1,     -- Padding between Utility icons
         accountForUtility = true,   -- Account for Utility icons extending past Essential
+        utilityThreshold = 3,       -- How many MORE utility icons than essential to trigger movement
+        utilityOverflowOffset = 25, -- Pixels to add per side when threshold is met
         yOffset = 0,                -- Y offset for all unit frames
+        frameGap = 20,              -- Gap between Player/Target and Essential (shared)
         
         -- Unit Frame positioning
         playerFrame = {
             enabled = true,
-            gap = 5,
         },
         targetFrame = {
             enabled = true,
-            gap = 5,
         },
         targetTargetFrame = {
             enabled = true,
@@ -77,11 +78,12 @@ P["thingsUI"] = {
         enabled = false,
         throttle = 0,
 
-        -- Supported anchor targets: PLAYER, TARGET, ESSENTIAL, UTILITY, UIPARENT
+        -- Supported anchor targets: PLAYER, TARGET, UIPARENT, CUSTOM
         frames = {
             BCDM_CustomCooldownViewer = {
                 enabled = false,
                 anchorTo = "PLAYER",
+                customAnchor = "",
                 point = "CENTER",
                 relativePoint = "CENTER",
                 xOffset = 0,
@@ -90,6 +92,7 @@ P["thingsUI"] = {
             BCDM_AdditionalCustomCooldownViewer = {
                 enabled = false,
                 anchorTo = "PLAYER",
+                customAnchor = "",
                 point = "CENTER",
                 relativePoint = "CENTER",
                 xOffset = 0,
@@ -98,6 +101,7 @@ P["thingsUI"] = {
             BCDM_CustomItemBar = {
                 enabled = false,
                 anchorTo = "PLAYER",
+                customAnchor = "",
                 point = "CENTER",
                 relativePoint = "CENTER",
                 xOffset = 0,
@@ -106,6 +110,7 @@ P["thingsUI"] = {
             BCDM_TrinketBar = {
                 enabled = false,
                 anchorTo = "PLAYER",
+                customAnchor = "",
                 point = "CENTER",
                 relativePoint = "CENTER",
                 xOffset = 0,
@@ -114,6 +119,7 @@ P["thingsUI"] = {
             BCDM_CustomItemSpellBar = {
                 enabled = false,
                 anchorTo = "PLAYER",
+                customAnchor = "",
                 point = "CENTER",
                 relativePoint = "CENTER",
                 xOffset = 0,
@@ -463,13 +469,14 @@ local function CalculateEffectiveWidth()
         return essentialWidth, essentialCount, utilityCount, 0
     end
     
-    -- Simple approach: if utility has MORE icons than essential, calculate overflow
-    -- based on the EXTRA icons times the utility icon width
+    -- Simple approach: if utility exceeds essential by threshold or more, add fixed offset
     local extraUtilityIcons = math.max(0, utilityCount - essentialCount)
-
-    -- 3 Utility icons == 1 Essential "step"
-    local virtualEssential = math.floor(extraUtilityIcons / 3)
-    local overflow = virtualEssential * (db.essentialIconWidth + db.essentialIconPadding)
+    local threshold = db.utilityThreshold or 3
+    local overflow = 0
+    
+    if extraUtilityIcons >= threshold then
+        overflow = (db.utilityOverflowOffset or 50) * 2 -- Total overflow (will be split per side)
+    end
     
     local effectiveWidth = essentialWidth + overflow
     
@@ -500,7 +507,7 @@ local function UpdateClusterPositioning()
         local playerFrame = _G["ElvUF_Player"]
         if playerFrame then
             playerFrame:ClearAllPoints()
-            playerFrame:SetPoint("RIGHT", EssentialCooldownViewer, "LEFT", -(db.playerFrame.gap + sideOverflow), yOffset)
+            playerFrame:SetPoint("RIGHT", EssentialCooldownViewer, "LEFT", -(db.frameGap + sideOverflow), yOffset)
         end
     end
     
@@ -509,7 +516,7 @@ local function UpdateClusterPositioning()
         local targetFrame = _G["ElvUF_Target"]
         if targetFrame then
             targetFrame:ClearAllPoints()
-            targetFrame:SetPoint("LEFT", EssentialCooldownViewer, "RIGHT", db.targetFrame.gap + sideOverflow, yOffset)
+            targetFrame:SetPoint("LEFT", EssentialCooldownViewer, "RIGHT", db.frameGap + sideOverflow, yOffset)
         end
     end
     
@@ -634,9 +641,11 @@ function TUI:RecalculateCluster()
     local db = E.db.thingsUI.clusterPositioning
     local effectiveWidth, essentialCount, utilityCount, overflow = CalculateEffectiveWidth()
     local extraIcons = math.max(0, utilityCount - essentialCount)
+    local threshold = db.utilityThreshold or 3
+    local triggered = extraIcons >= threshold
     
-    print(string.format("|cFF8080FFElvUI_thingsUI|r - Essential: %d, Utility: %d (ExtraUtility: %d, VirtualEssential: %d), Overflow: %dpx (each side: %dpx)", 
-        essentialCount, utilityCount, extraIcons, math.floor(extraIcons / 3), overflow, overflow/2))
+    print(string.format("|cFF8080FFElvUI_thingsUI|r - Essential: %d, Utility: %d (+%d extra, threshold: %d) %s Overflow: %dpx (each side: %dpx)", 
+        essentialCount, utilityCount, extraIcons, threshold, triggered and "|cFF00FF00TRIGGERED|r" or "|cFFFF0000not triggered|r", overflow, overflow/2))
 end
 
 -------------------------------------------------
@@ -646,15 +655,13 @@ local bcdmUpdateFrame = CreateFrame("Frame")
 local bcdmUpdateThrottleDefault = 0.2
 local bcdmNextUpdate = 0
 
-local function GetBCDMAnchorFrame(anchorTo)
+local function GetBCDMAnchorFrame(anchorTo, customAnchor)
     if anchorTo == "PLAYER" then
         return _G["ElvUF_Player"]
     elseif anchorTo == "TARGET" then
         return _G["ElvUF_Target"]
-    elseif anchorTo == "ESSENTIAL" then
-        return _G["EssentialCooldownViewer"]
-    elseif anchorTo == "UTILITY" then
-        return _G["UtilityCooldownViewer"]
+    elseif anchorTo == "CUSTOM" and customAnchor and customAnchor ~= "" then
+        return _G[customAnchor]
     else -- UIPARENT
         return UIParent
     end
@@ -672,7 +679,7 @@ local function ApplyBCDMAnchors()
         if fdb and fdb.enabled then
             local frame = _G[frameName]
             if frame then
-                local anchor = GetBCDMAnchorFrame(fdb.anchorTo)
+                local anchor = GetBCDMAnchorFrame(fdb.anchorTo, fdb.customAnchor)
                 if anchor then
                     frame:ClearAllPoints()
                     frame:SetPoint(
@@ -778,9 +785,8 @@ function TUI:BCDMFrameOptions(frameName)
     local anchorTargets = {
         PLAYER = "ElvUF_Player",
         TARGET = "ElvUF_Target",
-        ESSENTIAL = "EssentialCooldownViewer",
-        UTILITY = "UtilityCooldownViewer",
         UIPARENT = "UIParent",
+        CUSTOM = "Custom Frame",
     }
 
     local points = {
@@ -819,8 +825,23 @@ function TUI:BCDMFrameOptions(frameName)
             end,
             disabled = function() return not E.db.thingsUI.bcdmAnchors.enabled end,
         },
-        point = {
+        customAnchor = {
             order = 3,
+            type = "input",
+            name = "Custom Frame Name",
+            desc = "Enter the exact frame name to anchor to (e.g., EssentialCooldownViewer, MyCustomFrame).",
+            width = "double",
+            get = function() return E.db.thingsUI.bcdmAnchors.frames[frameName].customAnchor end,
+            set = function(_, value)
+                E.db.thingsUI.bcdmAnchors.frames[frameName].customAnchor = value
+                TUI:UpdateBCDMAnchors()
+            end,
+            disabled = function() 
+                return not E.db.thingsUI.bcdmAnchors.enabled or E.db.thingsUI.bcdmAnchors.frames[frameName].anchorTo ~= "CUSTOM"
+            end,
+        },
+        point = {
+            order = 4,
             type = "select",
             name = "Point",
             values = points,
@@ -832,7 +853,7 @@ function TUI:BCDMFrameOptions(frameName)
             disabled = function() return not E.db.thingsUI.bcdmAnchors.enabled end,
         },
         relativePoint = {
-            order = 4,
+            order = 5,
             type = "select",
             name = "Relative Point",
             values = points,
@@ -844,7 +865,7 @@ function TUI:BCDMFrameOptions(frameName)
             disabled = function() return not E.db.thingsUI.bcdmAnchors.enabled end,
         },
         xOffset = {
-            order = 5,
+            order = 6,
             type = "range",
             name = "X Offset",
             min = -500, max = 500, step = 1,
@@ -856,7 +877,7 @@ function TUI:BCDMFrameOptions(frameName)
             disabled = function() return not E.db.thingsUI.bcdmAnchors.enabled end,
         },
         yOffset = {
-            order = 6,
+            order = 7,
             type = "range",
             name = "Y Offset",
             min = -500, max = 500, step = 1,
@@ -1324,7 +1345,7 @@ function TUI:ConfigTable()
                         order = 13,
                         type = "toggle",
                         name = "Account for Utility Overflow",
-                        desc = "Expand cluster width if Utility icons extend past Essential.",
+                        desc = "Move frames outward if Utility icons exceed Essential icons.",
                         get = function() return E.db.thingsUI.clusterPositioning.accountForUtility end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.accountForUtility = value
@@ -1332,8 +1353,34 @@ function TUI:ConfigTable()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
-                    yOffset = {
+                    utilityThreshold = {
                         order = 14,
+                        type = "range",
+                        name = "Utility Threshold",
+                        desc = "How many MORE utility icons than essential icons to trigger movement.",
+                        min = 1, max = 10, step = 1,
+                        get = function() return E.db.thingsUI.clusterPositioning.utilityThreshold end,
+                        set = function(_, value)
+                            E.db.thingsUI.clusterPositioning.utilityThreshold = value
+                            TUI:RecalculateCluster()
+                        end,
+                        disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.accountForUtility end,
+                    },
+                    utilityOverflowOffset = {
+                        order = 15,
+                        type = "range",
+                        name = "Overflow Offset",
+                        desc = "Pixels to move each frame outward when threshold is met.",
+                        min = 10, max = 200, step = 5,
+                        get = function() return E.db.thingsUI.clusterPositioning.utilityOverflowOffset end,
+                        set = function(_, value)
+                            E.db.thingsUI.clusterPositioning.utilityOverflowOffset = value
+                            TUI:RecalculateCluster()
+                        end,
+                        disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.accountForUtility end,
+                    },
+                    yOffset = {
+                        order = 16,
                         type = "range",
                         name = "Y Offset",
                         desc = "Vertical offset for all unit frames.",
@@ -1346,10 +1393,10 @@ function TUI:ConfigTable()
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
                     
-                    playerHeader = {
+                    playerTargetHeader = {
                         order = 20,
                         type = "header",
-                        name = "Player Frame",
+                        name = "Player / Target Frame",
                     },
                     playerEnabled = {
                         order = 21,
@@ -1363,27 +1410,8 @@ function TUI:ConfigTable()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
-                    playerGap = {
-                        order = 22,
-                        type = "range",
-                        name = "Player Gap",
-                        desc = "Gap between player frame and Essential.",
-                        min = 0, max = 50, step = 1,
-                        get = function() return E.db.thingsUI.clusterPositioning.playerFrame.gap end,
-                        set = function(_, value)
-                            E.db.thingsUI.clusterPositioning.playerFrame.gap = value
-                            TUI:RecalculateCluster()
-                        end,
-                        disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.playerFrame.enabled end,
-                    },
-                    
-                    targetHeader = {
-                        order = 30,
-                        type = "header",
-                        name = "Target Frame",
-                    },
                     targetEnabled = {
-                        order = 31,
+                        order = 22,
                         type = "toggle",
                         name = "Position Target Frame",
                         desc = "Anchor ElvUF_Target to the right of Essential.",
@@ -1394,18 +1422,18 @@ function TUI:ConfigTable()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
-                    targetGap = {
-                        order = 32,
+                    frameGap = {
+                        order = 23,
                         type = "range",
-                        name = "Target Gap",
-                        desc = "Gap between target frame and Essential.",
+                        name = "Frame Gap",
+                        desc = "Gap between Player/Target frames and Essential.",
                         min = 0, max = 50, step = 1,
-                        get = function() return E.db.thingsUI.clusterPositioning.targetFrame.gap end,
+                        get = function() return E.db.thingsUI.clusterPositioning.frameGap end,
                         set = function(_, value)
-                            E.db.thingsUI.clusterPositioning.targetFrame.gap = value
+                            E.db.thingsUI.clusterPositioning.frameGap = value
                             TUI:RecalculateCluster()
                         end,
-                        disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.targetFrame.enabled end,
+                        disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
                     
                     totHeader = {

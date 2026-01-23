@@ -2,7 +2,7 @@
 ## Title: |cFF8080FFElvUI_thingsUI|r
 ## Notes: ElvUI plugin for additional Cooldown Manager customization
 ## Author: things
-## Version: 1.10.1
+## Version: 1.11.0
 ## RequiredDeps: ElvUI, BetterCooldownManager
 ## DefaultState: Enabled
 
