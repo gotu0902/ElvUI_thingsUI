@@ -3,7 +3,6 @@
 An ElvUI plugin that provides additional customization options for the [Blizzard Cooldown Manager (BCDM)](https://www.curseforge.com/wow/addons/bettercooldownmanager) addon.
 
 ![Version](https://img.shields.io/badge/version-1.11.0-blue)
-![WoW Version](https://img.shields.io/badge/WoW-The%20War%20Within-orange)
 
 ## Features
 
@@ -110,7 +109,7 @@ MIT License - Feel free to modify and distribute.
 
 ## Credits
 
-- **things** - Author
-- **Anthropic Claude** - Development assistance
-- **ElvUI Team** - For the amazing UI framework
-- **BetterCooldownManager** - For the cooldown tracking foundation
+- **human** - made prompts, did 1%
+- **Anthropic Claude** - vibe coded this stuff, did 99%
+- **ElvUI Team** - #1, big w
+- **Unhalted** - For being the goat 🐐
