@@ -2,20 +2,10 @@
 
 An ElvUI plugin that provides additional customization options for the [Blizzard Cooldown Manager (BCDM)](https://www.curseforge.com/wow/addons/bettercooldownmanager) addon.
 
-![Version](https://img.shields.io/badge/version-1.10.0-blue)
+![Version](https://img.shields.io/badge/version-1.11.0-blue)
 ![WoW Version](https://img.shields.io/badge/WoW-The%20War%20Within-orange)
-![License](https://img.shields.io/badge/license-MIT-green)
 
 ## Features
-
-### 📊 Buff Bar Skinning
-Skin BCDM's BuffBarCooldownViewer with ElvUI's visual style:
-- Custom status bar textures (uses ElvUI's shared media)
-- Class color or custom color options
-- Configurable dimensions, spacing, and fonts
-- Icon visibility toggle
-- Growth direction (up/down)
-- **Anchor to any frame** - Attach buff bars to ElvUF_Player, EssentialCooldownViewer, or any named frame
 
 ### 🎯 Dynamic Cluster Positioning
 Automatically position ElvUI unit frames around BCDM's Essential Cooldown Viewer:
@@ -24,13 +14,28 @@ Automatically position ElvUI unit frames around BCDM's Essential Cooldown Viewer
 - **ElvUF_TargetTarget** anchors to Target frame
 - **ElvUF_Target_CastBar** anchors below Target frame with X/Y offset
 - Frames dynamically adjust as cooldown icons appear/disappear
-- Utility overflow support - frames move when utility icons exceed essential count
 - **Profile-aware** - Properly restores frames when switching to profiles with cluster disabled
+
+### 📊 Utility Overflow Support
+When utility icons exceed essential icons, frames automatically move outward:
+- **Utility Threshold** - How many extra utility icons trigger movement (default: 3)
+- **Overflow Offset** - Pixels to move each frame when triggered (default: 25)
+
+Example: 6 Essential + 9 Utility = +3 extra → frames move outward
+
+### 📈 Buff Bar Skinning & Anchoring
+Skin BCDM's BuffBarCooldownViewer with ElvUI's visual style:
+- Custom status bar textures (uses ElvUI's shared media)
+- Class color or custom color options
+- Configurable dimensions, spacing, and fonts
+- Icon visibility toggle
+- Growth direction (up/down)
+- **Anchor to any frame** - Attach buff bars to ElvUF_Player, EssentialCooldownViewer, or any named frame with full point configuration
 
 ### 🔗 BCDM Frame Anchoring
 Anchor BCDM's custom bars to ElvUI frames:
 - Supports: CustomCooldownViewer, AdditionalCustomCooldownViewer, CustomItemBar, TrinketBar, CustomItemSpellBar
-- Anchor targets: ElvUF_Player, ElvUF_Target, EssentialCooldownViewer, UtilityCooldownViewer, UIParent
+- Anchor targets: ElvUF_Player, ElvUF_Target, UIParent, or **Custom Frame** (type any frame name)
 - Full anchor point configuration (TOP, BOTTOM, LEFT, RIGHT, CENTER, corners)
 - X/Y offset fine-tuning
 
@@ -60,50 +65,44 @@ Or type `/elvui` and navigate to the thingsUI section.
 | **Cluster Positioning** | Dynamic unit frame positioning around Essential cooldowns |
 | **Anchor BCDM Stuff** | Anchor BCDM bars to ElvUI frames |
 
-## Example Setup: Cluster Positioning
+## Example Setups
 
+### Cluster Positioning
 For a centered cooldown cluster with unit frames on either side:
 
 1. Position BCDM's **EssentialCooldownViewer** in the center of your screen
 2. Enable **Cluster Positioning** in thingsUI
-3. Enable positioning for Player, Target, and TargetTarget frames
-4. Adjust gaps to your preference
+3. Enable positioning for Player and Target frames
+4. Adjust **Frame Gap** to your preference
 5. Unit frames will now dynamically reposition based on visible cooldown icons!
 
-## Example Setup: Buff Bar Anchoring
-
+### Buff Bar Anchoring
 To have buff bars grow upward from your player frame:
 
 1. Enable **Buff Bar Skinning**
 2. Set **Growth Direction** to "Up"
 3. Enable **Anchoring**
 4. Set **Anchor Frame** to `ElvUF_Player`
-5. Set **Point** to `BOTTOM`
-6. Set **Relative Point** to `TOP`
-7. Adjust **Y Offset** as needed (e.g., 5)
+5. Set **Point** to `BOTTOM`, **Relative Point** to `TOP`
+6. Adjust **Y Offset** as needed (e.g., 5)
+
+If your Edit Mode width is vastly different than this width it'll sometimes look bigger for like a second.
+Try to get Edit Mode width of the bars as close as you can to make this less noticeable.
+
+### Custom BCDM Anchoring
+To anchor a BCDM bar to any frame:
+
+1. Go to **Anchor BCDM Stuff** tab
+2. Enable the master toggle
+3. Find the bar you want to anchor
+4. Select **Custom Frame** from the dropdown
+5. Type the frame name (e.g., `EssentialCooldownViewer`, `WeakAurasFrame`)
+6. Configure point and offsets
 
 ## Requirements
 
 - [ElvUI](https://www.tukui.org/download.php?ui=elvui)
 - [BetterCooldownManager](https://www.curseforge.com/wow/addons/bettercooldownmanager)
-
-## Troubleshooting
-
-**Frames not positioning correctly?**
-- Click "Recalculate Now" in the Cluster Positioning settings
-- Ensure the target frames exist (e.g., you have a target selected for Target frame)
-
-**Profile switching issues?**
-- The addon automatically restores frames when switching to profiles with cluster disabled
-- If issues persist, `/reload` will reset everything
-
-**Buff bars not skinning?**
-- Make sure BuffBarCooldownViewer is enabled in BCDM
-- Check that "Enable Buff Bar Skinning" is checked in thingsUI
-
-## Support
-
-Found a bug or have a feature request? Open an issue on GitHub!
 
 ## License
 
