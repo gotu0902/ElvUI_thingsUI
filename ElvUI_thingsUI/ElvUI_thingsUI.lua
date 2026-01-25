@@ -11,7 +11,7 @@ local TUI = E:NewModule("thingsUI", "AceHook-3.0", "AceEvent-3.0")
 ns.TUI = TUI
 
 -- Plugin version info
-TUI.version = "1.11.0"
+TUI.version = "1.11.1"
 TUI.name = "thingsUI"
 
 -- Defaults that get merged into ElvUI's profile
@@ -469,13 +469,19 @@ local function CalculateEffectiveWidth()
         return essentialWidth, essentialCount, utilityCount, 0
     end
     
-    -- Simple approach: if utility exceeds essential by threshold or more, add fixed offset
+    -- Calculate utility width
+    local utilityWidth = (utilityCount * db.utilityIconWidth) + (math.max(0, utilityCount - 1) * db.utilityIconPadding)
+    
+    -- Only add overflow if utility is wider than essential
+    local overflow = 0
     local extraUtilityIcons = math.max(0, utilityCount - essentialCount)
     local threshold = db.utilityThreshold or 3
-    local overflow = 0
     
-    if extraUtilityIcons >= threshold then
-        overflow = (db.utilityOverflowOffset or 50) * 2 -- Total overflow (will be split per side)
+    if extraUtilityIcons >= threshold and utilityWidth > essentialWidth then
+        -- Calculate how much wider utility is than essential
+        local widthDifference = utilityWidth - essentialWidth
+        -- Add the configured offset on top of the width difference
+        overflow = widthDifference + ((db.utilityOverflowOffset or 25) * 2)
     end
     
     local effectiveWidth = essentialWidth + overflow
@@ -644,8 +650,14 @@ function TUI:RecalculateCluster()
     local threshold = db.utilityThreshold or 3
     local triggered = extraIcons >= threshold
     
-    print(string.format("|cFF8080FFElvUI_thingsUI|r - Essential: %d, Utility: %d (+%d extra, threshold: %d) %s Overflow: %dpx (each side: %dpx)", 
-        essentialCount, utilityCount, extraIcons, threshold, triggered and "|cFF00FF00TRIGGERED|r" or "|cFFFF0000not triggered|r", overflow, overflow/2))
+    -- Calculate widths for debug
+    local essentialWidth = (essentialCount * db.essentialIconWidth) + (math.max(0, essentialCount - 1) * db.essentialIconPadding)
+    local utilityWidth = (utilityCount * db.utilityIconWidth) + (math.max(0, utilityCount - 1) * db.utilityIconPadding)
+    
+    print(string.format("|cFF8080FFElvUI_thingsUI|r - Essential: %d (%dpx), Utility: %d (%dpx), +%d extra", 
+        essentialCount, essentialWidth, utilityCount, utilityWidth, extraIcons))
+    print(string.format("|cFF8080FFElvUI_thingsUI|r - Threshold: %d, %s, Overflow: %dpx (each side: %dpx)", 
+        threshold, triggered and "|cFF00FF00TRIGGERED|r" or "|cFFFF0000not triggered|r", overflow, overflow/2))
 end
 
 -------------------------------------------------
