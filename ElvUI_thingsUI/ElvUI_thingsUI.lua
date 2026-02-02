@@ -11,7 +11,7 @@ local TUI = E:NewModule("thingsUI", "AceHook-3.0", "AceEvent-3.0")
 ns.TUI = TUI
 
 -- Plugin version info
-TUI.version = "1.11.1"
+TUI.version = "1.11.3"
 TUI.name = "thingsUI"
 
 -- Defaults that get merged into ElvUI's profile
@@ -69,6 +69,11 @@ P["thingsUI"] = {
         },
         targetCastBar = {
             enabled = true,
+            gap = 1,
+            xOffset = 0,
+        },
+        additionalPowerBar = {
+            enabled = false,
             gap = 1,
             xOffset = 0,
         },
@@ -179,10 +184,10 @@ end
 -------------------------------------------------
 -- BUFF BAR SKINNING (BuffBarCooldownViewer)
 -------------------------------------------------
-local barUpdateThrottle = 0.1
+local barUpdateThrottle = 0.05 -- Faster updates (20 times per second)
 local barNextUpdate = 0
 local barUpdateFrame = CreateFrame("Frame")
-local skinnedBars = {}
+local skinnedBars = {} -- Track which bars we've skinned (for wipe on settings change)
 
 local function GetClassColor()
     local classColor = E:ClassColor(E.myclass, true)
@@ -191,22 +196,23 @@ end
 
 local function SkinBuffBar(childFrame, forceUpdate)
     if not childFrame then return end
-    if InCombatLockdown() then return end -- Don't skin during combat
     
-    local db = E.db.thingsUI.buffBars
-    local bar = childFrame.Bar
-    local icon = childFrame.Icon
+    if TUI_DEBUG then
+        print("|cFF8080FFthingsUI|r - SkinBuffBar called for frame")
+    end
     
-    if not bar then return end
-    
-    -- Check if this is a new bar or needs full skinning
-    local needsFullSkin = not skinnedBars[childFrame] or forceUpdate
-    
-    -- ALWAYS apply size (fixes width reset issue)
-    childFrame:SetSize(db.width, db.height)
-    
-    -- Skin the status bar
-    if bar then
+    -- Wrap everything in pcall since some operations might fail during combat
+    local success, err = pcall(function()
+        local db = E.db.thingsUI.buffBars
+        local bar = childFrame.Bar
+        local icon = childFrame.Icon
+        
+        if not bar then return end
+        
+        -- Apply size
+        childFrame:SetSize(db.width, db.height)
+        
+        -- Skin the status bar
         bar:ClearAllPoints()
         
         if db.iconEnabled and icon then
@@ -261,7 +267,7 @@ local function SkinBuffBar(childFrame, forceUpdate)
         end
         
         -- Create backdrop if it doesn't exist
-        if needsFullSkin and not childFrame.tuiBackdrop then
+        if not childFrame.tuiBackdrop then
             childFrame.tuiBackdrop = CreateFrame("Frame", nil, childFrame, "BackdropTemplate")
             childFrame.tuiBackdrop:SetPoint("TOPLEFT", bar, "TOPLEFT", -1, 1)
             childFrame.tuiBackdrop:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 1, -1)
@@ -274,88 +280,65 @@ local function SkinBuffBar(childFrame, forceUpdate)
             childFrame.tuiBackdrop:SetBackdropBorderColor(0, 0, 0, 1)
             childFrame.tuiBackdrop:SetFrameLevel(childFrame:GetFrameLevel())
         end
-    end
-    
-    -- Skin the icon
-    if icon and icon.Icon then
-        if db.iconEnabled then
-            icon:Show()
-            icon:ClearAllPoints()
-            icon:SetPoint("TOPLEFT", childFrame, "TOPLEFT", 0, 0)
-            icon:SetSize(db.height, db.height)
-            
-            icon.Icon:SetTexCoord(0.1, 0.9, 0.1, 0.9) -- Trim edges
-            icon.Icon:ClearAllPoints()
-            icon.Icon:SetAllPoints(icon)
-            
-            -- Icon backdrop
-            if needsFullSkin and not icon.tuiBackdrop then
-                icon.tuiBackdrop = CreateFrame("Frame", nil, icon, "BackdropTemplate")
-                icon.tuiBackdrop:SetPoint("TOPLEFT", icon, "TOPLEFT", -1, 1)
-                icon.tuiBackdrop:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 1, -1)
-                icon.tuiBackdrop:SetBackdrop({
-                    bgFile = E.media.blankTex,
-                    edgeFile = E.media.blankTex,
-                    edgeSize = 1,
-                })
-                icon.tuiBackdrop:SetBackdropColor(0, 0, 0, 0)
-                icon.tuiBackdrop:SetBackdropBorderColor(0, 0, 0, 1)
-                icon.tuiBackdrop:SetFrameLevel(icon:GetFrameLevel())
+        
+        -- Skin the icon
+        if icon and icon.Icon then
+            if db.iconEnabled then
+                icon:Show()
+                icon:ClearAllPoints()
+                icon:SetPoint("TOPLEFT", childFrame, "TOPLEFT", 0, 0)
+                icon:SetSize(db.height, db.height)
+                
+                icon.Icon:SetTexCoord(0.1, 0.9, 0.1, 0.9) -- Trim edges
+                icon.Icon:ClearAllPoints()
+                icon.Icon:SetAllPoints(icon)
+                
+                -- Icon backdrop
+                if not icon.tuiBackdrop then
+                    icon.tuiBackdrop = CreateFrame("Frame", nil, icon, "BackdropTemplate")
+                    icon.tuiBackdrop:SetPoint("TOPLEFT", icon, "TOPLEFT", -1, 1)
+                    icon.tuiBackdrop:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 1, -1)
+                    icon.tuiBackdrop:SetBackdrop({
+                        bgFile = E.media.blankTex,
+                        edgeFile = E.media.blankTex,
+                        edgeSize = 1,
+                    })
+                    icon.tuiBackdrop:SetBackdropColor(0, 0, 0, 0)
+                    icon.tuiBackdrop:SetBackdropBorderColor(0, 0, 0, 1)
+                    icon.tuiBackdrop:SetFrameLevel(icon:GetFrameLevel())
+                end
+            else
+                icon:Hide()
             end
-        else
-            icon:Hide()
         end
-    end
+        
+        -- Hide debuff border if present
+        if childFrame.DebuffBorder then
+            childFrame.DebuffBorder:SetAlpha(0)
+        end
+        
+        skinnedBars[childFrame] = true
+    end)
     
-    -- Hide debuff border if present
-    if childFrame.DebuffBorder then
-        childFrame.DebuffBorder:SetAlpha(0)
+    if TUI_DEBUG and not success then
+        print("|cFFFF0000thingsUI|r - SkinBuffBar ERROR:", err)
     end
-    
-    skinnedBars[childFrame] = true
 end
 
 -- Check if a bar has an active aura (is actually tracking something)
 local function IsBarActive(childFrame)
     if not childFrame then return false end
+    if not childFrame:IsShown() then return false end
+    if not childFrame.Bar then return false end
     
-    -- Use pcall to safely handle protected values during combat
-    local success, result = pcall(function()
-        if not childFrame:IsShown() then return false end
-        
-        -- Check if the bar has actual content (name text or duration)
-        local bar = childFrame.Bar
-        if bar then
-            -- Check if there's a spell name set
-            if bar.Name then
-                local text = bar.Name:GetText()
-                if text and text ~= "" then
-                    return true
-                end
-            end
-            -- Check if the bar has a value (duration progress)
-            local value = bar:GetValue()
-            local min, max = bar:GetMinMaxValues()
-            if max > 0 and value > 0 then
-                return true
-            end
-        end
-        
-        return false
-    end)
-    
-    if success then
-        return result
-    else
-        -- If we can't access the values (combat lockdown), assume bar is active if shown
-        return childFrame:IsShown()
-    end
+    -- If it's shown and has a Bar, consider it active
+    -- BCDM handles hiding inactive bars itself
+    return true
 end
 
 -- Anchor the BuffBarCooldownViewer container
 local function AnchorBuffBarContainer()
     if not BuffBarCooldownViewer then return end
-    if InCombatLockdown() then return end
     
     local db = E.db.thingsUI.buffBars
     if not db.anchorEnabled then return end
@@ -363,23 +346,46 @@ local function AnchorBuffBarContainer()
     local anchorFrame = _G[db.anchorFrame]
     if not anchorFrame then return end
     
-    BuffBarCooldownViewer:ClearAllPoints()
-    BuffBarCooldownViewer:SetPoint(db.anchorPoint, anchorFrame, db.anchorRelativePoint, db.anchorXOffset, db.anchorYOffset)
+    -- Use pcall since we're anchoring to potentially protected frames
+    -- But BuffBarCooldownViewer itself is NOT protected, so this should work
+    pcall(function()
+        BuffBarCooldownViewer:ClearAllPoints()
+        BuffBarCooldownViewer:SetPoint(db.anchorPoint, anchorFrame, db.anchorRelativePoint, db.anchorXOffset, db.anchorYOffset)
+    end)
 end
 
 local function UpdateBuffBarPositions()
     if not BuffBarCooldownViewer then return end
-    if InCombatLockdown() then return end -- Skip during combat
     
     local db = E.db.thingsUI.buffBars
     local visibleBars = {}
     
-    for _, childFrame in ipairs({ BuffBarCooldownViewer:GetChildren() }) do
+    -- Debug output
+    if TUI_DEBUG then
+        print("|cFF8080FFthingsUI|r - UpdateBuffBarPositions called, InCombat:", InCombatLockdown())
+    end
+    
+    -- Safely get children (might fail in combat)
+    local ok, children = pcall(function() return { BuffBarCooldownViewer:GetChildren() } end)
+    if not ok or not children then 
+        if TUI_DEBUG then print("|cFF8080FFthingsUI|r - GetChildren FAILED") end
+        return 
+    end
+    
+    if TUI_DEBUG then
+        print("|cFF8080FFthingsUI|r - Found", #children, "children")
+    end
+    
+    for _, childFrame in ipairs(children) do
         -- Only include bars that are shown AND have active aura data
         if childFrame and IsBarActive(childFrame) then
             SkinBuffBar(childFrame)
             table.insert(visibleBars, childFrame)
         end
+    end
+    
+    if TUI_DEBUG then
+        print("|cFF8080FFthingsUI|r - Visible bars:", #visibleBars)
     end
     
     if #visibleBars == 0 then return end
@@ -404,7 +410,7 @@ local function UpdateBuffBarPositions()
         end
     end
     
-    -- Apply container anchor if enabled
+    -- Apply container anchor if enabled (this one DOES need combat check since it anchors to ElvUI frames)
     AnchorBuffBarContainer()
 end
 
@@ -413,11 +419,25 @@ local function BuffBarOnUpdate()
     if currentTime < barNextUpdate then return end
     barNextUpdate = currentTime + barUpdateThrottle
     
-    if not E.db.thingsUI or not E.db.thingsUI.buffBars.enabled then return end
+    if not E.db.thingsUI or not E.db.thingsUI.buffBars or not E.db.thingsUI.buffBars.enabled then return end
     if not BuffBarCooldownViewer then return end
     
-    UpdateBuffBarPositions()
+    pcall(UpdateBuffBarPositions)
 end
+
+-- Event-based updates for more reliable skinning
+local buffBarEventFrame = CreateFrame("Frame")
+buffBarEventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+buffBarEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED") -- Combat ended
+buffBarEventFrame:RegisterUnitEvent("UNIT_AURA", "player")
+
+buffBarEventFrame:SetScript("OnEvent", function(self, event, ...)
+    if not E.db.thingsUI or not E.db.thingsUI.buffBars or not E.db.thingsUI.buffBars.enabled then return end
+    if not BuffBarCooldownViewer then return end
+    
+    -- On these events, force an immediate update
+    pcall(UpdateBuffBarPositions)
+end)
 
 function TUI:UpdateBuffBars()
     if E.db.thingsUI.buffBars.enabled then
@@ -546,6 +566,16 @@ local function UpdateClusterPositioning()
             holder:SetPoint("TOP", targetFrame, "BOTTOM", db.targetCastBar.xOffset, -db.targetCastBar.gap)
         end
     end
+    
+    -- Position Additional Power Bar - anchor above Player frame (for ferals, etc.)
+    if db.additionalPowerBar and db.additionalPowerBar.enabled then
+        local playerFrame = _G["ElvUF_Player"]
+        local powerBar = _G["ElvUF_Player_AdditionalPowerBar"]
+        if playerFrame and powerBar then
+            powerBar:ClearAllPoints()
+            powerBar:SetPoint("TOP", playerFrame, "BOTTOM", db.additionalPowerBar.xOffset, db.additionalPowerBar.gap)
+        end
+    end
 end
 
 -- OnUpdate handler
@@ -597,6 +627,14 @@ local function RestoreFramesToElvUI()
         local holder = castBar.Holder or castBar
         holder:ClearAllPoints()
         holder:SetPoint("CENTER", castBarMover, "CENTER", 0, 0)
+    end
+    
+    -- Additional Power Bar - anchor to its mover
+    local powerBar = _G["ElvUF_Player_AdditionalPowerBar"]
+    local powerBarMover = _G["ElvUF_AdditionalPowerBarMover"]
+    if powerBar and powerBarMover then
+        powerBar:ClearAllPoints()
+        powerBar:SetPoint("CENTER", powerBarMover, "CENTER", 0, 0)
     end
 end
 
@@ -953,10 +991,10 @@ function TUI:ConfigTable()
             -------------------------------------------------
             -- BUFF ICONS TAB
             -------------------------------------------------
-            buffIconsTab = {
+            generalTab = {
                 order = 10,
                 type = "group",
-                name = "Buff Icons",
+                name = "General",
                 args = {
                     buffIconsHeader = {
                         order = 1,
@@ -979,6 +1017,78 @@ function TUI:ConfigTable()
                         order = 3,
                         type = "description",
                         name = "\n|cFFFFFF00Note:|r If disabling, you may need to reload UI to restore default horizontal layout.\n",
+                    },
+                    
+                    windToolsHeader = {
+                        order = 10,
+                        type = "header",
+                        name = "WindTools & ElvUI Private Settings",
+                    },
+                    windToolsDescription = {
+                        order = 11,
+                        type = "description",
+                        name = "Apply things's recommended WindTools and ElvUI private settings.\n\n|cFFFF6B6BWarning:|r This will overwrite your current WindTools settings!\n",
+                    },
+                    setupWindTools = {
+                        order = 12,
+                        type = "execute",
+                        name = "Setup things Settings",
+                        desc = "Apply recommended WindTools and ElvUI private settings.",
+                        func = function()
+                            -- WindTools Maps
+                            E.private["WT"]["maps"]["instanceDifficulty"]["align"] = "CENTER"
+                            E.private["WT"]["maps"]["instanceDifficulty"]["enable"] = true
+                            E.private["WT"]["maps"]["minimapButtons"]["backdropSpacing"] = 0
+                            E.private["WT"]["maps"]["minimapButtons"]["buttonSize"] = 28
+                            E.private["WT"]["maps"]["minimapButtons"]["buttonsPerRow"] = 1
+                            E.private["WT"]["maps"]["minimapButtons"]["expansionLandingPage"] = true
+                            E.private["WT"]["maps"]["minimapButtons"]["mouseOver"] = true
+                            E.private["WT"]["maps"]["minimapButtons"]["orientation"] = "VERTICAL"
+                            E.private["WT"]["maps"]["minimapButtons"]["spacing"] = 1
+                            E.private["WT"]["maps"]["worldMap"]["scale"]["size"] = 1.33
+                            
+                            -- WindTools Quest
+                            E.private["WT"]["quest"]["objectiveTracker"]["colorfulPercentage"] = true
+                            E.private["WT"]["quest"]["objectiveTracker"]["cosmeticBar"]["border"] = "ONEPIXEL"
+                            E.private["WT"]["quest"]["objectiveTracker"]["cosmeticBar"]["color"]["mode"] = "CLASS"
+                            E.private["WT"]["quest"]["objectiveTracker"]["cosmeticBar"]["offsetY"] = -13
+                            E.private["WT"]["quest"]["objectiveTracker"]["cosmeticBar"]["texture"] = "ElvUI Blank"
+                            E.private["WT"]["quest"]["objectiveTracker"]["enable"] = true
+                            E.private["WT"]["quest"]["objectiveTracker"]["percentage"] = true
+                            
+                            -- WindTools Skins
+                            E.private["WT"]["skins"]["addons"]["worldQuestTab"] = false
+                            E.private["WT"]["skins"]["blizzard"]["scenario"] = false
+                            E.private["WT"]["skins"]["cooldownViewer"]["enable"] = false
+                            E.private["WT"]["skins"]["ime"]["label"]["name"] = "Expressway"
+                            E.private["WT"]["skins"]["shadow"] = false
+                            E.private["WT"]["skins"]["widgets"]["button"]["backdrop"]["texture"] = "ElvUI Blank"
+                            E.private["WT"]["skins"]["widgets"]["treeGroupButton"]["backdrop"]["texture"] = "ElvUI Blank"
+                            
+                            -- WindTools UnitFrames
+                            E.private["WT"]["unitFrames"]["roleIcon"]["enable"] = false
+                            E.private["WT"]["unitFrames"]["roleIcon"]["roleIconStyle"] = "LYNUI"
+                            
+                            -- ElvUI Private General
+                            E.private["general"]["chatBubbleFont"] = "Expressway"
+                            E.private["general"]["chatBubbleFontOutline"] = "OUTLINE"
+                            E.private["general"]["chatBubbles"] = "nobackdrop"
+                            E.private["general"]["classColors"] = true
+                            E.private["general"]["glossTex"] = "ElvUI Blank"
+                            E.private["general"]["minimap"]["hideTracking"] = true
+                            E.private["general"]["nameplateFont"] = "Expressway"
+                            E.private["general"]["nameplateLargeFont"] = "Expressway"
+                            E.private["general"]["normTex"] = "ElvUI Blank"
+                            E.private["install_complete"] = 12.12
+                            
+                            -- ElvUI Private Other
+                            E.private["nameplates"]["enable"] = false
+                            E.private["skins"]["blizzard"]["cooldownManager"] = false
+                            E.private["skins"]["parchmentRemoverEnable"] = true
+                            
+                            print("|cFF8080FFthingsUI|r - WindTools & ElvUI private settings applied! |cFFFFFF00Reload required.|r")
+                            E:StaticPopup_Show("PRIVATE_RL")
+                        end,
                     },
                 },
             },
@@ -1058,7 +1168,7 @@ function TUI:ConfigTable()
                         order = 14,
                         type = "range",
                         name = "Spacing",
-                        min = 0, max = 10, step = 1,
+                        min = -10, max = 10, step = 1,
                         get = function() return E.db.thingsUI.buffBars.spacing end,
                         set = function(_, value)
                             E.db.thingsUI.buffBars.spacing = value
@@ -1439,7 +1549,7 @@ function TUI:ConfigTable()
                         type = "range",
                         name = "Frame Gap",
                         desc = "Gap between Player/Target frames and Essential.",
-                        min = 0, max = 50, step = 1,
+                        min = -50, max = 50, step = 1,
                         get = function() return E.db.thingsUI.clusterPositioning.frameGap end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.frameGap = value
@@ -1470,7 +1580,7 @@ function TUI:ConfigTable()
                         type = "range",
                         name = "ToT Gap",
                         desc = "Gap between TargetTarget and Target frame.",
-                        min = 0, max = 50, step = 1,
+                        min = -50, max = 50, step = 1,
                         get = function() return E.db.thingsUI.clusterPositioning.targetTargetFrame.gap end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.targetTargetFrame.gap = value
@@ -1501,7 +1611,7 @@ function TUI:ConfigTable()
                         type = "range",
                         name = "CastBar Y Gap",
                         desc = "Vertical gap between Target frame and CastBar.",
-                        min = 0, max = 50, step = 1,
+                        min = -50, max = 50, step = 1,
                         get = function() return E.db.thingsUI.clusterPositioning.targetCastBar.gap end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.targetCastBar.gap = value
