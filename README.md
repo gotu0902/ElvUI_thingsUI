@@ -2,7 +2,7 @@
 
 An ElvUI plugin that provides additional customization options for the [Blizzard Cooldown Manager (BCDM)](https://www.curseforge.com/wow/addons/bettercooldownmanager) addon.
 
-![Version](https://img.shields.io/badge/version-1.11.3-blue)
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
 
 ### Dynamic Cluster Positioning
 Automatically position ElvUI unit frames around BCDM's Essential Cooldown Viewer:
@@ -32,12 +32,8 @@ Skin BCDM's BuffBarCooldownViewer with ElvUI's visual style:
 If your Edit Mode width is vastly different than this width it'll sometimes look bigger for like a second.
 Try to get Edit Mode width of the bars as close as you can to make this less noticeable.
 
-### BCDM Frame Anchoring
-Anchor BCDM's custom bars to ElvUI frames:
-- Supports: CustomCooldownViewer, AdditionalCustomCooldownViewer, CustomItemBar, TrinketBar, CustomItemSpellBar
-- Anchor targets: ElvUF_Player, ElvUF_Target, UIParent, or **Custom Frame** (type any frame name)
-- Full anchor point configuration (TOP, BOTTOM, LEFT, RIGHT, CENTER, corners)
-- X/Y offset fine-tuning
+### Special Bars
+- Move a tracked buff bar to somewhere else on the screen
 
 ### Vertical Buff Icons
 Toggle vertical growth for BCDM's BuffIconCooldownViewer.
