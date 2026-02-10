@@ -11,8 +11,28 @@ local TUI = E:NewModule("thingsUI", "AceHook-3.0", "AceEvent-3.0")
 ns.TUI = TUI
 
 -- Plugin version info
-TUI.version = "1.11.3"
+TUI.version = "2.0.0" -- Split backdrops for proper spacing
 TUI.name = "thingsUI"
+
+-- Shared Anchor List
+local SHARED_ANCHOR_VALUES = {
+    ["ElvUF_Player"] = "ElvUI Player Frame",
+    ["ElvUF_Target"] = "ElvUI Target Frame",
+    ["ElvUF_Player_ClassBar"] = "ElvUI Class Bar",
+    ["EssentialCooldownViewer"] = "Essential Cooldowns",
+    ["UtilityCooldownViewer"] = "Utility Cooldowns",
+    ["BCDM_Power"] = "BCDM Power Bar",
+    ["BCDM_CastBar"] = "BCDM Cast Bar",
+    ["UIParent"] = "Screen (UIParent)",
+    ["CUSTOM"] = "|cFFFFFF00Custom Frame...|r",
+}
+
+-- Special Bars Anchor List (Includes TUI Bars)
+local SPECIAL_BAR_ANCHOR_VALUES = {}
+for k, v in pairs(SHARED_ANCHOR_VALUES) do SPECIAL_BAR_ANCHOR_VALUES[k] = v end
+SPECIAL_BAR_ANCHOR_VALUES["TUI_SpecialBar_bar1"] = "TUI Special Bar 1"
+SPECIAL_BAR_ANCHOR_VALUES["TUI_SpecialBar_bar2"] = "TUI Special Bar 2"
+SPECIAL_BAR_ANCHOR_VALUES["TUI_SpecialBar_bar3"] = "TUI Special Bar 3"
 
 -- Defaults that get merged into ElvUI's profile
 P["thingsUI"] = {
@@ -23,24 +43,42 @@ P["thingsUI"] = {
     buffBars = {
         enabled = false,
         growthDirection = "UP", -- "UP" or "DOWN"
-        width = 200,
-        height = 20,
+        width = 240,
+        height = 23,
         spacing = 1,
-        statusBarTexture = "ElvUI Norm",
-        font = "PT Sans Narrow",
-        fontSize = 12,
+        statusBarTexture = "ElvUI Blank",
+        font = "Expressway",
+        fontSize = 14,
         fontOutline = "OUTLINE",
         iconEnabled = true,
+        iconSpacing = 1,    -- Gap between icon and bar
+        iconZoom = 0.1,     -- 0 = full texture, 0.1 = 10% crop each side (like ElvUI default)
+        inheritWidth = true, -- Inherit width from anchor frame
+        inheritWidthOffset = 0, -- Fine-tune offset when inheriting width
+        stackFontSize = 14  , -- Stack count font size                                                                                                                                                      
+        stackFontOutline = "OUTLINE",
+        stackPoint = "CENTER",
+        stackAnchor = "ICON",  -- "ICON" or "BAR"
+        stackXOffset = 0,
+        stackYOffset = 0,
+        -- Name text positioning
+        namePoint = "LEFT",
+        nameXOffset = 2,
+        nameYOffset = 0,
+        -- Duration text positioning
+        durationPoint = "RIGHT",
+        durationXOffset = -4,
+        durationYOffset = 0,
         backgroundColor = { r = 0.1, g = 0.1, b = 0.1, a = 0.8 },
         useClassColor = true,
         customColor = { r = 0.2, g = 0.6, b = 1.0 },
         -- Anchor settings
-        anchorEnabled = false,
+        anchorEnabled = true,
         anchorFrame = "ElvUF_Player",
         anchorPoint = "BOTTOM",      -- Point on buff bars
         anchorRelativePoint = "TOP", -- Point on target frame
         anchorXOffset = 0,
-        anchorYOffset = 5,
+        anchorYOffset = 50,
     },
     
     -- Dynamic Cooldown Cluster Positioning
@@ -78,61 +116,12 @@ P["thingsUI"] = {
             xOffset = 0,
         },
     },
-    -- Anchor BetterCooldownManager frames
-    bcdmAnchors = {
-        enabled = false,
-        throttle = 0,
 
-        -- Supported anchor targets: PLAYER, TARGET, UIPARENT, CUSTOM
-        frames = {
-            BCDM_CustomCooldownViewer = {
-                enabled = false,
-                anchorTo = "PLAYER",
-                customAnchor = "",
-                point = "CENTER",
-                relativePoint = "CENTER",
-                xOffset = 0,
-                yOffset = 0,
-            },
-            BCDM_AdditionalCustomCooldownViewer = {
-                enabled = false,
-                anchorTo = "PLAYER",
-                customAnchor = "",
-                point = "CENTER",
-                relativePoint = "CENTER",
-                xOffset = 0,
-                yOffset = 0,
-            },
-            BCDM_CustomItemBar = {
-                enabled = false,
-                anchorTo = "PLAYER",
-                customAnchor = "",
-                point = "CENTER",
-                relativePoint = "CENTER",
-                xOffset = 0,
-                yOffset = 0,
-            },
-            BCDM_TrinketBar = {
-                enabled = false,
-                anchorTo = "PLAYER",
-                customAnchor = "",
-                point = "CENTER",
-                relativePoint = "CENTER",
-                xOffset = 0,
-                yOffset = 0,
-            },
-            BCDM_CustomItemSpellBar = {
-                enabled = false,
-                anchorTo = "PLAYER",
-                customAnchor = "",
-                point = "CENTER",
-                relativePoint = "CENTER",
-                xOffset = 0,
-                yOffset = 0,
-            },
-        },
+    -- Special Bars (yoinked from Tracked Bars) — stored per spec
+    specialBars = {
+        -- Per-spec storage: specialBars.specs[specID] = { bar1 = {...}, bar2 = {...}, bar3 = {...} }
+        specs = {},
     },
-
 }
 
 -------------------------------------------------
@@ -141,6 +130,7 @@ P["thingsUI"] = {
 local iconUpdateThrottle = 0.05
 local iconNextUpdate = 0
 local iconUpdateFrame = CreateFrame("Frame")
+local reusableIconTable = {}
 
 local function PositionBuffsVertically()
     local currentTime = GetTime()
@@ -150,24 +140,24 @@ local function PositionBuffsVertically()
     if not BuffIconCooldownViewer then return end
     if not E.db.thingsUI or not E.db.thingsUI.verticalBuffs then return end
     
-    local visibleBuffIcons = {}
+    wipe(reusableIconTable)
 
     for _, childFrame in ipairs({ BuffIconCooldownViewer:GetChildren() }) do
         if childFrame and childFrame.Icon and childFrame:IsShown() then
-            table.insert(visibleBuffIcons, childFrame)
+            table.insert(reusableIconTable, childFrame)
         end
     end
 
-    if #visibleBuffIcons == 0 then return end
+    if #reusableIconTable == 0 then return end
 
-    table.sort(visibleBuffIcons, function(a, b)
+    table.sort(reusableIconTable, function(a, b)
         return (a.layoutIndex or 0) < (b.layoutIndex or 0)
     end)
 
-    local iconSize = visibleBuffIcons[1]:GetWidth()
+    local iconSize = reusableIconTable[1]:GetWidth()
     local iconSpacing = BuffIconCooldownViewer.childYPadding or 0
     
-    for index, iconFrame in ipairs(visibleBuffIcons) do
+    for index, iconFrame in ipairs(reusableIconTable) do
         iconFrame:ClearAllPoints()
         iconFrame:SetPoint("TOP", BuffIconCooldownViewer, "TOP", 0, -((index - 1) * (iconSize + iconSpacing)))
     end
@@ -196,133 +186,104 @@ end
 
 local function SkinBuffBar(childFrame, forceUpdate)
     if not childFrame then return end
-    
-    if TUI_DEBUG then
-        print("|cFF8080FFthingsUI|r - SkinBuffBar called for frame")
-    end
-    
-    -- Wrap everything in pcall since some operations might fail during combat
-    local success, err = pcall(function()
+    pcall(function()
         local db = E.db.thingsUI.buffBars
         local bar = childFrame.Bar
         local icon = childFrame.Icon
-        
         if not bar then return end
         
-        -- Apply size
-        childFrame:SetSize(db.width, db.height)
-        
-        -- Skin the status bar
-        bar:ClearAllPoints()
-        
-        if db.iconEnabled and icon then
-            bar:SetPoint("TOPLEFT", childFrame, "TOPLEFT", db.height + 2, 0)
-            bar:SetPoint("BOTTOMRIGHT", childFrame, "BOTTOMRIGHT", 0, 0)
-        else
-            bar:SetPoint("TOPLEFT", childFrame, "TOPLEFT", 0, 0)
-            bar:SetPoint("BOTTOMRIGHT", childFrame, "BOTTOMRIGHT", 0, 0)
+        -- Sizing
+        local effectiveWidth = db.width
+        if db.inheritWidth and db.anchorEnabled then
+            local anchorFrame = _G[db.anchorFrame]
+            if anchorFrame then effectiveWidth = (anchorFrame:GetWidth() or 0) + (db.inheritWidthOffset or 0) end
         end
+        childFrame:SetSize(effectiveWidth, db.height)
         
-        -- Apply ElvUI statusbar texture
-        local texture = LSM:Fetch("statusbar", db.statusBarTexture)
-        bar:SetStatusBarTexture(texture)
-        
-        -- Bar color
-        if db.useClassColor then
-            local r, g, b = GetClassColor()
-            bar:SetStatusBarColor(r, g, b, 1)
-        else
-            bar:SetStatusBarColor(db.customColor.r, db.customColor.g, db.customColor.b, 1)
-        end
-        
-        -- Background
-        if bar.BarBG then
-            bar.BarBG:SetTexture(texture)
-            bar.BarBG:SetVertexColor(db.backgroundColor.r, db.backgroundColor.g, db.backgroundColor.b, db.backgroundColor.a)
-            bar.BarBG:ClearAllPoints()
-            bar.BarBG:SetAllPoints(bar)
-        end
-        
-        -- Hide the pip/spark if it exists
-        if bar.Pip then
-            bar.Pip:SetAlpha(0)
-        end
-        
-        -- Spell name text
-        if bar.Name then
-            local font = LSM:Fetch("font", db.font)
-            bar.Name:SetFont(font, db.fontSize, db.fontOutline)
-            bar.Name:ClearAllPoints()
-            bar.Name:SetPoint("LEFT", bar, "LEFT", 4, 0)
-            bar.Name:SetJustifyH("LEFT")
-        end
-        
-        -- Duration text
-        if bar.Duration then
-            local font = LSM:Fetch("font", db.font)
-            bar.Duration:SetFont(font, db.fontSize, db.fontOutline)
-            bar.Duration:ClearAllPoints()
-            bar.Duration:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
-            bar.Duration:SetJustifyH("RIGHT")
-        end
-        
-        -- Create backdrop if it doesn't exist
-        if not childFrame.tuiBackdrop then
-            childFrame.tuiBackdrop = CreateFrame("Frame", nil, childFrame, "BackdropTemplate")
-            childFrame.tuiBackdrop:SetPoint("TOPLEFT", bar, "TOPLEFT", -1, 1)
-            childFrame.tuiBackdrop:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 1, -1)
-            childFrame.tuiBackdrop:SetBackdrop({
-                bgFile = E.media.blankTex,
-                edgeFile = E.media.blankTex,
-                edgeSize = 1,
-            })
-            childFrame.tuiBackdrop:SetBackdropColor(0, 0, 0, 0)
-            childFrame.tuiBackdrop:SetBackdropBorderColor(0, 0, 0, 1)
-            childFrame.tuiBackdrop:SetFrameLevel(childFrame:GetFrameLevel())
-        end
-        
-        -- Skin the icon
+        -- KILL OLD UNIBODY BACKDROP (Fjerner den gamle store boksen)
+        if childFrame.tuiBackdrop then childFrame.tuiBackdrop:Hide() end
+
+        -- Calculate offsets
+        local barOffset = 0
+        local iconSize = db.height
+
+        -- ICON SKINNING & BACKDROP
         if icon and icon.Icon then
             if db.iconEnabled then
                 icon:Show()
-                icon:ClearAllPoints()
-                icon:SetPoint("TOPLEFT", childFrame, "TOPLEFT", 0, 0)
-                icon:SetSize(db.height, db.height)
+                icon:SetSize(iconSize, iconSize)
+                icon.Icon:SetTexCoord(db.iconZoom, 1-db.iconZoom, db.iconZoom, 1-db.iconZoom)
                 
-                icon.Icon:SetTexCoord(0.1, 0.9, 0.1, 0.9) -- Trim edges
-                icon.Icon:ClearAllPoints()
-                icon.Icon:SetAllPoints(icon)
-                
-                -- Icon backdrop
+                -- Create separate backdrop for Icon
                 if not icon.tuiBackdrop then
                     icon.tuiBackdrop = CreateFrame("Frame", nil, icon, "BackdropTemplate")
-                    icon.tuiBackdrop:SetPoint("TOPLEFT", icon, "TOPLEFT", -1, 1)
-                    icon.tuiBackdrop:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 1, -1)
-                    icon.tuiBackdrop:SetBackdrop({
-                        bgFile = E.media.blankTex,
-                        edgeFile = E.media.blankTex,
-                        edgeSize = 1,
-                    })
-                    icon.tuiBackdrop:SetBackdropColor(0, 0, 0, 0)
+                    icon.tuiBackdrop:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
+                    icon.tuiBackdrop:SetBackdropColor(0, 0, 0, 1)
                     icon.tuiBackdrop:SetBackdropBorderColor(0, 0, 0, 1)
-                    icon.tuiBackdrop:SetFrameLevel(icon:GetFrameLevel())
                 end
-            else
-                icon:Hide()
+                icon.tuiBackdrop:Show()
+                icon.tuiBackdrop:SetAllPoints(icon)
+                icon.tuiBackdrop:SetFrameLevel(icon:GetFrameLevel() - 1)
+                
+                -- Position Icon
+                icon:ClearAllPoints()
+                icon:SetPoint("LEFT", childFrame, "LEFT", 0, 0)
+                
+                -- Inset the texture slightly inside the icon border
+                icon.Icon:ClearAllPoints()
+                icon.Icon:SetPoint("TOPLEFT", icon, "TOPLEFT", 1, -1)
+                icon.Icon:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
+                
+                barOffset = iconSize + (db.iconSpacing or 3)
+            else 
+                icon:Hide() 
             end
         end
         
-        -- Hide debuff border if present
-        if childFrame.DebuffBorder then
-            childFrame.DebuffBorder:SetAlpha(0)
+        -- BAR BACKDROP (Create separate backdrop for Bar)
+        if not bar.tuiBackdrop then
+            bar.tuiBackdrop = CreateFrame("Frame", nil, childFrame, "BackdropTemplate")
+            bar.tuiBackdrop:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
+            bar.tuiBackdrop:SetBackdropColor(0, 0, 0, 0.7)
+            bar.tuiBackdrop:SetBackdropBorderColor(0, 0, 0, 1)
+            bar.tuiBackdrop:SetFrameLevel(childFrame:GetFrameLevel() - 1)
+        end
+        bar.tuiBackdrop:Show()
+        bar.tuiBackdrop:ClearAllPoints()
+        -- Anchor bar backdrop to the calculated offset
+        bar.tuiBackdrop:SetPoint("TOPLEFT", childFrame, "TOPLEFT", barOffset, 0)
+        bar.tuiBackdrop:SetPoint("BOTTOMRIGHT", childFrame, "BOTTOMRIGHT", 0, 0)
+
+        -- BAR POSITIONING (Inset inside the bar backdrop)
+        bar:ClearAllPoints()
+        bar:SetPoint("TOPLEFT", bar.tuiBackdrop, "TOPLEFT", 1, -1)
+        bar:SetPoint("BOTTOMRIGHT", bar.tuiBackdrop, "BOTTOMRIGHT", -1, 1)
+        
+        -- Skin the bar
+        local texture = LSM:Fetch("statusbar", db.statusBarTexture)
+        bar:SetStatusBarTexture(texture)
+        if db.useClassColor then
+            bar:SetStatusBarColor(GetClassColor())
+        else
+            bar:SetStatusBarColor(db.customColor.r, db.customColor.g, db.customColor.b)
         end
         
+        -- Textures & Pip
+        if bar.BarBG then bar.BarBG:SetAlpha(0) end
+        if bar.Pip then bar.Pip:SetAlpha(0) end
+        
+        -- Fonts
+        local font = LSM:Fetch("font", db.font)
+        if bar.Name then
+            bar.Name:SetFont(font, db.fontSize, db.fontOutline)
+            bar.Name:SetPoint(db.namePoint or "LEFT", bar, db.namePoint or "LEFT", db.nameXOffset or 4, db.nameYOffset or 0)
+        end
+        if bar.Duration then
+            bar.Duration:SetFont(font, db.fontSize, db.fontOutline)
+            bar.Duration:SetPoint(db.durationPoint or "RIGHT", bar, db.durationPoint or "RIGHT", db.durationXOffset or -4, db.durationYOffset or 0)
+        end
         skinnedBars[childFrame] = true
     end)
-    
-    if TUI_DEBUG and not success then
-        print("|cFFFF0000thingsUI|r - SkinBuffBar ERROR:", err)
-    end
 end
 
 -- Check if a bar has an active aura (is actually tracking something)
@@ -332,7 +293,7 @@ local function IsBarActive(childFrame)
     if not childFrame.Bar then return false end
     
     -- If it's shown and has a Bar, consider it active
-    -- BCDM handles hiding inactive bars itself
+    -- CDM handles hiding inactive bars itself
     return true
 end
 
@@ -354,45 +315,52 @@ local function AnchorBuffBarContainer()
     end)
 end
 
+local reusableBarTable = {}
+local yoinkedBars = {}  -- childFrame references that are yoinked by Special Bars
+local UpdateSpecialBarSlot  -- forward declaration (defined after special bar system)
+local FindBarBySpellName
+local ReleaseSpecialBar
+local GetOrCreateWrapper
+local StyleSpecialBar
+local GetSpecialBarDB
+local GetSpecialBarSlotDB
+local GetCurrentSpecID
+local ScanAndHookCDMChildren  -- forward declaration for CDM child hooking
+
 local function UpdateBuffBarPositions()
     if not BuffBarCooldownViewer then return end
     
     local db = E.db.thingsUI.buffBars
-    local visibleBars = {}
+    wipe(reusableBarTable)
     
-    -- Debug output
-    if TUI_DEBUG then
-        print("|cFF8080FFthingsUI|r - UpdateBuffBarPositions called, InCombat:", InCombatLockdown())
+    -- Process special bar yoinks FIRST, before positioning normal bars
+    -- This ensures yoinked bars are marked before the positioning loop
+    if E.db.thingsUI.specialBars then
+        local specDB = GetSpecialBarDB()
+        for barKey, barDB in pairs(specDB) do
+            if type(barDB) == "table" then
+                pcall(UpdateSpecialBarSlot, barKey)
+            end
+        end
     end
     
     -- Safely get children (might fail in combat)
     local ok, children = pcall(function() return { BuffBarCooldownViewer:GetChildren() } end)
-    if not ok or not children then 
-        if TUI_DEBUG then print("|cFF8080FFthingsUI|r - GetChildren FAILED") end
-        return 
-    end
-    
-    if TUI_DEBUG then
-        print("|cFF8080FFthingsUI|r - Found", #children, "children")
-    end
+    if not ok or not children then return end
     
     for _, childFrame in ipairs(children) do
-        -- Only include bars that are shown AND have active aura data
-        if childFrame and IsBarActive(childFrame) then
+        -- Only include bars that are shown AND have active aura data AND not yoinked
+        if childFrame and IsBarActive(childFrame) and not yoinkedBars[childFrame] then
             SkinBuffBar(childFrame)
-            table.insert(visibleBars, childFrame)
+            table.insert(reusableBarTable, childFrame)
         end
     end
     
-    if TUI_DEBUG then
-        print("|cFF8080FFthingsUI|r - Visible bars:", #visibleBars)
-    end
-    
-    if #visibleBars == 0 then return end
+    if #reusableBarTable == 0 then return end
     
     -- Sort with pcall in case layoutIndex is protected
     pcall(function()
-        table.sort(visibleBars, function(a, b)
+        table.sort(reusableBarTable, function(a, b)
             return (a.layoutIndex or 0) < (b.layoutIndex or 0)
         end)
     end)
@@ -400,7 +368,7 @@ local function UpdateBuffBarPositions()
     local spacing = db.spacing
     local height = db.height
     
-    for index, barFrame in ipairs(visibleBars) do
+    for index, barFrame in ipairs(reusableBarTable) do
         barFrame:ClearAllPoints()
         
         if db.growthDirection == "DOWN" then
@@ -419,10 +387,22 @@ local function BuffBarOnUpdate()
     if currentTime < barNextUpdate then return end
     barNextUpdate = currentTime + barUpdateThrottle
     
-    if not E.db.thingsUI or not E.db.thingsUI.buffBars or not E.db.thingsUI.buffBars.enabled then return end
+    if not E.db.thingsUI then return end
     if not BuffBarCooldownViewer then return end
     
-    pcall(UpdateBuffBarPositions)
+    -- Always process special bars (they run inside UpdateBuffBarPositions)
+    if E.db.thingsUI.buffBars and E.db.thingsUI.buffBars.enabled then
+        pcall(UpdateBuffBarPositions)
+    elseif E.db.thingsUI.specialBars then
+        -- Buff bar skinning disabled but special bars may be active
+        ScanAndHookCDMChildren()
+        local specDB = GetSpecialBarDB()
+        for barKey, barDB in pairs(specDB) do
+            if type(barDB) == "table" then
+                pcall(UpdateSpecialBarSlot, barKey)
+            end
+        end
+    end
 end
 
 -- Event-based updates for more reliable skinning
@@ -432,11 +412,25 @@ buffBarEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED") -- Combat ended
 buffBarEventFrame:RegisterUnitEvent("UNIT_AURA", "player")
 
 buffBarEventFrame:SetScript("OnEvent", function(self, event, ...)
-    if not E.db.thingsUI or not E.db.thingsUI.buffBars or not E.db.thingsUI.buffBars.enabled then return end
+    if not E.db.thingsUI then return end
     if not BuffBarCooldownViewer then return end
     
-    -- On these events, force an immediate update
-    pcall(UpdateBuffBarPositions)
+    -- Process buff bar skinning if enabled
+    if E.db.thingsUI.buffBars and E.db.thingsUI.buffBars.enabled then
+        pcall(UpdateBuffBarPositions)
+    end
+    
+    -- ALWAYS process special bars on aura events (even if buff bar skinning is off)
+    -- This is critical for yoinking newly-created CDM child frames mid-combat
+    if E.db.thingsUI.specialBars then
+        ScanAndHookCDMChildren()
+        local specDB = GetSpecialBarDB()
+        for barKey, barDB in pairs(specDB) do
+            if type(barDB) == "table" then
+                pcall(UpdateSpecialBarSlot, barKey)
+            end
+        end
+    end
 end)
 
 function TUI:UpdateBuffBars()
@@ -449,6 +443,650 @@ function TUI:UpdateBuffBars()
         end
     else
         barUpdateFrame:SetScript("OnUpdate", nil)
+    end
+end
+
+-------------------------------------------------
+-- SPECIAL BARS (Yoinked from BuffBarCooldownViewer)
+-------------------------------------------------
+
+-- Default template for a special bar slot
+local SPECIAL_BAR_DEFAULTS = {
+    enabled = false,
+    spellName = "",
+    width = 230,
+    inheritWidth = false,
+    inheritWidthOffset = 0,
+    height = 23,
+    inheritHeight = false,
+    inheritHeightOffset = 0,
+    statusBarTexture = "ElvUI Blank",
+    font = "Expressway",
+    fontSize = 14,
+    fontOutline = "OUTLINE",
+    useClassColor = true,
+    customColor = { r = 0.2, g = 0.6, b = 1.0 },
+    backgroundColor = { r = 0.1, g = 0.1, b = 0.1, a = 0.8 },
+    showBackdrop = false,
+    backdropColor = { r = 0.1, g = 0.1, b = 0.1, a = 0.6 },
+    iconEnabled = true,
+    iconSpacing = 1,
+    iconZoom = 0.1,
+    showStacks = true,
+    stackFontSize = 14,
+    stackFontOutline = "OUTLINE",
+    stackPoint = "CENTER",
+    stackAnchor = "ICON", -- New: "ICON" or "BAR"
+    stackXOffset = 0,
+    stackYOffset = 0,
+    showName = true,
+    namePoint = "LEFT",
+    nameXOffset = 2,
+    nameYOffset = 0,
+    showDuration = true,
+    durationPoint = "RIGHT",
+    durationXOffset = -4,
+    durationYOffset = 0,
+    anchorMode = "UIParent",  -- Predefined or "CUSTOM"
+    anchorFrame = "BCDM_CastBar", -- Used when anchorMode == "CUSTOM"
+    anchorPoint = "CENTER",
+    anchorRelativePoint = "CENTER",
+    anchorXOffset = 0,
+    anchorYOffset = 0,
+}
+
+-- Resolve actual frame name from anchor settings
+local function ResolveAnchorFrame(db)
+    local mode = db.anchorMode or db.anchorFrame or "ElvUF_Player"
+    if mode == "CUSTOM" then
+        return db.anchorFrame or "ElvUF_Player"
+    end
+    return mode
+end
+
+-- Get the current spec ID
+GetCurrentSpecID = function()
+    local specIndex = GetSpecialization()
+    if specIndex then
+        return GetSpecializationInfo(specIndex) or 0
+    end
+    return 0
+end
+
+-- Get or create spec-specific special bar config
+-- Returns the bar table for the current spec, creating defaults if needed
+GetSpecialBarDB = function()
+    if not E.db.thingsUI.specialBars then
+        E.db.thingsUI.specialBars = { specs = {} }
+    end
+    if not E.db.thingsUI.specialBars.specs then
+        E.db.thingsUI.specialBars.specs = {}
+    end
+    
+    local specID = GetCurrentSpecID()
+    if specID == 0 then specID = 1 end  -- Fallback
+    local specKey = tostring(specID)
+    
+    if not E.db.thingsUI.specialBars.specs[specKey] then
+        -- Create fresh defaults for this spec
+        E.db.thingsUI.specialBars.specs[specKey] = {}
+        for _, barKey in ipairs({"bar1", "bar2", "bar3"}) do
+            E.db.thingsUI.specialBars.specs[specKey][barKey] = {}
+            for k, v in pairs(SPECIAL_BAR_DEFAULTS) do
+                if type(v) == "table" then
+                    E.db.thingsUI.specialBars.specs[specKey][barKey][k] = {}
+                    for k2, v2 in pairs(v) do
+                        E.db.thingsUI.specialBars.specs[specKey][barKey][k][k2] = v2
+                    end
+                else
+                    E.db.thingsUI.specialBars.specs[specKey][barKey][k] = v
+                end
+            end
+        end
+
+    end
+    
+    return E.db.thingsUI.specialBars.specs[specKey]
+end
+
+-- Get a specific bar's DB for the current spec
+GetSpecialBarSlotDB = function(barKey)
+    local specDB = GetSpecialBarDB()
+    if not specDB[barKey] then
+        specDB[barKey] = {}
+    end
+    -- Ensure all defaults exist (fill in missing keys)
+    for k, v in pairs(SPECIAL_BAR_DEFAULTS) do
+        if specDB[barKey][k] == nil then
+            if type(v) == "table" then
+                specDB[barKey][k] = {}
+                for k2, v2 in pairs(v) do
+                    specDB[barKey][k][k2] = v2
+                end
+            else
+                specDB[barKey][k] = v
+            end
+        elseif type(v) == "table" and type(specDB[barKey][k]) == "table" then
+            -- Ensure nested table has all default keys
+            for k2, v2 in pairs(v) do
+                if specDB[barKey][k][k2] == nil then
+                    specDB[barKey][k][k2] = v2
+                end
+            end
+        end
+    end
+    return specDB[barKey]
+end
+
+local specialBarUpdateFrame = CreateFrame("Frame")
+local specialBarThrottle = 0.05
+local specialBarNextUpdate = 0
+local specialBarState = {}  -- Track state per barKey: { childFrame, originalParent, wrapperFrame }
+
+-- Track known CDM children so we can detect newly created ones
+local knownCDMChildren = {}   -- [childFrame] = true
+local hookedCDMChildren = {}  -- [childFrame] = true (OnShow hooked)
+
+-- Helper: clean text for matching (remove colors, trim spaces)
+local function CleanString(str)
+    if not str then return "" end
+    -- Remove color codes like |c%x%x%x%x%x%x%x%x
+    str = str:gsub("|c%x%x%x%x%x%x%x%x", "")
+    -- Remove restore code |r
+    str = str:gsub("|r", "")
+    -- Trim whitespace
+    str = str:match("^%s*(.-)%s*$")
+    return str
+end
+
+-- Called when a BCDM child frame is shown (either new or re-shown)
+-- This is the critical path for catching first-time spell casts mid-combat
+local function OnCDMChildShown(childFrame)
+    if not E.db.thingsUI or not E.db.thingsUI.specialBars then return end
+    if not childFrame or not childFrame.Bar then return end
+    
+    -- Check if any special bar is waiting for this spell
+    local specDB = GetSpecialBarDB()
+    for barKey, barDB in pairs(specDB) do
+        if type(barDB) == "table" and barDB.enabled and barDB.spellName and barDB.spellName ~= "" then
+            local match = false
+            local targetName = CleanString(barDB.spellName)
+            
+            -- Try text match first (works out of combat)
+            if childFrame.Bar.Name then
+                pcall(function()
+                    local barText = CleanString(childFrame.Bar.Name:GetText())
+                    if barText and barText == targetName then
+                        match = true
+                    end
+                end)
+            end
+            -- Fallback: match via auraSpellID (works in combat OR if user entered an ID)
+            if not match and childFrame.auraSpellID then
+                pcall(function()
+                    -- Check if user entered a raw spell ID
+                    local targetID = tonumber(targetName)
+                    if targetID and targetID == childFrame.auraSpellID then
+                        match = true
+                    else
+                        -- Check against spell info name
+                    local spellInfo = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(childFrame.auraSpellID)
+                    local resolvedName = spellInfo and spellInfo.name
+                    if not resolvedName then
+                        resolvedName = GetSpellInfo(childFrame.auraSpellID)
+                    end
+                        if resolvedName and CleanString(resolvedName) == targetName then
+                        match = true
+                        end
+                    end
+                end)
+            end
+            if match then
+                -- This child matches a special bar! Check if we already yoinked it
+                local state = specialBarState[barKey]
+                if not state or not state.childFrame or state.childFrame ~= childFrame then
+                    -- New match — immediately try to yoink via UpdateSpecialBarSlot
+                    pcall(UpdateSpecialBarSlot, barKey)
+                end
+            end
+        end
+    end
+end
+
+-- Scan BuffBarCooldownViewer for new children and hook their OnShow
+ScanAndHookCDMChildren = function()
+    if not BuffBarCooldownViewer then return end
+    
+    local ok, children = pcall(function() return { BuffBarCooldownViewer:GetChildren() } end)
+    if not ok or not children then return end
+    
+    for _, childFrame in ipairs(children) do
+        if childFrame and not hookedCDMChildren[childFrame] then
+            hookedCDMChildren[childFrame] = true
+            knownCDMChildren[childFrame] = true
+            -- Hook OnShow so we catch the moment CDM activates this bar
+            pcall(function()
+                childFrame:HookScript("OnShow", OnCDMChildShown)
+            end)
+            -- If it's already shown right now, process it immediately
+            local isShown = false
+            pcall(function() isShown = childFrame:IsShown() end)
+            if isShown then
+                OnCDMChildShown(childFrame)
+            end
+        end
+    end
+end
+
+-- Wrapper frame for a yoinked bar — provides independent anchoring
+GetOrCreateWrapper = function(barKey)
+    -- Check if we already have this wrapper in memory
+    if specialBarState[barKey] and specialBarState[barKey].wrapper then
+        return specialBarState[barKey].wrapper
+    end
+    
+    -- Check if the frame already exists globally (prevents duplication on script reload/update)
+    local frameName = "TUI_SpecialBar_" .. barKey
+    local wrapper = _G[frameName] or CreateFrame("Frame", frameName, UIParent)
+    
+    -- Ensure default props
+    if not wrapper:IsShown() then wrapper:Show() end
+    wrapper:SetFrameStrata("MEDIUM")
+    wrapper:SetFrameLevel(10)
+    
+    -- Check if backdrop exists on this frame (might be a reused frame)
+    if not wrapper.backdrop then
+        local bd = CreateFrame("Frame", nil, wrapper, "BackdropTemplate")
+        bd:SetAllPoints(wrapper)
+        bd:SetFrameLevel(wrapper:GetFrameLevel())
+        bd:SetBackdrop({
+            bgFile = E.media.blankTex,
+            edgeFile = E.media.blankTex,
+            edgeSize = 1,
+        })
+        bd:SetBackdropColor(0.1, 0.1, 0.1, 0.6)
+        bd:SetBackdropBorderColor(0, 0, 0, 0.8)
+        bd:Hide()
+        wrapper.backdrop = bd
+    end
+    
+    return wrapper
+end
+
+-- Find a tracked bar by spell name from BuffBarCooldownViewer
+FindBarBySpellName = function(spellName)
+    if not BuffBarCooldownViewer or not spellName or spellName == "" then return nil end
+    
+    local ok, children = pcall(function() return { BuffBarCooldownViewer:GetChildren() } end)
+    if not ok or not children then return nil end
+    
+    local targetName = CleanString(spellName)
+    
+    for _, childFrame in ipairs(children) do
+        if childFrame and childFrame.Bar then
+            local match = false
+            -- Primary: try matching via Bar.Name text (works out of combat)
+            if childFrame.Bar.Name then
+                pcall(function()
+                    local barText = CleanString(childFrame.Bar.Name:GetText())
+                    if barText and barText == targetName then
+                        match = true
+                    end
+                end)
+            end
+            -- Fallback: match via auraSpellID (works in combat when GetText returns secret value)
+            if not match and childFrame.auraSpellID then
+                pcall(function()
+                    -- Check if user entered a raw spell ID
+                    local targetID = tonumber(targetName)
+                    if targetID and targetID == childFrame.auraSpellID then
+                        match = true
+                    else
+                    local spellInfo = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(childFrame.auraSpellID)
+                    local resolvedName = spellInfo and spellInfo.name
+                    if not resolvedName then
+                        -- Legacy API fallback
+                        resolvedName = GetSpellInfo(childFrame.auraSpellID)
+                    end
+                        if resolvedName and CleanString(resolvedName) == targetName then
+                        match = true
+                        end
+                    end
+                end)
+            end
+            if match then return childFrame end
+        end
+    end
+    return nil
+end
+
+-- Release a yoinked bar back to its original parent
+ReleaseSpecialBar = function(barKey)
+    local state = specialBarState[barKey]
+    if not state then return end
+    
+    if state.childFrame and state.originalParent then
+        pcall(function()
+            state.childFrame:SetParent(state.originalParent)
+            yoinkedBars[state.childFrame] = nil
+        end)
+    end
+    
+    if state.wrapper then
+        if state.wrapper.backdrop then state.wrapper.backdrop:Hide() end
+        state.wrapper:Hide()
+    end
+    
+    specialBarState[barKey] = nil
+end
+
+-- Style a yoinked bar with special bar settings
+StyleSpecialBar = function(childFrame, db)
+    local bar = childFrame.Bar
+    local icon = childFrame.Icon
+    if not bar then return end
+    
+    -- SIZING: childFrame is strictly sized.
+    -- We need to split the backdrops for spacing to work.
+    
+    -- 1. Use the childFrame.tuiBackdrop as the BAR backdrop (repurposed)
+    if not childFrame.tuiBackdrop then
+        childFrame.tuiBackdrop = CreateFrame("Frame", nil, childFrame, "BackdropTemplate")
+        childFrame.tuiBackdrop:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
+    end
+    -- We will position this backdrop later based on offset
+    childFrame.tuiBackdrop:SetBackdropColor(0, 0, 0, 0.7)
+    childFrame.tuiBackdrop:SetBackdropBorderColor(0, 0, 0, 1)
+    childFrame.tuiBackdrop:SetFrameLevel(childFrame:GetFrameLevel() - 1)
+
+    local height = db.height
+    local barOffset = 0
+
+    -- 2. ICON STYLING
+    if db.iconEnabled and icon then
+        icon:Show()
+        icon:SetSize(height, height) -- Square icon match bar height
+        
+        if icon.Icon then
+            icon.Icon:SetTexCoord(db.iconZoom or 0.1, 1-(db.iconZoom or 0.1), db.iconZoom or 0.1, 1-(db.iconZoom or 0.1))
+            icon.Icon:SetDrawLayer("ARTWORK", 1) 
+            -- Inset texture
+            icon.Icon:ClearAllPoints()
+            icon.Icon:SetPoint("TOPLEFT", icon, "TOPLEFT", 1, -1)
+            icon.Icon:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
+        end
+        
+        -- Icon Backdrop
+        if not icon.tuiBackdrop then
+            icon.tuiBackdrop = CreateFrame("Frame", nil, icon, "BackdropTemplate")
+            icon.tuiBackdrop:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
+            icon.tuiBackdrop:SetBackdropColor(0, 0, 0, 1)
+            icon.tuiBackdrop:SetBackdropBorderColor(0, 0, 0, 1)
+        end
+        icon.tuiBackdrop:Show()
+        icon.tuiBackdrop:SetAllPoints(icon)
+        icon.tuiBackdrop:SetFrameLevel(icon:GetFrameLevel() - 1)
+        
+        -- Icon Position
+        icon:ClearAllPoints()
+        icon:SetPoint("LEFT", childFrame, "LEFT", 0, 0)
+        
+        barOffset = height + (db.iconSpacing or 3)
+    elseif icon then
+        icon:Hide()
+        barOffset = 0
+    end
+    
+    -- 3. BAR BACKDROP POSITIONING
+    childFrame.tuiBackdrop:Show()
+    childFrame.tuiBackdrop:ClearAllPoints()
+    childFrame.tuiBackdrop:SetPoint("TOPLEFT", childFrame, "TOPLEFT", barOffset, 0)
+    childFrame.tuiBackdrop:SetPoint("BOTTOMRIGHT", childFrame, "BOTTOMRIGHT", 0, 0)
+
+    -- 4. BAR POSITIONING (Inset inside the bar backdrop)
+    bar:ClearAllPoints()
+    bar:SetPoint("TOPLEFT", childFrame.tuiBackdrop, "TOPLEFT", 1, -1)
+    bar:SetPoint("BOTTOMRIGHT", childFrame.tuiBackdrop, "BOTTOMRIGHT", -1, 1)
+    
+    -- Show Name logic
+    local font = LSM:Fetch("font", db.font)
+    if bar.Name then
+        if db.showName then
+            bar.Name:Show()
+            bar.Name:SetFont(font, db.fontSize, db.fontOutline)
+            bar.Name:ClearAllPoints()
+            bar.Name:SetPoint(db.namePoint or "LEFT", bar, db.namePoint or "LEFT", db.nameXOffset or 4, db.nameYOffset or 0)
+        else
+            bar.Name:Hide()
+        end
+    end
+    
+    -- Show Duration logic
+    if bar.Duration then
+        if db.showDuration then
+            bar.Duration:Show()
+            bar.Duration:SetFont(font, db.fontSize, db.fontOutline)
+            bar.Duration:ClearAllPoints()
+            bar.Duration:SetPoint(db.durationPoint or "RIGHT", bar, db.durationPoint or "RIGHT", db.durationXOffset or -4, db.durationYOffset or 0)
+        else
+            bar.Duration:Hide()
+        end
+    end
+    
+    -- Statusbar Texture & Colors
+    bar:SetStatusBarTexture(LSM:Fetch("statusbar", db.statusBarTexture))
+    if db.useClassColor then bar:SetStatusBarColor(GetClassColor()) else bar:SetStatusBarColor(db.customColor.r, db.customColor.g, db.customColor.b) end
+    if bar.BarBG then bar.BarBG:SetAlpha(0) end
+    if bar.Pip then bar.Pip:SetAlpha(0) end
+    
+    -- Fonts
+    local font = LSM:Fetch("font", db.font)
+    if bar.Name then bar.Name:SetFont(font, db.fontSize, db.fontOutline) end
+    if bar.Duration then bar.Duration:SetFont(font, db.fontSize, db.fontOutline) end
+end
+
+-- Main update for a single special bar slot
+UpdateSpecialBarSlot = function(barKey)
+    local db = GetSpecialBarSlotDB(barKey)
+    if not db or not db.enabled or not db.spellName or db.spellName == "" then
+        ReleaseSpecialBar(barKey)
+        return
+    end
+    
+    local state = specialBarState[barKey]
+    local childFrame
+    local resolvedAnchor = ResolveAnchorFrame(db)
+    local anchorFrame = _G[resolvedAnchor]
+
+    -- STRICT SIZING: Do not guess borders. Use raw values.
+    local effectiveWidth = db.width
+    if db.inheritWidth and anchorFrame then
+        local aw = anchorFrame:GetWidth()
+        if aw and aw > 0 then 
+            effectiveWidth = aw + (db.inheritWidthOffset or 0)
+        end
+    end
+
+    local effectiveHeight = db.height
+    if db.inheritHeight and anchorFrame then
+        local ah = anchorFrame:GetHeight()
+        if ah and ah > 0 then 
+            effectiveHeight = ah + (db.inheritHeightOffset or 0)
+        end
+        -- Sync the DB height so StyleSpecialBar uses the correct value for Icon size
+        db.height = effectiveHeight
+    end
+    
+    if state and state.childFrame then
+        local stillValid = false
+        pcall(function() if state.childFrame.Bar and state.childFrame.Bar.Name then stillValid = true end end)
+        if stillValid then
+            childFrame = state.childFrame
+            yoinkedBars[childFrame] = true
+        else
+            if state.childFrame then yoinkedBars[state.childFrame] = nil end
+            if state.wrapper then state.wrapper:Hide() end
+            specialBarState[barKey] = nil
+            state = nil
+        end
+    end
+    
+    if not childFrame then
+        ScanAndHookCDMChildren()
+        childFrame = FindBarBySpellName(db.spellName)
+    end
+    
+    local wrapper = GetOrCreateWrapper(barKey)
+    
+    -- Apply strict sizing to wrapper
+    wrapper:SetSize(effectiveWidth, effectiveHeight)
+    
+    pcall(function()
+        if anchorFrame then
+            wrapper:ClearAllPoints()
+            wrapper:SetPoint(db.anchorPoint, anchorFrame, db.anchorRelativePoint, db.anchorXOffset, db.anchorYOffset)
+        end
+    end)
+    
+    -- Placeholder logic (Backdrop)
+    if wrapper.backdrop then
+        if db.showBackdrop and (not childFrame or not childFrame:IsShown()) then
+            wrapper.backdrop:Show()
+            wrapper:Show()
+            
+            -- Adjust placeholder to match the split layout (Only show "Bar" area)
+            local bc = db.backdropColor or { r = 0.1, g = 0.1, b = 0.1, a = 0.6 }
+            wrapper.backdrop:SetBackdropColor(bc.r, bc.g, bc.b, bc.a)
+            wrapper.backdrop:ClearAllPoints()
+            local phOffset = 0
+            if db.iconEnabled then
+                phOffset = effectiveHeight + (db.iconSpacing or 3)
+            end
+            wrapper.backdrop:SetPoint("TOPLEFT", wrapper, "TOPLEFT", phOffset, 0)
+            wrapper.backdrop:SetPoint("BOTTOMRIGHT", wrapper, "BOTTOMRIGHT", 0, 0)
+            
+        else
+            wrapper.backdrop:Hide()
+            if not childFrame then wrapper:Hide() end
+        end
+    end
+    
+    -- No child frame? We are done (just showed placeholder if needed)
+    if not childFrame then
+        if not specialBarState[barKey] then specialBarState[barKey] = { wrapper = wrapper } end
+        return
+    end
+    
+    local isActive = false
+    pcall(function() isActive = childFrame:IsShown() end)
+    yoinkedBars[childFrame] = true
+    
+    if not isActive then
+        return
+    end
+
+    if not state or state.childFrame ~= childFrame then
+        if state and state.childFrame and state.childFrame ~= childFrame then
+            yoinkedBars[state.childFrame] = nil
+            if state.originalParent then pcall(function() state.childFrame:SetParent(state.originalParent) end) end
+        end
+        
+        specialBarState[barKey] = {
+            childFrame = childFrame,
+            originalParent = childFrame:GetParent(),
+            wrapper = wrapper,
+        }
+        state = specialBarState[barKey]
+    end
+    
+    -- Parent the child to the wrapper
+    pcall(function()
+        if childFrame:GetParent() ~= wrapper then childFrame:SetParent(wrapper) end
+        
+        -- Resize the actual childFrame to match wrapper exactly
+        childFrame:SetSize(effectiveWidth, effectiveHeight)
+        
+        childFrame:ClearAllPoints()
+        childFrame:SetPoint("CENTER", wrapper, "CENTER", 0, 0)
+    end)
+    
+    -- Apply styling (texture, icon pos, etc)
+    pcall(StyleSpecialBar, childFrame, db)
+    wrapper:Show()
+end
+
+local function SpecialBarOnUpdate()
+    -- This is only used when buff bar skinning is disabled but special bars are active
+    local currentTime = GetTime()
+    if currentTime < specialBarNextUpdate then return end
+    specialBarNextUpdate = currentTime + specialBarThrottle
+    
+    if not E.db.thingsUI or not E.db.thingsUI.specialBars then return end
+    if not BuffBarCooldownViewer then return end
+    
+    -- Periodically scan for new CDM children (catches first-time spell casts)
+    ScanAndHookCDMChildren()
+    
+    local specDB = GetSpecialBarDB()
+    for barKey, barDB in pairs(specDB) do
+        if type(barDB) == "table" then
+            pcall(UpdateSpecialBarSlot, barKey)
+        end
+    end
+end
+
+function TUI:UpdateSpecialBars()
+    if not E.db.thingsUI.specialBars then return end
+    
+    -- Hook existing CDM children immediately so we catch OnShow events
+    ScanAndHookCDMChildren()
+    
+    local specDB = GetSpecialBarDB()
+    local anyEnabled = false
+    
+    -- First release any bars from OTHER specs that might be yoinked
+    for barKey, state in pairs(specialBarState) do
+        local db = specDB[barKey]
+        if not db or not db.enabled or not db.spellName or db.spellName == "" then
+            ReleaseSpecialBar(barKey)
+        end
+    end
+    
+    for barKey, barDB in pairs(specDB) do
+        if type(barDB) == "table" and barDB.enabled and barDB.spellName and barDB.spellName ~= "" then
+            anyEnabled = true
+        else
+            if type(barDB) == "table" then
+                ReleaseSpecialBar(barKey)
+            end
+        end
+    end
+    
+    if anyEnabled then
+        if not E.db.thingsUI.buffBars or not E.db.thingsUI.buffBars.enabled then
+            specialBarUpdateFrame:SetScript("OnUpdate", SpecialBarOnUpdate)
+        end
+        barUpdateFrame:SetScript("OnUpdate", BuffBarOnUpdate)
+        
+        -- Schedule additional scans to catch CDM children created after init
+        -- CDM may create bar frames slightly later during loading
+        for _, delay in ipairs({ 0.5, 1.0, 2.0, 5.0 }) do
+            C_Timer.After(delay, function()
+                ScanAndHookCDMChildren()
+                -- Also try to yoink immediately on each delayed scan
+                local currentSpecDB = GetSpecialBarDB()
+                for barKey, barDB in pairs(currentSpecDB) do
+                    if type(barDB) == "table" and barDB.enabled and barDB.spellName and barDB.spellName ~= "" then
+                        pcall(UpdateSpecialBarSlot, barKey)
+                    end
+                end
+            end)
+        end
+    else
+        specialBarUpdateFrame:SetScript("OnUpdate", nil)
+        for barKey, _ in pairs(specialBarState) do
+            ReleaseSpecialBar(barKey)
+        end
     end
 end
 
@@ -699,272 +1337,454 @@ function TUI:RecalculateCluster()
 end
 
 -------------------------------------------------
--- BCDM ANCHORING
--------------------------------------------------
-local bcdmUpdateFrame = CreateFrame("Frame")
-local bcdmUpdateThrottleDefault = 0.2
-local bcdmNextUpdate = 0
-
-local function GetBCDMAnchorFrame(anchorTo, customAnchor)
-    if anchorTo == "PLAYER" then
-        return _G["ElvUF_Player"]
-    elseif anchorTo == "TARGET" then
-        return _G["ElvUF_Target"]
-    elseif anchorTo == "CUSTOM" and customAnchor and customAnchor ~= "" then
-        return _G[customAnchor]
-    else -- UIPARENT
-        return UIParent
-    end
-end
-
-local function ApplyBCDMAnchors()
-    if not E.db.thingsUI or not E.db.thingsUI.bcdmAnchors then return end
-
-    local db = E.db.thingsUI.bcdmAnchors
-    if not db.enabled then return end
-    if InCombatLockdown() then return end
-
-    local frames = db.frames or {}
-    for frameName, fdb in pairs(frames) do
-        if fdb and fdb.enabled then
-            local frame = _G[frameName]
-            if frame then
-                local anchor = GetBCDMAnchorFrame(fdb.anchorTo, fdb.customAnchor)
-                if anchor then
-                    frame:ClearAllPoints()
-                    frame:SetPoint(
-                        fdb.point or "TOP",
-                        anchor,
-                        fdb.relativePoint or "BOTTOM",
-                        fdb.xOffset or 0,
-                        fdb.yOffset or 0
-                    )
-                end
-            end
-        end
-    end
-end
-
-local function BCDMAnchorsOnUpdate()
-    if not E.db.thingsUI or not E.db.thingsUI.bcdmAnchors then return end
-
-    local db = E.db.thingsUI.bcdmAnchors
-    if not db.enabled then return end
-
-    local currentTime = GetTime()
-    local throttle = db.throttle or bcdmUpdateThrottleDefault
-    if currentTime < bcdmNextUpdate then return end
-    bcdmNextUpdate = currentTime + throttle
-
-    ApplyBCDMAnchors()
-end
-
-function TUI:UpdateBCDMAnchors()
-    if not E.db.thingsUI or not E.db.thingsUI.bcdmAnchors then return end
-
-    local db = E.db.thingsUI.bcdmAnchors
-
-    -- Always clear the updater first (we only enable it if you explicitly want periodic re-apply)
-    bcdmUpdateFrame:SetScript("OnUpdate", nil)
-
-    if not db.enabled then return end
-
-    -- One-shot apply now
-    ApplyBCDMAnchors()
-
-    -- Hook OnShow for BCDM frames so anchors get re-applied when they appear (no constant polling).
-    TUI._bcdmHooked = TUI._bcdmHooked or {}
-
-    local function HookFrameByName(frameName)
-        local f = _G[frameName]
-        if f and not TUI._bcdmHooked[f] then
-            f:HookScript("OnShow", ApplyBCDMAnchors)
-            TUI._bcdmHooked[f] = true
-        end
-    end
-
-    local names = {
-        "BCDM_CustomCooldownViewer",
-        "BCDM_AdditionalCustomCooldownViewer",
-        "BCDM_CustomItemBar",
-        "BCDM_TrinketBar",
-        "BCDM_CustomItemSpellBar",
-    }
-
-    for _, n in ipairs(names) do
-        HookFrameByName(n)
-    end
-
-    -- Try a few times in case BCDM creates frames slightly later.
-    if not TUI._bcdmHookTicker then
-        local tries = 0
-        TUI._bcdmHookTicker = C_Timer.NewTicker(0.5, function(ticker)
-            tries = tries + 1
-            for _, n in ipairs(names) do
-                HookFrameByName(n)
-            end
-            ApplyBCDMAnchors()
-
-            if tries >= 10 then
-                ticker:Cancel()
-                TUI._bcdmHookTicker = nil
-            end
-        end)
-    end
-
-    -- Optional: enable periodic re-apply ONLY if throttle > 0
-    local throttle = db.throttle or 0
-    if throttle and throttle > 0 then
-        bcdmNextUpdate = 0
-        bcdmUpdateFrame:SetScript("OnUpdate", BCDMAnchorsOnUpdate)
-    end
-end
-
-function TUI:ReanchorBCDMNow()
-    if InCombatLockdown() then
-        print("|cFF8080FFElvUI_thingsUI|r - Cannot reposition during combat.")
-        return
-    end
-
-    bcdmNextUpdate = 0
-    ApplyBCDMAnchors()
-end
-
--- Generate shared config options for a BCDM frame
-function TUI:BCDMFrameOptions(frameName)
-    local anchorTargets = {
-        PLAYER = "ElvUF_Player",
-        TARGET = "ElvUF_Target",
-        UIPARENT = "UIParent",
-        CUSTOM = "Custom Frame",
-    }
-
-    local points = {
-        TOP = "TOP",
-        BOTTOM = "BOTTOM",
-        LEFT = "LEFT",
-        RIGHT = "RIGHT",
-        CENTER = "CENTER",
-        TOPLEFT = "TOPLEFT",
-        TOPRIGHT = "TOPRIGHT",
-        BOTTOMLEFT = "BOTTOMLEFT",
-        BOTTOMRIGHT = "BOTTOMRIGHT",
-    }
-
-    return {
-        enabled = {
-            order = 1,
-            type = "toggle",
-            name = "Enable",
-            get = function() return E.db.thingsUI.bcdmAnchors.frames[frameName].enabled end,
-            set = function(_, value)
-                E.db.thingsUI.bcdmAnchors.frames[frameName].enabled = value
-                TUI:UpdateBCDMAnchors()
-            end,
-            disabled = function() return not E.db.thingsUI.bcdmAnchors.enabled end,
-        },
-        anchorTo = {
-            order = 2,
-            type = "select",
-            name = "Anchor To",
-            values = anchorTargets,
-            get = function() return E.db.thingsUI.bcdmAnchors.frames[frameName].anchorTo end,
-            set = function(_, value)
-                E.db.thingsUI.bcdmAnchors.frames[frameName].anchorTo = value
-                TUI:UpdateBCDMAnchors()
-            end,
-            disabled = function() return not E.db.thingsUI.bcdmAnchors.enabled end,
-        },
-        customAnchor = {
-            order = 3,
-            type = "input",
-            name = "Custom Frame Name",
-            desc = "Enter the exact frame name to anchor to (e.g., EssentialCooldownViewer, MyCustomFrame).",
-            width = "double",
-            get = function() return E.db.thingsUI.bcdmAnchors.frames[frameName].customAnchor end,
-            set = function(_, value)
-                E.db.thingsUI.bcdmAnchors.frames[frameName].customAnchor = value
-                TUI:UpdateBCDMAnchors()
-            end,
-            disabled = function() 
-                return not E.db.thingsUI.bcdmAnchors.enabled or E.db.thingsUI.bcdmAnchors.frames[frameName].anchorTo ~= "CUSTOM"
-            end,
-        },
-        point = {
-            order = 4,
-            type = "select",
-            name = "Point",
-            values = points,
-            get = function() return E.db.thingsUI.bcdmAnchors.frames[frameName].point end,
-            set = function(_, value)
-                E.db.thingsUI.bcdmAnchors.frames[frameName].point = value
-                TUI:UpdateBCDMAnchors()
-            end,
-            disabled = function() return not E.db.thingsUI.bcdmAnchors.enabled end,
-        },
-        relativePoint = {
-            order = 5,
-            type = "select",
-            name = "Relative Point",
-            values = points,
-            get = function() return E.db.thingsUI.bcdmAnchors.frames[frameName].relativePoint end,
-            set = function(_, value)
-                E.db.thingsUI.bcdmAnchors.frames[frameName].relativePoint = value
-                TUI:UpdateBCDMAnchors()
-            end,
-            disabled = function() return not E.db.thingsUI.bcdmAnchors.enabled end,
-        },
-        xOffset = {
-            order = 6,
-            type = "range",
-            name = "X Offset",
-            min = -500, max = 500, step = 1,
-            get = function() return E.db.thingsUI.bcdmAnchors.frames[frameName].xOffset end,
-            set = function(_, value)
-                E.db.thingsUI.bcdmAnchors.frames[frameName].xOffset = value
-                TUI:UpdateBCDMAnchors()
-            end,
-            disabled = function() return not E.db.thingsUI.bcdmAnchors.enabled end,
-        },
-        yOffset = {
-            order = 7,
-            type = "range",
-            name = "Y Offset",
-            min = -500, max = 500, step = 1,
-            get = function() return E.db.thingsUI.bcdmAnchors.frames[frameName].yOffset end,
-            set = function(_, value)
-                E.db.thingsUI.bcdmAnchors.frames[frameName].yOffset = value
-                TUI:UpdateBCDMAnchors()
-            end,
-            disabled = function() return not E.db.thingsUI.bcdmAnchors.enabled end,
-        },
-    }
-end
-
-
-
--------------------------------------------------
 -- MODULE INITIALIZATION
 -------------------------------------------------
 function TUI:Initialize()
-    -- Register the plugin with ElvUI
     EP:RegisterPlugin(addon, TUI.ConfigTable)
     
-    -- Apply settings
+    -- Start-clean
+    wipe(skinnedBars)
+    wipe(yoinkedBars)
+
     self:UpdateVerticalBuffs()
     self:UpdateBuffBars()
+    self:UpdateSpecialBars()
     self:UpdateClusterPositioning()
-    self:UpdateBCDMAnchors()
     
-    -- Register for profile changes
     self:RegisterEvent("PLAYER_ENTERING_WORLD", function()
-        TUI:UpdateVerticalBuffs()
-        TUI:UpdateBuffBars()
-        TUI:UpdateClusterPositioning()
-        TUI:UpdateBCDMAnchors()
+        -- Tømme driten, om det ikke virker dreper jeg noen. Ingame.
+        wipe(skinnedBars)
+        
+        C_Timer.After(2, function()
+            wipe(skinnedBars)
+            wipe(yoinkedBars)
+            
+            -- Finn rammene CDM har laget mens vi ventet
+            ScanAndHookCDMChildren()
+            
+            -- Oppdater i rekkefølge
+            local specDB = GetSpecialBarDB()
+            for barKey in pairs(specDB) do UpdateSpecialBarSlot(barKey) end
+            
+            TUI:UpdateBuffBars()
+            TUI:UpdateVerticalBuffs()
+            TUI:UpdateClusterPositioning()
+            
+        end)
     end)
     
-    print("|cFF8080FFElvUI_thingsUI|r v" .. self.version .. " loaded - Config in /elvui → thingsUI")
+    self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED", function(_, unit)
+        if unit ~= "player" then return end
+        C_Timer.After(1, function() 
+            wipe(skinnedBars)
+            wipe(yoinkedBars)
+            TUI:UpdateSpecialBars() 
+            TUI:UpdateBuffBars()
+        end)
+    end)
+    
+    print("|cFF8080FFElvUI_thingsUI|r v" .. self.version .. " loaded - Config in /elvui -> thingsUI")
+end
+
+-------------------------------------------------
+-- SPECIAL BAR CONFIG GENERATOR
+-------------------------------------------------
+function TUI:SpecialBarOptions(barKey)
+    local function get(key) return GetSpecialBarSlotDB(barKey)[key] end
+    local function set(key, value) GetSpecialBarSlotDB(barKey)[key] = value; TUI:UpdateSpecialBars() end
+    local function setWipe(key, value) GetSpecialBarSlotDB(barKey)[key] = value; wipe(skinnedBars); TUI:UpdateSpecialBars() end
+    
+    return {
+        specInfo = {
+            order = 0, type = "description", width = "full",
+            name = function()
+                local specIndex = GetSpecialization()
+                local specName = specIndex and select(2, GetSpecializationInfo(specIndex)) or "Unknown"
+                return "|cFFFFFF00Current spec: " .. specName .. "|r  (settings are saved per spec)"
+            end,
+        },
+        enabled = {
+            order = 1, type = "toggle", name = "Enable", width = "full",
+            get = function() return get("enabled") end,
+            set = function(_, v)
+                if not v then ReleaseSpecialBar(barKey) end
+                GetSpecialBarSlotDB(barKey).enabled = v
+                TUI:UpdateSpecialBars()
+            end,
+        },
+        spellName = {
+            order = 2, type = "input", name = "Spell Name", width = "double",
+            desc = "Exact spell name as shown in Tracked Bars (e.g., Ironfur, Frenzied Regeneration).",
+            get = function() return get("spellName") end,
+            set = function(_, v)
+                -- Fully release and clear any cached state
+                ReleaseSpecialBar(barKey)
+                specialBarState[barKey] = nil
+                wipe(skinnedBars)
+                GetSpecialBarSlotDB(barKey).spellName = v
+                -- Delay to let CDM reclaim the released bar
+                C_Timer.After(0.15, function()
+                    TUI:UpdateSpecialBars()
+                end)
+            end,
+        },
+        spellStatus = {
+            order = 3, type = "description", width = "full",
+            name = function()
+                local name = GetSpecialBarSlotDB(barKey).spellName or ""
+                if name == "" then return "" end
+                if not BuffBarCooldownViewer then return "|cFFFF8800BuffBarCooldownViewer not found — open Cooldown Manager settings to initialize it|r" end
+                if InCombatLockdown() then return "|cFFFFFF00Status check unavailable in combat|r" end
+                
+                -- Force a fresh scan for new CDM children every time this status is checked
+                ScanAndHookCDMChildren()
+                
+                -- Check if this bar is currently yoinked and active
+                local state = specialBarState[barKey]
+                if state and state.childFrame and state.wrapper then
+                    local isShown = false
+                    pcall(function() isShown = state.wrapper:IsShown() end)
+                    if isShown then
+                        return "|cFF00FF00 Active (yoinked from Tracked Bars)|r"
+                    end
+                end
+                
+                -- Check all CDM children (including wrappers we may have created)
+                local found = false
+                local targetName = CleanString(name)
+                
+                pcall(function()
+                    local children = { BuffBarCooldownViewer:GetChildren() }
+                    for _, cf in ipairs(children) do
+                        local match = false
+                        if cf.Bar and cf.Bar.Name then
+                            local t = CleanString(cf.Bar.Name:GetText())
+                            if t and t == targetName then match = true end
+                        end
+                        if not match and cf.auraSpellID then
+                            local targetID = tonumber(targetName)
+                            if targetID and targetID == cf.auraSpellID then match = true end
+                        end
+                        if match then found = true end
+                    end
+                end)
+                if found then
+                    return "|cFF00FF00 Found in Tracked Bars|r"
+                end
+                
+                -- Also check if another special bar already yoinked this spell
+                for otherKey, otherState in pairs(specialBarState) do
+                    if otherKey ~= barKey and otherState.childFrame then
+                        local match = false
+                        pcall(function()
+                            local t = CleanString(otherState.childFrame.Bar.Name:GetText())
+                            if t and t == targetName then match = true end
+                        end)
+                        if match then
+                            return "|cFFFF8800 Found but yoinked by " .. otherKey .. "|r"
+                        end
+                    end
+                end
+
+                return "|cFFFF0000 Not found in Tracked Bars yet|r — Open CDM to force a scan, tab back in and out of this tab to check. Otherwise it's not in the Tracked Bars or may be misspelled. Or doesn't exist"
+            end,
+        },
+        
+        layoutHeader = { order = 10, type = "header", name = "Layout" },
+        width = {
+            order = 11, type = "range", name = "Width", min = 50, max = 500, step = 1,
+            get = function() return get("width") end,
+            set = function(_, v) setWipe("width", v) end,
+            disabled = function() return get("inheritWidth") end,
+        },
+        inheritWidth = {
+            order = 11.5, type = "toggle", name = "Inherit Width from Anchor",
+            desc = "Automatically match the width of the anchor frame.",
+            get = function() return get("inheritWidth") end,
+            set = function(_, v) setWipe("inheritWidth", v) end,
+        },
+        inheritWidthOffset = {
+            order = 11.6, type = "range", name = "Width Nudge",
+            desc = "Fine-tune the inherited width.",
+            min = -10, max = 10, step = 0.01, bigStep = 0.5,
+            get = function() return get("inheritWidthOffset") end,
+            set = function(_, v) setWipe("inheritWidthOffset", v) end,
+            disabled = function() return not get("inheritWidth") end,
+        },
+        height = {
+            order = 12, type = "range", name = "Height", min = 8, max = 60, step = 1,
+            get = function() return get("height") end,
+            set = function(_, v) setWipe("height", v) end,
+            disabled = function() return get("inheritHeight") end,
+        },
+        inheritHeight = {
+            order = 12.5, type = "toggle", name = "Inherit Height from Anchor",
+            desc = "Automatically match the height of the anchor frame.",
+            get = function() return get("inheritHeight") end,
+            set = function(_, v) setWipe("inheritHeight", v) end,
+        },
+        inheritHeightOffset = {
+            order = 12.6, type = "range", name = "Height Nudge",
+            desc = "Fine-tune the inherited height.",
+            min = -10, max = 10, step = 0.01, bigStep = 0.5,
+            get = function() return get("inheritHeightOffset") end,
+            set = function(_, v) setWipe("inheritHeightOffset", v) end,
+            disabled = function() return not get("inheritHeight") end,
+        },
+        statusBarTexture = {
+            order = 13, type = "select", name = "Texture",
+            dialogControl = "LSM30_Statusbar", values = LSM:HashTable("statusbar"),
+            get = function() return get("statusBarTexture") end,
+            set = function(_, v) setWipe("statusBarTexture", v) end,
+        },
+        useClassColor = {
+            order = 14, type = "toggle", name = "Use Class Color",
+            get = function() return get("useClassColor") end,
+            set = function(_, v) setWipe("useClassColor", v) end,
+        },
+        customColor = {
+            order = 15, type = "color", name = "Custom Color", hasAlpha = false,
+            disabled = function() return get("useClassColor") end,
+            get = function() local c = get("customColor"); return c.r, c.g, c.b end,
+            set = function(_, r, g, b) setWipe("customColor", { r = r, g = g, b = b }) end,
+        },
+        
+        iconHeader = { order = 20, type = "header", name = "Icon" },
+        iconEnabled = {
+            order = 21, type = "toggle", name = "Show Icon",
+            get = function() return get("iconEnabled") end,
+            set = function(_, v) setWipe("iconEnabled", v) end,
+        },
+        iconSpacing = {
+            order = 22, type = "range", name = "Icon Spacing", min = 0, max = 10, step = 1,
+            get = function() return get("iconSpacing") end,
+            set = function(_, v) setWipe("iconSpacing", v) end,
+            disabled = function() return not get("iconEnabled") end,
+        },
+        iconZoom = {
+            order = 23, type = "range", name = "Icon Zoom", min = 0, max = 0.45, step = 0.01, isPercent = true,
+            get = function() return get("iconZoom") end,
+            set = function(_, v) setWipe("iconZoom", v) end,
+            disabled = function() return not get("iconEnabled") end,
+        },
+        
+        textHeader = { order = 30, type = "header", name = "Text" },
+        font = {
+            order = 31, type = "select", name = "Font",
+            dialogControl = "LSM30_Font", values = LSM:HashTable("font"),
+            get = function() return get("font") end,
+            set = function(_, v) setWipe("font", v) end,
+        },
+        fontSize = {
+            order = 32, type = "range", name = "Font Size", min = 6, max = 30, step = 1,
+            get = function() return get("fontSize") end,
+            set = function(_, v) setWipe("fontSize", v) end,
+        },
+        fontOutline = {
+            order = 33, type = "select", name = "Font Outline",
+            values = { ["NONE"] = "None", ["OUTLINE"] = "Outline", ["THICKOUTLINE"] = "Thick Outline" },
+            get = function() return get("fontOutline") end,
+            set = function(_, v) setWipe("fontOutline", v) end,
+        },
+        showName = {
+            order = 34, type = "toggle", name = "Show Name",
+            get = function() return get("showName") end,
+            set = function(_, v) setWipe("showName", v) end,
+        },
+        namePoint = {
+            order = 35, type = "select", name = "Name Alignment",
+            values = { ["LEFT"] = "Left", ["CENTER"] = "Center", ["RIGHT"] = "Right" },
+            get = function() return get("namePoint") end,
+            set = function(_, v) setWipe("namePoint", v) end,
+            disabled = function() return not get("showName") end,
+        },
+        nameXOffset = {
+            order = 36, type = "range", name = "Name X Offset", min = -50, max = 50, step = 0.5,
+            get = function() return get("nameXOffset") end,
+            set = function(_, v) setWipe("nameXOffset", v) end,
+            disabled = function() return not get("showName") end,
+        },
+        nameYOffset = {
+            order = 37, type = "range", name = "Name Y Offset", min = -20, max = 20, step = 0.5,
+            get = function() return get("nameYOffset") end,
+            set = function(_, v) setWipe("nameYOffset", v) end,
+            disabled = function() return not get("showName") end,
+        },
+        
+        durationPoint = {
+            order = 38,
+            type = "select",
+            name = "Duration Alignment",
+            values = {
+                ["LEFT"] = "Left",
+                ["CENTER"] = "Center",
+                ["RIGHT"] = "Right",
+            },
+            get = function() return get("durationPoint") end,
+            set = function(_, v) setWipe("durationPoint", v) end,
+            disabled = function() return not get("showDuration") end,
+        },
+        durationXOffset = {
+            order = 39,
+            type = "range",
+            name = "Duration X Offset",
+            min = -50, max = 50, step = 0.5,
+            get = function() return get("durationXOffset") end,
+            set = function(_, v) setWipe("durationXOffset", v) end,
+            disabled = function() return not get("showDuration") end,
+        },
+        durationYOffset = {
+            order = 40,
+            type = "range",
+            name = "Duration Y Offset",
+            min = -20, max = 20, step = 0.5,
+            get = function() return E.db.thingsUI.buffBars.durationYOffset end,
+            set = function(_, v)
+                E.db.thingsUI.buffBars.durationYOffset = value
+                wipe(skinnedBars)
+                TUI:UpdateBuffBars()
+            end,
+        },
+        
+        stackHeader = { order = 40, type = "header", name = "Stack Count" },
+        showStacks = {
+            order = 41, type = "toggle", name = "Show Stack Count",
+            get = function() return get("showStacks") end,
+            set = function(_, v) setWipe("showStacks", v) end,
+        },
+        stackAnchor = {
+            order = 41.5, type = "select", name = "Stack Anchor",
+            desc = "Anchor the stack count to the Icon or the Bar.",
+            values = { ["ICON"] = "Icon", ["BAR"] = "Bar" },
+            get = function() return get("stackAnchor") or "ICON" end,
+            set = function(_, v) setWipe("stackAnchor", v) end,
+            disabled = function() return not get("showStacks") end,
+        },
+        stackFontSize = {
+            order = 42, type = "range", name = "Stack Font Size", min = 6, max = 36, step = 1,
+            get = function() return get("stackFontSize") end,
+            set = function(_, v) setWipe("stackFontSize", v) end,
+            disabled = function() return not get("showStacks") end,
+        },
+        stackFontOutline = {
+            order = 43, type = "select", name = "Stack Outline",
+            values = { ["NONE"] = "None", ["OUTLINE"] = "Outline", ["THICKOUTLINE"] = "Thick Outline" },
+            get = function() return get("stackFontOutline") end,
+            set = function(_, v) setWipe("stackFontOutline", v) end,
+            disabled = function() return not get("showStacks") end,
+        },
+        stackPoint = {
+            order = 44, type = "select", name = "Stack Position",
+            values = { ["CENTER"] = "Center", ["LEFT"] = "Left", ["RIGHT"] = "Right", ["TOP"] = "Top", ["BOTTOM"] = "Bottom" },
+            get = function() return get("stackPoint") end,
+            set = function(_, v) setWipe("stackPoint", v) end,
+            disabled = function() return not get("showStacks") end,
+        },
+        stackXOffset = {
+            order = 45, type = "range", name = "Stack X Offset", min = -20, max = 20, step = 0.5,
+            get = function() return get("stackXOffset") end,
+            set = function(_, v) setWipe("stackXOffset", v) end,
+            disabled = function() return not get("showStacks") end,
+        },
+        stackYOffset = {
+            order = 46, type = "range", name = "Stack Y Offset", min = -20, max = 20, step = 0.5,
+            get = function() return get("stackYOffset") end,
+            set = function(_, v) setWipe("stackYOffset", v) end,
+            disabled = function() return not get("showStacks") end,
+        },
+        
+        backdropHeader = { order = 48, type = "header", name = "Backdrop" },
+        showBackdrop = {
+            order = 48.1, type = "toggle", name = "Show Backdrop",
+            desc = "Show a persistent background behind the bar slot, visible even when the aura is not active.",
+            get = function() return get("showBackdrop") end,
+            set = function(_, v) setWipe("showBackdrop", v) end,
+        },
+        backdropColor = {
+            order = 48.2, type = "color", name = "Backdrop Color", hasAlpha = true,
+            get = function()
+                local c = get("backdropColor") or { r = 0.1, g = 0.1, b = 0.1, a = 0.6 }
+                return c.r, c.g, c.b, c.a
+            end,
+            set = function(_, r, g, b, a) setWipe("backdropColor", { r = r, g = g, b = b, a = a }) end,
+            disabled = function() return not get("showBackdrop") end,
+        },
+        
+        anchorHeader = { order = 50, type = "header", name = "Anchor" },
+        anchorMode = {
+            order = 51, type = "select", name = "Anchor To", width = "double",
+            desc = "Choose a predefined frame or select Custom to type a frame name.",
+            values = SPECIAL_BAR_ANCHOR_VALUES,
+            get = function() return get("anchorMode") or get("anchorFrame") or "ElvUF_Player" end,
+            set = function(_, v)
+                GetSpecialBarSlotDB(barKey).anchorMode = v
+                if v ~= "CUSTOM" then
+                    GetSpecialBarSlotDB(barKey).anchorFrame = v
+                end
+                TUI:UpdateSpecialBars()
+            end,
+        },
+        anchorFrame = {
+            order = 51.5, type = "input", name = "Custom Frame Name", width = "double",
+            desc = "Type the exact frame name (e.g., ElvUF_Player, UIParent).",
+            get = function() return get("anchorFrame") end,
+            set = function(_, v) set("anchorFrame", v) end,
+            hidden = function() return (get("anchorMode") or get("anchorFrame") or "ElvUF_Player") ~= "CUSTOM" end,
+        },
+        anchorPoint = {
+            order = 52, type = "select", name = "Point",
+            values = { ["TOP"] = "TOP", ["BOTTOM"] = "BOTTOM", ["LEFT"] = "LEFT", ["RIGHT"] = "RIGHT", ["CENTER"] = "CENTER",
+                       ["TOPLEFT"] = "TOPLEFT", ["TOPRIGHT"] = "TOPRIGHT", ["BOTTOMLEFT"] = "BOTTOMLEFT", ["BOTTOMRIGHT"] = "BOTTOMRIGHT" },
+            get = function() return get("anchorPoint") end,
+            set = function(_, v) set("anchorPoint", v) end,
+        },
+        anchorRelativePoint = {
+            order = 53, type = "select", name = "Relative Point",
+            values = { ["TOP"] = "TOP", ["BOTTOM"] = "BOTTOM", ["LEFT"] = "LEFT", ["RIGHT"] = "RIGHT", ["CENTER"] = "CENTER",
+                       ["TOPLEFT"] = "TOPLEFT", ["TOPRIGHT"] = "TOPRIGHT", ["BOTTOMLEFT"] = "BOTTOMLEFT", ["BOTTOMRIGHT"] = "BOTTOMRIGHT" },
+            get = function() return get("anchorRelativePoint") end,
+            set = function(_, v) set("anchorRelativePoint", v) end,
+        },
+        anchorXOffset = {
+            order = 54, type = "range", name = "X Offset", min = -500, max = 500, step = 0.5, bigStep = 1,
+            get = function() return get("anchorXOffset") end,
+            set = function(_, v) set("anchorXOffset", v) end,
+        },
+        anchorYOffset = {
+            order = 55, type = "range", name = "Y Offset", min = -500, max = 500, step = 0.5, bigStep = 1,
+            get = function() return get("anchorYOffset") end,
+            set = function(_, v) set("anchorYOffset", v) end,
+        },
+        
+        -- Reset Button
+        resetSettings = {
+            order = 100, -- High order to ensure it appears at the bottom
+            type = "execute",
+            name = "Reset to Defaults",
+            desc = "Reset all settings for this bar to their default values.",
+            func = function()
+                local db = GetSpecialBarSlotDB(barKey)
+                
+                -- Loop through the defaults table and copy values over
+                for k, v in pairs(SPECIAL_BAR_DEFAULTS) do
+                    if type(v) == "table" then
+                        -- Create a new table for colors to avoid reference issues
+                        db[k] = {}
+                        for subKey, subVal in pairs(v) do
+                            db[k][subKey] = subVal
+                        end
+                    else
+                        db[k] = v
+                    end
+                end
+                
+                -- Force a full refresh
+                wipe(skinnedBars) 
+                TUI:UpdateSpecialBars()
+                print("|cFF8080FFthingsUI|r: " .. barKey .. " reset to defaults.")
+            end,
+        },
+    }
 end
 
 -------------------------------------------------
@@ -1100,6 +1920,7 @@ function TUI:ConfigTable()
                 order = 20,
                 type = "group",
                 name = "Buff Bars",
+                childGroups = "tree",
                 args = {
                     buffBarsHeader = {
                         order = 1,
@@ -1118,277 +1939,650 @@ function TUI:ConfigTable()
                             TUI:UpdateBuffBars()
                         end,
                     },
+                    presetDPSTank = {
+                        order = 3,
+                        type = "execute",
+                        name = "Load DPS/Tank Preset",
+                        desc = "Load default buff bar settings for DPS and Tank specs (bars grow UP from player frame).",
+                        func = function()
+                            local db = E.db.thingsUI.buffBars
+                            db.enabled = true
+                            db.growthDirection = "UP"
+                            db.width = 240
+                            db.inheritWidth = true
+                            db.inheritWidthOffset = 1
+                            db.height = 23
+                            db.spacing = 3
+                            db.statusBarTexture = "ElvUI Blank"
+                            db.useClassColor = true
+                            db.iconEnabled = true
+                            db.iconSpacing = 4
+                            db.iconZoom = 0.1
+                            db.font = "Expressway"
+                            db.fontSize = 14
+                            db.fontOutline = "OUTLINE"
+                            db.namePoint = "LEFT"
+                            db.nameXOffset = 2
+                            db.nameYOffset = 0
+                            db.durationPoint = "RIGHT"
+                            db.durationXOffset = -4
+                            db.durationYOffset = 0
+                            db.stackAnchor = "ICON"
+                            db.stackPoint = "CENTER"
+                            db.stackFontSize = 15
+                            db.stackFontOutline = "OUTLINE"
+                            db.stackXOffset = 0
+                            db.stackYOffset = 0
+                            db.anchorEnabled = true
+                            db.anchorFrame = "ElvUF_Player"
+                            db.anchorPoint = "BOTTOM"
+                            db.anchorRelativePoint = "TOP"
+                            db.anchorXOffset = -0.5
+                            db.anchorYOffset = 50
+                            wipe(skinnedBars)
+                            TUI:UpdateBuffBars()
+                        end,
+                    },
+                    presetHealer = {
+                        order = 4,
+                        type = "execute",
+                        name = "Load Healer Preset",
+                        desc = "Load default buff bar settings for Healer specs (bars grow DOWN from class bar).",
+                        func = function()
+                            local db = E.db.thingsUI.buffBars
+                            db.enabled = true
+                            db.growthDirection = "DOWN"
+                            db.width = 218
+                            db.inheritWidth = true
+                            db.inheritWidthOffset = 3
+                            db.height = 23
+                            db.spacing = 3
+                            db.statusBarTexture = "ElvUI Blank"
+                            db.useClassColor = true
+                            db.iconEnabled = true
+                            db.iconSpacing = 4
+                            db.iconZoom = 0
+                            db.font = "Expressway"
+                            db.fontSize = 15
+                            db.fontOutline = "OUTLINE"
+                            db.namePoint = "LEFT"
+                            db.nameXOffset = 4
+                            db.nameYOffset = 0
+                            db.durationPoint = "RIGHT"
+                            db.durationXOffset = -4
+                            db.durationYOffset = 0
+                            db.stackAnchor = "ICON"
+                            db.stackPoint = "CENTER"
+                            db.stackFontSize = 15
+                            db.stackFontOutline = "OUTLINE"
+                            db.stackXOffset = 0
+                            db.stackYOffset = 0
+                            db.anchorEnabled = true
+                            db.anchorFrame = "ElvUF_Player_ClassBar"
+                            db.anchorPoint = "TOP"
+                            db.anchorRelativePoint = "BOTTOM"
+                            db.anchorXOffset = -0.5
+                            db.anchorYOffset = -3
+                            wipe(skinnedBars)
+                            TUI:UpdateBuffBars()
+                        end,
+                    },
                     
-                    layoutHeader = {
+                    -----------------------------------------
+                    -- LAYOUT SUB-GROUP
+                    -----------------------------------------
+                    layoutGroup = {
                         order = 10,
-                        type = "header",
+                        type = "group",
                         name = "Layout",
-                    },
-                    growthDirection = {
-                        order = 11,
-                        type = "select",
-                        name = "Growth Direction",
-                        desc = "Direction the bars grow.",
-                        values = {
-                            ["UP"] = "Up",
-                            ["DOWN"] = "Down",
+                        args = {
+                            layoutHeader = {
+                                order = 1,
+                                type = "header",
+                                name = "Size & Spacing",
+                            },
+                            growthDirection = {
+                                order = 2,
+                                type = "select",
+                                name = "Growth Direction",
+                                desc = "Direction the bars grow.",
+                                values = {
+                                    ["UP"] = "Up",
+                                    ["DOWN"] = "Down",
+                                },
+                                get = function() return E.db.thingsUI.buffBars.growthDirection end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.growthDirection = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            width = {
+                                order = 3,
+                                type = "range",
+                                name = "Width",
+                                min = 100, max = 400, step = 0.01, bigStep = 1,
+                                get = function() return E.db.thingsUI.buffBars.width end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.width = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                                disabled = function() return E.db.thingsUI.buffBars.inheritWidth end,
+                            },
+                            inheritWidth = {
+                                order = 4,
+                                type = "toggle",
+                                name = "Inherit Width from Anchor",
+                                desc = "Automatically match the width of the anchor frame. Requires anchoring to be enabled.",
+                                get = function() return E.db.thingsUI.buffBars.inheritWidth end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.inheritWidth = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            inheritWidthOffset = {
+                                order = 5,
+                                type = "range",
+                                name = "Width Nudge",
+                                desc = "Fine-tune the inherited width. Add or subtract pixels from the anchor's width.",
+                                min = -10, max = 10, step = 0.01, bigStep = 0.5,
+                                get = function() return E.db.thingsUI.buffBars.inheritWidthOffset end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.inheritWidthOffset = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                                disabled = function() return not E.db.thingsUI.buffBars.inheritWidth end,
+                            },
+                            height = {
+                                order = 6,
+                                type = "range",
+                                name = "Height",
+                                min = 10, max = 40, step = 0.01, bigStep = 1,
+                                get = function() return E.db.thingsUI.buffBars.height end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.height = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            spacing = {
+                                order = 7,
+                                type = "range",
+                                name = "Spacing",
+                                min = -10, max = 10, step = 0.01, bigStep = 1,
+                                get = function() return E.db.thingsUI.buffBars.spacing end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.spacing = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            
+                            textureHeader = {
+                                order = 10,
+                                type = "header",
+                                name = "Textures & Colors",
+                            },
+                            statusBarTexture = {
+                                order = 11,
+                                type = "select",
+                                name = "Status Bar Texture",
+                                dialogControl = "LSM30_Statusbar",
+                                values = LSM:HashTable("statusbar"),
+                                get = function() return E.db.thingsUI.buffBars.statusBarTexture end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.statusBarTexture = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            useClassColor = {
+                                order = 12,
+                                type = "toggle",
+                                name = "Use Class Color",
+                                desc = "Color the bar based on your class.",
+                                get = function() return E.db.thingsUI.buffBars.useClassColor end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.useClassColor = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            customColor = {
+                                order = 13,
+                                type = "color",
+                                name = "Custom Bar Color",
+                                desc = "Custom color when not using class color.",
+                                hasAlpha = false,
+                                disabled = function() return E.db.thingsUI.buffBars.useClassColor end,
+                                get = function()
+                                    local c = E.db.thingsUI.buffBars.customColor
+                                    return c.r, c.g, c.b
+                                end,
+                                set = function(_, r, g, b)
+                                    E.db.thingsUI.buffBars.customColor = { r = r, g = g, b = b }
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            
+                            iconHeader = {
+                                order = 20,
+                                type = "header",
+                                name = "Icon",
+                            },
+                            iconEnabled = {
+                                order = 21,
+                                type = "toggle",
+                                name = "Show Icon",
+                                desc = "Display the spell icon next to the bar.",
+                                get = function() return E.db.thingsUI.buffBars.iconEnabled end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.iconEnabled = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            iconSpacing = {
+                                order = 22,
+                                type = "range",
+                                name = "Icon Spacing",
+                                desc = "Gap between the icon and the bar.",
+                                min = 0, max = 10, step = 0.01, bigStep = 1,
+                                get = function() return E.db.thingsUI.buffBars.iconSpacing end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.iconSpacing = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                            },
+                            iconZoom = {
+                                order = 23,
+                                type = "range",
+                                name = "Icon Zoom",
+                                desc = "How much to crop the icon edges. 0 = no crop (full texture), 0.1 = ElvUI default.",
+                                min = 0, max = 0.45, step = 0.01,
+                                isPercent = true,
+                                get = function() return E.db.thingsUI.buffBars.iconZoom end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.iconZoom = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                            },
                         },
-                        get = function() return E.db.thingsUI.buffBars.growthDirection end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.growthDirection = value
-                            wipe(skinnedBars)
-                            TUI:UpdateBuffBars()
-                        end,
-                    },
-                    width = {
-                        order = 12,
-                        type = "range",
-                        name = "Width",
-                        min = 100, max = 400, step = 1,
-                        get = function() return E.db.thingsUI.buffBars.width end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.width = value
-                            wipe(skinnedBars)
-                            TUI:UpdateBuffBars()
-                        end,
-                    },
-                    height = {
-                        order = 13,
-                        type = "range",
-                        name = "Height",
-                        min = 10, max = 40, step = 1,
-                        get = function() return E.db.thingsUI.buffBars.height end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.height = value
-                            wipe(skinnedBars)
-                            TUI:UpdateBuffBars()
-                        end,
-                    },
-                    spacing = {
-                        order = 14,
-                        type = "range",
-                        name = "Spacing",
-                        min = -10, max = 10, step = 1,
-                        get = function() return E.db.thingsUI.buffBars.spacing end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.spacing = value
-                            wipe(skinnedBars)
-                            TUI:UpdateBuffBars()
-                        end,
                     },
                     
-                    textureHeader = {
+                    -----------------------------------------
+                    -- TEXT SUB-GROUP
+                    -----------------------------------------
+                    textGroup = {
                         order = 20,
-                        type = "header",
-                        name = "Textures & Colors",
-                    },
-                    statusBarTexture = {
-                        order = 21,
-                        type = "select",
-                        name = "Status Bar Texture",
-                        dialogControl = "LSM30_Statusbar",
-                        values = LSM:HashTable("statusbar"),
-                        get = function() return E.db.thingsUI.buffBars.statusBarTexture end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.statusBarTexture = value
-                            wipe(skinnedBars)
-                            TUI:UpdateBuffBars()
-                        end,
-                    },
-                    useClassColor = {
-                        order = 22,
-                        type = "toggle",
-                        name = "Use Class Color",
-                        desc = "Color the bar based on your class.",
-                        get = function() return E.db.thingsUI.buffBars.useClassColor end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.useClassColor = value
-                            wipe(skinnedBars)
-                            TUI:UpdateBuffBars()
-                        end,
-                    },
-                    customColor = {
-                        order = 23,
-                        type = "color",
-                        name = "Custom Bar Color",
-                        desc = "Custom color when not using class color.",
-                        hasAlpha = false,
-                        disabled = function() return E.db.thingsUI.buffBars.useClassColor end,
-                        get = function()
-                            local c = E.db.thingsUI.buffBars.customColor
-                            return c.r, c.g, c.b
-                        end,
-                        set = function(_, r, g, b)
-                            E.db.thingsUI.buffBars.customColor = { r = r, g = g, b = b }
-                            wipe(skinnedBars)
-                            TUI:UpdateBuffBars()
-                        end,
+                        type = "group",
+                        name = "Text",
+                        args = {
+                            fontHeader = {
+                                order = 1,
+                                type = "header",
+                                name = "Font",
+                            },
+                            font = {
+                                order = 2,
+                                type = "select",
+                                name = "Font",
+                                dialogControl = "LSM30_Font",
+                                values = LSM:HashTable("font"),
+                                get = function() return E.db.thingsUI.buffBars.font end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.font = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            fontSize = {
+                                order = 3,
+                                type = "range",
+                                name = "Font Size",
+                                min = 8, max = 50, step = 1,
+                                get = function() return E.db.thingsUI.buffBars.fontSize end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.fontSize = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            fontOutline = {
+                                order = 4,
+                                type = "select",
+                                name = "Font Outline",
+                                desc = "Outline for Name and Duration text.",
+                                values = {
+                                    ["NONE"] = "None",
+                                    ["OUTLINE"] = "Outline",
+                                    ["THICKOUTLINE"] = "Thick Outline",
+                                    ["MONOCHROME"] = "Monochrome",
+                                },
+                                get = function() return E.db.thingsUI.buffBars.fontOutline end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.fontOutline = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            
+                            nameTextHeader = {
+                                order = 10,
+                                type = "header",
+                                name = "Name Text",
+                            },
+                            namePoint = {
+                                order = 11,
+                                type = "select",
+                                name = "Name Alignment",
+                                desc = "Anchor point for the spell name text.",
+                                values = {
+                                    ["LEFT"] = "Left",
+                                    ["CENTER"] = "Center",
+                                    ["RIGHT"] = "Right",
+                                },
+                                get = function() return E.db.thingsUI.buffBars.namePoint end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.namePoint = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            nameXOffset = {
+                                order = 12,
+                                type = "range",
+                                name = "Name X Offset",
+                                min = -50, max = 50, step = 0.5,
+                                get = function() return E.db.thingsUI.buffBars.nameXOffset end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.nameXOffset = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            nameYOffset = {
+                                order = 13,
+                                type = "range",
+                                name = "Name Y Offset",
+                                min = -20, max = 20, step = 0.5,
+                                get = function() return E.db.thingsUI.buffBars.nameYOffset end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.nameYOffset = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            
+                            durationTextHeader = {
+                                order = 20,
+                                type = "header",
+                                name = "Duration Text",
+                            },
+                            durationPoint = {
+                                order = 21,
+                                type = "select",
+                                name = "Duration Alignment",
+                                desc = "Anchor point for the duration text.",
+                                values = {
+                                    ["LEFT"] = "Left",
+                                    ["CENTER"] = "Center",
+                                    ["RIGHT"] = "Right",
+                                },
+                                get = function() return E.db.thingsUI.buffBars.durationPoint end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.durationPoint = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            durationXOffset = {
+                                order = 22,
+                                type = "range",
+                                name = "Duration X Offset",
+                                min = -50, max = 50, step = 0.5,
+                                get = function() return E.db.thingsUI.buffBars.durationXOffset end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.durationXOffset = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            durationYOffset = {
+                                order = 23,
+                                type = "range",
+                                name = "Duration Y Offset",
+                                min = -20, max = 20, step = 0.5,
+                                get = function() return E.db.thingsUI.buffBars.durationYOffset end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.durationYOffset = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            
+                            stackHeader = {
+                                order = 30,
+                                type = "header",
+                                name = "Stack Count",
+                            },
+                            stackAnchor = {
+                                order = 30.5,
+                                type = "select",
+                                name = "Stack Anchor",
+                                desc = "Anchor the stack count to the Icon or the Bar.",
+                                values = {
+                                    ["ICON"] = "Icon",
+                                    ["BAR"] = "Bar",
+                                },
+                                get = function() return E.db.thingsUI.buffBars.stackAnchor end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.stackAnchor = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                            },
+                            stackPoint = {
+                                order = 31,
+                                type = "select",
+                                name = "Stack Position",
+                                desc = "Anchor point for the stack count on the icon.",
+                                values = {
+                                    ["CENTER"] = "Center",
+                                    ["TOP"] = "Top",
+                                    ["BOTTOM"] = "Bottom",
+                                    ["TOPLEFT"] = "Top Left",
+                                    ["TOPRIGHT"] = "Top Right",
+                                    ["BOTTOMLEFT"] = "Bottom Left",
+                                    ["BOTTOMRIGHT"] = "Bottom Right",
+                                },
+                                get = function() return E.db.thingsUI.buffBars.stackPoint end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.stackPoint = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                            },
+                            stackFontSize = {
+                                order = 32,
+                                type = "range",
+                                name = "Stack Font Size",
+                                desc = "Font size for the stack count on icons.",
+                                min = 6, max = 50, step = 1,
+                                get = function() return E.db.thingsUI.buffBars.stackFontSize end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.stackFontSize = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                            },
+                            stackFontOutline = {
+                                order = 33,
+                                type = "select",
+                                name = "Stack Font Outline",
+                                values = {
+                                    ["NONE"] = "None",
+                                    ["OUTLINE"] = "Outline",
+                                    ["THICKOUTLINE"] = "Thick Outline",
+                                },
+                                get = function() return E.db.thingsUI.buffBars.stackFontOutline end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.stackFontOutline = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                            },
+                            stackXOffset = {
+                                order = 34,
+                                type = "range",
+                                name = "Stack X Offset",
+                                desc = "Horizontal offset for the stack count text.",
+                                min = -20, max = 20, step = 0.5,
+                                get = function() return E.db.thingsUI.buffBars.stackXOffset end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.stackXOffset = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                            },
+                            stackYOffset = {
+                                order = 35,
+                                type = "range",
+                                name = "Stack Y Offset",
+                                desc = "Vertical offset for the stack count text.",
+                                min = -20, max = 20, step = 0.5,
+                                get = function() return E.db.thingsUI.buffBars.stackYOffset end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.stackYOffset = value
+                                    wipe(skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                            },
+                        },
                     },
                     
-                    fontHeader = {
+                    -----------------------------------------
+                    -- ANCHORING SUB-GROUP
+                    -----------------------------------------
+                    anchoringGroup = {
                         order = 30,
-                        type = "header",
-                        name = "Font",
-                    },
-                    font = {
-                        order = 31,
-                        type = "select",
-                        name = "Font",
-                        dialogControl = "LSM30_Font",
-                        values = LSM:HashTable("font"),
-                        get = function() return E.db.thingsUI.buffBars.font end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.font = value
-                            wipe(skinnedBars)
-                            TUI:UpdateBuffBars()
-                        end,
-                    },
-                    fontSize = {
-                        order = 32,
-                        type = "range",
-                        name = "Font Size",
-                        min = 8, max = 24, step = 1,
-                        get = function() return E.db.thingsUI.buffBars.fontSize end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.fontSize = value
-                            wipe(skinnedBars)
-                            TUI:UpdateBuffBars()
-                        end,
-                    },
-                    fontOutline = {
-                        order = 33,
-                        type = "select",
-                        name = "Font Outline",
-                        values = {
-                            ["NONE"] = "None",
-                            ["OUTLINE"] = "Outline",
-                            ["THICKOUTLINE"] = "Thick Outline",
-                            ["MONOCHROME"] = "Monochrome",
+                        type = "group",
+                        name = "Anchoring",
+                        args = {
+                            anchorHeader = {
+                                order = 1,
+                                type = "header",
+                                name = "Anchor Settings",
+                            },
+                            anchorEnabled = {
+                                order = 2,
+                                type = "toggle",
+                                name = "Enable Anchoring",
+                                desc = "Anchor the buff bar container to another frame.",
+                                get = function() return E.db.thingsUI.buffBars.anchorEnabled end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.anchorEnabled = value
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            anchorFrame = {
+                                order = 3,
+                                type = "select",
+                                name = "Anchor Frame",
+                                desc = "Select a frame to anchor to.",
+                                values = SHARED_ANCHOR_VALUES,
+                                get = function() return E.db.thingsUI.buffBars.anchorFrame end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.anchorFrame = value
+                                    TUI:UpdateBuffBars()
+                                end,
+                                disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
+                            },
+                            anchorPoint = {
+                                order = 4,
+                                type = "select",
+                                name = "Point",
+                                desc = "The point on the buff bars to anchor.",
+                                values = {
+                                    ["TOP"] = "TOP",
+                                    ["BOTTOM"] = "BOTTOM",
+                                    ["LEFT"] = "LEFT",
+                                    ["RIGHT"] = "RIGHT",
+                                    ["CENTER"] = "CENTER",
+                                    ["TOPLEFT"] = "TOPLEFT",
+                                    ["TOPRIGHT"] = "TOPRIGHT",
+                                    ["BOTTOMLEFT"] = "BOTTOMLEFT",
+                                    ["BOTTOMRIGHT"] = "BOTTOMRIGHT",
+                                },
+                                get = function() return E.db.thingsUI.buffBars.anchorPoint end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.anchorPoint = value
+                                    TUI:UpdateBuffBars()
+                                end,
+                                disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
+                            },
+                            anchorRelativePoint = {
+                                order = 5,
+                                type = "select",
+                                name = "Relative Point",
+                                desc = "The point on the target frame to anchor to.",
+                                values = {
+                                    ["TOP"] = "TOP",
+                                    ["BOTTOM"] = "BOTTOM",
+                                    ["LEFT"] = "LEFT",
+                                    ["RIGHT"] = "RIGHT",
+                                    ["CENTER"] = "CENTER",
+                                    ["TOPLEFT"] = "TOPLEFT",
+                                    ["TOPRIGHT"] = "TOPRIGHT",
+                                    ["BOTTOMLEFT"] = "BOTTOMLEFT",
+                                    ["BOTTOMRIGHT"] = "BOTTOMRIGHT",
+                                },
+                                get = function() return E.db.thingsUI.buffBars.anchorRelativePoint end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.anchorRelativePoint = value
+                                    TUI:UpdateBuffBars()
+                                end,
+                                disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
+                            },
+                            anchorXOffset = {
+                                order = 6,
+                                type = "range",
+                                name = "X Offset",
+                                min = -500, max = 500, step = 0.01, bigStep = 1,
+                                get = function() return E.db.thingsUI.buffBars.anchorXOffset end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.anchorXOffset = value
+                                    TUI:UpdateBuffBars()
+                                end,
+                                disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
+                            },
+                            anchorYOffset = {
+                                order = 7,
+                                type = "range",
+                                name = "Y Offset",
+                                min = -500, max = 500, step = 0.01, bigStep = 1,
+                                get = function() return E.db.thingsUI.buffBars.anchorYOffset end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.anchorYOffset = value
+                                    TUI:UpdateBuffBars()
+                                end,
+                                disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
+                            },
                         },
-                        get = function() return E.db.thingsUI.buffBars.fontOutline end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.fontOutline = value
-                            wipe(skinnedBars)
-                            TUI:UpdateBuffBars()
-                        end,
-                    },
-                    
-                    iconHeader = {
-                        order = 40,
-                        type = "header",
-                        name = "Icon",
-                    },
-                    iconEnabled = {
-                        order = 41,
-                        type = "toggle",
-                        name = "Show Icon",
-                        desc = "Display the spell icon next to the bar.",
-                        get = function() return E.db.thingsUI.buffBars.iconEnabled end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.iconEnabled = value
-                            wipe(skinnedBars)
-                            TUI:UpdateBuffBars()
-                        end,
-                    },
-                    
-                    anchorHeader = {
-                        order = 50,
-                        type = "header",
-                        name = "Anchor Settings",
-                    },
-                    anchorEnabled = {
-                        order = 51,
-                        type = "toggle",
-                        name = "Enable Anchoring",
-                        desc = "Anchor the buff bar container to another frame.",
-                        get = function() return E.db.thingsUI.buffBars.anchorEnabled end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.anchorEnabled = value
-                            TUI:UpdateBuffBars()
-                        end,
-                    },
-                    anchorFrame = {
-                        order = 52,
-                        type = "input",
-                        name = "Anchor Frame",
-                        desc = "Name of the frame to anchor to (e.g., ElvUF_Player, EssentialCooldownViewer).",
-                        width = "double",
-                        get = function() return E.db.thingsUI.buffBars.anchorFrame end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.anchorFrame = value
-                            TUI:UpdateBuffBars()
-                        end,
-                        disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
-                    },
-                    anchorPoint = {
-                        order = 53,
-                        type = "select",
-                        name = "Point",
-                        desc = "The point on the buff bars to anchor.",
-                        values = {
-                            ["TOP"] = "TOP",
-                            ["BOTTOM"] = "BOTTOM",
-                            ["LEFT"] = "LEFT",
-                            ["RIGHT"] = "RIGHT",
-                            ["CENTER"] = "CENTER",
-                            ["TOPLEFT"] = "TOPLEFT",
-                            ["TOPRIGHT"] = "TOPRIGHT",
-                            ["BOTTOMLEFT"] = "BOTTOMLEFT",
-                            ["BOTTOMRIGHT"] = "BOTTOMRIGHT",
-                        },
-                        get = function() return E.db.thingsUI.buffBars.anchorPoint end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.anchorPoint = value
-                            TUI:UpdateBuffBars()
-                        end,
-                        disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
-                    },
-                    anchorRelativePoint = {
-                        order = 54,
-                        type = "select",
-                        name = "Relative Point",
-                        desc = "The point on the target frame to anchor to.",
-                        values = {
-                            ["TOP"] = "TOP",
-                            ["BOTTOM"] = "BOTTOM",
-                            ["LEFT"] = "LEFT",
-                            ["RIGHT"] = "RIGHT",
-                            ["CENTER"] = "CENTER",
-                            ["TOPLEFT"] = "TOPLEFT",
-                            ["TOPRIGHT"] = "TOPRIGHT",
-                            ["BOTTOMLEFT"] = "BOTTOMLEFT",
-                            ["BOTTOMRIGHT"] = "BOTTOMRIGHT",
-                        },
-                        get = function() return E.db.thingsUI.buffBars.anchorRelativePoint end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.anchorRelativePoint = value
-                            TUI:UpdateBuffBars()
-                        end,
-                        disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
-                    },
-                    anchorXOffset = {
-                        order = 55,
-                        type = "range",
-                        name = "X Offset",
-                        min = -500, max = 500, step = 1,
-                        get = function() return E.db.thingsUI.buffBars.anchorXOffset end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.anchorXOffset = value
-                            TUI:UpdateBuffBars()
-                        end,
-                        disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
-                    },
-                    anchorYOffset = {
-                        order = 56,
-                        type = "range",
-                        name = "Y Offset",
-                        min = -500, max = 500, step = 1,
-                        get = function() return E.db.thingsUI.buffBars.anchorYOffset end,
-                        set = function(_, value)
-                            E.db.thingsUI.buffBars.anchorYOffset = value
-                            TUI:UpdateBuffBars()
-                        end,
-                        disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
                     },
                 },
             },
@@ -1602,7 +2796,7 @@ function TUI:ConfigTable()
                         get = function() return E.db.thingsUI.clusterPositioning.targetCastBar.enabled end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.targetCastBar.enabled = value
-                            TUI:RecalculateCluster()
+                            TUI:UpdateClusterPositioning()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
@@ -1661,93 +2855,41 @@ function TUI:ConfigTable()
             },
 
             -------------------------------------------------
-            -- BCDM ANCHORING TAB
+            -- SPECIAL BARS TAB
             -------------------------------------------------
-            bcdmAnchorsTab = {
-                order = 40,
+            specialBarsTab = {
+                order = 50,
                 type = "group",
-                name = "Anchor BCDM Stuff",
+                name = "Special Bars",
+                childGroups = "tree",
                 args = {
-                    header = {
+                    specialBarsHeader = {
                         order = 1,
                         type = "header",
-                        name = "BetterCooldownManager Anchors",
+                        name = "Special Bars",
                     },
                     description = {
                         order = 2,
                         type = "description",
-                        name = "Anchor selected BetterCooldownManager frames to ElvUI unit frames (or other frames).\n\n",
+                        name = "Yoink individual tracked bars from the BuffBarCooldownViewer and reposition them independently.\n\nEnter the exact spell name as it appears in your Tracked Bars. The bar will be pulled out and displayed at your chosen anchor. It keeps updating in combat because CDM handles the aura tracking internally.\n\n|cFFFFFF00The spell must be in your Tracked Bars list in the Cooldown Manager.|r\n|cFF00FF00Settings are saved per specialization — each spec remembers its own spells and layout.|r",
                     },
-                    enabled = {
-                        order = 3,
-                        type = "toggle",
-                        name = "Enable BCDM Anchoring",
-                        width = "full",
-                        get = function() return E.db.thingsUI.bcdmAnchors.enabled end,
-                        set = function(_, value)
-                            E.db.thingsUI.bcdmAnchors.enabled = value
-                            TUI:UpdateBCDMAnchors()
-                        end,
-                    },
-                    throttle = {
-                        order = 4,
-                        type = "range",
-                        name = "Update Throttle",
-                        desc = "0 = no polling (recommended). Set > 0 only if BCDM keeps moving frames on its own.",
-                        min = 0, max = 1.0, step = 0.05,
-                        get = function() return E.db.thingsUI.bcdmAnchors.throttle or 0 end,
-                        set = function(_, value)
-                            E.db.thingsUI.bcdmAnchors.throttle = value
-                        end,
-                        disabled = function() return not E.db.thingsUI.bcdmAnchors.enabled end,
-                    },
-                    recalc = {
-                        order = 5,
-                        type = "execute",
-                        name = "Re-anchor now",
-                        func = function() TUI:UpdateBCDMAnchors() end,
-                        disabled = function() return not E.db.thingsUI.bcdmAnchors.enabled end,
-                    },
-                    spacer = { order = 6, type = "description", name = "\n" },
-
-                    customCooldownViewer = {
+                    bar1Group = {
                         order = 10,
                         type = "group",
-                        name = "CustomCooldownViewer",
-                        inline = true,
-                        args = TUI:BCDMFrameOptions("BCDM_CustomCooldownViewer"),
+                        name = "Special Bar 1",
+                        args = TUI:SpecialBarOptions("bar1"),
                     },
-
-                    additionalCustomCooldownViewer = {
+                    bar2Group = {
                         order = 20,
                         type = "group",
-                        name = "AdditionalCustomCooldownViewer",
-                        inline = true,
-                        args = TUI:BCDMFrameOptions("BCDM_AdditionalCustomCooldownViewer"),
+                        name = "Special Bar 2",
+                        args = TUI:SpecialBarOptions("bar2"),
                     },
-
-                    customItemBar = {
+                    bar3Group = {
                         order = 30,
                         type = "group",
-                        name = "CustomItemBar",
-                        inline = true,
-                        args = TUI:BCDMFrameOptions("BCDM_CustomItemBar"),
-                    },
-
-                    trinketBar = {
-                        order = 40,
-                        type = "group",
-                        name = "TrinketBar",
-                        inline = true,
-                        args = TUI:BCDMFrameOptions("BCDM_TrinketBar"),
-                    },
-
-                    customItemSpellBar = {
-                        order = 50,
-                        type = "group",
-                        name = "CustomItemSpellBar",
-                        inline = true,
-                        args = TUI:BCDMFrameOptions("BCDM_CustomItemSpellBar"),
+                        name = "Special Bar 3",
+                        args = TUI:SpecialBarOptions("bar3"),
                     },
                 },
             },
@@ -1762,8 +2904,8 @@ function TUI:ProfileUpdate()
     wipe(skinnedBars)
     self:UpdateVerticalBuffs()
     self:UpdateBuffBars()
+    self:UpdateSpecialBars()
     self:UpdateClusterPositioning()
-    self:UpdateBCDMAnchors()
 end
 
 local function OnProfileChanged()
