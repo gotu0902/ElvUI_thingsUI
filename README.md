@@ -1,6 +1,10 @@
 # ElvUI_thingsUI
 
-An ElvUI plugin that provides additional customization options for the [Blizzard Cooldown Manager (BCDM)](https://www.curseforge.com/wow/addons/bettercooldownmanager) addon.
+A kinda-okay ElvUI plugin that provides additional customization options for the [Blizzard Cooldown Manager (BCDM)](https://www.curseforge.com/wow/addons/bettercooldownmanager) addon.
+
+Throttled SetScript("OnUpdate") shit, with buff bar skinning on, it WILL scan after bars to skin on a throttle.
+Had some human help to make it less crazy in 2.0, afaik there's no reliable events to do this without update on every frame.
+Hoping someone can prove me wrong, willing to pay.
 
 ![Version](https://img.shields.io/badge/version-2.0.0-blue)
 
