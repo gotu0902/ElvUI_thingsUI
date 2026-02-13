@@ -1,12 +1,6 @@
 # ElvUI_thingsUI
 
-A kinda-okay ElvUI plugin that provides additional customization options for the [Blizzard Cooldown Manager (BCDM)](https://www.curseforge.com/wow/addons/bettercooldownmanager) addon.
-
-Throttled SetScript("OnUpdate") shit, with buff bar skinning on, it WILL scan after bars to skin on a throttle.
-Had some human help to make it less crazy in 2.0, afaik there's no reliable events to do this without update on every frame.
-Hoping someone can prove me wrong, willing to pay.
-
-![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![Version](https://img.shields.io/badge/version-2.1.0-blue)
 
 ### Dynamic Cluster Positioning
 Automatically position ElvUI unit frames around BCDM's Essential Cooldown Viewer:
@@ -17,30 +11,27 @@ Automatically position ElvUI unit frames around BCDM's Essential Cooldown Viewer
 - Frames dynamically adjust as cooldown icons appear/disappear
 - **Profile-aware** - Properly restores frames when switching to profiles with cluster disabled
 
-### Utility Overflow Support
-When utility icons exceed essential icons, frames automatically move outward:
+**When utility icons exceed essential icons, frames automatically move outward:**
 - **Utility Threshold** - How many extra utility icons trigger movement (default: 3)
 - **Overflow Offset** - Pixels to move each frame when triggered (default: 25)
 
 Example: 6 Essential + 9 Utility = +3 extra, frames move outward
 
 ### Buff Bar Skinning & Anchoring
-Skin BCDM's BuffBarCooldownViewer with ElvUI's visual style:
+
 - Custom status bar textures (uses ElvUI's shared media)
 - Class color or custom color options
 - Configurable dimensions, spacing, and fonts
 - Icon visibility toggle
 - Growth direction (up/down)
-- **Anchor to any frame** - Attach buff bars to ElvUF_Player, EssentialCooldownViewer, or any named frame. Go /framestack to find it o7
-
-If your Edit Mode width is vastly different than this width it'll sometimes look bigger for like a second.
-Try to get Edit Mode width of the bars as close as you can to make this less noticeable.
 
 ### Special Bars
 - Move a tracked buff bar to somewhere else on the screen
 
+- **Anchor to any frame** - Attach buff bars to ElvUF_Player, EssentialCooldownViewer, or any named frame. Go /framestack to find it o7
+- 
 ### Vertical Buff Icons
-Toggle vertical growth for BCDM's BuffIconCooldownViewer.
+Toggle vertical growth for BCDM's BuffIconCooldownViewer, used for FHT.
 
 ## Installation
 
@@ -63,7 +54,8 @@ MIT License - Feel free to modify and distribute.
 
 ## Credits
 
-- **human** - made prompts, did 1%
-- **Anthropic Claude** - vibe coded this stuff, did 99%
+- **human** - did the basics
+- **Anthropic Claude** - vibe coded the base that got it started
+- **D.G** - big help and tutoring - optimized and fixed alot of vibes
 - **ElvUI Team** - #1, big w
 - **Unhalted** - For being the goat 🐐
