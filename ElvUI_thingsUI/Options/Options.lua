@@ -5,6 +5,29 @@ local LSM = ns.LSM
 local SHARED_ANCHOR_VALUES = ns.ANCHORS.SHARED_ANCHOR_VALUES
 local anchors = ns.ANCHORS.SPECIAL_BAR_ANCHOR_VALUES
 
+local GetSpecialBarSlotDB = ns.SpecialBars and ns.SpecialBars.GetSpecialBarSlotDB
+local CleanString = ns.SpecialBars and ns.SpecialBars.CleanString
+
+local function SpecialBarTabName(barKey, index)
+    -- Fallback if DB helpers aren't available for some reason
+    if not GetSpecialBarSlotDB then
+        return ("Special Bar %d"):format(index or 0)
+    end
+
+    local db = GetSpecialBarSlotDB(barKey) or {}
+    local spell = db.spellName or ""
+    if CleanString then
+        spell = CleanString(spell)
+    else
+        spell = tostring(spell):gsub("^%s+", ""):gsub("%s+$", "")
+    end
+
+    if spell ~= "" then
+        return ("Special Bar %d: %s"):format(index or 0, spell)
+    end
+    return ("Special Bar %d"):format(index or 0)
+end
+
 -------------------------------------------------
 -- ELVUI CONFIG OPTIONS
 -------------------------------------------------
@@ -733,7 +756,7 @@ function TUI.ConfigTable()
                             anchorPoint = {
                                 order = 4,
                                 type = "select",
-                                name = "Point",
+                                name = "Anchor From",
                                 desc = "The point on the buff bars to anchor.",
                                 values = {
                                     ["TOP"] = "TOP",
@@ -756,7 +779,7 @@ function TUI.ConfigTable()
                             anchorRelativePoint = {
                                 order = 5,
                                 type = "select",
-                                name = "Relative Point",
+                                name = "Anchor To",
                                 desc = "The point on the target frame to anchor to.",
                                 values = {
                                     ["TOP"] = "TOP",
@@ -1079,35 +1102,60 @@ function TUI.ConfigTable()
                 order = 50,
                 type = "group",
                 name = "Special Bars",
-                childGroups = "tree",
+                -- Bars as tabs (Special Bar 1/2/3)
+                childGroups = "tab",
                 args = {
-                    specialBarsHeader = {
+                    infoGroup = {
                         order = 1,
-                        type = "header",
-                        name = "Special Bars",
-                    },
-                    description = {
-                        order = 2,
-                        type = "description",
-                        name = "Yoink individual tracked bars from the BuffBarCooldownViewer and reposition them independently.\n\nEnter the exact spell name as it appears in your Tracked Bars. The bar will be pulled out and displayed at your chosen anchor. It keeps updating in combat because CDM handles the aura tracking internally.\n\n|cFFFFFF00The spell must be in your Tracked Bars list in the Cooldown Manager.|r\n|cFF00FF00Settings are saved per specialization — each spec remembers its own spells and layout.|r",
+                        type = "group",
+                        name = "Info",
+                        args = {
+                            specialBarsHeader = {
+                                order = 1,
+                                type = "header",
+                                name = "Special Bars",
+                            },
+                            description = {
+                                order = 2,
+                                type = "description",
+                                name = "Yoink individual tracked bars from the BuffBarCooldownViewer and reposition them independently.\n\nEnter the exact spell name as it appears in your Tracked Bars. The bar will be pulled out and displayed at your chosen anchor. It keeps updating in combat because CDM handles the aura tracking internally.\n\n|cFFFFFF00The spell must be in your Tracked Bars list in the Cooldown Manager.|r\n|cFF00FF00Settings are saved per specialization — each spec remembers its own spells and layout.|r",
+                            },
+                        },
                     },
                     bar1Group = {
                         order = 10,
                         type = "group",
-                        name = "Special Bar 1",
+                        name = function() return SpecialBarTabName("bar1", 1) end,
+                        childGroups = "tree",
                         args = TUI:SpecialBarOptions("bar1"),
                     },
                     bar2Group = {
                         order = 20,
                         type = "group",
-                        name = "Special Bar 2",
+                        name = function() return SpecialBarTabName("bar2", 2) end,
+                        childGroups = "tree",
                         args = TUI:SpecialBarOptions("bar2"),
                     },
                     bar3Group = {
                         order = 30,
                         type = "group",
-                        name = "Special Bar 3",
+                        name = function() return SpecialBarTabName("bar3", 3) end,
+                        childGroups = "tree",
                         args = TUI:SpecialBarOptions("bar3"),
+                    },
+                    bar4Group = {
+                        order = 40,
+                        type = "group",
+                        name = function() return SpecialBarTabName("bar4", 4) end,
+                        childGroups = "tree",
+                        args = TUI:SpecialBarOptions("bar4"),
+                    },
+                    bar5Group = {
+                        order = 50,
+                        type = "group",
+                        name = function() return SpecialBarTabName("bar5", 5) end,
+                        childGroups = "tree",
+                        args = TUI:SpecialBarOptions("bar5"),
                     },
                 },
             },
