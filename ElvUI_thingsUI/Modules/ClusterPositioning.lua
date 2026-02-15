@@ -100,7 +100,6 @@ local function UpdateClusterPositioning()
     if InCombatLockdown() then
         if not combatDeferred then
             combatDeferred = true
-            print("|cFF8080FFthingsUI|r - Cluster update queued for after combat.")
         end
         return
     end
@@ -278,8 +277,4 @@ function TUI:RecalculateCluster()
     local essentialWidth = (essentialCount * db.essentialIconWidth) + (math.max(0, essentialCount - 1) * db.essentialIconPadding)
     local utilityWidth = (utilityCount * db.utilityIconWidth) + (math.max(0, utilityCount - 1) * db.utilityIconPadding)
     
-    print(string.format("|cFF8080FFElvUI_thingsUI|r - Essential: %d (%dpx), Utility: %d (%dpx), +%d extra",
-        essentialCount, essentialWidth, utilityCount, utilityWidth, extraIcons))
-    print(string.format("|cFF8080FFElvUI_thingsUI|r - Threshold: %d, %s, Overflow: %dpx (each side: %dpx)",
-        threshold, triggered and "|cFF00FF00TRIGGERED|r" or "|cFFFF0000not triggered|r", overflow, overflow / 2))
 end
