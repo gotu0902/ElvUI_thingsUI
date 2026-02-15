@@ -18,6 +18,7 @@ end
 local barUpdateFrame = ns.BuffBars and ns.BuffBars.barUpdateFrame
 local BuffBarOnUpdate = ns.BuffBars and ns.BuffBars.BuffBarOnUpdate
 local yoinkedBars = ns.yoinkedBars
+local trackedBarsByName = {}
 TUI.scanScheduled = false
 
 local SPECIAL_BAR_DEFAULTS = {
@@ -190,8 +191,11 @@ local function OnCDMChildShown(childFrame)
             if childFrame.Bar.Name then
                 pcall(function()
                     local barText = CleanString(childFrame.Bar.Name:GetText())
-                    if barText and barText == targetName then
-                        match = true
+                    if barText and barText ~= "" then
+                        trackedBarsByName[barText] = childFrame -- cache for later lookups
+                        if barText == targetName then
+                            match = true
+                        end
                     end
                 end)
             end
@@ -317,6 +321,9 @@ local FindBarBySpellName = function(spellName)
     if not ok or not children then return nil end
     
     local targetName = CleanString(spellName)
+    if trackedBarsByName[targetName] then
+        return trackedBarsByName[targetName]
+    end
     
     for _, childFrame in ipairs(children) do
         if childFrame and childFrame.Bar then
@@ -325,8 +332,11 @@ local FindBarBySpellName = function(spellName)
             if childFrame.Bar.Name then
                 pcall(function()
                     local barText = CleanString(childFrame.Bar.Name:GetText())
-                    if barText and barText == targetName then
-                        match = true
+                    if barText and barText ~= "" then
+                        trackedBarsByName[barText] = childFrame -- cache for later lookups
+                        if barText == targetName then
+                            match = true
+                        end
                     end
                 end)
             end
@@ -357,7 +367,8 @@ local FindBarBySpellName = function(spellName)
 end
 
 -- Release a yoinked bar back to its original parent
-local ReleaseSpecialBar = function(barKey)
+local ReleaseSpecialBar = function(barKey, opts)
+    opts = opts or {}
     local state = specialBarState[barKey]
     if not state then return false end
 
@@ -367,11 +378,18 @@ local ReleaseSpecialBar = function(barKey)
 
     if returnedBar and originalParent then
         pcall(function()
-            returnedBar:ClearAllPoints()
-            returnedBar:SetParent(originalParent)
+        returnedBar:ClearAllPoints()
+        returnedBar:SetParent(originalParent)
+
+        if opts.keepHidden then
+            returnedBar:Hide()
+        else
             returnedBar:Show()
-            yoinkedBars[returnedBar] = nil
-            didReturn = true
+        end
+
+        yoinkedBars[returnedBar] = nil
+        didReturn = true
+
         end)
     end
 

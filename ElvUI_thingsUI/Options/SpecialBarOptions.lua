@@ -10,6 +10,46 @@ local SPECIAL_BAR_DEFAULTS = ns.SpecialBars.SPECIAL_BAR_DEFAULTS
 local CleanString = ns.SpecialBars.CleanString
 local specialBarState = ns.SpecialBars.specialBarState
 
+ns.__specialBarScanUntil = ns.__specialBarScanUntil or {}
+ns.__specialBarLastSetAt = ns.__specialBarLastSetAt or {}
+
+local function PrimeCDMIfClosed(callback)
+    if InCombatLockdown() then
+        -- defer until out of combat
+        local f = CreateFrame("Frame")
+        f:RegisterEvent("PLAYER_REGEN_ENABLED")
+        f:SetScript("OnEvent", function(self)
+            self:UnregisterAllEvents()
+            C_Timer.After(0.05, function() PrimeCDMIfClosed(callback) end)
+        end)
+        return
+    end
+
+    local cdm = _G.CooldownViewerSettings
+    if not cdm then
+        callback()
+        return
+    end
+
+    -- If already open, don't touch it
+    if cdm:IsShown() then
+        callback()
+        return
+    end
+
+    -- Quick invisible show/hide to force Blizzard to rebuild/cleanup
+    local oldAlpha = cdm:GetAlpha()
+    cdm:SetAlpha(0)
+    cdm:Show()
+
+    C_Timer.After(0, function()
+        cdm:Hide()
+        cdm:SetAlpha(oldAlpha or 1)
+        callback()
+    end)
+end
+
+
 function TUI:SpecialBarOptions(barKey)
     local function get(key) return GetSpecialBarSlotDB(barKey)[key] end
     local function set(key, value)
@@ -52,15 +92,18 @@ function TUI:SpecialBarOptions(barKey)
             desc = "Exact spell name as shown in Tracked Bars (e.g., Ironfur, Frenzied Regeneration).",
             get = function() return get("spellName") end,
             set = function(_, v)
-                -- Fully release and clear any cached state
-                ReleaseSpecialBar(barKey)
-                specialBarState[barKey] = nil
-                        GetSpecialBarSlotDB(barKey).spellName = v
-                -- Delay to let CDM reclaim the released bar
-                C_Timer.After(0.15, function()
-                    TUI:UpdateSpecialBars()
-                end)
-            end,
+            -- Release old bar, but keep it hidden so it cannot "hang" on screen
+            ReleaseSpecialBar(barKey, { keepHidden = true })
+            specialBarState[barKey] = nil
+            GetSpecialBarSlotDB(barKey).spellName = v
+            ns.__specialBarLastSetAt[barKey] = GetTime()
+            ns.__specialBarScanUntil[barKey] = GetTime() + 1.0 -- 1s grace period
+
+            -- If CDM isn't open, prime it quickly so Blizzard cleans up / rebuilds tracked bar UI
+            PrimeCDMIfClosed(function()
+                TUI:UpdateSpecialBars()
+            end)
+        end,
         },
         spellStatus = {
             order = 3, type = "description", width = "full",
@@ -69,16 +112,25 @@ function TUI:SpecialBarOptions(barKey)
                 if name == "" then return "" end
                 if not BuffBarCooldownViewer then return "|cFFFF8800BuffBarCooldownViewer not found — open Cooldown Manager settings to initialize it|r" end
                 if InCombatLockdown() then return "|cFFFFFF00Status check unavailable in combat|r" end
+                local scanUntil = ns.__specialBarScanUntil[barKey]
+                if scanUntil and GetTime() < scanUntil then
+                    -- In scan window: do scans here (a few times) while UI is open
+                    ScanAndHookCDMChildren()
+                    return "|cffffcc00 New spell linked |r"
+                end
                 
-                -- Force a fresh scan for new CDM children every time this status is checked
-                ScanAndHookCDMChildren()
-                
+                local state = specialBarState[barKey]
+                if state and state.childFrame then
+                    ns.__specialBarScanUntil[barKey] = nil
+                    return "|cFF00FF00 Linked (will display when active)|r"
+                end
                 -- Check if this bar is currently yoinked and active
                 local state = specialBarState[barKey]
                 if state and state.childFrame and state.wrapper then
                     local isShown = false
                     pcall(function() isShown = state.wrapper:IsShown() end)
                     if isShown then
+                        ns.__specialBarScanUntil[barKey] = nil
                         return "|cFF00FF00 Active (yoinked from Tracked Bars)|r"
                     end
                 end
@@ -103,9 +155,10 @@ function TUI:SpecialBarOptions(barKey)
                     end
                 end)
                 if found then
+                    ns.__specialBarScanUntil[barKey] = nil
                     return "|cFF00FF00 Found in Tracked Bars|r"
                 end
-                
+
                 -- Also check if another special bar already yoinked this spell
                 for otherKey, otherState in pairs(specialBarState) do
                     if otherKey ~= barKey and otherState.childFrame then

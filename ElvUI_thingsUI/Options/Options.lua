@@ -858,7 +858,7 @@ function TUI.ConfigTable()
                         get = function() return E.db.thingsUI.clusterPositioning.essentialIconWidth end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.essentialIconWidth = value
-                            TUI:RecalculateCluster()
+                            TUI:QueueClusterUpdate()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
@@ -871,7 +871,7 @@ function TUI.ConfigTable()
                         get = function() return E.db.thingsUI.clusterPositioning.utilityIconWidth end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.utilityIconWidth = value
-                            TUI:RecalculateCluster()
+                            TUI:QueueClusterUpdate()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
@@ -883,7 +883,7 @@ function TUI.ConfigTable()
                         get = function() return E.db.thingsUI.clusterPositioning.accountForUtility end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.accountForUtility = value
-                            TUI:RecalculateCluster()
+                            TUI:QueueClusterUpdate()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
@@ -896,7 +896,7 @@ function TUI.ConfigTable()
                         get = function() return E.db.thingsUI.clusterPositioning.utilityThreshold end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.utilityThreshold = value
-                            TUI:RecalculateCluster()
+                            TUI:QueueClusterUpdate()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.accountForUtility end,
                     },
@@ -909,7 +909,7 @@ function TUI.ConfigTable()
                         get = function() return E.db.thingsUI.clusterPositioning.utilityOverflowOffset end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.utilityOverflowOffset = value
-                            TUI:RecalculateCluster()
+                            TUI:QueueClusterUpdate()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.accountForUtility end,
                     },
@@ -922,7 +922,7 @@ function TUI.ConfigTable()
                         get = function() return E.db.thingsUI.clusterPositioning.yOffset end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.yOffset = value
-                            TUI:RecalculateCluster()
+                            TUI:QueueClusterUpdate()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
@@ -940,7 +940,7 @@ function TUI.ConfigTable()
                         get = function() return E.db.thingsUI.clusterPositioning.playerFrame.enabled end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.playerFrame.enabled = value
-                            TUI:RecalculateCluster()
+                            TUI:QueueClusterUpdate()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
@@ -952,7 +952,7 @@ function TUI.ConfigTable()
                         get = function() return E.db.thingsUI.clusterPositioning.targetFrame.enabled end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.targetFrame.enabled = value
-                            TUI:RecalculateCluster()
+                            TUI:QueueClusterUpdate()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
@@ -965,7 +965,7 @@ function TUI.ConfigTable()
                         get = function() return E.db.thingsUI.clusterPositioning.frameGap end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.frameGap = value
-                            TUI:RecalculateCluster()
+                            TUI:QueueClusterUpdate()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
@@ -983,7 +983,7 @@ function TUI.ConfigTable()
                         get = function() return E.db.thingsUI.clusterPositioning.targetTargetFrame.enabled end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.targetTargetFrame.enabled = value
-                            TUI:RecalculateCluster()
+                            TUI:QueueClusterUpdate()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
@@ -996,7 +996,7 @@ function TUI.ConfigTable()
                         get = function() return E.db.thingsUI.clusterPositioning.targetTargetFrame.gap end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.targetTargetFrame.gap = value
-                            TUI:RecalculateCluster()
+                            TUI:QueueClusterUpdate()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.targetTargetFrame.enabled end,
                     },
@@ -1027,7 +1027,7 @@ function TUI.ConfigTable()
                         get = function() return E.db.thingsUI.clusterPositioning.targetCastBar.gap end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.targetCastBar.gap = value
-                            TUI:RecalculateCluster()
+                            TUI:QueueClusterUpdate()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.targetCastBar.enabled end,
                     },
@@ -1040,7 +1040,7 @@ function TUI.ConfigTable()
                         get = function() return E.db.thingsUI.clusterPositioning.targetCastBar.xOffset end,
                         set = function(_, value)
                             E.db.thingsUI.clusterPositioning.targetCastBar.xOffset = value
-                            TUI:RecalculateCluster()
+                            TUI:QueueClusterUpdate()
                         end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.targetCastBar.enabled end,
                     },
