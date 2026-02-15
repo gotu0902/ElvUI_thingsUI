@@ -1,6 +1,6 @@
 # ElvUI_thingsUI
 
-![Version](https://img.shields.io/badge/version-2.1.0-blue)
+![Version](https://img.shields.io/badge/version-2.2.0-green)
 
 ### Cluster Positioning
 - Anchor BCDM frames to ElvUI Player\Target UFs
