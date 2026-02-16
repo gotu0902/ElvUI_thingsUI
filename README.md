@@ -1,16 +1,17 @@
 # ElvUI_thingsUI
 
-![Version](https://img.shields.io/badge/version-2.2.2-green)
+![Version](https://img.shields.io/badge/version-2.2.3-green)
 
-### Cluster Positioning
+### BCDM + ElvUI
 - Anchor BCDM frames to ElvUI Player\Target UFs
 - Frames dynamically adjust as cooldown icons appear/disappear
-- Change stuff to your liking.
+- Change stuff to your liking
+- Anchor BCDM Castbar to Secondary Power Bar when present, otherwise default to Power Bar
 
 **"When utility icons gets longer than essential icons, the frames move!?" Yes.**
 - **Utility Threshold** = How many extra utility icons trigger movement
 - **Overflow Offset** = Pixels(ish) to move each frame when triggered 
-Example: 6 Essential + 9 Utility = +3 extra, frames move. Figure it out.
+Example: 6 Essential + 9 Utility = +3 extra, frames move. Figure it out
 
 ### Buff Bar Skinning & Anchoring
 
