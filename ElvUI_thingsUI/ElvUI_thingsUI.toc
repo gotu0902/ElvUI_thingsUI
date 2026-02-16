@@ -2,7 +2,7 @@
 ## Title: |cFF8080FFElvUI_thingsUI|r
 ## Notes: ElvUI plugin for additional Cooldown Manager customization
 ## Author: ._.
-## Version: 2.2.2
+## Version: 2.2.3
 ## RequiredDeps: ElvUI, BetterCooldownManager
 ## DefaultState: Enabled
 ## X-Wago-ID: mKODDZGx
@@ -15,6 +15,7 @@ Modules\VerticalBuffs.lua
 Modules\SpecialBars.lua
 Modules\BuffBars.lua
 Modules\ClusterPositioning.lua
+Modules\DynamicCastBarAnchor.lua
 
 Options\SpecialBarOptions.lua
 Options\Options.lua

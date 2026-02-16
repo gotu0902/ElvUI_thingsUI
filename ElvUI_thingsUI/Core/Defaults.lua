@@ -84,9 +84,18 @@ P["thingsUI"] = {
         },
     },
 
+    -- Dynamic CastBar Anchor (auto-switch between Power Bar and Secondary Power Bar)
+    dynamicCastBarAnchor = {
+        enabled = false,
+        point = "BOTTOM",
+        relativePoint = "TOP",
+        xOffset = 0,
+        yOffset = 1,
+    },
+
     -- Special Bars (yoinked from Tracked Bars) — stored per spec
     specialBars = {
-        -- Per-spec storage: specialBars.specs[specID] = { bar1 = {...}, bar2 = {...}, bar3 = {...} }
+        -- Per-spec storage: specialBars.specs[specID] = { bar1 = {...}, bar2 = {...}, bar3 = {...} etc etc }
         specs = {},
     },
 }

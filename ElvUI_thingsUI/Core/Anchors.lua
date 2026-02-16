@@ -22,3 +22,5 @@ end
 ns.ANCHORS.SPECIAL_BAR_ANCHOR_VALUES["TUI_SpecialBar_bar1"] = "TUI Special Bar 1"
 ns.ANCHORS.SPECIAL_BAR_ANCHOR_VALUES["TUI_SpecialBar_bar2"] = "TUI Special Bar 2"
 ns.ANCHORS.SPECIAL_BAR_ANCHOR_VALUES["TUI_SpecialBar_bar3"] = "TUI Special Bar 3"
+ns.ANCHORS.SPECIAL_BAR_ANCHOR_VALUES["TUI_SpecialBar_bar4"] = "TUI Special Bar 4"
+ns.ANCHORS.SPECIAL_BAR_ANCHOR_VALUES["TUI_SpecialBar_bar5"] = "TUI Special Bar 5"

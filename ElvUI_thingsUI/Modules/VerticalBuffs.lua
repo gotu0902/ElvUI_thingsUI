@@ -2,15 +2,12 @@ local addon, ns = ...
 local TUI = ns.TUI
 local E = ns.E
 
--- =========================================
--- EVENT-DRIVEN VERTICAL BUFF POSITIONING
--- Uses dirty-flag: event → mark dirty → process next frame → stop
--- =========================================
 local updateFrame = CreateFrame("Frame")
 local eventFrame = CreateFrame("Frame")
 local isDirty = false
 local isEnabled = false
 local reusableIconTable = {}
+local hookedBuffIcons = {}
 
 local function PositionBuffsVertically()
     if not BuffIconCooldownViewer then return end
@@ -53,12 +50,32 @@ local function MarkDirty()
     updateFrame:SetScript("OnUpdate", OnNextFrame)
 end
 
+-- Hook buff icon children so we reposition the instant a new icon
+-- appears or disappears, instead of waiting for UNIT_AURA.
+local function HookBuffIconChildren()
+    if not BuffIconCooldownViewer then return end
+    for i = 1, BuffIconCooldownViewer:GetNumChildren() do
+        local child = select(i, BuffIconCooldownViewer:GetChildren())
+        if child and not hookedBuffIcons[child] then
+            hookedBuffIcons[child] = true
+            pcall(function()
+                child:HookScript("OnShow", MarkDirty)
+                child:HookScript("OnHide", MarkDirty)
+            end)
+        end
+    end
+end
+
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "UNIT_AURA" then
         MarkDirty()
     elseif event == "PLAYER_ENTERING_WORLD" then
-        C_Timer.After(1, MarkDirty)
+        C_Timer.After(1, function()
+            HookBuffIconChildren()
+            MarkDirty()
+        end)
     elseif event == "PLAYER_REGEN_ENABLED" then
+        HookBuffIconChildren()
         MarkDirty()
     end
 end)
@@ -69,6 +86,7 @@ function TUI:UpdateVerticalBuffs()
         eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
         eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
         eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        HookBuffIconChildren()
         MarkDirty()
     else
         isEnabled = false

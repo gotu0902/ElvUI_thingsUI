@@ -63,6 +63,7 @@ function TUI:Initialize()
     self:UpdateBuffBars()
     self:UpdateSpecialBars()
     self:UpdateClusterPositioning()
+    self:UpdateDynamicCastBarAnchor()
     
     -- On entering world, give CDM time to create its frames then refresh
     self:RegisterEvent("PLAYER_ENTERING_WORLD", function()
@@ -102,6 +103,7 @@ function TUI:ProfileUpdate()
     self:UpdateBuffBars()
     self:UpdateSpecialBars()
     self:UpdateClusterPositioning()
+    self:UpdateDynamicCastBarAnchor()
 end
 
 local function OnProfileChanged()
