@@ -22,7 +22,7 @@ P["thingsUI"] = {
         iconZoom = 0.1,     -- 0 = full texture, 0.1 = 10% crop each side (like ElvUI default)
         inheritWidth = true, -- Inherit width from anchor frame
         inheritWidthOffset = 0, -- Fine-tune offset when inheriting width
-        stackFontSize = 14  , -- Stack count font size                                                                                                                                                      
+        stackFontSize = 15  , -- Stack count font size                                                                                                                                                      
         stackFontOutline = "OUTLINE",
         stackPoint = "CENTER",
         stackAnchor = "ICON",  -- "ICON" or "BAR"
@@ -75,11 +75,11 @@ P["thingsUI"] = {
         targetCastBar = {
             enabled = true,
             gap = 1,
-            xOffset = 0,
+            xOffset = -17,
         },
         additionalPowerBar = {
             enabled = false,
-            gap = 1,
+            gap = 4,
             xOffset = 0,
         },
     },
