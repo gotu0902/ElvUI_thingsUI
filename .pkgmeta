@@ -1,2 +1,4 @@
+package-as: ElvUI_thingsUI
+
 ignore:
   - README.md
