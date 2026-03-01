@@ -27,7 +27,7 @@ local SPECIAL_BAR_DEFAULTS = {
     width = 230,
     inheritWidth = false,
     inheritWidthOffset = 0,
-    height = 23,
+    height = 24,
     inheritHeight = false,
     inheritHeightOffset = 0,
     statusBarTexture = "ElvUI Blank",
@@ -58,7 +58,7 @@ local SPECIAL_BAR_DEFAULTS = {
     durationXOffset = -4,
     durationYOffset = 0,
     anchorMode = "UIParent",  -- Predefined or "CUSTOM"
-    anchorFrame = "BCDM_CastBar", -- Used when anchorMode == "CUSTOM"
+    anchorFrame = "UIParent", -- Used when anchorMode == "CUSTOM"
     anchorPoint = "CENTER",
     anchorRelativePoint = "CENTER",
     anchorXOffset = 0,
@@ -174,8 +174,6 @@ local function CleanString(str)
     return str
 end
 
--- Called when a BCDM child frame is shown (either new or re-shown)
--- This is the critical path for catching first-time spell casts mid-combat
 local function OnCDMChildShown(childFrame)
     if not E.db.thingsUI or not E.db.thingsUI.specialBars then return end
     if not childFrame or not childFrame.Bar then return end
@@ -256,8 +254,6 @@ local ScanAndHookCDMChildren = function()
     end
 end
 
--- Ask Blizzard CDM viewer to re-layout / refresh after re-parenting bars back.
--- Different client builds/forks expose different method names, so we try a small set safely.
 local function RequestCDMRefresh()
     if not BuffBarCooldownViewer then return end
     local methods = {
@@ -426,9 +422,6 @@ local StyleSpecialBar = function(childFrame, db)
     local icon = childFrame.Icon
     if not bar then return end
     
-    -- SIZING: childFrame is strictly sized.
-    -- We need to split the backdrops for spacing to work.
-    
     -- 1. Use the childFrame.tuiBackdrop as the BAR backdrop (repurposed)
     if not childFrame.tuiBackdrop then
         childFrame.tuiBackdrop = CreateFrame("Frame", nil, childFrame, "BackdropTemplate")
@@ -547,12 +540,6 @@ local UpdateSpecialBarSlot = function(barKey)
         end
     end
 
-    -- Height handling:
-    -- When inheritHeight is enabled we MUST NOT permanently overwrite db.height.
-    -- Otherwise the UI "sticks" to the anchor's height after you disable inherit.
-    --
-    -- We store the user's previous value once in db._tui_prevHeight, compute an
-    -- effectiveHeight for this update pass, and restore when inherit is turned off.
     local effectiveHeight = db.height
     if db.inheritHeight and anchorFrame then
         if db._tui_prevHeight == nil then
@@ -676,9 +663,6 @@ local UpdateSpecialBarSlot = function(barKey)
         childFrame:SetPoint("CENTER", wrapper, "CENTER", 0, 0)
     end)
     
-    -- Apply styling (texture, icon pos, etc)
-    -- StyleSpecialBar expects db.height for icon sizing; use the computed
-    -- effectiveHeight WITHOUT permanently overwriting the user's configured value.
     local oldHeight = db.height
     db.height = effectiveHeight
     pcall(StyleSpecialBar, childFrame, db)
@@ -707,7 +691,10 @@ end
 
 function TUI:UpdateSpecialBars()
     if not E.db.thingsUI.specialBars then return end
-    
+
+    -- Reset init-scan guard so the new spec gets its own delayed scan passes.
+    TUI._specialBarsInitScansScheduled = nil
+
     -- Hook existing CDM children immediately so we catch OnShow events
     ScanAndHookCDMChildren()
     
@@ -748,10 +735,6 @@ function TUI:UpdateSpecialBars()
             end
         end
 
-        
-        -- Schedule additional scans to catch CDM children created after init
-        -- CDM may create bar frames slightly later during loading
-        -- Only schedule init scans once (login/enable), not on every options tweak
         if not TUI._specialBarsInitScansScheduled then
             TUI._specialBarsInitScansScheduled = true
 
@@ -781,11 +764,22 @@ function TUI:UpdateSpecialBars()
     end
 end
 
+local function ReleaseAllSpecialBars()
+    local keys = {}
+    for barKey in pairs(specialBarState) do
+        keys[#keys + 1] = barKey
+    end
+    for _, barKey in ipairs(keys) do
+        pcall(ReleaseSpecialBar, barKey)
+    end
+end
+
 ns.SpecialBars = ns.SpecialBars or {}
 ns.SpecialBars.ScanAndHookCDMChildren = ScanAndHookCDMChildren
 ns.SpecialBars.GetSpecialBarDB = GetSpecialBarDB
 ns.SpecialBars.UpdateSpecialBarSlot = UpdateSpecialBarSlot
 ns.SpecialBars.ReleaseSpecialBar = ReleaseSpecialBar
+ns.SpecialBars.ReleaseAllSpecialBars = ReleaseAllSpecialBars
 ns.SpecialBars.specialBarState = specialBarState
 ns.SpecialBars.CleanString = CleanString
 ns.SpecialBars.SPECIAL_BAR_DEFAULTS = SPECIAL_BAR_DEFAULTS

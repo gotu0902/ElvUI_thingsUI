@@ -80,56 +80,22 @@ function TUI.ConfigTable()
                         name = "\n|cFFFFFF00Note:|r If disabling, you may need to reload UI to restore default horizontal layout.\n",
                     },
                     
-                    windToolsHeader = {
+                    psettingsHeader = {
                         order = 10,
                         type = "header",
-                        name = "WindTools & ElvUI Private Settings",
+                        name = "ElvUI Private Settings",
                     },
-                    windToolsDescription = {
+                    psettingsDescription = {
                         order = 11,
                         type = "description",
-                        name = "Apply things's recommended WindTools and ElvUI private settings.\n\n|cFFFF6B6BWarning:|r This will overwrite your current WindTools settings!\n",
+                        name = "Apply ElvUI private settings.\n\n|cFFFF6B6BWarning:|r This will overwrite your Private Profile settings!\n",
                     },
-                    setupWindTools = {
+                    psettingsImport = {
                         order = 12,
                         type = "execute",
                         name = "Setup things Settings",
-                        desc = "Apply recommended WindTools and ElvUI private settings.",
+                        desc = "Apply ElvUI private settings.",
                         func = function()
-                            -- WindTools Maps
-                            E.private["WT"]["maps"]["instanceDifficulty"]["align"] = "CENTER"
-                            E.private["WT"]["maps"]["instanceDifficulty"]["enable"] = true
-                            E.private["WT"]["maps"]["minimapButtons"]["backdropSpacing"] = 0
-                            E.private["WT"]["maps"]["minimapButtons"]["buttonSize"] = 28
-                            E.private["WT"]["maps"]["minimapButtons"]["buttonsPerRow"] = 1
-                            E.private["WT"]["maps"]["minimapButtons"]["expansionLandingPage"] = true
-                            E.private["WT"]["maps"]["minimapButtons"]["mouseOver"] = true
-                            E.private["WT"]["maps"]["minimapButtons"]["orientation"] = "VERTICAL"
-                            E.private["WT"]["maps"]["minimapButtons"]["spacing"] = 1
-                            E.private["WT"]["maps"]["worldMap"]["scale"]["size"] = 1.33
-                            
-                            -- WindTools Quest
-                            E.private["WT"]["quest"]["objectiveTracker"]["colorfulPercentage"] = true
-                            E.private["WT"]["quest"]["objectiveTracker"]["cosmeticBar"]["border"] = "ONEPIXEL"
-                            E.private["WT"]["quest"]["objectiveTracker"]["cosmeticBar"]["color"]["mode"] = "CLASS"
-                            E.private["WT"]["quest"]["objectiveTracker"]["cosmeticBar"]["offsetY"] = -13
-                            E.private["WT"]["quest"]["objectiveTracker"]["cosmeticBar"]["texture"] = "ElvUI Blank"
-                            E.private["WT"]["quest"]["objectiveTracker"]["enable"] = true
-                            E.private["WT"]["quest"]["objectiveTracker"]["percentage"] = true
-                            
-                            -- WindTools Skins
-                            E.private["WT"]["skins"]["addons"]["worldQuestTab"] = false
-                            E.private["WT"]["skins"]["blizzard"]["scenario"] = false
-                            E.private["WT"]["skins"]["cooldownViewer"]["enable"] = false
-                            E.private["WT"]["skins"]["ime"]["label"]["name"] = "Expressway"
-                            E.private["WT"]["skins"]["shadow"] = false
-                            E.private["WT"]["skins"]["widgets"]["button"]["backdrop"]["texture"] = "ElvUI Blank"
-                            E.private["WT"]["skins"]["widgets"]["treeGroupButton"]["backdrop"]["texture"] = "ElvUI Blank"
-                            
-                            -- WindTools UnitFrames
-                            E.private["WT"]["unitFrames"]["roleIcon"]["enable"] = false
-                            E.private["WT"]["unitFrames"]["roleIcon"]["roleIconStyle"] = "LYNUI"
-                            
                             -- ElvUI Private General
                             E.private["general"]["chatBubbleFont"] = "Expressway"
                             E.private["general"]["chatBubbleFontOutline"] = "OUTLINE"
@@ -141,13 +107,12 @@ function TUI.ConfigTable()
                             E.private["general"]["nameplateLargeFont"] = "Expressway"
                             E.private["general"]["normTex"] = "ElvUI Blank"
                             E.private["install_complete"] = 12.12
-                            
                             -- ElvUI Private Other
                             E.private["nameplates"]["enable"] = false
                             E.private["skins"]["blizzard"]["cooldownManager"] = false
                             E.private["skins"]["parchmentRemoverEnable"] = true
                             
-                            print("|cFF8080FFthingsUI|r - WindTools & ElvUI private settings applied! |cFFFFFF00Reload required.|r")
+                            print("|cFF8080FFthingsUI|r - ElvUI private settings applied! |cFFFFFF00Reload required.|r")
                             E:StaticPopup_Show("PRIVATE_RL")
                         end,
                     },
