@@ -118,7 +118,7 @@ function TUI.ConfigTable()
                                     E.db["movers"]["GMMover"] = "TOPLEFT,ElvUIParent,TOPLEFT,635,-2"
                                     E:UpdateMoverPositions()
                                     E:UpdateAuras()
-                                    print("|cFF8080FFthingsUI|r - Minimap and Auras moved to Top Right.)
+                                    print("|cFF8080FFthingsUI|r - Minimap and Auras moved to Top Right.")
                                 end,
                             },
                             positionsGruffDescription = {
