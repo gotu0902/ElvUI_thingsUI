@@ -228,9 +228,18 @@ local function LayoutBuffBar(childFrame)
             icon.Applications:SetParent(stackParent)
         end
         
-        icon.Applications:SetWidth(0)
+        local xOff = db.stackXOffset or 0
+        if db.stackAnchor == "BAR" then
+            local iconSize = db.height or 23
+            local spacing = db.iconSpacing or 1
+            xOff = xOff - ((iconSize + spacing) / 2)
+        end
+        
+        local appWidth = (db.stackAnchor == "BAR") and (db.height or 23) or 0
+        icon.Applications:SetWidth(appWidth)
+        icon.Applications:SetJustifyH("CENTER")
         icon.Applications:ClearAllPoints()
-        icon.Applications:SetPoint(stackPoint, stackParent, stackPoint, db.stackXOffset or 0, db.stackYOffset or 0)
+        icon.Applications:SetPoint(stackPoint, stackParent, stackPoint, xOff, db.stackYOffset or 0)
     end
 end
 

@@ -373,21 +373,14 @@ local ReleaseSpecialBar = function(barKey, opts)
     local didReturn = false
 
     if returnedBar and originalParent then
-        pcall(function()
+    pcall(function()
         returnedBar:ClearAllPoints()
         returnedBar:SetParent(originalParent)
 
-        if opts.keepHidden then
-            returnedBar:Hide()
-        else
-            returnedBar:Show()
-        end
-
         yoinkedBars[returnedBar] = nil
         didReturn = true
-
-        end)
-    end
+    end)
+end
 
     if state.wrapper then
         if state.wrapper.backdrop then state.wrapper.backdrop:Hide() end
@@ -519,16 +512,31 @@ local StyleSpecialBar = function(childFrame, db)
 
     -- Stack count styling + positioning
     if icon and icon.Applications then
+        if icon.Applications.SetFont then
+            local stackFont = LSM:Fetch("font", db.font)
+            icon.Applications:SetFont(stackFont, db.stackFontSize or 14, db.stackFontOutline or "OUTLINE")
+            icon.Applications:SetWidth(0)  -- allerede der for ICON
+        end
+        
         local stackParent = (db.stackAnchor == "BAR") and bar or icon
         local stackPoint = db.stackPoint or "CENTER"
-        
         if icon.Applications:GetParent() ~= stackParent then
             icon.Applications:SetParent(stackParent)
         end
-        
-        icon.Applications:SetWidth(0)  -- <-- denne, auto-størrelse
+
+        local xOff = db.stackXOffset or 0
+        -- Når anchor er BAR og icon er synlig, flytt litt til høyre for å kompensere
+        if db.stackAnchor == "BAR" and db.iconEnabled then
+            local iconSize = db.height or 24
+            local spacing = db.iconSpacing or 1
+            xOff = xOff - ((iconSize + spacing) / 2)
+        end
+
+        local appWidth = (db.stackAnchor == "BAR") and (db.height or 24) or 0
+        icon.Applications:SetWidth(appWidth)
+        icon.Applications:SetJustifyH("CENTER")
         icon.Applications:ClearAllPoints()
-        icon.Applications:SetPoint(stackPoint, stackParent, stackPoint, db.stackXOffset or 0, db.stackYOffset or 0)
+        icon.Applications:SetPoint(stackPoint, stackParent, stackPoint, xOff, db.stackYOffset or 0)
     end
 end
 
@@ -786,6 +794,21 @@ local function ReleaseAllSpecialBars()
     for _, barKey in ipairs(keys) do
         pcall(ReleaseSpecialBar, barKey)
     end
+end
+
+local function HookCDMWindowClose()
+    local cdm = _G["CooldownViewerSettings"]
+    if not cdm then return end
+    cdm:HookScript("OnHide", function()
+        C_Timer.After(0.3, function()
+            if ns.SpecialBars and ns.SpecialBars.ScanAndHookCDMChildren then
+                ns.SpecialBars.ScanAndHookCDMChildren()
+            end
+            if TUI and TUI.UpdateSpecialBars then
+                TUI:UpdateSpecialBars()
+            end
+        end)
+    end)
 end
 
 ns.SpecialBars = ns.SpecialBars or {}
