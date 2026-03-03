@@ -9,12 +9,7 @@ local yoinkedBars = ns.yoinkedBars
 -- =========================================
 -- LAZY CDM CHILD CREATION
 -- =========================================
--- CDM can create/show BuffBarCooldownViewer children lazily (often only after
--- the first aura/cast). To ensure we skin/layout immediately on login and
--- whenever new bars appear, we:
---  1) keep a short ticker after entering world until the viewer exists
---  2) hook each child frame's OnShow to trigger a re-skin/re-layout
-local hookedBuffChildren = {} -- [childFrame] = true
+local hookedBuffChildren = {}
 local viewerReadyTicker
 
 local function HookBuffChild(childFrame)
@@ -45,13 +40,9 @@ local function StartViewerReadyTicker()
     viewerReadyTicker = C_Timer.NewTicker(0.25, function()
         tries = tries + 1
         local hasChildren = ScanAndHookBuffChildren()
-
-        -- When viewer exists and has children, force at least one pass
         if BuffBarCooldownViewer and hasChildren and ns.MarkBuffBarsDirty then
             ns.MarkBuffBarsDirty()
         end
-
-        -- stop after a short window; avoids permanent ticking
         if tries >= 20 then
             viewerReadyTicker:Cancel()
             viewerReadyTicker = nil
@@ -96,16 +87,16 @@ local function GetClassColor()
 end
 
 -- =========================================
--- SKINNING — one-time visual setup per bar
+-- SKINNING
 -- =========================================
 local function SkinBuffBar(childFrame)
     if not childFrame or not childFrame.Bar then return end
     if skinnedBars[childFrame] then return end
-    
+
     local db = E.db.thingsUI.buffBars
     local bar = childFrame.Bar
     local icon = childFrame.Icon
-    
+
     if childFrame.tuiBackdrop then childFrame.tuiBackdrop:Hide() end
 
     if icon and icon.Icon then
@@ -124,7 +115,7 @@ local function SkinBuffBar(childFrame)
             icon:Hide()
         end
     end
-    
+
     if not bar.tuiBackdrop then
         bar.tuiBackdrop = CreateFrame("Frame", nil, childFrame, "BackdropTemplate")
         bar.tuiBackdrop:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
@@ -133,7 +124,7 @@ local function SkinBuffBar(childFrame)
         bar.tuiBackdrop:SetFrameLevel(childFrame:GetFrameLevel() - 1)
     end
     bar.tuiBackdrop:Show()
-    
+
     local texture = LSM:Fetch("statusbar", db.statusBarTexture)
     bar:SetStatusBarTexture(texture)
     if db.useClassColor then
@@ -141,27 +132,48 @@ local function SkinBuffBar(childFrame)
     else
         bar:SetStatusBarColor(db.customColor.r, db.customColor.g, db.customColor.b)
     end
-    
+
     if bar.BarBG then bar.BarBG:SetAlpha(0) end
     if bar.Pip then bar.Pip:SetAlpha(0) end
-    
+
     local font = LSM:Fetch("font", db.font)
     if bar.Name then bar.Name:SetFont(font, db.fontSize, db.fontOutline) end
     if bar.Duration then bar.Duration:SetFont(font, db.fontSize, db.fontOutline) end
-    
+
+    -- Stack count font styling
+    if icon and icon.Applications and icon.Applications.SetFont then
+        local stackFont = LSM:Fetch("font", db.font)
+        icon.Applications:SetFont(stackFont, db.stackFontSize or 15, db.stackFontOutline or "OUTLINE")
+    end
+
     skinnedBars[childFrame] = true
 end
 
 -- =========================================
--- LAYOUT — runs every update, handles dynamic sizing
+-- Map anchor point names to horizontal/vertical justify values
+-- =========================================
+local JUSTIFY_H_MAP = {
+    LEFT = "LEFT", RIGHT = "RIGHT", CENTER = "CENTER",
+    TOPLEFT = "LEFT", TOPRIGHT = "RIGHT", TOP = "CENTER",
+    BOTTOMLEFT = "LEFT", BOTTOMRIGHT = "RIGHT", BOTTOM = "CENTER",
+}
+local JUSTIFY_V_MAP = {
+    TOP = "TOP", BOTTOM = "BOTTOM", CENTER = "MIDDLE",
+    TOPLEFT = "TOP", TOPRIGHT = "TOP",
+    BOTTOMLEFT = "BOTTOM", BOTTOMRIGHT = "BOTTOM",
+    LEFT = "MIDDLE", RIGHT = "MIDDLE",
+}
+
+-- =========================================
+-- LAYOUT
 -- =========================================
 local function LayoutBuffBar(childFrame)
     if not childFrame or not childFrame.Bar then return end
-    
+
     local db = E.db.thingsUI.buffBars
     local bar = childFrame.Bar
     local icon = childFrame.Icon
-    
+
     local effectiveWidth = db.width
     if db.inheritWidth and db.anchorEnabled then
         local anchorFrame = _G[db.anchorFrame]
@@ -171,10 +183,10 @@ local function LayoutBuffBar(childFrame)
         end
     end
     childFrame:SetSize(effectiveWidth, db.height)
-    
+
     local barOffset = 0
     local iconSize = db.height
-    
+
     if icon and icon.Icon and db.iconEnabled then
         icon:SetSize(iconSize, iconSize)
         if icon.tuiBackdrop then icon.tuiBackdrop:SetAllPoints(icon) end
@@ -185,19 +197,19 @@ local function LayoutBuffBar(childFrame)
         icon.Icon:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
         barOffset = iconSize + (db.iconSpacing or 3)
     end
-    
+
     if bar.tuiBackdrop then
         bar.tuiBackdrop:ClearAllPoints()
         bar.tuiBackdrop:SetPoint("TOPLEFT", childFrame, "TOPLEFT", barOffset, 0)
         bar.tuiBackdrop:SetPoint("BOTTOMRIGHT", childFrame, "BOTTOMRIGHT", 0, 0)
     end
-    
+
     bar:ClearAllPoints()
     if bar.tuiBackdrop then
         bar:SetPoint("TOPLEFT", bar.tuiBackdrop, "TOPLEFT", 1, -1)
         bar:SetPoint("BOTTOMRIGHT", bar.tuiBackdrop, "BOTTOMRIGHT", -1, 1)
     end
-    
+
     if bar.Name then
         bar.Name:ClearAllPoints()
         bar.Name:SetPoint(db.namePoint or "LEFT", bar, db.namePoint or "LEFT", db.nameXOffset or 4, db.nameYOffset or 0)
@@ -205,6 +217,20 @@ local function LayoutBuffBar(childFrame)
     if bar.Duration then
         bar.Duration:ClearAllPoints()
         bar.Duration:SetPoint(db.durationPoint or "RIGHT", bar, db.durationPoint or "RIGHT", db.durationXOffset or -4, db.durationYOffset or 0)
+    end
+
+    -- Stack count positioning
+    if icon and icon.Applications then
+        local stackParent = (db.stackAnchor == "BAR") and bar or icon
+        local stackPoint = db.stackPoint or "CENTER"
+        
+        if icon.Applications:GetParent() ~= stackParent then
+            icon.Applications:SetParent(stackParent)
+        end
+        
+        icon.Applications:SetWidth(0)
+        icon.Applications:ClearAllPoints()
+        icon.Applications:SetPoint(stackPoint, stackParent, stackPoint, db.stackXOffset or 0, db.stackYOffset or 0)
     end
 end
 
@@ -230,13 +256,11 @@ local function ProcessUpdate()
     if not BuffBarCooldownViewer then return end
     if not E.db.thingsUI then return end
 
-    -- Ensure any newly created/activated CDM children are hooked so we can
-    -- re-skin/re-layout the moment they appear.
     ScanAndHookBuffChildren()
-    
+
     local buffBarsEnabled = E.db.thingsUI.buffBars and E.db.thingsUI.buffBars.enabled
     local specialBarsExist = E.db.thingsUI.specialBars
-    
+
     if specialBarsExist then
         ScanAndHookCDMChildren_Safe()
         local specDB = GetSpecialBarDB_Safe()
@@ -246,13 +270,13 @@ local function ProcessUpdate()
             end
         end
     end
-    
+
     if not buffBarsEnabled then return end
-    
+
     local db = E.db.thingsUI.buffBars
     wipe(sortedBars)
     local children = { BuffBarCooldownViewer:GetChildren() }
-    
+
     for _, childFrame in ipairs(children) do
         if childFrame and childFrame:IsShown() and childFrame.Bar
            and not yoinkedBars[childFrame] and not childFrame._tui_hidden then
@@ -261,13 +285,13 @@ local function ProcessUpdate()
             sortedBars[#sortedBars + 1] = childFrame
         end
     end
-    
+
     if #sortedBars == 0 then return end
-    
+
     table.sort(sortedBars, function(a, b)
         return (a.layoutIndex or 0) < (b.layoutIndex or 0)
     end)
-    
+
     local spacing = db.spacing
     local height = db.height
     for index, barFrame in ipairs(sortedBars) do
@@ -278,7 +302,7 @@ local function ProcessUpdate()
             barFrame:SetPoint("BOTTOM", BuffBarCooldownViewer, "BOTTOM", 0, ((index - 1) * (height + spacing)))
         end
     end
-    
+
     AnchorBuffBarContainer()
 end
 
@@ -307,7 +331,7 @@ local eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if not E.db.thingsUI then return end
     if not BuffBarCooldownViewer then return end
-    
+
     if event == "UNIT_AURA" then
         MarkDirty()
     elseif event == "PLAYER_REGEN_ENABLED" then

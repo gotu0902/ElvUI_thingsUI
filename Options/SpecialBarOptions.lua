@@ -435,7 +435,7 @@ function TUI:SpecialBarOptions(barKey)
                 },
                 stackPoint = {
                     order = 44, type = "select", name = "Stack Position",
-                    values = { ["CENTER"] = "Center", ["LEFT"] = "Left", ["RIGHT"] = "Right", ["TOP"] = "Top", ["BOTTOM"] = "Bottom" },
+                    values = { ["CENTER"] = "Center", ["LEFT"] = "Left", ["RIGHT"] = "Right", ["TOP"] = "Top", ["BOTTOM"] = "Bottom", ["TOPLEFT"] = "Top Left", ["TOPRIGHT"] = "Top Right", ["BOTTOMLEFT"] = "Bottom Left", ["BOTTOMRIGHT"] = "Bottom Right" },
                     get = function() return get("stackPoint") end,
                     set = function(_, v) setWipe("stackPoint", v) end,
                     disabled = function() return not get("showStacks") end,

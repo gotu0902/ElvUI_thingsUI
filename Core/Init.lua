@@ -4,15 +4,6 @@ local E = ns.E
 local EP = ns.EP
 local addon = ns.addon
 
--- Scan + hook CDM children so our OnShow hooks fire when bars appear.
--- We deliberately do NOT call CooldownViewerSettings:Show() here —
--- that path opens the Blizzard EditMode panel system, which calls
--- SetAttribute / RefreshLayout on CDM frames. If that happens during a
--- spec change or level-up (when CDM is already refreshing internally)
--- it taints `wasOnGCDLookup` — a secure Blizzard table — and makes
--- the entire CDM Essential/Utility viewer disappear until /reload.
--- CDM builds its bar frames lazily on the first UNIT_AURA after login;
--- our OnShow hooks in ScanAndHookCDMChildren catch them at that point.
 local function PrimeAndScanCDM()
     wipe(ns.skinnedBars)
     wipe(ns.yoinkedBars)
@@ -72,10 +63,6 @@ function TUI:Initialize()
         end)
     end)
 
-    -- Spec change / level-up: release special bars first, THEN wipe tables,
-    -- so yoinkedBars is accurate during the release pass. If we wipe first,
-    -- ProcessUpdate in BuffBars sees the released bar as a normal buff bar
-    -- (yoinkedBars[childFrame] == nil) and renders it as an empty tracked bar.
     self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED", function(_, unit)
         if unit ~= "player" then return end
         C_Timer.After(0.5, function()

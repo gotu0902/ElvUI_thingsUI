@@ -46,7 +46,7 @@ function TUI.ConfigTable()
             description = {
                 order = 2,
                 type = "description",
-                name = "Additional customization options for the Blizzard Cooldown Manager.\n\n",
+                name = "Skin Buff Bars, automatically move frames when using BCDM and CDM icons increase, seperate Tracked Bars with Special Bars o7.\n\n",
             },
             
             -------------------------------------------------
@@ -77,44 +77,145 @@ function TUI.ConfigTable()
                     verticalNote = {
                         order = 3,
                         type = "description",
-                        name = "\n|cFFFFFF00Note:|r If disabling, you may need to reload UI to restore default horizontal layout.\n",
+                        name = "\n|cFFFFFF00Used for FHT (Healing).|r If disabling, you may need to reload UI to restore default horizontal layout.\n",
                     },
-                    
-                    psettingsHeader = {
-                        order = 10,
-                        type = "header",
-                        name = "ElvUI Private Settings",
-                    },
-                    psettingsDescription = {
-                        order = 11,
+                    generalSpace1 = {
+                        order = 4,
                         type = "description",
-                        name = "Apply ElvUI private settings.\n\n|cFFFF6B6BWarning:|r This will overwrite your Private Profile settings!\n",
+                        name = "\n",
                     },
-                    psettingsImport = {
-                        order = 12,
-                        type = "execute",
-                        name = "Setup things Settings",
-                        desc = "Apply ElvUI private settings.",
-                        func = function()
-                            -- ElvUI Private General
-                            E.private["general"]["chatBubbleFont"] = "Expressway"
-                            E.private["general"]["chatBubbleFontOutline"] = "OUTLINE"
-                            E.private["general"]["chatBubbles"] = "nobackdrop"
-                            E.private["general"]["classColors"] = true
-                            E.private["general"]["glossTex"] = "ElvUI Blank"
-                            E.private["general"]["minimap"]["hideTracking"] = true
-                            E.private["general"]["nameplateFont"] = "Expressway"
-                            E.private["general"]["nameplateLargeFont"] = "Expressway"
-                            E.private["general"]["normTex"] = "ElvUI Blank"
-                            E.private["install_complete"] = 12.12
-                            -- ElvUI Private Other
-                            E.private["nameplates"]["enable"] = false
-                            E.private["skins"]["blizzard"]["cooldownManager"] = false
-                            E.private["skins"]["parchmentRemoverEnable"] = true
-                            
-                            print("|cFF8080FFthingsUI|r - ElvUI private settings applied! |cFFFFFF00Reload required.|r")
-                            E:StaticPopup_Show("PRIVATE_RL")
-                        end,
+                    psettingsHeader = {
+                        order = 5,
+                        type = "header",
+                        name = "ElvUI Stuff",
+                    },
+                    positionsGroup = {
+                        order = 6,
+                        type = "group",
+                        name = "Minimap & Aura Positions.",
+                        inline = true,
+                        args = {
+                            positionsTRDescription = {
+                                order = 1,
+                                type = "description",
+                                name = "Move minimap, auras and DT panels to top right.\n\nMove Details yourself you basic bitch ;)\n\n",
+                            },
+                            positionTopRight = {
+                                order = 2,
+                                type = "execute",
+                                name = "Move them Top Right",
+                                func = function()
+                                    E.db["movers"]["MinimapMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-2,-2"
+                                    E.db["movers"]["VehicleLeaveButton"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-152,-2"
+                                    E.db["movers"]["QueueStatusMover"] = "TOPRIGHT,UIParent,TOPRIGHT,-10,-14"
+                                    E.db["movers"]["DTPanelFriends and GuildMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-4,-170"
+                                    E.db["movers"]["DTPanelSystemMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-139,-174"
+                                    E.db["movers"]["DTPanelTimeMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-76,-185"
+                                    E.db["movers"]["BuffsMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-217,-2"
+                                    E.db["auras"]["buffs"]["growthDirection"] = "LEFT_DOWN"
+                                    E.db["movers"]["DebuffsMover"] = "TOPRIGHT,UIParent,TOPRIGHT,-216,-101"
+                                    E.db["auras"]["debuffs"]["growthDirection"] = "LEFT_DOWN"
+                                    E.db["movers"]["GMMover"] = "TOPLEFT,ElvUIParent,TOPLEFT,635,-2"
+                                    E:UpdateMoverPositions()
+                                    E:UpdateAuras()
+                                    print("|cFF8080FFthingsUI|r - Minimap and Auras moved to Top Right.)
+                                end,
+                            },
+                            positionsGruffDescription = {
+                                order = 3,
+                                type = "description",
+                                name = "\nMove them back to default positions.",
+                            },
+                            positionGruff = {
+                                order = 4,
+                                type = "execute",
+                                name = "Reset to default",
+                                func = function()
+                                    E.db["movers"]["MinimapMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,-2,2"
+                                    E.db["movers"]["VehicleLeaveButton"] = "BOTTOMRIGHT,UIParent,BOTTOMRIGHT,-151,152"
+                                    E.db["movers"]["QueueStatusMover"] = "BOTTOMRIGHT,UIParent,BOTTOMRIGHT,-9,176"
+                                    E.db["movers"]["DTPanelFriends and GuildMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,0,5"
+                                    E.db["movers"]["DTPanelSystemMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,-142,1"
+                                    E.db["movers"]["DTPanelTimeMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,-68,1"
+                                    E.db["movers"]["BuffsMover"] = "TOPLEFT,ElvUIParent,TOPLEFT,2,-2"
+                                    E.db["auras"]["buffs"]["growthDirection"] = "RIGHT_DOWN"
+                                    E.db["movers"]["DebuffsMover"] = "TOPLEFT,ElvUIParent,TOPLEFT,2,-101"
+                                    E.db["auras"]["debuffs"]["growthDirection"] = "RIGHT_DOWN"
+                                    E.db["movers"]["GMMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-377,-2"
+                                    E:UpdateMoverPositions()
+                                    E:UpdateAuras()
+                                    print("|cFF8080FFthingsUI|r - Minimap and Auras reset to default positions.")
+                                end,
+                            },
+                        },
+                    },
+                    generalSpace2 = {
+                        order = 7,
+                        type = "description",
+                        name = "\n",
+                    },
+                    psettingsGroup = {
+                        order = 10,
+                        type = "group",
+                        name = "Import Private Settings.",
+                        inline = true,
+                        args = {
+                            psettingsDescription = {
+                                order = 12,
+                                type = "description",
+                                name = "Alternative to import ElvUI private settings.\n\n|cFFFF6B6BWarning:|r This will overwrite your Private Profile settings!\n\n",
+                            },
+                            psettingsImport = {
+                                order = 13,
+                                type = "execute",
+                                name = "Setup things Settings",
+                                desc = "Apply ElvUI private settings.",
+                                func = function()
+                                    -- ElvUI Private General
+                                    E.private["general"]["chatBubbleFont"] = "Expressway"
+                                    E.private["general"]["chatBubbleFontOutline"] = "OUTLINE"
+                                    E.private["general"]["chatBubbles"] = "nobackdrop"
+                                    E.private["general"]["classColors"] = true
+                                    E.private["general"]["glossTex"] = "ElvUI Blank"
+                                    E.private["general"]["minimap"]["hideTracking"] = true
+                                    E.private["general"]["nameplateFont"] = "Expressway"
+                                    E.private["general"]["nameplateLargeFont"] = "Expressway"
+                                    E.private["general"]["normTex"] = "ElvUI Blank"
+                                    E.private["install_complete"] = 12.12
+                                    -- ElvUI Private Other
+                                    E.private["nameplates"]["enable"] = false
+                                    E.private["skins"]["blizzard"]["cooldownManager"] = false
+                                    E.private["skins"]["parchmentRemoverEnable"] = true
+                                    
+                                    print("|cFF8080FFthingsUI|r - ElvUI private settings applied! |cFFFFFF00Reload required.|r")
+                                    E:StaticPopup_Show("PRIVATE_RL")
+                                end,
+                            },
+                        },
+                    },
+                    UIScaleGroup = {
+                        order = 14,
+                        type = "group",
+                        name = "Set UI Scale for 1440p",
+                        inline = true,
+                        args = {
+                            uiScaleDesc = {
+                                order = 15,
+                                type = "description",
+                                name = "If stuff looks weird, you must reset UI Scale to 0.53, or click this button.\n\n|cFFFF6B6BReload required|r\n\n",
+                            },
+                            uiScaleButton = {
+                                order = 16,
+                                type = "execute",
+                                name = "Set UI Scale (0.53)",
+                                func = function()
+                                    E.global.general.UIScale = 0.53
+                                    E:PixelScaleChanged()
+                                    E.ShowPopup = true
+                                    print("|cFF8080FFthingsUI|r - UI Scale set to 0.53. |cFFFFFF00Reload required.|r")
+                                end,
+                            },
+                        },
                     },
                 },
             },
@@ -604,6 +705,8 @@ function TUI.ConfigTable()
                                 desc = "Anchor point for the stack count on the icon.",
                                 values = {
                                     ["CENTER"] = "Center",
+                                    ["LEFT"] = "Left",
+                                    ["RIGHT"] = "Right",
                                     ["TOP"] = "Top",
                                     ["BOTTOM"] = "Bottom",
                                     ["TOPLEFT"] = "Top Left",

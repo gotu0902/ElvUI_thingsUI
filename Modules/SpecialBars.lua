@@ -516,6 +516,20 @@ local StyleSpecialBar = function(childFrame, db)
     local font = LSM:Fetch("font", db.font)
     if bar.Name then bar.Name:SetFont(font, db.fontSize, db.fontOutline) end
     if bar.Duration then bar.Duration:SetFont(font, db.fontSize, db.fontOutline) end
+
+    -- Stack count styling + positioning
+    if icon and icon.Applications then
+        local stackParent = (db.stackAnchor == "BAR") and bar or icon
+        local stackPoint = db.stackPoint or "CENTER"
+        
+        if icon.Applications:GetParent() ~= stackParent then
+            icon.Applications:SetParent(stackParent)
+        end
+        
+        icon.Applications:SetWidth(0)  -- <-- denne, auto-størrelse
+        icon.Applications:ClearAllPoints()
+        icon.Applications:SetPoint(stackPoint, stackParent, stackPoint, db.stackXOffset or 0, db.stackYOffset or 0)
+    end
 end
 
 -- Main update for a single special bar slot
