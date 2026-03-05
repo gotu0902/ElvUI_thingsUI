@@ -1,6 +1,6 @@
 # ElvUI_thingsUI
 
-![Version](https://img.shields.io/badge/version-2.2.6-green)
+![Version](https://img.shields.io/badge/version-2.2.7-green)
 
 ### BCDM + ElvUI
 - Anchor BCDM frames to ElvUI Player\Target UFs

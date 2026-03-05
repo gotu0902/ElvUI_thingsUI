@@ -2,7 +2,7 @@
 ## Title: |cFF8080FFElvUI_thingsUI|r
 ## Notes: ElvUI plugin for additional Cooldown Manager customization
 ## Author: ._.
-## Version: 2.2.6
+## Version: 2.2.7
 ## RequiredDeps: ElvUI, BetterCooldownManager
 ## DefaultState: Enabled
 ## X-Wago-ID: mKODDZGx
