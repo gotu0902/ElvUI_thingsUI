@@ -65,18 +65,23 @@ function TUI:Initialize()
 
     self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED", function(_, unit)
         if unit ~= "player" then return end
-        C_Timer.After(0.5, function()
-            -- 1. Release all yoinked special bars back to their original parent
-            --    BEFORE wiping shared state tables.
+        -- I Init.lua, PLAYER_SPECIALIZATION_CHANGED
+        C_Timer.After(1.5, function()
             if ns.SpecialBars and ns.SpecialBars.ReleaseAllSpecialBars then
                 ns.SpecialBars.ReleaseAllSpecialBars()
             end
-
-            -- 2. Now it is safe to wipe — no bar is mid-yoink.
+            
+            if ns.SpecialBars then
+                if ns.SpecialBars.trackedBarsByName then
+                    wipe(ns.SpecialBars.trackedBarsByName)
+                end
+                if ns.SpecialBars.hookedCDMChildren then
+                    wipe(ns.SpecialBars.hookedCDMChildren)
+                end
+            end
+            
             wipe(ns.skinnedBars)
             wipe(ns.yoinkedBars)
-
-            -- 3. Scan for new spec's CDM children and reinitialise.
             PrimeAndScanCDM()
             TUI:UpdateSpecialBars()
             TUI:UpdateBuffBars()

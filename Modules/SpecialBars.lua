@@ -821,3 +821,5 @@ ns.SpecialBars.specialBarState = specialBarState
 ns.SpecialBars.CleanString = CleanString
 ns.SpecialBars.SPECIAL_BAR_DEFAULTS = SPECIAL_BAR_DEFAULTS
 ns.SpecialBars.GetSpecialBarSlotDB = GetSpecialBarSlotDB
+ns.SpecialBars.trackedBarsByName = trackedBarsByName
+ns.SpecialBars.hookedCDMChildren = hookedCDMChildren
