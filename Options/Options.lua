@@ -3,10 +3,137 @@ local TUI = ns.TUI
 local E = ns.E
 local LSM = ns.LSM
 local SHARED_ANCHOR_VALUES = ns.ANCHORS.SHARED_ANCHOR_VALUES
-local anchors = ns.ANCHORS.SPECIAL_BAR_ANCHOR_VALUES
+local SB = ns.SpecialBars
 
-local GetSpecialBarSlotDB = ns.SpecialBars and ns.SpecialBars.GetSpecialBarSlotDB
-local CleanString = ns.SpecialBars and ns.SpecialBars.CleanString
+-- Tracks which source spec is selected in the copy-from dropdowns
+local selectedCopySpec = ""
+
+local function NotifyChange()
+    local ok, reg = pcall(LibStub, "AceConfigRegistry-3.0")
+    if ok and reg and reg.NotifyChange then reg:NotifyChange("ElvUI") end
+end
+
+local function DeepCopy(src)
+    if type(src) ~= "table" then return src end
+    local t = {}
+    for k, v in pairs(src) do t[k] = DeepCopy(v) end
+    return t
+end
+
+-- Returns number of bar slots and icon slots that have a spell configured
+local function CountConfiguredSlots(specData)
+    local bars, icons = 0, 0
+    if specData.bars then
+        for _, slot in pairs(specData.bars) do
+            if type(slot) == "table" and slot.spellID then bars = bars + 1 end
+        end
+    end
+    if specData.icons then
+        for _, slot in pairs(specData.icons) do
+            if type(slot) == "table" and slot.spellID then icons = icons + 1 end
+        end
+    end
+    return bars, icons
+end
+
+-- Returns a table of {[specIDstring] = "ClassName - SpecName"} for specs that
+-- have saved data, excluding the current spec.
+local function GetOtherSpecChoices()
+    local choices = { [""] = "|cFF888888— Select Spec —|r" }
+    local db = E.db.thingsUI and E.db.thingsUI.specialBars
+    if not db or not db.specs then return choices end
+    local currentID = tostring(SB and SB.GetSpecRoot and (function()
+        local idx = GetSpecialization()
+        return idx and select(1, GetSpecializationInfo(idx)) or 0
+    end)() or 0)
+    for specIDStr, specData in pairs(db.specs) do
+        if specIDStr ~= currentID then
+            local configuredBars, configuredIcons = CountConfiguredSlots(specData)
+            -- Skip specs with nothing configured
+            if configuredBars > 0 or configuredIcons > 0 then
+                local sid = tonumber(specIDStr)
+                local specName, className
+                if sid and sid > 0 then
+                    local _, sName, _, _, _, _, cName = GetSpecializationInfoByID(sid)
+                    specName  = sName  or ("Spec "..specIDStr)
+                    className = cName  or ""
+                else
+                    specName, className = "Spec "..specIDStr, ""
+                end
+                local label = className ~= "" and (className.." - "..specName) or specName
+                label = label .. " |cFF888888("..configuredBars.."b/"..configuredIcons.."i)|r"
+                choices[specIDStr] = label
+            end
+        end
+    end
+    return choices
+end
+
+local function CopySpecSection(sourceKey, copyBars, copyIcons)
+    if not sourceKey or sourceKey == "" then return end
+    local db = E.db.thingsUI and E.db.thingsUI.specialBars
+    if not db or not db.specs then return end
+    local src = db.specs[sourceKey]
+    if not src then return end
+
+    local dest = SB.GetSpecRoot()
+
+    if copyBars and src.bars then
+        dest.barCount = src.barCount or dest.barCount or 3
+        dest.bars = dest.bars or {}
+        for i = 1, (dest.barCount or 3) do
+            local key = "bar"..i
+            local srcSlot = src.bars[key]
+            if srcSlot then
+                SB.ReleaseBar(key)
+                dest.bars[key] = DeepCopy(srcSlot)
+                -- Keep spellID as-is. If it doesn't exist in this spec's CDM the slot
+                -- simply sits inactive — the user can add the spell to CDM or pick a new one.
+            end
+        end
+    end
+
+    if copyIcons and src.icons then
+        dest.iconCount = src.iconCount or dest.iconCount or 3
+        dest.icons = dest.icons or {}
+        for i = 1, (dest.iconCount or 3) do
+            local key = "icon"..i
+            local srcSlot = src.icons[key]
+            if srcSlot then
+                SB.ReleaseIcon(key)
+                dest.icons[key] = DeepCopy(srcSlot)
+            end
+        end
+    end
+
+    TUI:UpdateSpecialBars()
+    NotifyChange()
+end
+
+local function BarTabName(barKey, index)
+    if not SB then return ("Bar %d"):format(index) end
+    local db = SB.GetBarDB(barKey) or {}
+    local name = db.spellName or ""
+    if name == "" then return ("Bar %d"):format(index) end
+    -- Warn if the spell isn't in the current spec's CDM list
+    local inCDM = SB.GetRawSpellList and SB.GetRawSpellList()[db.spellID]
+    if not inCDM then
+        return ("|cFFFF4444! Bar %d: %s|r"):format(index, name)
+    end
+    return ("Bar %d: %s"):format(index, name)
+end
+
+local function IconTabName(iconKey, index)
+    if not SB then return ("Icon %d"):format(index) end
+    local db = SB.GetIconDB(iconKey) or {}
+    local name = db.spellName or ""
+    if name == "" then return ("Icon %d"):format(index) end
+    local inCDM = SB.GetRawSpellList and SB.GetRawSpellList()[db.spellID]
+    if not inCDM then
+        return ("|cFFFF4444! Icon %d: %s|r"):format(index, name)
+    end
+    return ("Icon %d: %s"):format(index, name)
+end
 
 local function SpecialBarTabName(barKey, index)
     -- Fallback if DB helpers aren't available for some reason
@@ -50,60 +177,165 @@ function TUI.ConfigTable()
             },
             
             -------------------------------------------------
-            -- BUFF ICONS TAB
+            -- GENERAL TAB
             -------------------------------------------------
             generalTab = {
                 order = 10,
                 type = "group",
                 name = "General",
+                childGroups = "tab",
                 args = {
-                    buffIconsHeader = {
+                    generalSubTab = {
                         order = 1,
-                        type = "header",
-                        name = "Buff Icon Viewer (BuffIconCooldownViewer)",
-                    },
-                    verticalBuffs = {
-                        order = 2,
-                        type = "toggle",
-                        name = "Grow Vertically (Top to Bottom)",
-                        desc = "Stack buff icons vertically from top to bottom instead of horizontally.",
-                        width = "full",
-                        get = function() return E.db.thingsUI.verticalBuffs end,
-                        set = function(_, value)
-                            E.db.thingsUI.verticalBuffs = value
-                            TUI:UpdateVerticalBuffs()
-                        end,
-                    },
-                    verticalNote = {
-                        order = 3,
-                        type = "description",
-                        name = "\n|cFFFFFF00Used for FHT (Healing).|r If disabling, you may need to reload UI to restore default horizontal layout.\n",
-                    },
-                    generalSpace1 = {
-                        order = 4,
-                        type = "description",
-                        name = "\n",
-                    },
-                    psettingsHeader = {
-                        order = 5,
-                        type = "header",
-                        name = "ElvUI Stuff",
-                    },
-                    positionsGroup = {
-                        order = 6,
                         type = "group",
-                        name = "Minimap & Aura Positions.",
+                        name = "General",
+                        args = {
+                            buffIconsGroup = {
+                                order = 1,
+                                type = "group",
+                                name = "Buff Icon Viewer (BuffIconCooldownViewer)",
+                                inline = true,
+                                args = {
+                                    verticalBuffs = {
+                                        order = 1,
+                                        type = "toggle",
+                                        name = "Grow Vertically (Top to Bottom)",
+                                        desc = "Stack buff icons vertically from top to bottom instead of horizontally.",
+                                        width = "full",
+                                        get = function() return E.db.thingsUI.verticalBuffs end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.verticalBuffs = value
+                                            TUI:UpdateVerticalBuffs()
+                                        end,
+                                    },
+                                    verticalNote = {
+                                        order = 2,
+                                        type = "description",
+                                        name = "\n|cFFFFFF00Used for FHT (Healing).|r If disabling, you may need to reload UI to restore default horizontal layout.\n",
+                                    },
+                                },
+                            },
+                            trinketsCDMGroup = {
+                                order = 2,
+                                type = "group",
+                                name = "Trinkets to CDM (BCDM Trinket Bar)",
+                                inline = true,
+                                args = {
+                                    trinketsCDMEnabled = {
+                                        order = 1,
+                                        type = "toggle",
+                                        name = "Enable",
+                                        desc = "Position BCDM's trinket bar relative to the Essential or Utility cooldown viewer.",
+                                        width = "full",
+                                        get = function() return E.db.thingsUI.trinketsCDM.enabled end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.trinketsCDM.enabled = value
+                                            TUI:UpdateTrinketsCDM()
+                                            NotifyChange()
+                                        end,
+                                    },
+                                    trinketsCDMMode = {
+                                        order = 2,
+                                        type = "toggle",
+                                        name = "NHT (Horizontal)",
+                                        desc = "Trinkets extend the Essential row horizontally (grows left or right).",
+                                        hidden = function() return not E.db.thingsUI.trinketsCDM.enabled end,
+                                        get = function() return E.db.thingsUI.trinketsCDM.mode == "NHT" end,
+                                        set = function(_, value)
+                                            if value then
+                                                E.db.thingsUI.trinketsCDM.mode = "NHT"
+                                                TUI:UpdateTrinketsCDM()
+                                                NotifyChange()
+                                            end
+                                        end,
+                                    },
+                                    trinketsCDMModeFHT = {
+                                        order = 3,
+                                        type = "toggle",
+                                        name = "FHT (Vertical)",
+                                        desc = "Trinkets grow vertically from the end of Essential. If Essential + trinkets exceed the limit, they overflow to the Utility slot (Utility shifts down).",
+                                        hidden = function() return not E.db.thingsUI.trinketsCDM.enabled end,
+                                        get = function() return E.db.thingsUI.trinketsCDM.mode == "FHT" end,
+                                        set = function(_, value)
+                                            if value then
+                                                E.db.thingsUI.trinketsCDM.mode = "FHT"
+                                                TUI:UpdateTrinketsCDM()
+                                                NotifyChange()
+                                            end
+                                        end,
+                                    },
+                                    trinketsCDMSide = {
+                                        order = 5,
+                                        type = "select",
+                                        name = "Side",
+                                        desc = "Which end of EssentialCooldownViewer to anchor to.",
+                                        hidden = function()
+                                            local db = E.db.thingsUI.trinketsCDM
+                                            return not db.enabled or db.mode == "FHT"
+                                        end,
+                                        values = {
+                                            RIGHT = "Right",
+                                            LEFT  = "Left",
+                                        },
+                                        get = function() return E.db.thingsUI.trinketsCDM.side end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.trinketsCDM.side = value
+                                            TUI:UpdateTrinketsCDM()
+                                        end,
+                                    },
+                                    trinketsCDMGap = {
+                                        order = 4,
+                                        type = "range",
+                                        name = "Gap",
+                                        desc = "Pixel gap between EssentialCooldownViewer and the trinket bar. NHT = horizontal, FHT = vertical.",
+                                        hidden = function() return not E.db.thingsUI.trinketsCDM.enabled end,
+                                        min = -20, max = 20, step = 0.01, bigStep = 1,
+                                        get = function() return E.db.thingsUI.trinketsCDM.gap end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.trinketsCDM.gap = value
+                                            TUI:UpdateTrinketsCDM()
+                                        end,
+                                    },
+                                    trinketsCDMFhtLimit = {
+                                        order = 6,
+                                        type = "range",
+                                        name = "FHT Essential Limit",
+                                        desc = "Maximum combined icon count (Essential + trinkets) before trinkets overflow to the Utility slot.",
+                                        hidden = function()
+                                            return not E.db.thingsUI.trinketsCDM.enabled
+                                                or E.db.thingsUI.trinketsCDM.mode ~= "FHT"
+                                        end,
+                                        min = 1, max = 30, step = 1,
+                                        get = function() return E.db.thingsUI.trinketsCDM.fhtLimit end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.trinketsCDM.fhtLimit = value
+                                            TUI:UpdateTrinketsCDM()
+                                        end,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    positioningTab = {
+                        order = 2,
+                        type = "group",
+                        name = "Positioning Tweaks",
+                        args = {
+                            minimapGroup = {
+                        order = 1,
+                        type = "group",
+                        name = "Minimap & Aura Positions",
                         inline = true,
                         args = {
                             positionsTRDescription = {
                                 order = 1,
                                 type = "description",
-                                name = "Move minimap, auras and DT panels to top right.\n\nMove Details yourself you basic bitch ;)\n\n",
+                                name = "Move Minimap, auras and DT panels to top right, Details! to bottom right (if chat anchoring enabled).\n\n",
                             },
                             positionTopRight = {
                                 order = 2,
                                 type = "execute",
-                                name = "Move them Top Right",
+                                name = "Move! That! Stuff!",
                                 func = function()
                                     E.db["movers"]["MinimapMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-2,-2"
                                     E.db["movers"]["VehicleLeaveButton"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-152,-2"
@@ -116,9 +348,10 @@ function TUI.ConfigTable()
                                     E.db["movers"]["DebuffsMover"] = "TOPRIGHT,UIParent,TOPRIGHT,-216,-101"
                                     E.db["auras"]["debuffs"]["growthDirection"] = "LEFT_DOWN"
                                     E.db["movers"]["GMMover"] = "TOPLEFT,ElvUIParent,TOPLEFT,635,-2"
+                                    E.db["movers"]["RightChatMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,-2,2"
                                     E:UpdateMoverPositions()
                                     E:UpdateAuras()
-                                    print("|cFF8080FFthingsUI|r - Minimap and Auras moved to Top Right.")
+                                    print("|cFF8080FFthingsUI|r - Minimap Auras and DT panels moved to Top Right, Details! bottom right (if chat anchoring enabled).")
                                 end,
                             },
                             positionsGruffDescription = {
@@ -142,31 +375,114 @@ function TUI.ConfigTable()
                                     E.db["movers"]["DebuffsMover"] = "TOPLEFT,ElvUIParent,TOPLEFT,2,-101"
                                     E.db["auras"]["debuffs"]["growthDirection"] = "RIGHT_DOWN"
                                     E.db["movers"]["GMMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-377,-2"
+                                    E.db["movers"]["RightChatMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,-202,2"
                                     E:UpdateMoverPositions()
                                     E:UpdateAuras()
-                                    print("|cFF8080FFthingsUI|r - Minimap and Auras reset to default positions.")
+                                    print("|cFF8080FFthingsUI|r - Minimap, Auras and Details! reset to default positions.")
                                 end,
                             },
                         },
                     },
-                    generalSpace2 = {
-                        order = 7,
-                        type = "description",
-                        name = "\n",
-                    },
-                    psettingsGroup = {
-                        order = 10,
+                    detailsChatGroup = {
+                        order = 2,
                         type = "group",
-                        name = "Import Private Settings.",
+                        name = "Details! Chat Backdrop",
+                        inline = true,
+                        args = {
+                            rightChatBackdropDescription = {
+                                order = 1,
+                                type = "description",
+                                name = "Use ElvUI's Right Chat Panel as a backdrop for Details! windows 1 & 2, side by side inside it.\n",
+                            },
+                            rightChatBackdrop = {
+                                order = 2,
+                                type = "toggle",
+                                name = "Enable",
+                                desc = "Enables the right chat panel backdrop, sets its size, and places Details! windows 1 & 2 side by side inside it.",
+                                width = "full",
+                                get = function() return E.db.thingsUI.rightChatAsBackground end,
+                                set = function(_, value)
+                                    E.db.thingsUI.rightChatAsBackground = value
+                                    if value then
+                                        TUI:ApplyDetailsRightChatAnchor()
+                                        print("|cFF8080FFthingsUI|r - Right Chat Backdrop enabled. Details! anchored inside panel.")
+                                    else
+                                        local LO = E:GetModule("Layout")
+                                        local CH = E:GetModule("Chat")
+                                        local current = E.db["chat"]["panelBackdrop"] or "RIGHT"
+                                        if current == "RIGHT" then
+                                            E.db["chat"]["panelBackdrop"] = "HIDEBOTH"
+                                        elseif current == "SHOWBOTH" then
+                                            E.db["chat"]["panelBackdrop"] = "LEFT"
+                                        end
+                                        if LO and LO.ToggleChatPanels then LO:ToggleChatPanels() end
+                                        if CH then
+                                            if CH.PositionChats then CH:PositionChats() end
+                                            if CH.UpdateEditboxAnchors then CH:UpdateEditboxAnchors() end
+                                        end
+                                        print("|cFF8080FFthingsUI|r - Right Chat Backdrop disabled.")
+                                    end
+                                end,
+                            },
+                            rightChatWidthOffset = {
+                                order = 3,
+                                type = "range",
+                                name = "Width Offset",
+                                desc = "Fine-tune the right chat panel width. Applied on top of the auto-calculated size.",
+                                hidden = function() return not E.db.thingsUI.rightChatAsBackground end,
+                                min = -500, max = 500, step = 0.01, bigStep = 1,
+                                get = function() return E.db.thingsUI.rightChatWidthOffset end,
+                                set = function(_, value)
+                                    E.db.thingsUI.rightChatWidthOffset = value
+                                    TUI:ApplyDetailsRightChatAnchor()
+                                end,
+                            },
+                            rightChatHeightOffset = {
+                                order = 4,
+                                type = "range",
+                                name = "Height Offset",
+                                desc = "Fine-tune the right chat panel height. Applied on top of the auto-calculated size.",
+                                hidden = function() return not E.db.thingsUI.rightChatAsBackground end,
+                                min = -500, max = 500, step = 0.01, bigStep = 1,
+                                get = function() return E.db.thingsUI.rightChatHeightOffset end,
+                                set = function(_, value)
+                                    E.db.thingsUI.rightChatHeightOffset = value
+                                    TUI:ApplyDetailsRightChatAnchor()
+                                end,
+                            },
+                            rightChatReapply = {
+                                order = 5,
+                                type = "execute",
+                                name = "Reapply",
+                                desc = "Reapply sizing and anchors — use this if you've resized Details! windows or the ElvUI right chat panel.",
+                                hidden = function() return not E.db.thingsUI.rightChatAsBackground end,
+                                func = function()
+                                    TUI:ApplyDetailsRightChatAnchor()
+                                    print("|cFF8080FFthingsUI|r - Details! chat anchor reapplied.")
+                                end,
+                            },
+                        },
+                    },          -- end detailsChatGroup
+                    },          -- end positioningTab args
+                },              -- end positioningTab
+                fixesTab = {
+                        order = 3,
+                        type = "group",
+                        name = "Fixes and QoL",
+                        args = {
+                            psettingsGroup = {
+                        order = 1,
+                        type = "group",
+                        name = "Import settings.",
                         inline = true,
                         args = {
                             psettingsDescription = {
-                                order = 12,
+                                order = 1,
                                 type = "description",
                                 name = "Alternative to import ElvUI private settings.\n\n|cFFFF6B6BWarning:|r This will overwrite your Private Profile settings!\n\n",
                             },
                             psettingsImport = {
-                                order = 13,
+                                order = 2,
                                 type = "execute",
                                 name = "Setup things Settings",
                                 desc = "Apply ElvUI private settings.",
@@ -186,26 +502,65 @@ function TUI.ConfigTable()
                                     E.private["nameplates"]["enable"] = false
                                     E.private["skins"]["blizzard"]["cooldownManager"] = false
                                     E.private["skins"]["parchmentRemoverEnable"] = true
-                                    
+
                                     print("|cFF8080FFthingsUI|r - ElvUI private settings applied! |cFFFFFF00Reload required.|r")
                                     E:StaticPopup_Show("PRIVATE_RL")
                                 end,
                             },
                         },
                     },
+                    cvarsGroup = {
+                        order = 2,
+                        type = "group",
+                        name = "Import CVars",
+                        inline = true,
+                        args = {
+                            cvarsDescription = {
+                                order = 1,
+                                type = "description",
+                                name = "Applies the following World of Warcraft audio/graphics CVars:\n\n"
+                                    .. "|cFFFFFF00Sound_NumChannels|r |cFF888888= 32|r — Number of active sound channels. Might help with FPS is the word on the thing.\n"
+                                    .. "|cFFFFFF00weatherDensity|r |cFF888888= 0|r — Weather density (default: 0).\n"
+                                    .. "|cFFFFFF00RAIDweatherDensity|r |cFF888888= 0|r — Raid weather density (default: 3).\n\n",
+                            },
+                            cvarsImport = {
+                                order = 2,
+                                type = "execute",
+                                name = "Import CVars",
+                                desc = "Apply the listed CVars.",
+                                func = function()
+                                    SetCVar("Sound_NumChannels", 32)
+                                    SetCVar("weatherDensity", 0)
+                                    SetCVar("RAIDweatherDensity", 0)
+                                    print("|cFF8080FFthingsUI|r - CVars applied: Sound_NumChannels=32, weatherDensity=0, RAIDweatherDensity=0.")
+                                end,
+                            },
+                            autoSetAudioChannels = {
+                                order = 3,
+                                type = "toggle",
+                                name = "Auto-set Sound Channels on Login",
+                                desc = "Automatically set Sound_NumChannels to 32 each time you enter the world. Since something keeps resetting this CVar.",
+                                width = "full",
+                                get = function() return E.db.thingsUI.autoSetAudioChannels end,
+                                set = function(_, value)
+                                    E.db.thingsUI.autoSetAudioChannels = value
+                                end,
+                            },
+                        },
+                    },
                     UIScaleGroup = {
-                        order = 14,
+                        order = 3,
                         type = "group",
                         name = "Set UI Scale for 1440p",
                         inline = true,
                         args = {
                             uiScaleDesc = {
-                                order = 15,
+                                order = 1,
                                 type = "description",
                                 name = "If stuff looks weird, you must reset UI Scale to 0.53, or click this button.\n\n|cFFFF6B6BReload required|r\n\n",
                             },
                             uiScaleButton = {
-                                order = 16,
+                                order = 2,
                                 type = "execute",
                                 name = "Set UI Scale (0.53)",
                                 func = function()
@@ -217,9 +572,11 @@ function TUI.ConfigTable()
                             },
                         },
                     },
-                },
-            },
-            
+                    },  -- end fixesTab args
+                },      -- end fixesTab
+                },      -- end generalTab args
+            },          -- end generalTab
+
             -------------------------------------------------
             -- BUFF BARS TAB
             -------------------------------------------------
@@ -1287,61 +1644,115 @@ function TUI.ConfigTable()
                 order = 50,
                 type = "group",
                 name = "Special Bars",
-                -- Bars as tabs (Special Bar 1/2/3)
                 childGroups = "tab",
                 args = {
-                    infoGroup = {
-                        order = 1,
-                        type = "group",
-                        name = "Info",
+                    controlGroup = {
+                        order = 1, type = "group", name = "Manage",
                         args = {
-                            specialBarsHeader = {
-                                order = 1,
-                                type = "header",
-                                name = "Special Bars",
+                            desc = { order = 1, type = "description",
+                                name = "Pull individual Tracked Buff bars from the Cooldown Manager and reposition them anywhere.\n\nSettings are saved per specialization.\n" },
+                            barCountHeader = { order = 2, type = "header", name = "Special Bars" },
+                            barCount = {
+                                order = 3, type = "range", name = "Number of Bar Slots", min = 1, max = 12, step = 1,
+                                get = function() if not SB then return 3 end; return SB.GetSpecRoot().barCount or 3 end,
+                                set = function(_, v)
+                                    if not SB then return end
+                                    local old = SB.GetSpecRoot().barCount or 3
+                                    SB.GetSpecRoot().barCount = v
+                                    if v < old then
+                                        for i = v+1, old do SB.ReleaseBar("bar"..i) end
+                                        TUI:UpdateSpecialBars()
+                                    end
+                                    local ok, reg = pcall(LibStub, "AceConfigRegistry-3.0")
+                                    if ok and reg and reg.NotifyChange then reg:NotifyChange("ElvUI") end
+                                end,
                             },
-                            description = {
-                                order = 2,
-                                type = "description",
-                                name = "Yoink individual tracked bars from the BuffBarCooldownViewer and reposition them independently.\n\nEnter the exact spell name as it appears in your Tracked Bars. The bar will be pulled out and displayed at your chosen anchor. It keeps updating in combat because CDM handles the aura tracking internally.\n\n|cFFFFFF00The spell must be in your Tracked Bars list in the Cooldown Manager.|r\n|cFF00FF00Settings are saved per specialization — each spec remembers its own spells and layout.|r",
+                            copyHeader = { order = 10, type = "header", name = "Copy from Another Spec" },
+                            copyDesc = { order = 11, type = "description",
+                                name = "Copies bar settings from another spec. Spells not available in the current spec are set to None.\n" },
+                            copySpecSelect = {
+                                order = 12, type = "select", name = "Copy From", width = "double",
+                                values = GetOtherSpecChoices,
+                                get = function() return selectedCopySpec end,
+                                set = function(_, v) selectedCopySpec = v; NotifyChange() end,
+                            },
+                            copyBarsButton = {
+                                order = 13, type = "execute", name = "Copy Bars",
+                                disabled = function() return not selectedCopySpec or selectedCopySpec == "" end,
+                                confirm = function() return "Overwrite your current bar settings with bars from the selected spec?" end,
+                                func = function() CopySpecSection(selectedCopySpec, true, false) end,
                             },
                         },
                     },
-                    bar1Group = {
-                        order = 10,
-                        type = "group",
-                        name = function() return SpecialBarTabName("bar1", 1) end,
-                        childGroups = "tree",
-                        args = TUI:SpecialBarOptions("bar1"),
+                    bar1Group  = { order=10,  type="group", childGroups="tree", name=function() return BarTabName("bar1",1)   end, hidden=function() return not SB or (SB.GetSpecRoot().barCount or 3) < 1  end, args=TUI:SpecialBarOptions("bar1")  },
+                    bar2Group  = { order=20,  type="group", childGroups="tree", name=function() return BarTabName("bar2",2)   end, hidden=function() return not SB or (SB.GetSpecRoot().barCount or 3) < 2  end, args=TUI:SpecialBarOptions("bar2")  },
+                    bar3Group  = { order=30,  type="group", childGroups="tree", name=function() return BarTabName("bar3",3)   end, hidden=function() return not SB or (SB.GetSpecRoot().barCount or 3) < 3  end, args=TUI:SpecialBarOptions("bar3")  },
+                    bar4Group  = { order=40,  type="group", childGroups="tree", name=function() return BarTabName("bar4",4)   end, hidden=function() return not SB or (SB.GetSpecRoot().barCount or 3) < 4  end, args=TUI:SpecialBarOptions("bar4")  },
+                    bar5Group  = { order=50,  type="group", childGroups="tree", name=function() return BarTabName("bar5",5)   end, hidden=function() return not SB or (SB.GetSpecRoot().barCount or 3) < 5  end, args=TUI:SpecialBarOptions("bar5")  },
+                    bar6Group  = { order=60,  type="group", childGroups="tree", name=function() return BarTabName("bar6",6)   end, hidden=function() return not SB or (SB.GetSpecRoot().barCount or 3) < 6  end, args=TUI:SpecialBarOptions("bar6")  },
+                    bar7Group  = { order=70,  type="group", childGroups="tree", name=function() return BarTabName("bar7",7)   end, hidden=function() return not SB or (SB.GetSpecRoot().barCount or 3) < 7  end, args=TUI:SpecialBarOptions("bar7")  },
+                    bar8Group  = { order=80,  type="group", childGroups="tree", name=function() return BarTabName("bar8",8)   end, hidden=function() return not SB or (SB.GetSpecRoot().barCount or 3) < 8  end, args=TUI:SpecialBarOptions("bar8")  },
+                    bar9Group  = { order=90,  type="group", childGroups="tree", name=function() return BarTabName("bar9",9)   end, hidden=function() return not SB or (SB.GetSpecRoot().barCount or 3) < 9  end, args=TUI:SpecialBarOptions("bar9")  },
+                    bar10Group = { order=100, type="group", childGroups="tree", name=function() return BarTabName("bar10",10) end, hidden=function() return not SB or (SB.GetSpecRoot().barCount or 3) < 10 end, args=TUI:SpecialBarOptions("bar10") },
+                    bar11Group = { order=110, type="group", childGroups="tree", name=function() return BarTabName("bar11",11) end, hidden=function() return not SB or (SB.GetSpecRoot().barCount or 3) < 11 end, args=TUI:SpecialBarOptions("bar11") },
+                    bar12Group = { order=120, type="group", childGroups="tree", name=function() return BarTabName("bar12",12) end, hidden=function() return not SB or (SB.GetSpecRoot().barCount or 3) < 12 end, args=TUI:SpecialBarOptions("bar12") },
+                },
+            },
+
+            specialIconsTab = {
+                order = 51,
+                type = "group",
+                name = "Special Icons",
+                childGroups = "tab",
+                args = {
+                    controlGroup = {
+                        order = 1, type = "group", name = "Manage",
+                        args = {
+                            iconCountHeader = { order = 1, type = "header", name = "Special Icons" },
+                            iconCount = {
+                                order = 2, type = "range", name = "Number of Icon Slots", min = 1, max = 12, step = 1,
+                                get = function() if not SB then return 3 end; return SB.GetSpecRoot().iconCount or 3 end,
+                                set = function(_, v)
+                                    if not SB then return end
+                                    local old = SB.GetSpecRoot().iconCount or 3
+                                    SB.GetSpecRoot().iconCount = v
+                                    if v < old then
+                                        for i = v+1, old do SB.ReleaseIcon("icon"..i) end
+                                        TUI:UpdateSpecialBars()
+                                    end
+                                    local ok, reg = pcall(LibStub, "AceConfigRegistry-3.0")
+                                    if ok and reg and reg.NotifyChange then reg:NotifyChange("ElvUI") end
+                                end,
+                            },
+                            copyHeader = { order = 10, type = "header", name = "Copy from Another Spec" },
+                            copyDesc = { order = 11, type = "description",
+                                name = "Copies icon settings from another spec. Spells not available in the current spec are set to None.\n" },
+                            copySpecSelect = {
+                                order = 12, type = "select", name = "Copy From", width = "double",
+                                values = GetOtherSpecChoices,
+                                get = function() return selectedCopySpec end,
+                                set = function(_, v) selectedCopySpec = v; NotifyChange() end,
+                            },
+                            copyIconsButton = {
+                                order = 13, type = "execute", name = "Copy Icons",
+                                disabled = function() return not selectedCopySpec or selectedCopySpec == "" end,
+                                confirm = function() return "Overwrite your current icon settings with icons from the selected spec?" end,
+                                func = function() CopySpecSection(selectedCopySpec, false, true) end,
+                            },
+                        },
                     },
-                    bar2Group = {
-                        order = 20,
-                        type = "group",
-                        name = function() return SpecialBarTabName("bar2", 2) end,
-                        childGroups = "tree",
-                        args = TUI:SpecialBarOptions("bar2"),
-                    },
-                    bar3Group = {
-                        order = 30,
-                        type = "group",
-                        name = function() return SpecialBarTabName("bar3", 3) end,
-                        childGroups = "tree",
-                        args = TUI:SpecialBarOptions("bar3"),
-                    },
-                    bar4Group = {
-                        order = 40,
-                        type = "group",
-                        name = function() return SpecialBarTabName("bar4", 4) end,
-                        childGroups = "tree",
-                        args = TUI:SpecialBarOptions("bar4"),
-                    },
-                    bar5Group = {
-                        order = 50,
-                        type = "group",
-                        name = function() return SpecialBarTabName("bar5", 5) end,
-                        childGroups = "tree",
-                        args = TUI:SpecialBarOptions("bar5"),
-                    },
+                    icon1Group  = { order=201, type="group", childGroups="tree", name=function() return IconTabName("icon1",1)   end, hidden=function() return not SB or (SB.GetSpecRoot().iconCount or 3) < 1  end, args=TUI:SpecialIconOptions("icon1")  },
+                    icon2Group  = { order=202, type="group", childGroups="tree", name=function() return IconTabName("icon2",2)   end, hidden=function() return not SB or (SB.GetSpecRoot().iconCount or 3) < 2  end, args=TUI:SpecialIconOptions("icon2")  },
+                    icon3Group  = { order=203, type="group", childGroups="tree", name=function() return IconTabName("icon3",3)   end, hidden=function() return not SB or (SB.GetSpecRoot().iconCount or 3) < 3  end, args=TUI:SpecialIconOptions("icon3")  },
+                    icon4Group  = { order=204, type="group", childGroups="tree", name=function() return IconTabName("icon4",4)   end, hidden=function() return not SB or (SB.GetSpecRoot().iconCount or 3) < 4  end, args=TUI:SpecialIconOptions("icon4")  },
+                    icon5Group  = { order=205, type="group", childGroups="tree", name=function() return IconTabName("icon5",5)   end, hidden=function() return not SB or (SB.GetSpecRoot().iconCount or 3) < 5  end, args=TUI:SpecialIconOptions("icon5")  },
+                    icon6Group  = { order=206, type="group", childGroups="tree", name=function() return IconTabName("icon6",6)   end, hidden=function() return not SB or (SB.GetSpecRoot().iconCount or 3) < 6  end, args=TUI:SpecialIconOptions("icon6")  },
+                    icon7Group  = { order=207, type="group", childGroups="tree", name=function() return IconTabName("icon7",7)   end, hidden=function() return not SB or (SB.GetSpecRoot().iconCount or 3) < 7  end, args=TUI:SpecialIconOptions("icon7")  },
+                    icon8Group  = { order=208, type="group", childGroups="tree", name=function() return IconTabName("icon8",8)   end, hidden=function() return not SB or (SB.GetSpecRoot().iconCount or 3) < 8  end, args=TUI:SpecialIconOptions("icon8")  },
+                    icon9Group  = { order=209, type="group", childGroups="tree", name=function() return IconTabName("icon9",9)   end, hidden=function() return not SB or (SB.GetSpecRoot().iconCount or 3) < 9  end, args=TUI:SpecialIconOptions("icon9")  },
+                    icon10Group = { order=210, type="group", childGroups="tree", name=function() return IconTabName("icon10",10) end, hidden=function() return not SB or (SB.GetSpecRoot().iconCount or 3) < 10 end, args=TUI:SpecialIconOptions("icon10") },
+                    icon11Group = { order=211, type="group", childGroups="tree", name=function() return IconTabName("icon11",11) end, hidden=function() return not SB or (SB.GetSpecRoot().iconCount or 3) < 11 end, args=TUI:SpecialIconOptions("icon11") },
+                    icon12Group = { order=212, type="group", childGroups="tree", name=function() return IconTabName("icon12",12) end, hidden=function() return not SB or (SB.GetSpecRoot().iconCount or 3) < 12 end, args=TUI:SpecialIconOptions("icon12") },
                 },
             },
         },

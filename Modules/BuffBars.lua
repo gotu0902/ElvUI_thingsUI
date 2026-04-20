@@ -63,8 +63,14 @@ local function GetSpecialBarDB_Safe()
 end
 
 local function UpdateSpecialBarSlot_Safe(barKey)
-    if ns.SpecialBars and ns.SpecialBars.UpdateSpecialBarSlot then
-        return ns.SpecialBars.UpdateSpecialBarSlot(barKey)
+    if ns.SpecialBars and ns.SpecialBars.UpdateBarSlot then
+        return ns.SpecialBars.UpdateBarSlot(barKey)
+    end
+end
+
+local function UpdateSpecialIconSlot_Safe(iconKey)
+    if ns.SpecialBars and ns.SpecialBars.UpdateIconSlot then
+        return ns.SpecialBars.UpdateIconSlot(iconKey)
     end
 end
 
@@ -272,12 +278,6 @@ local function ProcessUpdate()
 
     if specialBarsExist then
         ScanAndHookCDMChildren_Safe()
-        local specDB = GetSpecialBarDB_Safe()
-        for barKey, barDB in pairs(specDB) do
-            if type(barDB) == "table" then
-                pcall(UpdateSpecialBarSlot_Safe, barKey)
-            end
-        end
     end
 
     if not buffBarsEnabled then return end

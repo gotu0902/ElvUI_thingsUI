@@ -1,825 +1,287 @@
-local addon, ns = ...
+﻿local addon, ns = ...
 local TUI = ns.TUI
 local E = ns.E
-local LSM = ns.LSM   -- for texture/font fetching
+local LSM = ns.LSM
 
--- Coalesce rapid option updates (e.g. sliders) into a single UpdateSpecialBars call per frame
-local specialBarsUpdateQueued = false
-function TUI:QueueSpecialBarsUpdate()
-    if specialBarsUpdateQueued then return end
-    specialBarsUpdateQueued = true
-    C_Timer.After(0, function()
-        specialBarsUpdateQueued = false
-        if TUI and TUI.UpdateSpecialBars then
-            TUI:UpdateSpecialBars()
-        end
-    end)
-end
-local barUpdateFrame = ns.BuffBars and ns.BuffBars.barUpdateFrame
-local BuffBarOnUpdate = ns.BuffBars and ns.BuffBars.BuffBarOnUpdate
-local yoinkedBars = ns.yoinkedBars
-local trackedBarsByName = {}
-TUI.scanScheduled = false
+ns.SpecialBars = ns.SpecialBars or {}
+local SB = ns.SpecialBars
+local specialBarState = SB.specialBarState
+local yoinkedBars     = SB.yoinkedBars
+local ReturnFrame     = function(...) return SB.ReturnFrame(...) end
 
-local SPECIAL_BAR_DEFAULTS = {
-    enabled = false,
-    spellName = "",
-    width = 230,
-    inheritWidth = false,
-    inheritWidthOffset = 0,
-    height = 24,
-    inheritHeight = false,
-    inheritHeightOffset = 0,
-    statusBarTexture = "ElvUI Blank",
-    font = "Expressway",
-    fontSize = 14,
-    fontOutline = "OUTLINE",
-    useClassColor = true,
-    customColor = { r = 0.2, g = 0.6, b = 1.0 },
-    backgroundColor = { r = 0.1, g = 0.1, b = 0.1, a = 0.6 },
-    showBackdrop = false,
-    backdropColor = { r = 0.1, g = 0.1, b = 0.1, a = 0.6 },
-    iconEnabled = true,
-    iconSpacing = 1,
-    iconZoom = 0.1,
-    showStacks = true,
-    stackFontSize = 14,
-    stackFontOutline = "OUTLINE",
-    stackPoint = "CENTER",
-    stackAnchor = "ICON", -- New: "ICON" or "BAR"
-    stackXOffset = 0,
-    stackYOffset = 0,
-    showName = true,
-    namePoint = "LEFT",
-    nameXOffset = 2,
-    nameYOffset = 0,
-    showDuration = true,
-    durationPoint = "RIGHT",
-    durationXOffset = -4,
-    durationYOffset = 0,
-    anchorMode = "UIParent",  -- Predefined or "CUSTOM"
-    anchorFrame = "UIParent", -- Used when anchorMode == "CUSTOM"
-    anchorPoint = "CENTER",
-    anchorRelativePoint = "CENTER",
-    anchorXOffset = 0,
-    anchorYOffset = 0,
-}
-
--- Resolve actual frame name from anchor settings
-local function ResolveAnchorFrame(db)
-    local mode = db.anchorMode or db.anchorFrame or "ElvUF_Player"
-    if mode == "CUSTOM" then
-        return db.anchorFrame or "ElvUF_Player"
-    end
-    return mode
-end
-
--- Get the current spec ID
-local GetCurrentSpecID = function()
-    local specIndex = GetSpecialization()
-    if specIndex then
-        return GetSpecializationInfo(specIndex) or 0
-    end
-    return 0
-end
-
-local function GetClassColor()
-    local classColor = E:ClassColor(E.myclass, true)
-    return classColor.r, classColor.g, classColor.b
-end
-
--- Get or create spec-specific special bar config
--- Returns the bar table for the current spec, creating defaults if needed
-local GetSpecialBarDB = function()
-    if not E.db.thingsUI.specialBars then
-        E.db.thingsUI.specialBars = { specs = {} }
-    end
-    if not E.db.thingsUI.specialBars.specs then
-        E.db.thingsUI.specialBars.specs = {}
-    end
-    
-    local specID = GetCurrentSpecID()
-    if specID == 0 then specID = 1 end  -- Fallback
-    local specKey = tostring(specID)
-    
-    if not E.db.thingsUI.specialBars.specs[specKey] then
-        -- Create fresh defaults for this spec
-        E.db.thingsUI.specialBars.specs[specKey] = {}
-        for _, barKey in ipairs({"bar1", "bar2", "bar3"}) do
-            E.db.thingsUI.specialBars.specs[specKey][barKey] = {}
-            for k, v in pairs(SPECIAL_BAR_DEFAULTS) do
-                if type(v) == "table" then
-                    E.db.thingsUI.specialBars.specs[specKey][barKey][k] = {}
-                    for k2, v2 in pairs(v) do
-                        E.db.thingsUI.specialBars.specs[specKey][barKey][k][k2] = v2
-                    end
-                else
-                    E.db.thingsUI.specialBars.specs[specKey][barKey][k] = v
-                end
-            end
-        end
-
-    end
-    
-    return E.db.thingsUI.specialBars.specs[specKey]
-end
-
--- Get a specific bar's DB for the current spec
-local GetSpecialBarSlotDB = function(barKey)
-    local specDB = GetSpecialBarDB()
-    if not specDB[barKey] then
-        specDB[barKey] = {}
-    end
-    -- Ensure all defaults exist (fill in missing keys)
-    for k, v in pairs(SPECIAL_BAR_DEFAULTS) do
-        if specDB[barKey][k] == nil then
-            if type(v) == "table" then
-                specDB[barKey][k] = {}
-                for k2, v2 in pairs(v) do
-                    specDB[barKey][k][k2] = v2
-                end
-            else
-                specDB[barKey][k] = v
-            end
-        elseif type(v) == "table" and type(specDB[barKey][k]) == "table" then
-            -- Ensure nested table has all default keys
-            for k2, v2 in pairs(v) do
-                if specDB[barKey][k][k2] == nil then
-                    specDB[barKey][k][k2] = v2
-                end
-            end
-        end
-    end
-    return specDB[barKey]
-end
-
-local specialBarUpdateFrame = CreateFrame("Frame")
-local specialBarThrottle = 0.05
-local specialBarNextUpdate = 0
-local specialBarState = {}  -- Track state per barKey: { childFrame, originalParent, wrapperFrame }
-
--- Track known CDM children so we can detect newly created ones
-local knownCDMChildren = {}   -- [childFrame] = true
-local hookedCDMChildren = {}  -- [childFrame] = true (OnShow hooked)
-
--- Helper: clean text for matching (remove colors, trim spaces)
-local function CleanString(str)
-    if not str then return "" end
-    -- Remove color codes like |c%x%x%x%x%x%x%x%x
-    str = str:gsub("|c%x%x%x%x%x%x%x%x", "")
-    -- Remove restore code |r
-    str = str:gsub("|r", "")
-    -- Trim whitespace
-    str = str:match("^%s*(.-)%s*$")
-    return str
-end
-
-local function OnCDMChildShown(childFrame)
-    if not E.db.thingsUI or not E.db.thingsUI.specialBars then return end
-    if not childFrame or not childFrame.Bar then return end
-    
-    -- Check if any special bar is waiting for this spell
-    local specDB = GetSpecialBarDB()
-    for barKey, barDB in pairs(specDB) do
-        if type(barDB) == "table" and barDB.enabled and barDB.spellName and barDB.spellName ~= "" then
-            local match = false
-            local targetName = CleanString(barDB.spellName)
-            
-            -- Try text match first (works out of combat)
-            if childFrame.Bar.Name then
-                pcall(function()
-                    local barText = CleanString(childFrame.Bar.Name:GetText())
-                    if barText and barText ~= "" then
-                        trackedBarsByName[barText] = childFrame -- cache for later lookups
-                        if barText == targetName then
-                            match = true
-                        end
-                    end
-                end)
-            end
-            -- Fallback: match via auraSpellID (works in combat OR if user entered an ID)
-            if not match and childFrame.auraSpellID then
-                pcall(function()
-                    -- Check if user entered a raw spell ID
-                    local targetID = tonumber(targetName)
-                    if targetID and targetID == childFrame.auraSpellID then
-                        match = true
-                    else
-                        -- Check against spell info name
-                    local spellInfo = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(childFrame.auraSpellID)
-                    local resolvedName = spellInfo and spellInfo.name
-                    if not resolvedName then
-                        resolvedName = GetSpellInfo(childFrame.auraSpellID)
-                    end
-                        if resolvedName and CleanString(resolvedName) == targetName then
-                        match = true
-                        end
-                    end
-                end)
-            end
-            if match then
-                -- This child matches a special bar! Check if we already yoinked it
-                local state = specialBarState[barKey]
-                if not state or not state.childFrame or state.childFrame ~= childFrame then
-                    -- New match — immediately try to yoink via UpdateSpecialBarSlot
-                    pcall(UpdateSpecialBarSlot, barKey)
-                end
-            end
-        end
-    end
-end
-
--- Scan BuffBarCooldownViewer for new children and hook their OnShow
-local ScanAndHookCDMChildren = function()
-    if not BuffBarCooldownViewer then return end
-    
-    local ok, children = pcall(function() return { BuffBarCooldownViewer:GetChildren() } end)
-    if not ok or not children then return end
-    
-    for _, childFrame in ipairs(children) do
-        if childFrame and not hookedCDMChildren[childFrame] then
-            hookedCDMChildren[childFrame] = true
-            knownCDMChildren[childFrame] = true
-            -- Hook OnShow so we catch the moment CDM activates this bar
-            pcall(function()
-                childFrame:HookScript("OnShow", OnCDMChildShown)
-            end)
-            -- If it's already shown right now, process it immediately
-            local isShown = false
-            pcall(function() isShown = childFrame:IsShown() end)
-            if isShown then
-                OnCDMChildShown(childFrame)
-            end
-        end
-    end
-end
-
-local function RequestCDMRefresh()
-    if not BuffBarCooldownViewer then return end
-    local methods = {
-        "UpdateBars",
-        "Update",
-        "Refresh",
-        "Layout",
-        "UpdateAllBars",
-        "UpdateTrackedBars",
-        "UpdateAura",
-    }
-    for _, m in ipairs(methods) do
-        local fn = BuffBarCooldownViewer[m]
-        if type(fn) == "function" then
-            pcall(fn, BuffBarCooldownViewer)
-            return
-        end
-    end
-end
-
--- Wrapper frame for a yoinked bar — provides independent anchoring
-local GetOrCreateWrapper = function(barKey)
-    -- Check if we already have this wrapper in memory
-    if specialBarState[barKey] and specialBarState[barKey].wrapper then
-        return specialBarState[barKey].wrapper
-    end
-    
-    -- Check if the frame already exists globally (prevents duplication on script reload/update)
-    local frameName = "TUI_SpecialBar_" .. barKey
-    local wrapper = _G[frameName] or CreateFrame("Frame", frameName, UIParent)
-    
-    -- Ensure default props
-    if not wrapper:IsShown() then wrapper:Show() end
+-- ---------------------------------------------------------------------------
+-- Frame creation
+-- ---------------------------------------------------------------------------
+local function GetOrCreateWrapper(barKey)
+    local name    = "TUI_SpecialBar_" .. barKey
+    local wrapper = _G[name] or CreateFrame("Frame", name, UIParent)
     wrapper:SetFrameStrata("MEDIUM")
     wrapper:SetFrameLevel(10)
-    
-    -- Check if backdrop exists on this frame (might be a reused frame)
     if not wrapper.backdrop then
         local bd = CreateFrame("Frame", nil, wrapper, "BackdropTemplate")
         bd:SetAllPoints(wrapper)
         bd:SetFrameLevel(wrapper:GetFrameLevel())
-        bd:SetBackdrop({
-            bgFile = E.media.blankTex,
-            edgeFile = E.media.blankTex,
-            edgeSize = 1,
-        })
-        bd:SetBackdropColor(0.0, 0.0, 0.0, 0.6)
+        bd:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
+        bd:SetBackdropColor(0.1, 0.1, 0.1, 0.6)
         bd:SetBackdropBorderColor(0, 0, 0, 0.8)
         bd:Hide()
         wrapper.backdrop = bd
     end
-    
     return wrapper
 end
 
--- Find a tracked bar by spell name from BuffBarCooldownViewer
-local FindBarBySpellName = function(spellName)
-    if not BuffBarCooldownViewer or not spellName or spellName == "" then return nil end
-    
-    local ok, children = pcall(function() return { BuffBarCooldownViewer:GetChildren() } end)
-    if not ok or not children then return nil end
-    
-    local targetName = CleanString(spellName)
-    if trackedBarsByName[targetName] then
-        return trackedBarsByName[targetName]
+-- Separate backdrop tables per frame — SetBackdrop stores the reference, so sharing
+-- a single table between two frames causes the last call to overwrite both.
+local _bdBar  = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
+local _bdIcon = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
+
+-- ---------------------------------------------------------------------------
+-- Spell finder
+-- ---------------------------------------------------------------------------
+local function FindBarBySpell(spellID, forKey)
+    if not spellID then return nil end
+    local claimed = SB.RebuildClaimedBarFrames()
+    if BuffBarCooldownViewer then
+        local children, childCount = SB.GetChildrenReuseFind(BuffBarCooldownViewer)
+        for i = 1, childCount do
+            local child = children[i]
+            local owner = claimed[child]
+            if (not owner or owner == forKey) and SB.SafeMatch(child, spellID, true) then
+                return child
+            end
+        end
     end
-    
-    for _, childFrame in ipairs(children) do
-        if childFrame and childFrame.Bar then
-            local match = false
-            -- Primary: try matching via Bar.Name text (works out of combat)
-            if childFrame.Bar.Name then
-                pcall(function()
-                    local barText = CleanString(childFrame.Bar.Name:GetText())
-                    if barText and barText ~= "" then
-                        trackedBarsByName[barText] = childFrame -- cache for later lookups
-                        if barText == targetName then
-                            match = true
-                        end
-                    end
-                end)
-            end
-            -- Fallback: match via auraSpellID (works in combat when GetText returns secret value)
-            if not match and childFrame.auraSpellID then
-                pcall(function()
-                    -- Check if user entered a raw spell ID
-                    local targetID = tonumber(targetName)
-                    if targetID and targetID == childFrame.auraSpellID then
-                        match = true
-                    else
-                    local spellInfo = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(childFrame.auraSpellID)
-                    local resolvedName = spellInfo and spellInfo.name
-                    if not resolvedName then
-                        -- Legacy API fallback
-                        resolvedName = GetSpellInfo(childFrame.auraSpellID)
-                    end
-                        if resolvedName and CleanString(resolvedName) == targetName then
-                        match = true
-                        end
-                    end
-                end)
-            end
-            if match then return childFrame end
+    for child in pairs(yoinkedBars) do
+        local owner = claimed[child]
+        if (not owner or owner == forKey) and SB.SafeMatch(child, spellID, true) then
+            return child
         end
     end
     return nil
 end
 
--- Release a yoinked bar back to its original parent
-local ReleaseSpecialBar = function(barKey, opts)
-    opts = opts or {}
-    local state = specialBarState[barKey]
-    if not state then return false end
-
-    local returnedBar = state.childFrame
-    local originalParent = state.originalParent
-    local didReturn = false
-
-    if returnedBar and originalParent then
-    pcall(function()
-        returnedBar:ClearAllPoints()
-        returnedBar:SetParent(originalParent)
-
-        yoinkedBars[returnedBar] = nil
-        didReturn = true
-    end)
-end
-
-    if state.wrapper then
-        if state.wrapper.backdrop then state.wrapper.backdrop:Hide() end
-        state.wrapper:Hide()
-    end
-
-    specialBarState[barKey] = nil
-
-    -- Only refresh CDM / BuffBars if we actually returned something
-    if didReturn then
-        C_Timer.After(0, function()
-            if RequestCDMRefresh then pcall(RequestCDMRefresh) end
-
-            -- only mark this returned bar dirty (cheap) then run viewer update once
-            if ns and ns.skinnedBars and returnedBar then
-                ns.skinnedBars[returnedBar] = nil
-            end
-
-            -- This is the part that causes "BuffBars update stuff".
-            -- Keep it here (disable path), but NOT in option-change paths.
-            if TUI and TUI.UpdateBuffBars then
-                pcall(function() TUI:UpdateBuffBars() end)
-            end
-        end)
-    end
-    return didReturn
-end
-
--- Style a yoinked bar with special bar settings
-local StyleSpecialBar = function(childFrame, db)
-    local bar = childFrame.Bar
+-- ---------------------------------------------------------------------------
+-- Styling
+-- ---------------------------------------------------------------------------
+local function StyleSpecialBar(childFrame, db, effectiveHeight)
+    local bar  = childFrame.Bar
     local icon = childFrame.Icon
     if not bar then return end
-    
-    -- 1. Use the childFrame.tuiBackdrop as the BAR backdrop (repurposed)
+
     if not childFrame.tuiBackdrop then
         childFrame.tuiBackdrop = CreateFrame("Frame", nil, childFrame, "BackdropTemplate")
-        childFrame.tuiBackdrop:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
+        _bdBar.bgFile   = E.media.blankTex
+        _bdBar.edgeFile = E.media.blankTex
+        _bdBar.edgeSize = 1
+        childFrame.tuiBackdrop:SetBackdrop(_bdBar)
     end
-    -- We will position this backdrop later based on offset
     childFrame.tuiBackdrop:SetBackdropColor(0, 0, 0, 0.6)
     childFrame.tuiBackdrop:SetBackdropBorderColor(0, 0, 0, 1)
     childFrame.tuiBackdrop:SetFrameLevel(childFrame:GetFrameLevel() - 1)
 
-    local height = db.height
     local barOffset = 0
-
-    -- 2. ICON STYLING
     if db.iconEnabled and icon then
         icon:Show()
-        icon:SetSize(height, height) -- Square icon match bar height
-        
+        icon:SetScale(1)
+        icon:SetSize(effectiveHeight, effectiveHeight)
         if icon.Icon then
-            icon.Icon:SetTexCoord(db.iconZoom or 0.1, 1-(db.iconZoom or 0.1), db.iconZoom or 0.1, 1-(db.iconZoom or 0.1))
-            icon.Icon:SetDrawLayer("ARTWORK", 1) 
-            -- Inset texture
+            icon.Icon:SetScale(1)
+            local z = db.iconZoom or 0.1
+            icon.Icon:SetTexCoord(z, 1-z, z, 1-z)
+            icon.Icon:SetDrawLayer("ARTWORK", 1)
             icon.Icon:ClearAllPoints()
-            icon.Icon:SetPoint("TOPLEFT", icon, "TOPLEFT", 1, -1)
+            icon.Icon:SetPoint("TOPLEFT",     icon, "TOPLEFT",     1, -1)
             icon.Icon:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
+            icon.Icon:SetDesaturated(false)
         end
-        
-        -- Icon Backdrop
         if not icon.tuiBackdrop then
             icon.tuiBackdrop = CreateFrame("Frame", nil, icon, "BackdropTemplate")
-            icon.tuiBackdrop:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
+            _bdIcon.bgFile   = E.media.blankTex
+            _bdIcon.edgeFile = E.media.blankTex
+            _bdIcon.edgeSize = 1
+            icon.tuiBackdrop:SetBackdrop(_bdIcon)
             icon.tuiBackdrop:SetBackdropColor(0, 0, 0, 1)
             icon.tuiBackdrop:SetBackdropBorderColor(0, 0, 0, 1)
         end
         icon.tuiBackdrop:Show()
         icon.tuiBackdrop:SetAllPoints(icon)
         icon.tuiBackdrop:SetFrameLevel(icon:GetFrameLevel() - 1)
-        
-        -- Icon Position
         icon:ClearAllPoints()
         icon:SetPoint("LEFT", childFrame, "LEFT", 0, 0)
-        
-        barOffset = height + (db.iconSpacing or 3)
+        barOffset = effectiveHeight + (db.iconSpacing or 1)
     elseif icon then
         icon:Hide()
-        barOffset = 0
     end
-    
-    -- 3. BAR BACKDROP POSITIONING
+
     childFrame.tuiBackdrop:Show()
     childFrame.tuiBackdrop:ClearAllPoints()
-    childFrame.tuiBackdrop:SetPoint("TOPLEFT", childFrame, "TOPLEFT", barOffset, 0)
-    childFrame.tuiBackdrop:SetPoint("BOTTOMRIGHT", childFrame, "BOTTOMRIGHT", 0, 0)
+    childFrame.tuiBackdrop:SetPoint("TOPLEFT",     childFrame, "TOPLEFT",     barOffset, 0)
+    childFrame.tuiBackdrop:SetPoint("BOTTOMRIGHT", childFrame, "BOTTOMRIGHT", 0,         0)
 
-    -- 4. BAR POSITIONING (Inset inside the bar backdrop)
     bar:ClearAllPoints()
-    bar:SetPoint("TOPLEFT", childFrame.tuiBackdrop, "TOPLEFT", 1, -1)
+    bar:SetPoint("TOPLEFT",     childFrame.tuiBackdrop, "TOPLEFT",     1, -1)
     bar:SetPoint("BOTTOMRIGHT", childFrame.tuiBackdrop, "BOTTOMRIGHT", -1, 1)
-    
-    -- Show Name logic
+
+    -- Hide BACKGROUND-layer textures (CDM's BarBG + BCDM's barBackground)
+    if not childFrame._tuiBarBgRegions then childFrame._tuiBarBgRegions = {} end
+    for i = 1, bar:GetNumRegions() do
+        local r = select(i, bar:GetRegions())
+        if r and type(r.GetDrawLayer) == "function" then
+            local layer = r:GetDrawLayer()
+            if layer == "BACKGROUND" then
+                childFrame._tuiBarBgRegions[r] = r:GetAlpha()
+                r:SetAlpha(0)
+            end
+        end
+    end
+
     local font = LSM:Fetch("font", db.font)
     if bar.Name then
         if db.showName then
             bar.Name:Show()
             bar.Name:SetFont(font, db.fontSize, db.fontOutline)
             bar.Name:ClearAllPoints()
-            bar.Name:SetPoint(db.namePoint or "LEFT", bar, db.namePoint or "LEFT", db.nameXOffset or 4, db.nameYOffset or 0)
-        else
-            bar.Name:Hide()
-        end
+            bar.Name:SetPoint(db.namePoint or "LEFT", bar, db.namePoint or "LEFT", db.nameXOffset or 2, db.nameYOffset or 0)
+        else bar.Name:Hide() end
     end
-    
-    -- Show Duration logic
+
     if bar.Duration then
         if db.showDuration then
             bar.Duration:Show()
             bar.Duration:SetFont(font, db.fontSize, db.fontOutline)
             bar.Duration:ClearAllPoints()
             bar.Duration:SetPoint(db.durationPoint or "RIGHT", bar, db.durationPoint or "RIGHT", db.durationXOffset or -4, db.durationYOffset or 0)
-        else
-            bar.Duration:Hide()
-        end
+        else bar.Duration:Hide() end
     end
-    
-    -- Statusbar Texture & Colors
-    bar:SetStatusBarTexture(LSM:Fetch("statusbar", db.statusBarTexture))
-    if db.useClassColor then bar:SetStatusBarColor(GetClassColor()) else bar:SetStatusBarColor(db.customColor.r, db.customColor.g, db.customColor.b) end
-    if bar.BarBG then bar.BarBG:SetAlpha(0) end
-    if bar.Pip then bar.Pip:SetAlpha(0) end
-    
-    -- Fonts
-    local font = LSM:Fetch("font", db.font)
-    if bar.Name then bar.Name:SetFont(font, db.fontSize, db.fontOutline) end
-    if bar.Duration then bar.Duration:SetFont(font, db.fontSize, db.fontOutline) end
 
-    -- Stack count styling + positioning
+    bar:SetStatusBarTexture(LSM:Fetch("statusbar", db.statusBarTexture))
+    if db.useClassColor then
+        local c = E:ClassColor(E.myclass, true)
+        bar:SetStatusBarColor(c.r, c.g, c.b)
+    else
+        bar:SetStatusBarColor(db.customColor.r, db.customColor.g, db.customColor.b)
+    end
+    if bar.BarBG then bar.BarBG:SetAlpha(0) end
+    if bar.Pip   then bar.Pip:SetAlpha(0)   end
+
     if icon and icon.Applications then
+        local stackFont = LSM:Fetch("font", db.font)
         if icon.Applications.SetFont then
-            local stackFont = LSM:Fetch("font", db.font)
             icon.Applications:SetFont(stackFont, db.stackFontSize or 14, db.stackFontOutline or "OUTLINE")
-            icon.Applications:SetWidth(0)  -- allerede der for ICON
         end
-        
         local stackParent = (db.stackAnchor == "BAR") and bar or icon
-        local stackPoint = db.stackPoint or "CENTER"
         if icon.Applications:GetParent() ~= stackParent then
             icon.Applications:SetParent(stackParent)
         end
-
         local xOff = db.stackXOffset or 0
-        -- Når anchor er BAR og icon er synlig, flytt litt til høyre for å kompensere
         if db.stackAnchor == "BAR" and db.iconEnabled then
-            local iconSize = db.height or 24
-            local spacing = db.iconSpacing or 1
-            xOff = xOff - ((iconSize + spacing) / 2)
+            xOff = xOff - ((effectiveHeight + (db.iconSpacing or 1)) / 2)
         end
-
-        local appWidth = (db.stackAnchor == "BAR") and (db.height or 24) or 0
+        local appWidth = (db.stackAnchor == "BAR") and effectiveHeight or 0
         icon.Applications:SetWidth(appWidth)
         icon.Applications:SetJustifyH("CENTER")
         icon.Applications:ClearAllPoints()
-        icon.Applications:SetPoint(stackPoint, stackParent, stackPoint, xOff, db.stackYOffset or 0)
+        icon.Applications:SetPoint(db.stackPoint or "CENTER", stackParent, db.stackPoint or "CENTER", xOff, db.stackYOffset or 0)
+        if not db.showStacks then icon.Applications:SetAlpha(0) else icon.Applications:SetAlpha(1) end
     end
 end
 
--- Main update for a single special bar slot
-local UpdateSpecialBarSlot = function(barKey)
-    local db = GetSpecialBarSlotDB(barKey)
-    if not db or not db.enabled or not db.spellName or db.spellName == "" then
-        ReleaseSpecialBar(barKey)
-        return
-    end
-    
+-- ---------------------------------------------------------------------------
+-- Release
+-- ---------------------------------------------------------------------------
+local function ReleaseBar(barKey)
     local state = specialBarState[barKey]
-    local childFrame
-    local resolvedAnchor = ResolveAnchorFrame(db)
-    local anchorFrame = _G[resolvedAnchor]
+    if not state then return end
+    ReturnFrame(state.childFrame)
+    if state.wrapper then state.wrapper:Hide() end
+    specialBarState[barKey] = nil
+end
 
-    -- STRICT SIZING: Do not guess borders. Use raw values.
+-- ---------------------------------------------------------------------------
+-- Update slot
+-- ---------------------------------------------------------------------------
+local UpdateBarSlot
+UpdateBarSlot = function(barKey)
+    local db = SB.GetBarDB(barKey)
+    if not db.enabled or not db.spellID then ReleaseBar(barKey); return end
+
+    local wrapper     = GetOrCreateWrapper(barKey)
+    local anchorName  = (db.anchorMode ~= "CUSTOM") and db.anchorMode or db.anchorFrame
+    local anchorFrame = anchorName and _G[anchorName]
+
     local effectiveWidth = db.width
     if db.inheritWidth and anchorFrame then
         local aw = anchorFrame:GetWidth()
-        if aw and aw > 0 then 
-            effectiveWidth = aw + (db.inheritWidthOffset or 0)
-        end
+        if aw and aw > 0 then effectiveWidth = aw + (db.inheritWidthOffset or 0) end
     end
-
     local effectiveHeight = db.height
     if db.inheritHeight and anchorFrame then
-        if db._tui_prevHeight == nil then
-            db._tui_prevHeight = db.height
-        end
         local ah = anchorFrame:GetHeight()
-        if ah and ah > 0 then
-            effectiveHeight = ah + (db.inheritHeightOffset or 0)
-        end
-    else
-        if db._tui_prevHeight ~= nil then
-            db.height = db._tui_prevHeight
-            db._tui_prevHeight = nil
-        end
-        effectiveHeight = db.height
-    end
-    
-    if state and state.childFrame then
-        local stillValid = false
-        pcall(function() if state.childFrame.Bar and state.childFrame.Bar.Name then stillValid = true end end)
-        if stillValid then
-            childFrame = state.childFrame
-            yoinkedBars[childFrame] = true
-        else
-            if state.childFrame then yoinkedBars[state.childFrame] = nil end
-            if state.wrapper then state.wrapper:Hide() end
-            specialBarState[barKey] = nil
-            state = nil
-        end
-    end
-    
-    if not childFrame then
-        ScanAndHookCDMChildren()
-        childFrame = FindBarBySpellName(db.spellName)
-    end
-    
-    if not childFrame then
-        -- Only scan for spell typed in Special Bar #
-        childFrame = FindBarBySpellName(db.spellName)
-        
-        -- If still not found, schedule a full scan (but throttle it)
-        if not childFrame and not TUI.scanScheduled then
-            TUI.scanScheduled = true
-            C_Timer.After(0.5, function()
-                ScanAndHookCDMChildren()
-                -- Also try to find this specific bar again
-                TUI.scanScheduled = nil
-                -- Force an immediate retry (go fast - should work if not lmk /D.G)
-                TUI:UpdateSpecialBars()
-            end)
-        end
+        if ah and ah > 0 then effectiveHeight = ah + (db.inheritHeightOffset or 0) end
     end
 
-    local wrapper = GetOrCreateWrapper(barKey)
-    
-    -- Apply strict sizing to wrapper
     wrapper:SetSize(effectiveWidth, effectiveHeight)
-    
-    pcall(function()
-        if anchorFrame then
-            wrapper:ClearAllPoints()
-            wrapper:SetPoint(db.anchorPoint, anchorFrame, db.anchorRelativePoint, db.anchorXOffset, db.anchorYOffset)
+    if anchorFrame then
+        wrapper:ClearAllPoints()
+        pcall(wrapper.SetPoint, wrapper, db.anchorPoint, anchorFrame, db.anchorRelativePoint, db.anchorXOffset, db.anchorYOffset)
+    end
+
+    local realFrame = FindBarBySpell(db.spellID, barKey)
+    local isActive  = realFrame and realFrame:IsShown()
+
+    if isActive then
+        if specialBarState[barKey] and specialBarState[barKey].childFrame ~= realFrame then
+            ReturnFrame(specialBarState[barKey].childFrame)
         end
-    end)
-    
-    -- Placeholder logic (Backdrop)
-    if wrapper.backdrop then
-        if db.showBackdrop and (not childFrame or not childFrame:IsShown()) then
+        local state = specialBarState[barKey]
+        if not state then state = {}; specialBarState[barKey] = state end
+        state.wrapper    = wrapper
+        state.childFrame = realFrame
+        state.w          = effectiveWidth
+        state.h          = effectiveHeight
+
+        realFrame._cdmOriginalParent = realFrame._cdmOriginalParent or realFrame:GetParent()
+        if not realFrame._cdmOriginalW then
+            realFrame._cdmOriginalW = realFrame:GetWidth()
+            realFrame._cdmOriginalH = realFrame:GetHeight()
+        end
+        realFrame:SetParent(wrapper)
+        realFrame:ClearAllPoints()
+        realFrame:SetPoint("CENTER", wrapper, "CENTER", 0, 0)
+        realFrame:SetSize(effectiveWidth, effectiveHeight)
+        yoinkedBars[realFrame] = true
+
+        wrapper.backdrop:Hide()
+        pcall(StyleSpecialBar, realFrame, db, effectiveHeight)
+        wrapper:Show()
+    else
+        if specialBarState[barKey] and specialBarState[barKey].childFrame then
+            ReturnFrame(specialBarState[barKey].childFrame)
+        end
+        local state = specialBarState[barKey]
+        if not state then state = {}; specialBarState[barKey] = state end
+        state.wrapper    = wrapper
+        state.childFrame = nil
+        state.w          = nil
+        state.h          = nil
+
+        if db.showBackdrop then
+            local bc = db.backdropColor
+            wrapper.backdrop:SetBackdropColor(
+                bc and bc.r or 0.1, bc and bc.g or 0.1, bc and bc.b or 0.1,
+                bc and bc.a or 0.6
+            )
             wrapper.backdrop:Show()
             wrapper:Show()
-            
-            -- Adjust placeholder to match the split layout (Only show "Bar" area)
-            local bc = db.backdropColor or { r = 0.1, g = 0.1, b = 0.1, a = 0.6 }
-            wrapper.backdrop:SetBackdropColor(bc.r, bc.g, bc.b, bc.a)
-            wrapper.backdrop:ClearAllPoints()
-            wrapper.backdrop:SetPoint("TOPLEFT", wrapper, "TOPLEFT", 0, 0)
-            wrapper.backdrop:SetPoint("BOTTOMRIGHT", wrapper, "BOTTOMRIGHT", 0, 0)
-            
         else
             wrapper.backdrop:Hide()
-            if not childFrame then wrapper:Hide() end
-        end
-    end
-    
-    -- No child frame? We are done (just showed placeholder if needed)
-    if not childFrame then
-        if not specialBarState[barKey] then specialBarState[barKey] = { wrapper = wrapper } end
-        return
-    end
-    
-    local isActive = false
-    pcall(function() isActive = childFrame:IsShown() end)
-    yoinkedBars[childFrame] = true
-    
-    if not isActive then
-        return
-    end
-
-    if not state or state.childFrame ~= childFrame then
-        if state and state.childFrame and state.childFrame ~= childFrame then
-            yoinkedBars[state.childFrame] = nil
-            if state.originalParent then pcall(function() state.childFrame:SetParent(state.originalParent) end) end
-        end
-        
-        specialBarState[barKey] = {
-            childFrame = childFrame,
-            originalParent = childFrame:GetParent(),
-            wrapper = wrapper,
-        }
-        state = specialBarState[barKey]
-    end
-    
-    -- Parent the child to the wrapper
-    pcall(function()
-        if childFrame:GetParent() ~= wrapper then childFrame:SetParent(wrapper) end
-        
-        -- Resize the actual childFrame to match wrapper exactly
-        childFrame:SetSize(effectiveWidth, effectiveHeight)
-        
-        childFrame:ClearAllPoints()
-        childFrame:SetPoint("CENTER", wrapper, "CENTER", 0, 0)
-    end)
-    
-    local oldHeight = db.height
-    db.height = effectiveHeight
-    pcall(StyleSpecialBar, childFrame, db)
-    db.height = oldHeight
-    wrapper:Show()
-end
-
-local function SpecialBarOnUpdate()
-    -- This is only used when buff bar skinning is disabled but special bars are active
-    local currentTime = GetTime()
-    if currentTime < specialBarNextUpdate then return end
-    specialBarNextUpdate = currentTime + specialBarThrottle
-    
-    if not E.db.thingsUI or not E.db.thingsUI.specialBars then return end
-    if not BuffBarCooldownViewer then return end
-    
-    -- CDM children are hooked via OnShow; avoid expensive rescans here
-    
-    local specDB = GetSpecialBarDB()
-    for barKey, barDB in pairs(specDB) do
-        if type(barDB) == "table" then
-            pcall(UpdateSpecialBarSlot, barKey)
+            wrapper:Hide()
         end
     end
 end
 
-function TUI:UpdateSpecialBars()
-    if not E.db.thingsUI.specialBars then return end
-
-    -- Reset init-scan guard so the new spec gets its own delayed scan passes.
-    TUI._specialBarsInitScansScheduled = nil
-
-    -- Hook existing CDM children immediately so we catch OnShow events
-    ScanAndHookCDMChildren()
-    
-    local specDB = GetSpecialBarDB()
-    local anyEnabled = false
-    local releasedAny = false
-    
-    -- First release any bars from OTHER specs that might be yoinked
-    for barKey, state in pairs(specialBarState) do
-        local db = specDB[barKey]
-        if not db or not db.enabled or not db.spellName or db.spellName == "" then
-            if ReleaseSpecialBar(barKey) then releasedAny = true end
-        end
-    end
-    
-    for barKey, barDB in pairs(specDB) do
-        if type(barDB) == "table" and barDB.enabled and barDB.spellName and barDB.spellName ~= "" then
-            anyEnabled = true
-        else
-            if type(barDB) == "table" then
-                if ReleaseSpecialBar(barKey) then releasedAny = true end
-            end
-        end
-    end
-    
-    if anyEnabled then
-        if not E.db.thingsUI.buffBars or not E.db.thingsUI.buffBars.enabled then
-            specialBarUpdateFrame:SetScript("OnUpdate", SpecialBarOnUpdate)
-        end
-        if barUpdateFrame and BuffBarOnUpdate then
-            barUpdateFrame:SetScript("OnUpdate", BuffBarOnUpdate)
-        end
-
-        -- Apply changes immediately for option updates (no waiting for delayed scans / OnUpdate)
-        for barKey, barDB in pairs(specDB) do
-            if type(barDB) == "table" and barDB.enabled and barDB.spellName and barDB.spellName ~= "" then
-                pcall(UpdateSpecialBarSlot, barKey)
-            end
-        end
-
-        if not TUI._specialBarsInitScansScheduled then
-            TUI._specialBarsInitScansScheduled = true
-
-            for _, delay in ipairs({ 0.5, 1.0, 2.0, 5.0 }) do
-                C_Timer.After(delay, function()
-                    ScanAndHookCDMChildren()
-                    -- Also try to yoink immediately on each delayed scan
-                    local currentSpecDB = GetSpecialBarDB()
-                    for barKey, barDB in pairs(currentSpecDB) do
-                        if type(barDB) == "table" and barDB.enabled and barDB.spellName and barDB.spellName ~= "" then
-                            pcall(UpdateSpecialBarSlot, barKey)
-                        end
-                    end
-                end)
-            end
-        end
-    else
-        specialBarUpdateFrame:SetScript("OnUpdate", nil)
-        TUI._specialBarsInitScansScheduled = nil
-        for barKey, _ in pairs(specialBarState) do
-            if ReleaseSpecialBar(barKey) then releasedAny = true end
-        end
-    end
-
-    if releasedAny then
-        C_Timer.After(0, RequestCDMRefresh)
-    end
-end
-
-local function ReleaseAllSpecialBars()
-    local keys = {}
-    for barKey in pairs(specialBarState) do
-        keys[#keys + 1] = barKey
-    end
-    for _, barKey in ipairs(keys) do
-        pcall(ReleaseSpecialBar, barKey)
-    end
-end
-
-local function HookCDMWindowClose()
-    local cdm = _G["CooldownViewerSettings"]
-    if not cdm then return end
-    cdm:HookScript("OnHide", function()
-        C_Timer.After(0.3, function()
-            if ns.SpecialBars and ns.SpecialBars.ScanAndHookCDMChildren then
-                ns.SpecialBars.ScanAndHookCDMChildren()
-            end
-            if TUI and TUI.UpdateSpecialBars then
-                TUI:UpdateSpecialBars()
-            end
-        end)
-    end)
-end
-
-ns.SpecialBars = ns.SpecialBars or {}
-ns.SpecialBars.ScanAndHookCDMChildren = ScanAndHookCDMChildren
-ns.SpecialBars.GetSpecialBarDB = GetSpecialBarDB
-ns.SpecialBars.UpdateSpecialBarSlot = UpdateSpecialBarSlot
-ns.SpecialBars.ReleaseSpecialBar = ReleaseSpecialBar
-ns.SpecialBars.ReleaseAllSpecialBars = ReleaseAllSpecialBars
-ns.SpecialBars.specialBarState = specialBarState
-ns.SpecialBars.CleanString = CleanString
-ns.SpecialBars.SPECIAL_BAR_DEFAULTS = SPECIAL_BAR_DEFAULTS
-ns.SpecialBars.GetSpecialBarSlotDB = GetSpecialBarSlotDB
-ns.SpecialBars.trackedBarsByName = trackedBarsByName
-ns.SpecialBars.hookedCDMChildren = hookedCDMChildren
+-- ---------------------------------------------------------------------------
+-- Exports
+-- ---------------------------------------------------------------------------
+SB.UpdateBarSlot = UpdateBarSlot
+SB.ReleaseBar    = ReleaseBar

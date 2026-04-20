@@ -70,6 +70,10 @@ local function CalculateEffectiveWidth()
     
     local essentialCount = EssentialCooldownViewer and CountVisibleChildren(EssentialCooldownViewer) or 0
     local utilityCount = UtilityCooldownViewer and CountVisibleChildren(UtilityCooldownViewer) or 0
+
+    -- Add any trinkets that are in the Essential row (from TrinketsCDM module)
+    local extraTrinkets = ns.TrinketsCDM and ns.TrinketsCDM.GetExtraEssentialCount and ns.TrinketsCDM.GetExtraEssentialCount() or 0
+    essentialCount = essentialCount + extraTrinkets
     
     local essentialWidth = (essentialCount * db.essentialIconWidth) + (math.max(0, essentialCount - 1) * db.essentialIconPadding)
     
@@ -115,11 +119,23 @@ local function UpdateClusterPositioning()
     local yOffset = db.yOffset
     local sideOverflow = utilityOverflow / 2
     
+    -- In NHT mode the trinket bar sits beside EssentialCooldownViewer.
+    -- The cluster must anchor to the outer edge of the trinket bar, not to
+    -- EssentialCooldownViewer's inner edge, so that player/target frames sit
+    -- at the true extremes of the combined (essential + trinket) group.
+    local nhtSide      = ns.TrinketsCDM and ns.TrinketsCDM.GetNHTAnchor and ns.TrinketsCDM.GetNHTAnchor()
+    local trinketFrame = nhtSide and _G["BCDM_TrinketBar"]
+
     if db.playerFrame.enabled then
         local playerFrame = _G["ElvUF_Player"]
         if playerFrame then
             playerFrame:ClearAllPoints()
-            playerFrame:SetPoint("RIGHT", EssentialCooldownViewer, "LEFT", -(db.frameGap + sideOverflow), yOffset)
+            -- NHT LEFT: trinkets are to the LEFT of Essential → anchor to trinket bar's left edge
+            if nhtSide == "LEFT" and trinketFrame then
+                playerFrame:SetPoint("RIGHT", trinketFrame, "LEFT", -(db.frameGap + sideOverflow), yOffset)
+            else
+                playerFrame:SetPoint("RIGHT", EssentialCooldownViewer, "LEFT", -(db.frameGap + sideOverflow), yOffset)
+            end
         end
     end
     
@@ -127,7 +143,12 @@ local function UpdateClusterPositioning()
         local targetFrame = _G["ElvUF_Target"]
         if targetFrame then
             targetFrame:ClearAllPoints()
-            targetFrame:SetPoint("LEFT", EssentialCooldownViewer, "RIGHT", db.frameGap + sideOverflow, yOffset)
+            -- NHT RIGHT: trinkets are to the RIGHT of Essential → anchor to trinket bar's right edge
+            if nhtSide == "RIGHT" and trinketFrame then
+                targetFrame:SetPoint("LEFT", trinketFrame, "RIGHT", db.frameGap + sideOverflow, yOffset)
+            else
+                targetFrame:SetPoint("LEFT", EssentialCooldownViewer, "RIGHT", db.frameGap + sideOverflow, yOffset)
+            end
         end
     end
     
