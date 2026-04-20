@@ -252,22 +252,6 @@ function TUI:Initialize()
                 end
             end
 
-            local utilFrame = _G["UtilityCooldownViewer"]
-            if utilFrame and not utilFrame._TUI_widthOverride then
-                utilFrame._TUI_widthOverride = true
-                local _origUtilGetWidth = utilFrame.GetWidth
-                utilFrame.GetWidth = function(self)
-                    local baseWidth = _origUtilGetWidth(self)
-                    if ns.TrinketsCDM and ns.TrinketsCDM.GetNHTAnchor and ns.TrinketsCDM.GetNHTAnchor() then
-                        local tf = _G["BCDM_TrinketBar"]
-                        if tf and tf:IsShown() then
-                            local tw = tf:GetWidth()
-                            if tw and tw > 1 then return baseWidth + tw end
-                        end
-                    end
-                    return baseWidth
-                end
-            end
             TUI:UpdateTrinketsCDM()
     
             if TUI._SetupBCDMBarHooks then TUI._SetupBCDMBarHooks() end

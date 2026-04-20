@@ -22,15 +22,14 @@ Adds BCDM TrinketBar to Essentials for NHT (Left or Right), and essentials\utili
 - To make it bigger, make Details! bigger and hit the "Reapply" button.
 - To move it, /emove -> Move ElvUI Right Chat and it should follow. If you recently imported the profile you *may* have to reload first.
 
-### Fixes\QoL
+## Fixes\QoL
 - Import Private settings.
 - Import CVars
  - Sets Sound_NumChannels to 32 and turns of Weather Density.
  - Toggle on "Auto-set" to set NumChannels every login, something keeps resetting it, maybe BW.
  - Supposedly it helps with FPS, not having that many sound channels ready, I guess it depends on your sound settings, the more sound that's on the more channels you need? 🤷
-
- ### Set UI Scale
- Just a button for those that are too lazy or can't find where you have to type in UI Scale after installation when stuff looks weird. It may say 0.53 in /ec -> General but you have to re-enter it and hit ENTER to make sure it's set. Only need to do it once.
+ - Set UI Scale
+  - Just a button for those that are too lazy or can't find where you have to type in UI Scale after installation when stuff looks weird. It may say 0.53 in /ec -> General but you have to re-enter it and hit ENTER to make sure it's set. Only need to do it once.
 
  ## Buff Bar Skinning & Anchoring
 
