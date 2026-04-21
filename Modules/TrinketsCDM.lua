@@ -48,27 +48,35 @@ local updateQueued = false
 -- ---------------------------------------------------------------------------
 
 local function GetBCDMProfile()
-    if not BCDMDB then return nil end
-    local name  = UnitName("player") or ""
-    local realm = GetRealmName() or ""
-    local key   = name .. " - " .. realm
-    local profileName = BCDMDB.profileKeys and BCDMDB.profileKeys[key]
-    if not profileName then
-        -- Fallback: first available profile that has CooldownManager data
-        for _, p in pairs(BCDMDB.profiles or {}) do
-            if p.CooldownManager then return p end
+    if type(BCDMDB) ~= "table" then return nil end
+    local profiles = rawget(BCDMDB, "profiles")
+    if type(profiles) ~= "table" then return nil end
+    local keys = rawget(BCDMDB, "profileKeys")
+
+    local name  = UnitName("player")
+    local realm = GetRealmName()
+    if name and name ~= "" and name ~= "Unknown" and realm then
+        local key = name .. " - " .. realm
+        local profileName = keys and keys[key]
+        if profileName and profiles[profileName] then
+            return profiles[profileName]
         end
-        return nil
     end
-    return BCDMDB.profiles and BCDMDB.profiles[profileName]
+
+    -- Fallback: first profile with CooldownManager data
+    for _, p in pairs(profiles) do
+        if type(p) == "table" and p.CooldownManager then return p end
+    end
+    return nil
 end
 
 local function GetBCDMEssentialIconSize()
     local profile = GetBCDMProfile()
-    if not profile then return 42 end
-    return (profile.CooldownManager
-        and profile.CooldownManager.Essential
-        and profile.CooldownManager.Essential.IconSize) or 42
+    local v = profile and profile.CooldownManager
+              and profile.CooldownManager.Essential
+              and profile.CooldownManager.Essential.IconSize
+    if type(v) == "number" and v > 0 then return v end
+    return 42
 end
 
 local function GetBCDMTrinketSpacing()
@@ -195,6 +203,10 @@ end
 -- ---------------------------------------------------------------------------
 
 local function ResizeTrinketIcons(iconSize, spacing, vertical)
+    iconSize = tonumber(iconSize) or 42
+    spacing  = tonumber(spacing)  or 2
+    if iconSize <= 0 then iconSize = 42 end
+
     local c = _G["BCDM_TrinketBar"]
     if not c then return end
     local count = 0
@@ -334,6 +346,20 @@ end
 -- ---------------------------------------------------------------------------
 
 local function ApplyTrinketPosition(db)
+    if InCombatLockdown() then
+        -- queue a retry on combat end
+        if not M._combatRetryHooked then
+            M._combatRetryHooked = true
+            TUI:RegisterEvent("PLAYER_REGEN_ENABLED", function()
+                TUI:UnregisterEvent("PLAYER_REGEN_ENABLED")
+                M._combatRetryHooked = nil
+                M.QueueUpdate()
+            end)
+        end
+        return
+    end
+
+
     local essViewer = _G["EssentialCooldownViewer"]
     if not essViewer then return end
 
@@ -342,7 +368,6 @@ local function ApplyTrinketPosition(db)
     local side         = db.side or "RIGHT"
     local essIconSize  = GetBCDMEssentialIconSize()
     local trinketSpace = GetBCDMTrinketSpacing()
-
     -- -----------------------------------------------------------------------
     -- NHT: trinkets extend the Essential row horizontally
     -- -----------------------------------------------------------------------
@@ -499,7 +524,7 @@ local function ApplyTrinketPosition(db)
     -- NHT with active trinkets already schedules ApplyMatchWidth with the
     -- correct combined width above, so skip it here for that case.
     local db = E.db.thingsUI and E.db.thingsUI.trinketsCDM
-    local isNHTWithTrinkets = db and db.mode == "NHT" and isApplied and CountActiveTrinkets() > 0
+    local isNHTWithTrinkets = db.mode == "NHT" and isApplied and CountActiveTrinkets() > 0
     if not isNHTWithTrinkets then
         C_Timer.After(0.15, function()
             M.ApplyMatchWidth()

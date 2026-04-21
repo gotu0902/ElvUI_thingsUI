@@ -7,7 +7,7 @@ local eventFrame = CreateFrame("Frame")
 local isDirty = false
 local isEnabled = false
 local reusableIconTable = {}
-local hookedBuffIcons = {}
+local hookedBuffIcons = setmetatable({}, { __mode = "k" })
 
 local function PositionBuffsVertically()
     if not BuffIconCooldownViewer then return end
