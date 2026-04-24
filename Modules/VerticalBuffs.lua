@@ -40,9 +40,14 @@ local function PositionBuffsVertically()
     end
 end
 
+local lastProcessTime = 0
+local throttledPending = false
+local THROTTLE_INTERVAL = 0.1  -- 10Hz cap on UNIT_AURA-driven updates
+
 local function OnNextFrame(self)
     self:SetScript("OnUpdate", nil)
     isDirty = false
+    lastProcessTime = GetTime()
     PositionBuffsVertically()
 end
 
@@ -51,6 +56,21 @@ local function MarkDirty()
     if isDirty then return end
     isDirty = true
     updateFrame:SetScript("OnUpdate", OnNextFrame)
+end
+
+local function MarkDirtyThrottled()
+    if not isEnabled then return end
+    if isDirty or throttledPending then return end
+    local since = GetTime() - lastProcessTime
+    if since >= THROTTLE_INTERVAL then
+        MarkDirty()
+    else
+        throttledPending = true
+        C_Timer.After(THROTTLE_INTERVAL - since, function()
+            throttledPending = false
+            MarkDirty()
+        end)
+    end
 end
 
 -- Hook buff icon children so we reposition instantly on show/hide instead of waiting for UNIT_AURA.
@@ -68,7 +88,7 @@ end
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "UNIT_AURA" then
-        MarkDirty()
+        MarkDirtyThrottled()
     elseif event == "PLAYER_ENTERING_WORLD" then
         C_Timer.After(1, function()
             HookBuffIconChildren()

@@ -273,13 +273,14 @@ local function StyleYoinkedIcon(childFrame, db)
                     if dc then r:SetTextColor(dc.r, dc.g, dc.b) end
                     r:ClearAllPoints()
                     r:SetPoint(pt, childFrame.Cooldown, pt, db.durationXOffset or 0, db.durationYOffset or 0)
-                    r:Show()
+                    r:SetAlpha(1)
                 end
             end
         else
+            -- SetAlpha instead of Hide — these FontStrings live inside CDM's Cooldown.
             for i = 1, childFrame.Cooldown:GetNumRegions() do
                 local r = select(i, childFrame.Cooldown:GetRegions())
-                if r and r.GetObjectType and r:GetObjectType() == 'FontString' then r:Hide() end
+                if r and r.GetObjectType and r:GetObjectType() == 'FontString' then r:SetAlpha(0) end
             end
         end
     end

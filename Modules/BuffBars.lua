@@ -73,7 +73,7 @@ local function SkinBuffBar(childFrame)
 
     if icon and icon.Icon then
         if db.iconEnabled then
-            icon:Show()
+            icon:SetAlpha(1)
             icon.Icon:SetTexCoord(db.iconZoom, 1 - db.iconZoom, db.iconZoom, 1 - db.iconZoom)
             if not icon.tuiBackdrop then
                 icon.tuiBackdrop = CreateFrame("Frame", nil, icon, "BackdropTemplate")
@@ -84,7 +84,8 @@ local function SkinBuffBar(childFrame)
             icon.tuiBackdrop:Show()
             icon.tuiBackdrop:SetFrameLevel(icon:GetFrameLevel() - 1)
         else
-            icon:Hide()
+            -- SetAlpha instead of Hide — icon is a CDM sub-frame.
+            icon:SetAlpha(0)
         end
     end
 
@@ -265,9 +266,14 @@ local function ProcessUpdate()
     AnchorBuffBarContainer()
 end
 
+local lastProcessTime = 0
+local throttledPending = false
+local THROTTLE_INTERVAL = 0.1  -- 10Hz cap on UNIT_AURA-driven updates
+
 local function OnNextFrame(self)
     self:SetScript("OnUpdate", nil)
     isDirty = false
+    lastProcessTime = GetTime()
     ProcessUpdate()
 end
 
@@ -278,6 +284,23 @@ local function MarkDirty()
     updateFrame:SetScript("OnUpdate", OnNextFrame)
 end
 
+-- Throttled variant for high-frequency events (UNIT_AURA in raids).
+-- Coalesces multiple events into at most one ProcessUpdate per THROTTLE_INTERVAL.
+local function MarkDirtyThrottled()
+    if not isEnabled then return end
+    if isDirty or throttledPending then return end
+    local since = GetTime() - lastProcessTime
+    if since >= THROTTLE_INTERVAL then
+        MarkDirty()
+    else
+        throttledPending = true
+        C_Timer.After(THROTTLE_INTERVAL - since, function()
+            throttledPending = false
+            MarkDirty()
+        end)
+    end
+end
+
 ns.MarkBuffBarsDirty = MarkDirty
 
 local eventFrame = CreateFrame("Frame")
@@ -286,7 +309,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     if not BuffBarCooldownViewer then return end
 
     if event == "UNIT_AURA" then
-        MarkDirty()
+        MarkDirtyThrottled()
     elseif event == "PLAYER_REGEN_ENABLED" then
         wipe(skinnedBars)
         MarkDirty()

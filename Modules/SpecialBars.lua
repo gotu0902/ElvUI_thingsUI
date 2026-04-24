@@ -72,7 +72,7 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
 
     local barOffset = 0
     if db.iconEnabled and icon then
-        icon:Show()
+        icon:SetAlpha(1)
         icon:SetScale(1)
         icon:SetSize(effectiveHeight, effectiveHeight)
         if icon.Icon then
@@ -101,7 +101,8 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
         icon:SetPoint("LEFT", childFrame, "LEFT", 0, 0)
         barOffset = effectiveHeight + (db.iconSpacing or 1)
     elseif icon then
-        icon:Hide()
+        -- SetAlpha instead of Hide — icon is a CDM sub-frame.
+        icon:SetAlpha(0)
     end
 
     childFrame.tuiBackdrop:Show()
@@ -129,20 +130,20 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
     local font = LSM:Fetch("font", db.font)
     if bar.Name then
         if db.showName then
-            bar.Name:Show()
+            bar.Name:SetAlpha(1)
             bar.Name:SetFont(font, db.fontSize, db.fontOutline)
             bar.Name:ClearAllPoints()
             bar.Name:SetPoint(db.namePoint or "LEFT", bar, db.namePoint or "LEFT", db.nameXOffset or 2, db.nameYOffset or 0)
-        else bar.Name:Hide() end
+        else bar.Name:SetAlpha(0) end
     end
 
     if bar.Duration then
         if db.showDuration then
-            bar.Duration:Show()
+            bar.Duration:SetAlpha(1)
             bar.Duration:SetFont(font, db.fontSize, db.fontOutline)
             bar.Duration:ClearAllPoints()
             bar.Duration:SetPoint(db.durationPoint or "RIGHT", bar, db.durationPoint or "RIGHT", db.durationXOffset or -4, db.durationYOffset or 0)
-        else bar.Duration:Hide() end
+        else bar.Duration:SetAlpha(0) end
     end
 
     bar:SetStatusBarTexture(LSM:Fetch("statusbar", db.statusBarTexture))
