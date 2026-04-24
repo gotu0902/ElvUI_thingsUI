@@ -10,9 +10,6 @@ local iconGroupState = SB.iconGroupState
 local yoinkedBars    = SB.yoinkedBars
 local ReturnFrame    = function(...) return SB.ReturnFrame(...) end
 
--- ---------------------------------------------------------------------------
--- Frame creation
--- ---------------------------------------------------------------------------
 local function GetOrCreateIconFrame(iconKey)
     local name    = 'TUI_SpecialIcon_' .. iconKey
     local wrapper = _G[name] or CreateFrame('Frame', name, UIParent)
@@ -37,7 +34,6 @@ local function GetOrCreateIconFrame(iconKey)
         inner:SetBackdropBorderColor(0, 0, 0, 1)
         inner:Hide()
         wrapper.tuiBorderInner = inner
-        -- Main border
         local bd = CreateFrame('Frame', nil, wrapper, 'BackdropTemplate')
         bd:SetFrameLevel(12)
         bd:SetBackdrop({ bgFile = nil, edgeFile = E.media.blankTex, edgeSize = 1 })
@@ -45,7 +41,6 @@ local function GetOrCreateIconFrame(iconKey)
         bd:SetBackdropBorderColor(0, 0, 0, 1)
         bd:Hide()
         wrapper.tuiBorder = bd
-        -- Outer stroke
         local outer = CreateFrame('Frame', nil, wrapper, 'BackdropTemplate')
         outer:SetFrameLevel(12)
         outer:SetBackdrop({ bgFile = nil, edgeFile = E.media.blankTex, edgeSize = 1 })
@@ -88,7 +83,6 @@ local function ApplyIconBorder(wrapper, db)
     bd:Show()
 
     if stroke then
-        -- Inner stroke: 1px black
         _bdInner.edgeFile = E.media.blankTex
         _bdInner.edgeSize = 1
         inner:SetBackdrop(nil)
@@ -98,7 +92,6 @@ local function ApplyIconBorder(wrapper, db)
         inner:SetPoint('TOPLEFT',     wrapper, 'TOPLEFT',      inset + size, -(inset + size))
         inner:SetPoint('BOTTOMRIGHT', wrapper, 'BOTTOMRIGHT', -(inset + size),  inset + size)
         inner:Show()
-        -- Outer stroke: 1px black
         _bdOuter.edgeFile = E.media.blankTex
         _bdOuter.edgeSize = 1
         outer:SetBackdrop(nil)
@@ -114,15 +107,12 @@ local function ApplyIconBorder(wrapper, db)
     end
 end
 
--- ---------------------------------------------------------------------------
--- Glow
--- ---------------------------------------------------------------------------
 local function StopAllGlows(frame)
     if not LCG or not frame then return end
-    pcall(LCG.PixelGlow_Stop,    frame, "tui")
-    pcall(LCG.AutoCastGlow_Stop, frame, "tui")
-    pcall(LCG.ButtonGlow_Stop,   frame)
-    pcall(LCG.ProcGlow_Stop,     frame, "tui")
+    LCG.PixelGlow_Stop(frame, "tui")
+    LCG.AutoCastGlow_Stop(frame, "tui")
+    LCG.ButtonGlow_Stop(frame)
+    LCG.ProcGlow_Stop(frame, "tui")
 end
 
 local _glowCol = { 1, 1, 0, 1 }
@@ -204,9 +194,6 @@ local function ApplyIconGlow(wrapper, db)
     wrapper._tuiGlowSig = sig
 end
 
--- ---------------------------------------------------------------------------
--- Spell finder
--- ---------------------------------------------------------------------------
 local function FindIconBySpell(spellID, forKey)
     if not spellID then return nil end
     local claimed = SB.RebuildClaimedIconFrames()
@@ -229,11 +216,8 @@ local function FindIconBySpell(spellID, forKey)
     return nil
 end
 
--- ---------------------------------------------------------------------------
--- Styling
--- ---------------------------------------------------------------------------
+-- Saves CDM's original icon styling on first call so ReturnFrame can restore it.
 local function StyleYoinkedIcon(childFrame, db)
-    -- Save original styling once so ReturnFrame can restore CDM's look
     if not childFrame._tuiOrigStyle then
         local orig = {}
         if childFrame.Icon and childFrame.Icon.GetTexCoord then
@@ -242,7 +226,6 @@ local function StyleYoinkedIcon(childFrame, db)
         if childFrame.Cooldown then
             orig.drawSwipe = childFrame.Cooldown:GetDrawSwipe()
             orig.drawEdge  = childFrame.Cooldown:GetDrawEdge()
-            -- Save first FontString state inside Cooldown
             for i = 1, childFrame.Cooldown:GetNumRegions() do
                 local r = select(i, childFrame.Cooldown:GetRegions())
                 if r and r.GetObjectType and r:GetObjectType() == 'FontString' then
@@ -251,7 +234,6 @@ local function StyleYoinkedIcon(childFrame, db)
                     orig.cdFontSize = s
                     orig.cdFontOut  = o
                     orig.cdR, orig.cdG, orig.cdB = r:GetTextColor()
-                    orig.cdPoint, orig.cdRelTo, orig.cdRelPt, orig.cdX, orig.cdY = r:GetPoint(1)
                     orig.cdShown = r:IsShown()
                     break
                 end
@@ -266,7 +248,6 @@ local function StyleYoinkedIcon(childFrame, db)
             orig.appFontSize = s
             orig.appFontOut  = o
             orig.appR, orig.appG, orig.appB = app:GetTextColor()
-            orig.appPoint, orig.appRelTo, orig.appRelPt, orig.appX, orig.appY = app:GetPoint(1)
             orig.appAlpha = app:GetAlpha()
         end
         childFrame._tuiOrigStyle = orig
@@ -305,9 +286,9 @@ local function StyleYoinkedIcon(childFrame, db)
     local app = childFrame.Applications and childFrame.Applications.Applications or childFrame.Applications
     if app then
         local stackFont = LSM:Fetch('font', db.stackFont or 'Expressway')
-        pcall(app.SetFont, app, stackFont, db.stackFontSize or 14, db.stackFontOutline or 'OUTLINE')
+        app:SetFont(stackFont, db.stackFontSize or 14, db.stackFontOutline or 'OUTLINE')
         local sc = db.stackColor
-        if sc then pcall(app.SetTextColor, app, sc.r, sc.g, sc.b) end
+        if sc then app:SetTextColor(sc.r, sc.g, sc.b) end
         local pt = db.stackPoint or 'BOTTOMRIGHT'
         app:ClearAllPoints()
         app:SetPoint(pt, childFrame, pt, db.stackXOffset or 0, db.stackYOffset or 0)
@@ -315,9 +296,6 @@ local function StyleYoinkedIcon(childFrame, db)
     end
 end
 
--- ---------------------------------------------------------------------------
--- Release
--- ---------------------------------------------------------------------------
 local function ReleaseIcon(iconKey)
     local state = iconGroupState[iconKey]
     if not state then return end
@@ -335,9 +313,6 @@ local function ReleaseIcon(iconKey)
     iconGroupState[iconKey] = nil
 end
 
--- ---------------------------------------------------------------------------
--- Update slot
--- ---------------------------------------------------------------------------
 local UpdateIconSlot
 UpdateIconSlot = function(iconKey)
     local db = SB.GetIconDB(iconKey)
@@ -353,7 +328,7 @@ UpdateIconSlot = function(iconKey)
 
     if anchorFrame then
         wrapper:ClearAllPoints()
-        pcall(wrapper.SetPoint, wrapper, db.anchorPoint, anchorFrame, db.anchorRelativePoint, db.anchorXOffset, db.anchorYOffset)
+        wrapper:SetPoint(db.anchorPoint, anchorFrame, db.anchorRelativePoint, db.anchorXOffset, db.anchorYOffset)
     end
 
     local realFrame = FindIconBySpell(db.spellID, iconKey)
@@ -383,9 +358,9 @@ UpdateIconSlot = function(iconKey)
 
         wrapper.fallback:Hide()
         wrapper.fallbackBorder:Hide()
-        pcall(StyleYoinkedIcon, realFrame, db)
-        pcall(ApplyIconBorder, wrapper, db)
-        pcall(ApplyIconGlow, wrapper, db)
+        StyleYoinkedIcon(realFrame, db)
+        ApplyIconBorder(wrapper, db)
+        ApplyIconGlow(wrapper, db)
         wrapper:Show()
     else
         if iconGroupState[iconKey] and iconGroupState[iconKey].childFrame then
@@ -406,8 +381,11 @@ UpdateIconSlot = function(iconKey)
             wrapper.fallback:SetDesaturated(true)
             wrapper.fallback:Show()
             wrapper.fallbackBorder:Show()
-            pcall(ApplyIconBorder, wrapper, db)
-            pcall(ApplyIconGlow, wrapper, db)
+            ApplyIconBorder(wrapper, db)
+            -- Glow is an "active" indicator — never glow the desaturated fallback.
+            StopAllGlows(wrapper)
+            if wrapper.tuiBorder then StopAllGlows(wrapper.tuiBorder) end
+            wrapper._tuiGlowSig = nil
             wrapper:Show()
         else
             wrapper.fallback:Hide()
@@ -423,8 +401,5 @@ UpdateIconSlot = function(iconKey)
     end
 end
 
--- ---------------------------------------------------------------------------
--- Exports
--- ---------------------------------------------------------------------------
 SB.UpdateIconSlot = UpdateIconSlot
 SB.ReleaseIcon    = ReleaseIcon

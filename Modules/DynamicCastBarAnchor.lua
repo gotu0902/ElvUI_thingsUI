@@ -44,19 +44,17 @@ local function UpdateCastBarAnchor()
     if anchorTarget == lastAnchorTarget then return end
     lastAnchorTarget = anchorTarget
     
-    pcall(function()
-        castBar:ClearAllPoints()
-        castBar:SetPoint(
-            db.point or "TOP",
-            anchorTarget,
-            db.relativePoint or "BOTTOM",
-            db.xOffset or 0,
-            db.yOffset or 0
-        )
-    end)
+    castBar:ClearAllPoints()
+    castBar:SetPoint(
+        db.point or "TOP",
+        anchorTarget,
+        db.relativePoint or "BOTTOM",
+        db.xOffset or 0,
+        db.yOffset or 0
+    )
 end
 
-local function OnNextFrame(self) -- One-shot timer that costs zero CPU when nothing happens, cancels itself out /D.G
+local function OnNextFrame(self)
     self:SetScript("OnUpdate", nil)
     isDirty = false
     UpdateCastBarAnchor()
@@ -75,20 +73,16 @@ local function HookCDMSettings()
     if not settings then return end
     
     hookedCDMSettings = true
-    pcall(function()
-        settings:HookScript("OnShow", function()
-            -- CDM opening can re-anchor things, re-apply after it settles
-            C_Timer.After(0.1, function()
-                lastAnchorTarget = nil
-                MarkDirty()
-            end)
+    settings:HookScript("OnShow", function()
+        C_Timer.After(0.1, function()
+            lastAnchorTarget = nil
+            MarkDirty()
         end)
-        settings:HookScript("OnHide", function()
-            -- CDM closing — BCDM re-applies its anchors, override again
-            C_Timer.After(0.1, function()
-                lastAnchorTarget = nil
-                MarkDirty()
-            end)
+    end)
+    settings:HookScript("OnHide", function()
+        C_Timer.After(0.1, function()
+            lastAnchorTarget = nil
+            MarkDirty()
         end)
     end)
 end
@@ -99,15 +93,13 @@ local function HookSecondaryPowerBar()
     if not secondary then return end
     
     hookedSecondary = true
-    pcall(function()
-        secondary:HookScript("OnShow", function()
-            lastAnchorTarget = nil
-            MarkDirty()
-        end)
-        secondary:HookScript("OnHide", function()
-            lastAnchorTarget = nil
-            MarkDirty()
-        end)
+    secondary:HookScript("OnShow", function()
+        lastAnchorTarget = nil
+        MarkDirty()
+    end)
+    secondary:HookScript("OnHide", function()
+        lastAnchorTarget = nil
+        MarkDirty()
     end)
 end
 

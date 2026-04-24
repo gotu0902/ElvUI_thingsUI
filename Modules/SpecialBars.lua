@@ -9,9 +9,6 @@ local specialBarState = SB.specialBarState
 local yoinkedBars     = SB.yoinkedBars
 local ReturnFrame     = function(...) return SB.ReturnFrame(...) end
 
--- ---------------------------------------------------------------------------
--- Frame creation
--- ---------------------------------------------------------------------------
 local function GetOrCreateWrapper(barKey)
     local name    = "TUI_SpecialBar_" .. barKey
     local wrapper = _G[name] or CreateFrame("Frame", name, UIParent)
@@ -35,9 +32,6 @@ end
 local _bdBar  = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
 local _bdIcon = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
 
--- ---------------------------------------------------------------------------
--- Spell finder
--- ---------------------------------------------------------------------------
 local function FindBarBySpell(spellID, forKey)
     if not spellID then return nil end
     local claimed = SB.RebuildClaimedBarFrames()
@@ -60,9 +54,6 @@ local function FindBarBySpell(spellID, forKey)
     return nil
 end
 
--- ---------------------------------------------------------------------------
--- Styling
--- ---------------------------------------------------------------------------
 local function StyleSpecialBar(childFrame, db, effectiveHeight)
     local bar  = childFrame.Bar
     local icon = childFrame.Icon
@@ -186,9 +177,6 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
     end
 end
 
--- ---------------------------------------------------------------------------
--- Release
--- ---------------------------------------------------------------------------
 local function ReleaseBar(barKey)
     local state = specialBarState[barKey]
     if not state then return end
@@ -197,9 +185,6 @@ local function ReleaseBar(barKey)
     specialBarState[barKey] = nil
 end
 
--- ---------------------------------------------------------------------------
--- Update slot
--- ---------------------------------------------------------------------------
 local UpdateBarSlot
 UpdateBarSlot = function(barKey)
     local db = SB.GetBarDB(barKey)
@@ -223,7 +208,7 @@ UpdateBarSlot = function(barKey)
     wrapper:SetSize(effectiveWidth, effectiveHeight)
     if anchorFrame then
         wrapper:ClearAllPoints()
-        pcall(wrapper.SetPoint, wrapper, db.anchorPoint, anchorFrame, db.anchorRelativePoint, db.anchorXOffset, db.anchorYOffset)
+        wrapper:SetPoint(db.anchorPoint, anchorFrame, db.anchorRelativePoint, db.anchorXOffset, db.anchorYOffset)
     end
 
     local realFrame = FindBarBySpell(db.spellID, barKey)
@@ -252,7 +237,7 @@ UpdateBarSlot = function(barKey)
         yoinkedBars[realFrame] = true
 
         wrapper.backdrop:Hide()
-        pcall(StyleSpecialBar, realFrame, db, effectiveHeight)
+        StyleSpecialBar(realFrame, db, effectiveHeight)
         wrapper:Show()
     else
         if specialBarState[barKey] and specialBarState[barKey].childFrame then
@@ -280,8 +265,5 @@ UpdateBarSlot = function(barKey)
     end
 end
 
--- ---------------------------------------------------------------------------
--- Exports
--- ---------------------------------------------------------------------------
 SB.UpdateBarSlot = UpdateBarSlot
 SB.ReleaseBar    = ReleaseBar

@@ -2,6 +2,9 @@ local addon, ns = ...
 local TUI = ns.TUI
 local E = ns.E
 
+local ipairs, select, wipe = ipairs, select, wipe
+local tsort = table.sort
+
 local updateFrame = CreateFrame("Frame")
 local eventFrame = CreateFrame("Frame")
 local isDirty = false
@@ -24,7 +27,7 @@ local function PositionBuffsVertically()
 
     if #reusableIconTable == 0 then return end
 
-    table.sort(reusableIconTable, function(a, b)
+    tsort(reusableIconTable, function(a, b)
         return (a.layoutIndex or 0) < (b.layoutIndex or 0)
     end)
 
@@ -50,18 +53,15 @@ local function MarkDirty()
     updateFrame:SetScript("OnUpdate", OnNextFrame)
 end
 
--- Hook buff icon children so we reposition the instant a new icon
--- appears or disappears, instead of waiting for UNIT_AURA.
+-- Hook buff icon children so we reposition instantly on show/hide instead of waiting for UNIT_AURA.
 local function HookBuffIconChildren()
     if not BuffIconCooldownViewer then return end
     for i = 1, BuffIconCooldownViewer:GetNumChildren() do
         local child = select(i, BuffIconCooldownViewer:GetChildren())
         if child and not hookedBuffIcons[child] then
             hookedBuffIcons[child] = true
-            pcall(function()
-                child:HookScript("OnShow", MarkDirty)
-                child:HookScript("OnHide", MarkDirty)
-            end)
+            child:HookScript("OnShow", MarkDirty)
+            child:HookScript("OnHide", MarkDirty)
         end
     end
 end

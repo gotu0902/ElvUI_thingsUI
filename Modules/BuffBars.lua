@@ -3,31 +3,28 @@ local TUI = ns.TUI
 local E = ns.E
 local LSM = ns.LSM
 
+local ipairs, select, wipe = ipairs, select, wipe
+local tsort = table.sort
+
 local skinnedBars = ns.skinnedBars
 local yoinkedBars = ns.yoinkedBars
 
--- =========================================
--- LAZY CDM CHILD CREATION
--- =========================================
 local hookedBuffChildren = {}
 local viewerReadyTicker
 
 local function HookBuffChild(childFrame)
     if not childFrame or hookedBuffChildren[childFrame] then return end
     hookedBuffChildren[childFrame] = true
-    pcall(function()
-        childFrame:HookScript("OnShow", function()
-            if ns.MarkBuffBarsDirty then
-                ns.MarkBuffBarsDirty()
-            end
-        end)
+    childFrame:HookScript("OnShow", function()
+        if ns.MarkBuffBarsDirty then
+            ns.MarkBuffBarsDirty()
+        end
     end)
 end
 
 local function ScanAndHookBuffChildren()
     if not BuffBarCooldownViewer then return false end
-    local ok, children = pcall(function() return { BuffBarCooldownViewer:GetChildren() } end)
-    if not ok or not children then return false end
+    local children = { BuffBarCooldownViewer:GetChildren() }
     for _, childFrame in ipairs(children) do
         HookBuffChild(childFrame)
     end
@@ -50,39 +47,11 @@ local function StartViewerReadyTicker()
     end)
 end
 
--- =========================================
--- DIRTY-FLAG UPDATE SYSTEM
--- =========================================
 local updateFrame = CreateFrame("Frame")
 local isDirty = false
 local isEnabled = false
 local sortedBars = {}
 
-local function GetSpecialBarDB_Safe()
-    return ns.SpecialBars and ns.SpecialBars.GetSpecialBarDB and ns.SpecialBars.GetSpecialBarDB() or {}
-end
-
-local function UpdateSpecialBarSlot_Safe(barKey)
-    if ns.SpecialBars and ns.SpecialBars.UpdateBarSlot then
-        return ns.SpecialBars.UpdateBarSlot(barKey)
-    end
-end
-
-local function UpdateSpecialIconSlot_Safe(iconKey)
-    if ns.SpecialBars and ns.SpecialBars.UpdateIconSlot then
-        return ns.SpecialBars.UpdateIconSlot(iconKey)
-    end
-end
-
-local function ScanAndHookCDMChildren_Safe()
-    if ns.SpecialBars and ns.SpecialBars.ScanAndHookCDMChildren then
-        return ns.SpecialBars.ScanAndHookCDMChildren()
-    end
-end
-
--- =========================================
--- CLASS COLOR (cached)
--- =========================================
 local cachedClassR, cachedClassG, cachedClassB
 local function GetClassColor()
     if not cachedClassR then
@@ -92,9 +61,6 @@ local function GetClassColor()
     return cachedClassR, cachedClassG, cachedClassB
 end
 
--- =========================================
--- SKINNING
--- =========================================
 local function SkinBuffBar(childFrame)
     if not childFrame or not childFrame.Bar then return end
     if skinnedBars[childFrame] then return end
@@ -146,7 +112,6 @@ local function SkinBuffBar(childFrame)
     if bar.Name then bar.Name:SetFont(font, db.fontSize, db.fontOutline) end
     if bar.Duration then bar.Duration:SetFont(font, db.fontSize, db.fontOutline) end
 
-    -- Stack count font styling
     if icon and icon.Applications and icon.Applications.SetFont then
         local stackFont = LSM:Fetch("font", db.font)
         icon.Applications:SetFont(stackFont, db.stackFontSize or 15, db.stackFontOutline or "OUTLINE")
@@ -155,9 +120,6 @@ local function SkinBuffBar(childFrame)
     skinnedBars[childFrame] = true
 end
 
--- =========================================
--- Map anchor point names to horizontal/vertical justify values
--- =========================================
 local JUSTIFY_H_MAP = {
     LEFT = "LEFT", RIGHT = "RIGHT", CENTER = "CENTER",
     TOPLEFT = "LEFT", TOPRIGHT = "RIGHT", TOP = "CENTER",
@@ -170,9 +132,6 @@ local JUSTIFY_V_MAP = {
     LEFT = "MIDDLE", RIGHT = "MIDDLE",
 }
 
--- =========================================
--- LAYOUT
--- =========================================
 local function LayoutBuffBar(childFrame)
     if not childFrame or not childFrame.Bar then return end
 
@@ -225,7 +184,6 @@ local function LayoutBuffBar(childFrame)
         bar.Duration:SetPoint(db.durationPoint or "RIGHT", bar, db.durationPoint or "RIGHT", db.durationXOffset or -4, db.durationYOffset or 0)
     end
 
-    -- Stack count positioning
     if icon and icon.Applications then
         local stackParent = (db.stackAnchor == "BAR") and bar or icon
         local stackPoint = db.stackPoint or "CENTER"
@@ -249,24 +207,16 @@ local function LayoutBuffBar(childFrame)
     end
 end
 
--- =========================================
--- CONTAINER ANCHOR
--- =========================================
 local function AnchorBuffBarContainer()
     if not BuffBarCooldownViewer then return end
     local db = E.db.thingsUI.buffBars
     if not db.anchorEnabled then return end
     local anchorFrame = _G[db.anchorFrame]
     if not anchorFrame then return end
-    pcall(function()
-        BuffBarCooldownViewer:ClearAllPoints()
-        BuffBarCooldownViewer:SetPoint(db.anchorPoint, anchorFrame, db.anchorRelativePoint, db.anchorXOffset, db.anchorYOffset)
-    end)
+    BuffBarCooldownViewer:ClearAllPoints()
+    BuffBarCooldownViewer:SetPoint(db.anchorPoint, anchorFrame, db.anchorRelativePoint, db.anchorXOffset, db.anchorYOffset)
 end
 
--- =========================================
--- MAIN UPDATE
--- =========================================
 local function ProcessUpdate()
     if not BuffBarCooldownViewer then return end
     if not E.db.thingsUI then return end
@@ -277,7 +227,7 @@ local function ProcessUpdate()
     local specialBarsExist = E.db.thingsUI.specialBars
 
     if specialBarsExist then
-        ScanAndHookCDMChildren_Safe()
+        ns.SpecialBars.ScanAndHookCDMChildren()
     end
 
     if not buffBarsEnabled then return end
@@ -297,7 +247,7 @@ local function ProcessUpdate()
 
     if #sortedBars == 0 then return end
 
-    table.sort(sortedBars, function(a, b)
+    tsort(sortedBars, function(a, b)
         return (a.layoutIndex or 0) < (b.layoutIndex or 0)
     end)
 
@@ -315,9 +265,6 @@ local function ProcessUpdate()
     AnchorBuffBarContainer()
 end
 
--- =========================================
--- DIRTY-FLAG
--- =========================================
 local function OnNextFrame(self)
     self:SetScript("OnUpdate", nil)
     isDirty = false
@@ -333,9 +280,6 @@ end
 
 ns.MarkBuffBarsDirty = MarkDirty
 
--- =========================================
--- EVENTS
--- =========================================
 local eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if not E.db.thingsUI then return end
@@ -355,9 +299,6 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     end
 end)
 
--- =========================================
--- PUBLIC API
--- =========================================
 function TUI:UpdateBuffBars()
     if E.db.thingsUI.buffBars.enabled or (E.db.thingsUI.specialBars and next(E.db.thingsUI.specialBars.specs or {})) then
         isEnabled = true
