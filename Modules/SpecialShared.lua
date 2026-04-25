@@ -620,6 +620,7 @@ local function HookCDMWindow()
         lastBarChildCount  = -1
         lastIconChildCount = -1
         InvalidateSpellListCache()
+        if ns.MarkEnforceDirty then ns.MarkEnforceDirty() end
         TUI:QueueSpecialBarsUpdate()
     end
     local function _onCDMHideDeferred() TUI:UpdateSpecialBars() end
@@ -628,6 +629,7 @@ local function HookCDMWindow()
         lastBarChildCount  = -1
         lastIconChildCount = -1
         InvalidateSpellListCache()
+        if ns.MarkEnforceDirty then ns.MarkEnforceDirty() end
         C_Timer.After(0.1, _onCDMHideDeferred)
     end
     f:HookScript("OnShow", _onCDMShow)
@@ -661,14 +663,20 @@ function TUI:UpdateSpecialBars()
     for i = 1, iconCount do updateIcon(_iconKeys[i]) end
 end
 
--- Brute-force enforcer: 20 fps re-parent/size check.
+-- Event-driven enforcer: replaces a 20Hz polling loop. Dirty flag is set by
+-- triggers that can cause CDM to re-parent/re-size yoinked frames; OnUpdate
+-- drains the flag at most once per ENFORCE_INTERVAL.
 local enforcer = CreateFrame("Frame")
+local enforceDirty = false
 local enforceTimer = 0
-enforcer:SetScript("OnUpdate", function(_, elapsed)
-    enforceTimer = enforceTimer + elapsed
-    if enforceTimer < 0.05 then return end
-    enforceTimer = 0
+local ENFORCE_INTERVAL = 0.05  -- min time between enforce passes (debounce)
 
+local function MarkEnforceDirty()
+    enforceDirty = true
+end
+ns.MarkEnforceDirty = MarkEnforceDirty
+
+local function RunEnforce()
     local curBarCount  = BuffBarCooldownViewer  and BuffBarCooldownViewer:GetNumChildren()  or 0
     local curIconCount = BuffIconCooldownViewer and BuffIconCooldownViewer:GetNumChildren() or 0
     if curBarCount ~= lastBarChildCount or curIconCount ~= lastIconChildCount then
@@ -719,7 +727,26 @@ enforcer:SetScript("OnUpdate", function(_, elapsed)
             end
         end
     end
+end
+
+enforcer:SetScript("OnUpdate", function(_, elapsed)
+    if not enforceDirty then return end
+    enforceTimer = enforceTimer + elapsed
+    if enforceTimer < ENFORCE_INTERVAL then return end
+    enforceTimer = 0
+    enforceDirty = false
+    RunEnforce()
 end)
+
+-- Triggers that can cause CDM to re-parent/re-size yoinked frames.
+-- We mark dirty and let the next OnUpdate (within ENFORCE_INTERVAL) reconcile.
+local enforceTriggers = CreateFrame("Frame")
+enforceTriggers:RegisterUnitEvent("UNIT_AURA", "player")
+enforceTriggers:RegisterEvent("PLAYER_REGEN_ENABLED")
+enforceTriggers:RegisterEvent("PLAYER_REGEN_DISABLED")
+enforceTriggers:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
+enforceTriggers:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+enforceTriggers:SetScript("OnEvent", MarkEnforceDirty)
 
 local function OnSpecChanged()
     InvalidateSpellListCache()
@@ -743,6 +770,7 @@ do
     f:RegisterEvent("PLAYER_ENTERING_WORLD")
     f:SetScript("OnEvent", function(_, event, unit)
         if event == "PLAYER_SPECIALIZATION_CHANGED" and unit and unit ~= "player" then return end
+        MarkEnforceDirty()
         OnSpecChanged()
     end)
 end
