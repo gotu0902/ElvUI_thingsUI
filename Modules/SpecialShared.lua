@@ -711,9 +711,16 @@ function TUI:UpdateSpecialBars()
 
     local barCount = GetBarCount()
     local releaseBar = ns.SpecialBars.ReleaseBar
+    local hideBarMover = ns.SpecialBars.HideBarMover
     for key in pairs(specialBarState) do
         local idx = tonumber(key:match("^bar(%d+)$"))
         if not idx or idx > barCount then releaseBar(key) end
+    end
+    -- Hide movers for any slot beyond the current count, even if it never
+    -- had an active spell. Movers are created lazily so we only iterate
+    -- numbers up to a reasonable max (matches the option's range cap).
+    if hideBarMover then
+        for i = barCount + 1, 12 do hideBarMover("bar" .. i) end
     end
     EnsureSlotKeys(barCount, 0)
     local updateBar = ns.SpecialBars.UpdateBarSlot
@@ -721,9 +728,13 @@ function TUI:UpdateSpecialBars()
 
     local iconCount = GetIconCount()
     local releaseIcon = ns.SpecialBars.ReleaseIcon
+    local hideIconMover = ns.SpecialBars.HideIconMover
     for key in pairs(iconGroupState) do
         local idx = tonumber(key:match("^icon(%d+)$"))
         if not idx or idx > iconCount then releaseIcon(key) end
+    end
+    if hideIconMover then
+        for i = iconCount + 1, 12 do hideIconMover("icon" .. i) end
     end
     EnsureSlotKeys(0, iconCount)
     local updateIcon = ns.SpecialBars.UpdateIconSlot

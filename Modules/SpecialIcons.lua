@@ -10,6 +10,47 @@ local iconGroupState = SB.iconGroupState
 local yoinkedBars    = SB.yoinkedBars
 local ReturnFrame    = function(...) return SB.ReturnFrame(...) end
 
+-- Mover registration. Mirrors the bar version in SpecialBars.lua —
+-- see comments there for the full strategy.
+local _iconMoverCreated = {}
+local function PostDragForIcon(iconKey)
+    return function(self)
+        local db = SB.GetIconDB(iconKey)
+        if not db then return end
+        local point, _, relPoint, x, y = self:GetPoint()
+        if point and x and y then
+            db.anchorPoint = point
+            db.anchorRelativePoint = relPoint or "CENTER"
+            db.anchorXOffset = math.floor(x + 0.5)
+            db.anchorYOffset = math.floor(y + 0.5)
+            local ok, reg = pcall(LibStub, "AceConfigRegistry-3.0")
+            if ok and reg and reg.NotifyChange then reg:NotifyChange("ElvUI") end
+        end
+    end
+end
+
+local function EnsureIconMover(wrapper, iconKey, displayName)
+    if not E or not E.CreateMover then return end
+    if _iconMoverCreated[iconKey] then return end
+    local moverName = "TUI_SpecialIconMover_" .. iconKey
+    E:CreateMover(wrapper, moverName, displayName or ("Special Icon "..iconKey),
+        nil, nil,
+        PostDragForIcon(iconKey),
+        "ALL,THINGSUI",
+        function() return not (E.db.thingsUI and E.db.thingsUI.specialBars) end,
+        "thingsUI,specialIconsTab," .. iconKey .. "Group")
+    _iconMoverCreated[iconKey] = true
+end
+
+local function HideIconMover(iconKey)
+    local moverName = "TUI_SpecialIconMover_" .. iconKey
+    local mover = _G[moverName]
+    if mover and mover.Hide then mover:Hide() end
+    local wrapper = _G["TUI_SpecialIcon_" .. iconKey]
+    if wrapper then wrapper:Hide() end
+end
+SB.HideIconMover = HideIconMover
+
 local function GetOrCreateIconFrame(iconKey)
     local name    = 'TUI_SpecialIcon_' .. iconKey
     local wrapper = _G[name] or CreateFrame('Frame', name, UIParent)
@@ -327,9 +368,36 @@ UpdateIconSlot = function(iconKey)
     local h = db.keepAspectRatio ~= false and w or (db.height or 36)
     wrapper:SetSize(w, h)
 
-    if anchorFrame then
+    -- Anchor wrapper before mover creation (CreateMover requires a position).
+    local moverName = "TUI_SpecialIconMover_" .. iconKey
+    if not _G[moverName] then
         wrapper:ClearAllPoints()
-        wrapper:SetPoint(db.anchorPoint, anchorFrame, db.anchorRelativePoint, db.anchorXOffset, db.anchorYOffset)
+        if anchorFrame then
+            wrapper:SetPoint(db.anchorPoint or "CENTER", anchorFrame, db.anchorRelativePoint or "CENTER", db.anchorXOffset or 0, db.anchorYOffset or 0)
+        else
+            wrapper:SetPoint("CENTER", UIParent, "CENTER", db.anchorXOffset or 0, db.anchorYOffset or 0)
+        end
+    end
+
+    local iconNum = iconKey:match("(%d+)$") or ""
+    local label = "Special Icon " .. iconNum
+    if anchorFrame and db.anchorMode and db.anchorMode ~= "UIParent" then
+        label = label .. "\n|cFF888888(Anchored to: " .. (db.anchorMode or "?") .. ")|r"
+    end
+    EnsureIconMover(wrapper, iconKey, label)
+
+    -- Sync slider -> mover so option changes move the mover too.
+    local mover = _G[moverName]
+    if mover and anchorFrame then
+        local point = db.anchorPoint or "CENTER"
+        local relPoint = db.anchorRelativePoint or "CENTER"
+        local x, y = db.anchorXOffset or 0, db.anchorYOffset or 0
+        mover:ClearAllPoints()
+        mover:SetPoint(point, anchorFrame, relPoint, x, y)
+        if E.db.movers then
+            E.db.movers[moverName] = string.format("%s,%s,%s,%d,%d",
+                point, anchorFrame:GetName() or "UIParent", relPoint, x, y)
+        end
     end
 
     local realFrame = FindIconBySpell(db.spellID, iconKey)

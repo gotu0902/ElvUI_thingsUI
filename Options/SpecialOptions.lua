@@ -678,6 +678,13 @@ function TUI:SpecialIconOptions(iconKey)
                 anchorSettingsGroup = {
                     order = 50, type = "group", name = "Anchor", inline = true,
                     args = {
+                        toggleMovers = {
+                            order = 0, type = "execute", name = "Toggle Movers (thingsUI)",
+                            desc = "Open ElvUI's mover panel filtered to thingsUI movers.",
+                            func = function()
+                                if E and E.ToggleMoveMode then E:ToggleMoveMode("THINGSUI") end
+                            end,
+                        },
                         anchorMode = { order = 1, type = "select", name = "Anchor Frame", width = "double",
                             values  = function() return BuildAnchorValues(false, true) end,
                             sorting = function() return BuildAnchorSorting(false, true) end,

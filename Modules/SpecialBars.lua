@@ -84,6 +84,20 @@ local function EnsureMover(wrapper, barKey, displayName)
     _moverCreated[barKey] = true
 end
 
+-- Hide the mover and drop our created flag. We don't fully delete from
+-- E.CreatedMovers (no public API for that) — hiding is enough to keep the
+-- mover panel clean. Re-creating uses the same name so on next slot use the
+-- existing CreatedMovers entry is reused.
+local function HideBarMover(barKey)
+    local moverName = "TUI_SpecialBarMover_" .. barKey
+    local mover = _G[moverName]
+    if mover and mover.Hide then mover:Hide() end
+    -- Mark the wrapper hidden so ElvUI's enable-mover pass skips it.
+    local wrapper = _G["TUI_SpecialBar_" .. barKey]
+    if wrapper then wrapper:Hide() end
+end
+SB.HideBarMover = HideBarMover
+
 -- Separate backdrop tables per frame — SetBackdrop stores the reference, so sharing
 -- a single table between two frames causes the last call to overwrite both.
 local _bdBar  = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
