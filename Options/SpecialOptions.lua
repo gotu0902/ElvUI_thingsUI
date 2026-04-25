@@ -168,16 +168,53 @@ local function GetChoicesTable(currentKey, isBar)
     return choices
 end
 
+-- Sort buckets, lower = appears first in dropdown:
+--   1: in use as Bar           2: in use as Icon
+--   3: live as Bar             4: live as Icon (or Bar & Icon)
+--   5: in CDM, talented (Not tracked)
+--   6: in CDM, not talented
+--   7: unknown / not in CDM
+local function GetSortRank(id, data, knownBar, knownIcon)
+    local pid = data.parentID
+    local isSplitVariant = pid and pid ~= id
+    local liveAsBar, liveAsIcon
+    if isSplitVariant then
+        liveAsBar  = knownBar[id]  or false
+        liveAsIcon = knownIcon[id] or false
+    else
+        liveAsBar  = knownBar[id]  or (pid and knownBar[pid])
+        liveAsIcon = knownIcon[id] or (pid and knownIcon[pid])
+    end
+    local usage = SB.GetSpellUsageInfo(id, nil, nil)
+    if usage then
+        return usage:find("Icon", 1, true) and 2 or 1
+    end
+    if liveAsBar and not liveAsIcon then return 3 end
+    if liveAsIcon then return 4 end  -- Icon-only or Bar & Icon
+    local talented = IsPlayerSpell(id) or (pid and IsPlayerSpell(pid)) or false
+    local inCDM = data.type and data.type ~= "Unknown"
+    if inCDM and talented then return 5 end
+    if inCDM then return 6 end
+    return 7
+end
+
 local function GetSortedKeys()
     local rawList = GetEnrichedSpellList()
-    local keys = { "" }
+    local knownBar  = SB.knownBarSpells  or {}
+    local knownIcon = SB.knownIconSpells or {}
+    local ranks = {}
     local sorted = {}
-    for id in pairs(rawList) do sorted[#sorted+1] = id end
+    for id, data in pairs(rawList) do
+        sorted[#sorted+1] = id
+        ranks[id] = GetSortRank(id, data, knownBar, knownIcon)
+    end
     table.sort(sorted, function(a, b)
+        if ranks[a] ~= ranks[b] then return ranks[a] < ranks[b] end
         local na, nb = rawList[a].name or "", rawList[b].name or ""
         if na == nb then return a < b end
         return na < nb
     end)
+    local keys = { "" }
     for _, id in ipairs(sorted) do keys[#keys+1] = tostring(id) end
     return keys
 end
@@ -347,6 +384,13 @@ function TUI:SpecialBarOptions(barKey)
                 anchorSettingsGroup = {
                     order = 50, type = "group", name = "Anchor", inline = true,
                     args = {
+                        toggleMovers = {
+                            order = 0, type = "execute", name = "Toggle Movers (thingsUI)",
+                            desc = "Open ElvUI's mover panel filtered to thingsUI movers.",
+                            func = function()
+                                if E and E.ToggleMoveMode then E:ToggleMoveMode("THINGSUI") end
+                            end,
+                        },
                         anchorMode = { order = 1, type = "select", name = "Anchor Frame", width = "double",
                             values  = function() return BuildAnchorValues(true, false) end,
                             sorting = function() return BuildAnchorSorting(true, false) end,

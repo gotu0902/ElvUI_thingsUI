@@ -2,7 +2,7 @@
 ## Title: |cFF8080FFElvUI_thingsUI|r
 ## Notes: ElvUI plugin for doing things
 ## Author: ._.
-## Version: 3.0.2
+## Version: 3.0.3
 ## RequiredDeps: ElvUI
 ## DefaultState: Enabled
 ## X-Wago-ID: mKODDZGx

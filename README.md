@@ -1,6 +1,6 @@
 # ElvUI_thingsUI
 
-![Version](https://img.shields.io/badge/version-3.0.2-green)
+![Version](https://img.shields.io/badge/version-3.0.3-green)
 
 ## General
 

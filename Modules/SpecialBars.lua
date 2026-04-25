@@ -27,6 +27,63 @@ local function GetOrCreateWrapper(barKey)
     return wrapper
 end
 
+-- Register thingsUI as its own ElvUI Config Mode category so users can filter
+-- the mover panel to just our movers. Done once; safe to call repeatedly.
+local function EnsureConfigMode()
+    if not E or not E.ConfigModeLayouts then return end
+    if ns.__tuiConfigModeRegistered then return end
+    -- Append our category once.
+    local already = false
+    for _, v in ipairs(E.ConfigModeLayouts) do
+        if v == "THINGSUI" then already = true; break end
+    end
+    if not already then table.insert(E.ConfigModeLayouts, "THINGSUI") end
+    if E.ConfigModeLocalizedStrings then
+        E.ConfigModeLocalizedStrings.THINGSUI = "thingsUI"
+    end
+    ns.__tuiConfigModeRegistered = true
+end
+
+-- Register an ElvUI mover for the wrapper. The mover frame stores its position
+-- in E.db.movers (absolute, anchored to UIParent) and is what the user drags
+-- via /moveui. Right-click opens our config via ElvUI's ToggleOptions hook.
+local _moverCreated = {}
+
+-- After the user drags the mover, mirror the resulting offset back into our
+-- own X/Y DB fields so the option sliders stay in sync with the mover.
+local function PostDragForBar(barKey)
+    return function(self)
+        local db = SB.GetBarDB(barKey)
+        if not db then return end
+        local point, _, relPoint, x, y = self:GetPoint()
+        if point and x and y then
+            db.anchorPoint = point
+            db.anchorRelativePoint = relPoint or "CENTER"
+            db.anchorXOffset = math.floor(x + 0.5)
+            db.anchorYOffset = math.floor(y + 0.5)
+            -- Tell AceConfig to redraw sliders.
+            local ok, reg = pcall(LibStub, "AceConfigRegistry-3.0")
+            if ok and reg and reg.NotifyChange then reg:NotifyChange("ElvUI") end
+        end
+    end
+end
+
+local function EnsureMover(wrapper, barKey, displayName)
+    if not E or not E.CreateMover then return end
+    EnsureConfigMode()
+    if _moverCreated[barKey] then return end
+    local moverName = "TUI_SpecialBarMover_" .. barKey
+    -- configString is passed to E:ToggleOptions on right-click. ElvUI parses
+    -- it as comma-separated AceConfig path nodes within the ElvUI app.
+    E:CreateMover(wrapper, moverName, displayName or ("Special Bar "..barKey),
+        nil, nil,
+        PostDragForBar(barKey),
+        "ALL,THINGSUI",
+        function() return not (E.db.thingsUI and E.db.thingsUI.specialBars) end,
+        "thingsUI,specialBarsTab," .. barKey .. "Group")
+    _moverCreated[barKey] = true
+end
+
 -- Separate backdrop tables per frame — SetBackdrop stores the reference, so sharing
 -- a single table between two frames causes the last call to overwrite both.
 local _bdBar  = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
@@ -207,9 +264,45 @@ UpdateBarSlot = function(barKey)
     end
 
     wrapper:SetSize(effectiveWidth, effectiveHeight)
-    if anchorFrame then
+
+    -- E:CreateMover needs the wrapper to already have a valid anchor before
+    -- it's called. Set one based on the saved offset.
+    local moverName = "TUI_SpecialBarMover_" .. barKey
+    local moverExists = _G[moverName] ~= nil
+    if not moverExists then
         wrapper:ClearAllPoints()
-        wrapper:SetPoint(db.anchorPoint, anchorFrame, db.anchorRelativePoint, db.anchorXOffset, db.anchorYOffset)
+        if anchorFrame then
+            wrapper:SetPoint(db.anchorPoint or "CENTER", anchorFrame, db.anchorRelativePoint or "CENTER", db.anchorXOffset or 0, db.anchorYOffset or 0)
+        else
+            wrapper:SetPoint("CENTER", UIParent, "CENTER", db.anchorXOffset or 0, db.anchorYOffset or 0)
+        end
+    end
+
+    local moverNum = barKey:match("(%d+)$") or ""
+    local label = "Special Bar " .. moverNum
+    if anchorFrame and db.anchorMode and db.anchorMode ~= "UIParent" then
+        label = label .. "\n|cFF888888(Anchored to: " .. (db.anchorMode or "?") .. ")|r"
+    end
+    EnsureMover(wrapper, barKey, label)
+
+    -- After mover exists, push the saved offsets back into the mover so
+    -- changes from the option sliders are reflected. This is what keeps the
+    -- sliders and the in-game mover in sync both ways (postdrag handles the
+    -- other direction).
+    local mover = _G[moverName]
+    if mover and anchorFrame then
+        local point = db.anchorPoint or "CENTER"
+        local relPoint = db.anchorRelativePoint or "CENTER"
+        local x, y = db.anchorXOffset or 0, db.anchorYOffset or 0
+        mover:ClearAllPoints()
+        mover:SetPoint(point, anchorFrame, relPoint, x, y)
+        -- Persist into ElvUI's mover DB so /reload keeps the position.
+        if E.db.movers then
+            E.db.movers[moverName] = string.format("%s,%s,%s,%d,%d",
+                point,
+                anchorFrame:GetName() or "UIParent",
+                relPoint, x, y)
+        end
     end
 
     local realFrame = FindBarBySpell(db.spellID, barKey)
