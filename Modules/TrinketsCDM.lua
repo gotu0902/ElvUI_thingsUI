@@ -406,8 +406,12 @@ local function ApplyTrinketPosition(db)
             ShiftAllDependents(-xDelta)
 
             -- MatchWidthOfAnchor bars should span the full combined width (including gap).
+            -- Apply twice: once now to avoid a visible "snap" after BCDM's Position()
+            -- runs at default width, and once after 0.15s as a backup in case BCDM
+            -- overrides the width during its own async layout pass.
             local essW = essViewer:GetWidth()
             if essW and essW > 1 then
+                M.ApplyMatchWidth(essW + gap)
                 C_Timer.After(0.15, function() M.ApplyMatchWidth(essW + gap) end)
             end
         else
@@ -526,6 +530,7 @@ local function ApplyTrinketPosition(db)
     local db = E.db.thingsUI and E.db.thingsUI.trinketsCDM
     local isNHTWithTrinkets = db.mode == "NHT" and isApplied and CountActiveTrinkets() > 0
     if not isNHTWithTrinkets then
+        M.ApplyMatchWidth()
         C_Timer.After(0.15, function()
             M.ApplyMatchWidth()
         end)
