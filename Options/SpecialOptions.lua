@@ -53,22 +53,31 @@ end
 local function GetEnrichedSpellList()
     local rawList = SB.GetRawSpellList()
     local enriched = {}
-    for id, data in pairs(rawList) do enriched[id] = data end
+    local nameToID = {}
+    for id, data in pairs(rawList) do
+        enriched[id] = data
+        if data.name then nameToID[data.name] = id end
+    end
 
-    for i = 1, SB.GetBarCount() do
-        local id = SB.GetBarDB("bar"..i).spellID
-        if id and not enriched[id] then
-            local info = C_Spell.GetSpellInfo(id)
-            if info then enriched[id] = { name = info.name, type = "Unknown" } end
+    -- If a slot's saved spellID isn't in CDM's list but shares a name with a
+    -- CDM entry (e.g. user previously saved aura ID 164812 for Moonfire while
+    -- CDM exposes parent 8921), migrate the slot to the canonical CDM ID so
+    -- the dropdown shows the correct selection and we don't duplicate rows.
+    local function migrate(db)
+        if not db or not db.spellID or enriched[db.spellID] then return end
+        local info = C_Spell.GetSpellInfo(db.spellID)
+        if not info then return end
+        local canonical = nameToID[info.name]
+        if canonical then
+            db.spellID = canonical
+        else
+            enriched[db.spellID] = { name = info.name, type = "Unknown" }
+            nameToID[info.name] = db.spellID
         end
     end
-    for i = 1, SB.GetIconCount() do
-        local id = SB.GetIconDB("icon"..i).spellID
-        if id and not enriched[id] then
-            local info = C_Spell.GetSpellInfo(id)
-            if info then enriched[id] = { name = info.name, type = "Unknown" } end
-        end
-    end
+
+    for i = 1, SB.GetBarCount() do migrate(SB.GetBarDB("bar"..i)) end
+    for i = 1, SB.GetIconCount() do migrate(SB.GetIconDB("icon"..i)) end
     return enriched
 end
 
@@ -77,6 +86,12 @@ local function GetChoicesTable(currentKey, isBar)
     local rawList = GetEnrichedSpellList()
     local knownBar  = SB.knownBarSpells  or {}
     local knownIcon = SB.knownIconSpells or {}
+
+    -- Count name occurrences so we can suffix #spellID on duplicates only.
+    local nameCounts = {}
+    for _, data in pairs(rawList) do
+        if data.name then nameCounts[data.name] = (nameCounts[data.name] or 0) + 1 end
+    end
 
     for id, data in pairs(rawList) do
         local usage = SB.GetSpellUsageInfo(id, isBar and currentKey or nil, not isBar and currentKey or nil)
@@ -91,15 +106,24 @@ local function GetChoicesTable(currentKey, isBar)
             end
         end
 
+        local displayName = data.name or "?"
+        if data.name and nameCounts[data.name] and nameCounts[data.name] > 1 then
+            displayName = displayName .. " |cFF888888#" .. tostring(id) .. "|r"
+        end
+
+        local pid = data.parentID
+        local seenBar  = knownBar[id]  or (pid and knownBar[pid])
+        local seenIcon = knownIcon[id] or (pid and knownIcon[pid])
+
         local typeLabel
-        local isActive = false 
-        if knownBar[id] and knownIcon[id] then
+        local isActive = false
+        if seenBar and seenIcon then
             typeLabel = "|cFF888888(Bar & Icon)|r"
             isActive = true
-        elseif knownBar[id] then
+        elseif seenBar then
             typeLabel = "|cFF888888(Bar)|r"
             isActive = true
-        elseif knownIcon[id] then
+        elseif seenIcon then
             typeLabel = "|cFF888888(Icon)|r"
             isActive = true
         elseif data.type and data.type ~= "Unknown" then
@@ -115,16 +139,16 @@ local function GetChoicesTable(currentKey, isBar)
 
         if usage then
             -- In-use by another slot — orange/yellow so it stands out but clearly unavailable
-            choices[tostring(id)] = iconStr .. "|cFFFF8800" .. data.name .. "|r |cFFAA6600(In use: " .. usage .. ")|r"
+            choices[tostring(id)] = iconStr .. "|cFFFF8800" .. displayName .. "|r |cFFAA6600(In use: " .. usage .. ")|r"
         elseif isActive then
             -- Active in CDM viewer — bright green (fetches talented\available stuff as well, not sure how to fix that)
-            choices[tostring(id)] = iconStr .. "|cFF00FF00" .. data.name .. "|r " .. typeLabel
+            choices[tostring(id)] = iconStr .. "|cFF00FF00" .. displayName .. "|r " .. typeLabel
         elseif data.type and data.type ~= "Unknown" then
             -- In CDM API but not active — light gray (probably not talented)
-            choices[tostring(id)] = iconStr .. "|cFFAAAAAA" .. data.name .. "|r " .. typeLabel
+            choices[tostring(id)] = iconStr .. "|cFFAAAAAA" .. displayName .. "|r " .. typeLabel
         else
             -- Unknown / not in CDM at all — dim
-            choices[tostring(id)] = iconStr .. "|cFF666666" .. data.name .. " " .. typeLabel .. "|r"
+            choices[tostring(id)] = iconStr .. "|cFF666666" .. displayName .. " " .. typeLabel .. "|r"
         end
     end
     return choices
@@ -135,7 +159,11 @@ local function GetSortedKeys()
     local keys = { "" }
     local sorted = {}
     for id in pairs(rawList) do sorted[#sorted+1] = id end
-    table.sort(sorted, function(a, b) return rawList[a].name < rawList[b].name end)
+    table.sort(sorted, function(a, b)
+        local na, nb = rawList[a].name or "", rawList[b].name or ""
+        if na == nb then return a < b end
+        return na < nb
+    end)
     for _, id in ipairs(sorted) do keys[#keys+1] = tostring(id) end
     return keys
 end

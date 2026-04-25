@@ -133,7 +133,29 @@ local function BuildCDMSpellList()
     local list = {}
     if not C_CooldownViewer then return list end
 
-    local seenNames = {}
+    -- First pass: count how many CDM rows share each parent spellID. If more than
+    -- one row points to the same spellID, the rows must be telling different
+    -- variants apart via linkedSpellIDs (e.g. Eclipse Solar/Lunar both share
+    -- parent 1239669 but link to 48517/48518). For those we key by the linked
+    -- ID so each variant becomes its own entry. Single-row spells stay keyed
+    -- by their spellID, which collapses Ascendant Eclipses' multiple rows
+    -- (different parent IDs but same name) into one — wait, that's the other
+    -- case. We additionally collapse same-name rows that already share key.
+    local rowSpellCount = {}
+    local function preCount(cat, includeAll)
+        if not cat then return end
+        local ids = C_CooldownViewer.GetCooldownViewerCategorySet(cat, includeAll)
+        if not ids then return end
+        for _, cdID in ipairs(ids) do
+            local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
+            if info then
+                local sid = info.overrideSpellID or info.spellID
+                if sid then rowSpellCount[sid] = (rowSpellCount[sid] or 0) + 1 end
+            end
+        end
+    end
+    preCount(CAT_BUFF, false); preCount(CAT_BAR, false)
+    preCount(CAT_BUFF, true);  preCount(CAT_BAR, true)
 
     local function collect(cat, label, includeAll, notDisplayedFlag)
         if not cat then return end
@@ -142,26 +164,27 @@ local function BuildCDMSpellList()
             for _, cdID in ipairs(ids) do
                 local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
                 if info then
-                    local spellID = info.overrideSpellID or info.spellID
-                    local spellInfo = spellID and C_Spell.GetSpellInfo(spellID)
-                    if spellInfo then
-                        local existingID = seenNames[spellInfo.name]
-                        if existingID and existingID ~= spellID then
-                            if list[existingID] then
-                                list[existingID].type = MergeType(list[existingID].type, label)
-                                if not notDisplayedFlag then list[existingID].notDisplayed = nil end
-                            end
-                        elseif not list[spellID] then
-                            list[spellID] = {
-                                name = spellInfo.name,
-                                icon = spellInfo.iconID,
+                    local parentID = info.overrideSpellID or info.spellID
+                    -- If multiple CDM rows share this parent, the linked ID
+                    -- distinguishes them; use it as the key so variants split.
+                    local key = parentID
+                    if parentID and rowSpellCount[parentID] and rowSpellCount[parentID] > 1
+                        and info.linkedSpellIDs and info.linkedSpellIDs[1] then
+                        key = info.linkedSpellIDs[1]
+                    end
+                    local displayInfo = key and C_Spell.GetSpellInfo(key)
+                    if displayInfo then
+                        if not list[key] then
+                            list[key] = {
+                                name = displayInfo.name,
+                                icon = displayInfo.iconID,
                                 type = label,
                                 notDisplayed = notDisplayedFlag or nil,
+                                parentID = parentID,
                             }
-                            seenNames[spellInfo.name] = spellID
                         else
-                            list[spellID].type = MergeType(list[spellID].type, label)
-                            if not notDisplayedFlag then list[spellID].notDisplayed = nil end
+                            list[key].type = MergeType(list[key].type, label)
+                            if not notDisplayedFlag then list[key].notDisplayed = nil end
                         end
                     end
                 end
@@ -174,16 +197,28 @@ local function BuildCDMSpellList()
     collect(CAT_BUFF, "Icon", true,  true)
     collect(CAT_BAR,  "Bar",  true,  true)
 
-    for spellID in pairs(knownBarSpells) do
-        if list[spellID] then
-            list[spellID].type = MergeType(list[spellID].type, "Bar")
-            list[spellID].notDisplayed = nil
-        end
-    end
-    for spellID in pairs(knownIconSpells) do
-        if list[spellID] then
-            list[spellID].type = MergeType(list[spellID].type, "Icon")
-            list[spellID].notDisplayed = nil
+    -- We don't collapse same-name entries here. Talent variants of the same
+    -- buff (e.g. Ascendant Eclipses parents 1261564 and 1261565) and real
+    -- distinct variants (e.g. Blooming Infusion's two linked auras) look the
+    -- same to the API. The dropdown disambiguates duplicates with #spellID.
+
+    -- Frame-type observation overrides API category. CDM's API sometimes lists
+    -- a spell under TrackedBar even though it actually renders as an icon
+    -- (e.g. Eclipse Solar/Lunar). When we've seen the parent frame live, trust
+    -- that over the API category.
+    for key, data in pairs(list) do
+        local pid = data.parentID
+        local isBarFrame  = (key and knownBarSpells[key])  or (pid and knownBarSpells[pid])
+        local isIconFrame = (key and knownIconSpells[key]) or (pid and knownIconSpells[pid])
+        if isBarFrame and isIconFrame then
+            data.type = "Bar & Icon"
+            data.notDisplayed = nil
+        elseif isBarFrame then
+            data.type = "Bar"
+            data.notDisplayed = nil
+        elseif isIconFrame then
+            data.type = "Icon"
+            data.notDisplayed = nil
         end
     end
 
@@ -563,15 +598,6 @@ local function HookCDMMixins()
                     knownIconSpells[si.spellID] = true
                     InvalidateSpellListCache()
                 end
-                if info.linkedSpellIDs then
-                    for _, lid in ipairs(info.linkedSpellIDs) do
-                        local ls = C_Spell.GetSpellInfo(lid)
-                        if ls and ls.spellID and not knownIconSpells[ls.spellID] then
-                            knownIconSpells[ls.spellID] = true
-                            InvalidateSpellListCache()
-                        end
-                    end
-                end
             end
         end
         TUI:QueueSpecialBarsUpdate()
@@ -585,15 +611,6 @@ local function HookCDMMixins()
                 if si and si.spellID and not knownBarSpells[si.spellID] then
                     knownBarSpells[si.spellID] = true
                     InvalidateSpellListCache()
-                end
-                if info.linkedSpellIDs then
-                    for _, lid in ipairs(info.linkedSpellIDs) do
-                        local ls = C_Spell.GetSpellInfo(lid)
-                        if ls and ls.spellID and not knownBarSpells[ls.spellID] then
-                            knownBarSpells[ls.spellID] = true
-                            InvalidateSpellListCache()
-                        end
-                    end
                 end
             end
         end
@@ -619,6 +636,8 @@ local function HookCDMWindow()
         cdmSettingsOpen    = true
         lastBarChildCount  = -1
         lastIconChildCount = -1
+        wipe(knownBarSpells)
+        wipe(knownIconSpells)
         InvalidateSpellListCache()
         if ns.MarkEnforceDirty then ns.MarkEnforceDirty() end
         TUI:QueueSpecialBarsUpdate()
@@ -628,6 +647,8 @@ local function HookCDMWindow()
         cdmSettingsOpen    = false
         lastBarChildCount  = -1
         lastIconChildCount = -1
+        wipe(knownBarSpells)
+        wipe(knownIconSpells)
         InvalidateSpellListCache()
         if ns.MarkEnforceDirty then ns.MarkEnforceDirty() end
         C_Timer.After(0.1, _onCDMHideDeferred)
