@@ -601,184 +601,191 @@ function TUI.ConfigTable()
                         type = "group",
                         name = "Layout",
                         args = {
-                            layoutHeader = {
+                            sizeGroup = {
                                 order = 1,
-                                type = "header",
+                                type = "group",
                                 name = "Size & Spacing",
-                            },
-                            growthDirection = {
-                                order = 2,
-                                type = "select",
-                                name = "Growth Direction",
-                                desc = "Direction the bars grow.",
-                                values = {
-                                    ["UP"] = "Up",
-                                    ["DOWN"] = "Down",
+                                inline = true,
+                                args = {
+                                    growthDirection = {
+                                        order = 1,
+                                        type = "select",
+                                        name = "Growth Direction",
+                                        desc = "Direction the bars grow.",
+                                        values = {
+                                            ["UP"] = "Up",
+                                            ["DOWN"] = "Down",
+                                        },
+                                        get = function() return E.db.thingsUI.buffBars.growthDirection end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.growthDirection = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
+                                    width = {
+                                        order = 2,
+                                        type = "range",
+                                        name = "Width",
+                                        min = 100, max = 400, step = 0.01, bigStep = 1,
+                                        get = function() return E.db.thingsUI.buffBars.width end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.width = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                        disabled = function() return E.db.thingsUI.buffBars.inheritWidth end,
+                                    },
+                                    inheritWidth = {
+                                        order = 3,
+                                        type = "toggle",
+                                        name = "Inherit Width from Anchor",
+                                        desc = "Automatically match the width of the anchor frame. Requires anchoring to be enabled.",
+                                        get = function() return E.db.thingsUI.buffBars.inheritWidth end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.inheritWidth = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
+                                    inheritWidthOffset = {
+                                        order = 4,
+                                        type = "range",
+                                        name = "Width Nudge",
+                                        desc = "Fine-tune the inherited width. Add or subtract pixels from the anchor's width.",
+                                        min = -10, max = 10, step = 0.01, bigStep = 0.5,
+                                        get = function() return E.db.thingsUI.buffBars.inheritWidthOffset end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.inheritWidthOffset = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.buffBars.inheritWidth end,
+                                    },
+                                    height = {
+                                        order = 5,
+                                        type = "range",
+                                        name = "Height",
+                                        min = 10, max = 40, step = 0.01, bigStep = 1,
+                                        get = function() return E.db.thingsUI.buffBars.height end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.height = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
+                                    spacing = {
+                                        order = 6,
+                                        type = "range",
+                                        name = "Spacing",
+                                        min = -10, max = 10, step = 0.01, bigStep = 1,
+                                        get = function() return E.db.thingsUI.buffBars.spacing end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.spacing = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
                                 },
-                                get = function() return E.db.thingsUI.buffBars.growthDirection end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.growthDirection = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
                             },
-                            width = {
-                                order = 3,
-                                type = "range",
-                                name = "Width",
-                                min = 100, max = 400, step = 0.01, bigStep = 1,
-                                get = function() return E.db.thingsUI.buffBars.width end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.width = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                                disabled = function() return E.db.thingsUI.buffBars.inheritWidth end,
-                            },
-                            inheritWidth = {
-                                order = 4,
-                                type = "toggle",
-                                name = "Inherit Width from Anchor",
-                                desc = "Automatically match the width of the anchor frame. Requires anchoring to be enabled.",
-                                get = function() return E.db.thingsUI.buffBars.inheritWidth end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.inheritWidth = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                            inheritWidthOffset = {
-                                order = 5,
-                                type = "range",
-                                name = "Width Nudge",
-                                desc = "Fine-tune the inherited width. Add or subtract pixels from the anchor's width.",
-                                min = -10, max = 10, step = 0.01, bigStep = 0.5,
-                                get = function() return E.db.thingsUI.buffBars.inheritWidthOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.inheritWidthOffset = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                                disabled = function() return not E.db.thingsUI.buffBars.inheritWidth end,
-                            },
-                            height = {
-                                order = 6,
-                                type = "range",
-                                name = "Height",
-                                min = 10, max = 40, step = 0.01, bigStep = 1,
-                                get = function() return E.db.thingsUI.buffBars.height end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.height = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                            spacing = {
-                                order = 7,
-                                type = "range",
-                                name = "Spacing",
-                                min = -10, max = 10, step = 0.01, bigStep = 1,
-                                get = function() return E.db.thingsUI.buffBars.spacing end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.spacing = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                            
-                            textureHeader = {
-                                order = 10,
-                                type = "header",
+                            textureGroup = {
+                                order = 2,
+                                type = "group",
                                 name = "Textures & Colors",
+                                inline = true,
+                                args = {
+                                    statusBarTexture = {
+                                        order = 1,
+                                        type = "select",
+                                        name = "Status Bar Texture",
+                                        dialogControl = "LSM30_Statusbar",
+                                        values = LSM:HashTable("statusbar"),
+                                        get = function() return E.db.thingsUI.buffBars.statusBarTexture end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.statusBarTexture = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
+                                    useClassColor = {
+                                        order = 2,
+                                        type = "toggle",
+                                        name = "Use Class Color",
+                                        desc = "Color the bar based on your class.",
+                                        get = function() return E.db.thingsUI.buffBars.useClassColor end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.useClassColor = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
+                                    customColor = {
+                                        order = 3,
+                                        type = "color",
+                                        name = "Custom Bar Color",
+                                        desc = "Custom color when not using class color.",
+                                        hasAlpha = false,
+                                        disabled = function() return E.db.thingsUI.buffBars.useClassColor end,
+                                        get = function()
+                                            local c = E.db.thingsUI.buffBars.customColor
+                                            return c.r, c.g, c.b
+                                        end,
+                                        set = function(_, r, g, b)
+                                            E.db.thingsUI.buffBars.customColor = { r = r, g = g, b = b }
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
+                                },
                             },
-                            statusBarTexture = {
-                                order = 11,
-                                type = "select",
-                                name = "Status Bar Texture",
-                                dialogControl = "LSM30_Statusbar",
-                                values = LSM:HashTable("statusbar"),
-                                get = function() return E.db.thingsUI.buffBars.statusBarTexture end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.statusBarTexture = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                            useClassColor = {
-                                order = 12,
-                                type = "toggle",
-                                name = "Use Class Color",
-                                desc = "Color the bar based on your class.",
-                                get = function() return E.db.thingsUI.buffBars.useClassColor end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.useClassColor = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                            customColor = {
-                                order = 13,
-                                type = "color",
-                                name = "Custom Bar Color",
-                                desc = "Custom color when not using class color.",
-                                hasAlpha = false,
-                                disabled = function() return E.db.thingsUI.buffBars.useClassColor end,
-                                get = function()
-                                    local c = E.db.thingsUI.buffBars.customColor
-                                    return c.r, c.g, c.b
-                                end,
-                                set = function(_, r, g, b)
-                                    E.db.thingsUI.buffBars.customColor = { r = r, g = g, b = b }
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                            
-                            iconHeader = {
-                                order = 20,
-                                type = "header",
+                            iconGroup = {
+                                order = 3,
+                                type = "group",
                                 name = "Icon",
-                            },
-                            iconEnabled = {
-                                order = 21,
-                                type = "toggle",
-                                name = "Show Icon",
-                                desc = "Display the spell icon next to the bar.",
-                                get = function() return E.db.thingsUI.buffBars.iconEnabled end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.iconEnabled = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                            iconSpacing = {
-                                order = 22,
-                                type = "range",
-                                name = "Icon Spacing",
-                                desc = "Gap between the icon and the bar.",
-                                min = 0, max = 10, step = 0.01, bigStep = 1,
-                                get = function() return E.db.thingsUI.buffBars.iconSpacing end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.iconSpacing = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
-                            },
-                            iconZoom = {
-                                order = 23,
-                                type = "range",
-                                name = "Icon Zoom",
-                                desc = "How much to crop the icon edges. 0 = no crop (full texture), 0.1 = ElvUI default.",
-                                min = 0, max = 0.45, step = 0.01,
-                                isPercent = true,
-                                get = function() return E.db.thingsUI.buffBars.iconZoom end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.iconZoom = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                                inline = true,
+                                args = {
+                                    iconEnabled = {
+                                        order = 1,
+                                        type = "toggle",
+                                        name = "Show Icon",
+                                        desc = "Display the spell icon next to the bar.",
+                                        get = function() return E.db.thingsUI.buffBars.iconEnabled end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.iconEnabled = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
+                                    iconSpacing = {
+                                        order = 2,
+                                        type = "range",
+                                        name = "Icon Spacing",
+                                        desc = "Gap between the icon and the bar.",
+                                        min = 0, max = 10, step = 0.01, bigStep = 1,
+                                        get = function() return E.db.thingsUI.buffBars.iconSpacing end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.iconSpacing = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                                    },
+                                    iconZoom = {
+                                        order = 3,
+                                        type = "range",
+                                        name = "Icon Zoom",
+                                        desc = "How much to crop the icon edges. 0 = no crop (full texture), 0.1 = ElvUI default.",
+                                        min = 0, max = 0.45, step = 0.01,
+                                        isPercent = true,
+                                        get = function() return E.db.thingsUI.buffBars.iconZoom end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.iconZoom = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                                    },
+                                },
                             },
                         },
                     },
@@ -791,253 +798,262 @@ function TUI.ConfigTable()
                         type = "group",
                         name = "Text",
                         args = {
-                            fontHeader = {
+                            fontGroup = {
                                 order = 1,
-                                type = "header",
+                                type = "group",
                                 name = "Font",
+                                inline = true,
+                                args = {
+                                    font = {
+                                        order = 1,
+                                        type = "select",
+                                        name = "Font",
+                                        dialogControl = "LSM30_Font",
+                                        values = LSM:HashTable("font"),
+                                        get = function() return E.db.thingsUI.buffBars.font end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.font = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
+                                    fontSize = {
+                                        order = 2,
+                                        type = "range",
+                                        name = "Font Size",
+                                        min = 8, max = 50, step = 1,
+                                        get = function() return E.db.thingsUI.buffBars.fontSize end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.fontSize = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
+                                    fontOutline = {
+                                        order = 3,
+                                        type = "select",
+                                        name = "Font Outline",
+                                        desc = "Outline for Name and Duration text.",
+                                        values = {
+                                            ["NONE"] = "None",
+                                            ["OUTLINE"] = "Outline",
+                                            ["THICKOUTLINE"] = "Thick Outline",
+                                            ["MONOCHROME"] = "Monochrome",
+                                        },
+                                        get = function() return E.db.thingsUI.buffBars.fontOutline end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.fontOutline = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
+                                },
                             },
-                            font = {
+                            nameTextGroup = {
                                 order = 2,
-                                type = "select",
-                                name = "Font",
-                                dialogControl = "LSM30_Font",
-                                values = LSM:HashTable("font"),
-                                get = function() return E.db.thingsUI.buffBars.font end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.font = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                            fontSize = {
-                                order = 3,
-                                type = "range",
-                                name = "Font Size",
-                                min = 8, max = 50, step = 1,
-                                get = function() return E.db.thingsUI.buffBars.fontSize end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.fontSize = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                            fontOutline = {
-                                order = 4,
-                                type = "select",
-                                name = "Font Outline",
-                                desc = "Outline for Name and Duration text.",
-                                values = {
-                                    ["NONE"] = "None",
-                                    ["OUTLINE"] = "Outline",
-                                    ["THICKOUTLINE"] = "Thick Outline",
-                                    ["MONOCHROME"] = "Monochrome",
-                                },
-                                get = function() return E.db.thingsUI.buffBars.fontOutline end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.fontOutline = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                            
-                            nameTextHeader = {
-                                order = 10,
-                                type = "header",
+                                type = "group",
                                 name = "Name Text",
-                            },
-                            namePoint = {
-                                order = 11,
-                                type = "select",
-                                name = "Name Alignment",
-                                desc = "Anchor point for the spell name text.",
-                                values = {
-                                    ["LEFT"] = "Left",
-                                    ["CENTER"] = "Center",
-                                    ["RIGHT"] = "Right",
+                                inline = true,
+                                args = {
+                                    namePoint = {
+                                        order = 1,
+                                        type = "select",
+                                        name = "Name Alignment",
+                                        desc = "Anchor point for the spell name text.",
+                                        values = {
+                                            ["LEFT"] = "Left",
+                                            ["CENTER"] = "Center",
+                                            ["RIGHT"] = "Right",
+                                        },
+                                        get = function() return E.db.thingsUI.buffBars.namePoint end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.namePoint = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
+                                    nameXOffset = {
+                                        order = 2,
+                                        type = "range",
+                                        name = "Name X Offset",
+                                        min = -50, max = 50, step = 0.5,
+                                        get = function() return E.db.thingsUI.buffBars.nameXOffset end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.nameXOffset = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
+                                    nameYOffset = {
+                                        order = 3,
+                                        type = "range",
+                                        name = "Name Y Offset",
+                                        min = -20, max = 20, step = 0.5,
+                                        get = function() return E.db.thingsUI.buffBars.nameYOffset end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.nameYOffset = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
                                 },
-                                get = function() return E.db.thingsUI.buffBars.namePoint end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.namePoint = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
                             },
-                            nameXOffset = {
-                                order = 12,
-                                type = "range",
-                                name = "Name X Offset",
-                                min = -50, max = 50, step = 0.5,
-                                get = function() return E.db.thingsUI.buffBars.nameXOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.nameXOffset = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                            nameYOffset = {
-                                order = 13,
-                                type = "range",
-                                name = "Name Y Offset",
-                                min = -20, max = 20, step = 0.5,
-                                get = function() return E.db.thingsUI.buffBars.nameYOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.nameYOffset = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                            
-                            durationTextHeader = {
-                                order = 20,
-                                type = "header",
+                            durationTextGroup = {
+                                order = 3,
+                                type = "group",
                                 name = "Duration Text",
-                            },
-                            durationPoint = {
-                                order = 21,
-                                type = "select",
-                                name = "Duration Alignment",
-                                desc = "Anchor point for the duration text.",
-                                values = {
-                                    ["LEFT"] = "Left",
-                                    ["CENTER"] = "Center",
-                                    ["RIGHT"] = "Right",
+                                inline = true,
+                                args = {
+                                    durationPoint = {
+                                        order = 1,
+                                        type = "select",
+                                        name = "Duration Alignment",
+                                        desc = "Anchor point for the duration text.",
+                                        values = {
+                                            ["LEFT"] = "Left",
+                                            ["CENTER"] = "Center",
+                                            ["RIGHT"] = "Right",
+                                        },
+                                        get = function() return E.db.thingsUI.buffBars.durationPoint end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.durationPoint = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
+                                    durationXOffset = {
+                                        order = 2,
+                                        type = "range",
+                                        name = "Duration X Offset",
+                                        min = -50, max = 50, step = 0.5,
+                                        get = function() return E.db.thingsUI.buffBars.durationXOffset end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.durationXOffset = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
+                                    durationYOffset = {
+                                        order = 3,
+                                        type = "range",
+                                        name = "Duration Y Offset",
+                                        min = -20, max = 20, step = 0.5,
+                                        get = function() return E.db.thingsUI.buffBars.durationYOffset end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.durationYOffset = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
                                 },
-                                get = function() return E.db.thingsUI.buffBars.durationPoint end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.durationPoint = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
                             },
-                            durationXOffset = {
-                                order = 22,
-                                type = "range",
-                                name = "Duration X Offset",
-                                min = -50, max = 50, step = 0.5,
-                                get = function() return E.db.thingsUI.buffBars.durationXOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.durationXOffset = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                            durationYOffset = {
-                                order = 23,
-                                type = "range",
-                                name = "Duration Y Offset",
-                                min = -20, max = 20, step = 0.5,
-                                get = function() return E.db.thingsUI.buffBars.durationYOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.durationYOffset = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                            
-                            stackHeader = {
-                                order = 30,
-                                type = "header",
+                            stackGroup = {
+                                order = 4,
+                                type = "group",
                                 name = "Stack Count",
-                            },
-                            stackAnchor = {
-                                order = 30.5,
-                                type = "select",
-                                name = "Stack Anchor",
-                                desc = "Anchor the stack count to the Icon or the Bar.",
-                                values = {
-                                    ["ICON"] = "Icon",
-                                    ["BAR"] = "Bar",
+                                inline = true,
+                                args = {
+                                    stackAnchor = {
+                                        order = 1,
+                                        type = "select",
+                                        name = "Stack Anchor",
+                                        desc = "Anchor the stack count to the Icon or the Bar.",
+                                        values = {
+                                            ["ICON"] = "Icon",
+                                            ["BAR"] = "Bar",
+                                        },
+                                        get = function() return E.db.thingsUI.buffBars.stackAnchor end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.stackAnchor = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                                    },
+                                    stackPoint = {
+                                        order = 2,
+                                        type = "select",
+                                        name = "Stack Position",
+                                        desc = "Anchor point for the stack count on the icon.",
+                                        values = {
+                                            ["CENTER"] = "Center",
+                                            ["LEFT"] = "Left",
+                                            ["RIGHT"] = "Right",
+                                            ["TOP"] = "Top",
+                                            ["BOTTOM"] = "Bottom",
+                                            ["TOPLEFT"] = "Top Left",
+                                            ["TOPRIGHT"] = "Top Right",
+                                            ["BOTTOMLEFT"] = "Bottom Left",
+                                            ["BOTTOMRIGHT"] = "Bottom Right",
+                                        },
+                                        get = function() return E.db.thingsUI.buffBars.stackPoint end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.stackPoint = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                                    },
+                                    stackFontSize = {
+                                        order = 3,
+                                        type = "range",
+                                        name = "Stack Font Size",
+                                        desc = "Font size for the stack count on icons.",
+                                        min = 6, max = 50, step = 1,
+                                        get = function() return E.db.thingsUI.buffBars.stackFontSize end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.stackFontSize = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                                    },
+                                    stackFontOutline = {
+                                        order = 4,
+                                        type = "select",
+                                        name = "Stack Font Outline",
+                                        values = {
+                                            ["NONE"] = "None",
+                                            ["OUTLINE"] = "Outline",
+                                            ["THICKOUTLINE"] = "Thick Outline",
+                                        },
+                                        get = function() return E.db.thingsUI.buffBars.stackFontOutline end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.stackFontOutline = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                                    },
+                                    stackXOffset = {
+                                        order = 5,
+                                        type = "range",
+                                        name = "Stack X Offset",
+                                        desc = "Horizontal offset for the stack count text.",
+                                        min = -20, max = 20, step = 0.5,
+                                        get = function() return E.db.thingsUI.buffBars.stackXOffset end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.stackXOffset = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                                    },
+                                    stackYOffset = {
+                                        order = 6,
+                                        type = "range",
+                                        name = "Stack Y Offset",
+                                        desc = "Vertical offset for the stack count text.",
+                                        min = -20, max = 20, step = 0.5,
+                                        get = function() return E.db.thingsUI.buffBars.stackYOffset end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.stackYOffset = value
+                                            wipe(ns.skinnedBars)
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                                    },
                                 },
-                                get = function() return E.db.thingsUI.buffBars.stackAnchor end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.stackAnchor = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
-                            },
-                            stackPoint = {
-                                order = 31,
-                                type = "select",
-                                name = "Stack Position",
-                                desc = "Anchor point for the stack count on the icon.",
-                                values = {
-                                    ["CENTER"] = "Center",
-                                    ["LEFT"] = "Left",
-                                    ["RIGHT"] = "Right",
-                                    ["TOP"] = "Top",
-                                    ["BOTTOM"] = "Bottom",
-                                    ["TOPLEFT"] = "Top Left",
-                                    ["TOPRIGHT"] = "Top Right",
-                                    ["BOTTOMLEFT"] = "Bottom Left",
-                                    ["BOTTOMRIGHT"] = "Bottom Right",
-                                },
-                                get = function() return E.db.thingsUI.buffBars.stackPoint end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.stackPoint = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
-                            },
-                            stackFontSize = {
-                                order = 32,
-                                type = "range",
-                                name = "Stack Font Size",
-                                desc = "Font size for the stack count on icons.",
-                                min = 6, max = 50, step = 1,
-                                get = function() return E.db.thingsUI.buffBars.stackFontSize end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.stackFontSize = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
-                            },
-                            stackFontOutline = {
-                                order = 33,
-                                type = "select",
-                                name = "Stack Font Outline",
-                                values = {
-                                    ["NONE"] = "None",
-                                    ["OUTLINE"] = "Outline",
-                                    ["THICKOUTLINE"] = "Thick Outline",
-                                },
-                                get = function() return E.db.thingsUI.buffBars.stackFontOutline end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.stackFontOutline = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
-                            },
-                            stackXOffset = {
-                                order = 34,
-                                type = "range",
-                                name = "Stack X Offset",
-                                desc = "Horizontal offset for the stack count text.",
-                                min = -20, max = 20, step = 0.5,
-                                get = function() return E.db.thingsUI.buffBars.stackXOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.stackXOffset = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
-                            },
-                            stackYOffset = {
-                                order = 35,
-                                type = "range",
-                                name = "Stack Y Offset",
-                                desc = "Vertical offset for the stack count text.",
-                                min = -20, max = 20, step = 0.5,
-                                get = function() return E.db.thingsUI.buffBars.stackYOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.stackYOffset = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
                             },
                         },
                     },
@@ -1050,104 +1066,107 @@ function TUI.ConfigTable()
                         type = "group",
                         name = "Anchoring",
                         args = {
-                            anchorHeader = {
+                            anchorSettingsGroup = {
                                 order = 1,
-                                type = "header",
+                                type = "group",
                                 name = "Anchor Settings",
-                            },
-                            anchorEnabled = {
-                                order = 2,
-                                type = "toggle",
-                                name = "Enable Anchoring",
-                                desc = "Anchor the buff bar container to another frame.",
-                                get = function() return E.db.thingsUI.buffBars.anchorEnabled end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.anchorEnabled = value
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                            anchorFrame = {
-                                order = 3,
-                                type = "select",
-                                name = "Anchor Frame",
-                                desc = "Select a frame to anchor to.",
-                                values = SHARED_ANCHOR_VALUES,
-                                get = function() return E.db.thingsUI.buffBars.anchorFrame end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.anchorFrame = value
-                                    TUI:UpdateBuffBars()
-                                end,
-                                disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
-                            },
-                            anchorPoint = {
-                                order = 4,
-                                type = "select",
-                                name = "Anchor From",
-                                desc = "The point on the buff bars to anchor.",
-                                values = {
-                                    ["TOP"] = "TOP",
-                                    ["BOTTOM"] = "BOTTOM",
-                                    ["LEFT"] = "LEFT",
-                                    ["RIGHT"] = "RIGHT",
-                                    ["CENTER"] = "CENTER",
-                                    ["TOPLEFT"] = "TOPLEFT",
-                                    ["TOPRIGHT"] = "TOPRIGHT",
-                                    ["BOTTOMLEFT"] = "BOTTOMLEFT",
-                                    ["BOTTOMRIGHT"] = "BOTTOMRIGHT",
+                                inline = true,
+                                args = {
+                                    anchorEnabled = {
+                                        order = 1,
+                                        type = "toggle",
+                                        name = "Enable Anchoring",
+                                        desc = "Anchor the buff bar container to another frame.",
+                                        get = function() return E.db.thingsUI.buffBars.anchorEnabled end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.anchorEnabled = value
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                    },
+                                    anchorFrame = {
+                                        order = 2,
+                                        type = "select",
+                                        name = "Anchor Frame",
+                                        desc = "Select a frame to anchor to.",
+                                        values = SHARED_ANCHOR_VALUES,
+                                        get = function() return E.db.thingsUI.buffBars.anchorFrame end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.anchorFrame = value
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
+                                    },
+                                    anchorPoint = {
+                                        order = 3,
+                                        type = "select",
+                                        name = "Anchor From",
+                                        desc = "The point on the buff bars to anchor.",
+                                        values = {
+                                            ["TOP"] = "TOP",
+                                            ["BOTTOM"] = "BOTTOM",
+                                            ["LEFT"] = "LEFT",
+                                            ["RIGHT"] = "RIGHT",
+                                            ["CENTER"] = "CENTER",
+                                            ["TOPLEFT"] = "TOPLEFT",
+                                            ["TOPRIGHT"] = "TOPRIGHT",
+                                            ["BOTTOMLEFT"] = "BOTTOMLEFT",
+                                            ["BOTTOMRIGHT"] = "BOTTOMRIGHT",
+                                        },
+                                        get = function() return E.db.thingsUI.buffBars.anchorPoint end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.anchorPoint = value
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
+                                    },
+                                    anchorRelativePoint = {
+                                        order = 4,
+                                        type = "select",
+                                        name = "Anchor To",
+                                        desc = "The point on the target frame to anchor to.",
+                                        values = {
+                                            ["TOP"] = "TOP",
+                                            ["BOTTOM"] = "BOTTOM",
+                                            ["LEFT"] = "LEFT",
+                                            ["RIGHT"] = "RIGHT",
+                                            ["CENTER"] = "CENTER",
+                                            ["TOPLEFT"] = "TOPLEFT",
+                                            ["TOPRIGHT"] = "TOPRIGHT",
+                                            ["BOTTOMLEFT"] = "BOTTOMLEFT",
+                                            ["BOTTOMRIGHT"] = "BOTTOMRIGHT",
+                                        },
+                                        get = function() return E.db.thingsUI.buffBars.anchorRelativePoint end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.anchorRelativePoint = value
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
+                                    },
+                                    anchorXOffset = {
+                                        order = 5,
+                                        type = "range",
+                                        name = "X Offset",
+                                        min = -500, max = 500, step = 0.01, bigStep = 1,
+                                        get = function() return E.db.thingsUI.buffBars.anchorXOffset end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.anchorXOffset = value
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
+                                    },
+                                    anchorYOffset = {
+                                        order = 6,
+                                        type = "range",
+                                        name = "Y Offset",
+                                        min = -500, max = 500, step = 0.01, bigStep = 1,
+                                        get = function() return E.db.thingsUI.buffBars.anchorYOffset end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.buffBars.anchorYOffset = value
+                                            TUI:UpdateBuffBars()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
+                                    },
                                 },
-                                get = function() return E.db.thingsUI.buffBars.anchorPoint end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.anchorPoint = value
-                                    TUI:UpdateBuffBars()
-                                end,
-                                disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
-                            },
-                            anchorRelativePoint = {
-                                order = 5,
-                                type = "select",
-                                name = "Anchor To",
-                                desc = "The point on the target frame to anchor to.",
-                                values = {
-                                    ["TOP"] = "TOP",
-                                    ["BOTTOM"] = "BOTTOM",
-                                    ["LEFT"] = "LEFT",
-                                    ["RIGHT"] = "RIGHT",
-                                    ["CENTER"] = "CENTER",
-                                    ["TOPLEFT"] = "TOPLEFT",
-                                    ["TOPRIGHT"] = "TOPRIGHT",
-                                    ["BOTTOMLEFT"] = "BOTTOMLEFT",
-                                    ["BOTTOMRIGHT"] = "BOTTOMRIGHT",
-                                },
-                                get = function() return E.db.thingsUI.buffBars.anchorRelativePoint end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.anchorRelativePoint = value
-                                    TUI:UpdateBuffBars()
-                                end,
-                                disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
-                            },
-                            anchorXOffset = {
-                                order = 6,
-                                type = "range",
-                                name = "X Offset",
-                                min = -500, max = 500, step = 0.01, bigStep = 1,
-                                get = function() return E.db.thingsUI.buffBars.anchorXOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.anchorXOffset = value
-                                    TUI:UpdateBuffBars()
-                                end,
-                                disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
-                            },
-                            anchorYOffset = {
-                                order = 7,
-                                type = "range",
-                                name = "Y Offset",
-                                min = -500, max = 500, step = 0.01, bigStep = 1,
-                                get = function() return E.db.thingsUI.buffBars.anchorYOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.anchorYOffset = value
-                                    TUI:UpdateBuffBars()
-                                end,
-                                disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,
                             },
                         },
                     },
@@ -1199,34 +1218,37 @@ function TUI.ConfigTable()
                         func = function() TUI:RecalculateCluster() end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
-                    debugHeader = {
+                    debugGroup = {
                         order = 5,
-                        type = "header",
+                        type = "group",
                         name = "Debug Info",
-                    },
-                    currentLayout = {
-                        order = 6,
-                        type = "description",
-                        name = function()
-                            local essentialCount = 0
-                            if EssentialCooldownViewer then
-                                for _, child in ipairs({ EssentialCooldownViewer:GetChildren() }) do
-                                    if child and child:IsShown() then essentialCount = essentialCount + 1 end
-                                end
-                            end
-                            local utilityCount = 0
-                            if UtilityCooldownViewer then
-                                for _, child in ipairs({ UtilityCooldownViewer:GetChildren() }) do
-                                    if child and child:IsShown() then utilityCount = utilityCount + 1 end
-                                end
-                            end
-                            return string.format("|cFFFFFF00Essential Icons:|r %d\n|cFFFFFF00Utility Icons:|r %d", essentialCount, utilityCount)
-                        end,
-                    },
-                    debugInfo = {
-                        order = 9,
-                        type = "description",
-                        name = "If Utility Icons exceed Essential Icons by the number you set in Icon Settings -> Utility Threshold, UnitFrames will move. \n\nUseful if you have way more Utility than Essential and it starts to overlap.\n",
+                        inline = true,
+                        args = {
+                            currentLayout = {
+                                order = 1,
+                                type = "description",
+                                name = function()
+                                    local essentialCount = 0
+                                    if EssentialCooldownViewer then
+                                        for _, child in ipairs({ EssentialCooldownViewer:GetChildren() }) do
+                                            if child and child:IsShown() then essentialCount = essentialCount + 1 end
+                                        end
+                                    end
+                                    local utilityCount = 0
+                                    if UtilityCooldownViewer then
+                                        for _, child in ipairs({ UtilityCooldownViewer:GetChildren() }) do
+                                            if child and child:IsShown() then utilityCount = utilityCount + 1 end
+                                        end
+                                    end
+                                    return string.format("|cFFFFFF00Essential Icons:|r %d\n|cFFFFFF00Utility Icons:|r %d", essentialCount, utilityCount)
+                                end,
+                            },
+                            debugInfo = {
+                                order = 2,
+                                type = "description",
+                                name = "\nIf Utility Icons exceed Essential Icons by the number you set in Icon Settings -> Utility Threshold, UnitFrames will move. \n\nUseful if you have way more Utility than Essential and it starts to overlap.\n",
+                            },
+                        },
                     },
                     
                     -----------------------------------------
@@ -1323,117 +1345,124 @@ function TUI.ConfigTable()
                         name = "UnitFrame Settings",
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                         args = {
-                            playerTargetHeader = {
+                            playerTargetGroup = {
                                 order = 1,
-                                type = "header",
+                                type = "group",
                                 name = "Player / Target Frame",
+                                inline = true,
+                                args = {
+                                    playerEnabled = {
+                                        order = 1,
+                                        type = "toggle",
+                                        name = "Position Player Frame",
+                                        desc = "Anchor ElvUF_Player to the left of Essential.",
+                                        get = function() return E.db.thingsUI.clusterPositioning.playerFrame.enabled end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.clusterPositioning.playerFrame.enabled = value
+                                            TUI:QueueClusterUpdate()
+                                        end,
+                                    },
+                                    targetEnabled = {
+                                        order = 2,
+                                        type = "toggle",
+                                        name = "Position Target Frame",
+                                        desc = "Anchor ElvUF_Target to the right of Essential.",
+                                        get = function() return E.db.thingsUI.clusterPositioning.targetFrame.enabled end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.clusterPositioning.targetFrame.enabled = value
+                                            TUI:QueueClusterUpdate()
+                                        end,
+                                    },
+                                    frameGap = {
+                                        order = 3,
+                                        type = "range",
+                                        name = "Frame Gap",
+                                        desc = "Gap between Player/Target frames and Essential.",
+                                        min = -50, max = 50, step = 1,
+                                        get = function() return E.db.thingsUI.clusterPositioning.frameGap end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.clusterPositioning.frameGap = value
+                                            TUI:QueueClusterUpdate()
+                                        end,
+                                    },
+                                },
                             },
-                            playerEnabled = {
+                            totGroup = {
                                 order = 2,
-                                type = "toggle",
-                                name = "Position Player Frame",
-                                desc = "Anchor ElvUF_Player to the left of Essential.",
-                                get = function() return E.db.thingsUI.clusterPositioning.playerFrame.enabled end,
-                                set = function(_, value)
-                                    E.db.thingsUI.clusterPositioning.playerFrame.enabled = value
-                                    TUI:QueueClusterUpdate()
-                                end,
-                            },
-                            targetEnabled = {
-                                order = 3,
-                                type = "toggle",
-                                name = "Position Target Frame",
-                                desc = "Anchor ElvUF_Target to the right of Essential.",
-                                get = function() return E.db.thingsUI.clusterPositioning.targetFrame.enabled end,
-                                set = function(_, value)
-                                    E.db.thingsUI.clusterPositioning.targetFrame.enabled = value
-                                    TUI:QueueClusterUpdate()
-                                end,
-                            },
-                            frameGap = {
-                                order = 4,
-                                type = "range",
-                                name = "Frame Gap",
-                                desc = "Gap between Player/Target frames and Essential.",
-                                min = -50, max = 50, step = 1,
-                                get = function() return E.db.thingsUI.clusterPositioning.frameGap end,
-                                set = function(_, value)
-                                    E.db.thingsUI.clusterPositioning.frameGap = value
-                                    TUI:QueueClusterUpdate()
-                                end,
-                            },
-                            
-                            totHeader = {
-                                order = 10,
-                                type = "header",
+                                type = "group",
                                 name = "Target of Target Frame",
+                                inline = true,
+                                args = {
+                                    totEnabled = {
+                                        order = 1,
+                                        type = "toggle",
+                                        name = "Position TargetTarget Frame",
+                                        desc = "Anchor ElvUF_TargetTarget to the target frame.",
+                                        get = function() return E.db.thingsUI.clusterPositioning.targetTargetFrame.enabled end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.clusterPositioning.targetTargetFrame.enabled = value
+                                            TUI:QueueClusterUpdate()
+                                        end,
+                                    },
+                                    totGap = {
+                                        order = 2,
+                                        type = "range",
+                                        name = "ToT Gap",
+                                        desc = "Gap between TargetTarget and Target frame.",
+                                        min = -50, max = 50, step = 1,
+                                        get = function() return E.db.thingsUI.clusterPositioning.targetTargetFrame.gap end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.clusterPositioning.targetTargetFrame.gap = value
+                                            TUI:QueueClusterUpdate()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.targetTargetFrame.enabled end,
+                                    },
+                                },
                             },
-                            totEnabled = {
-                                order = 11,
-                                type = "toggle",
-                                name = "Position TargetTarget Frame",
-                                desc = "Anchor ElvUF_TargetTarget to the target frame.",
-                                get = function() return E.db.thingsUI.clusterPositioning.targetTargetFrame.enabled end,
-                                set = function(_, value)
-                                    E.db.thingsUI.clusterPositioning.targetTargetFrame.enabled = value
-                                    TUI:QueueClusterUpdate()
-                                end,
-                            },
-                            totGap = {
-                                order = 12,
-                                type = "range",
-                                name = "ToT Gap",
-                                desc = "Gap between TargetTarget and Target frame.",
-                                min = -50, max = 50, step = 1,
-                                get = function() return E.db.thingsUI.clusterPositioning.targetTargetFrame.gap end,
-                                set = function(_, value)
-                                    E.db.thingsUI.clusterPositioning.targetTargetFrame.gap = value
-                                    TUI:QueueClusterUpdate()
-                                end,
-                                disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.targetTargetFrame.enabled end,
-                            },
-                            
-                            castBarHeader = {
-                                order = 20,
-                                type = "header",
+                            castBarGroup = {
+                                order = 3,
+                                type = "group",
                                 name = "Target Cast Bar",
-                            },
-                            castBarEnabled = {
-                                order = 21,
-                                type = "toggle",
-                                name = "Position Target CastBar",
-                                desc = "Anchor ElvUF_Target_CastBar below the target frame.",
-                                get = function() return E.db.thingsUI.clusterPositioning.targetCastBar.enabled end,
-                                set = function(_, value)
-                                    E.db.thingsUI.clusterPositioning.targetCastBar.enabled = value
-                                    TUI:UpdateClusterPositioning()
-                                end,
-                            },
-                            castBarGap = {
-                                order = 22,
-                                type = "range",
-                                name = "CastBar Y Gap",
-                                desc = "Vertical gap between Target frame and CastBar.",
-                                min = -50, max = 50, step = 1,
-                                get = function() return E.db.thingsUI.clusterPositioning.targetCastBar.gap end,
-                                set = function(_, value)
-                                    E.db.thingsUI.clusterPositioning.targetCastBar.gap = value
-                                    TUI:QueueClusterUpdate()
-                                end,
-                                disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.targetCastBar.enabled end,
-                            },
-                            castBarXOffset = {
-                                order = 23,
-                                type = "range",
-                                name = "CastBar X Offset",
-                                desc = "Horizontal offset for CastBar.",
-                                min = -100, max = 100, step = 1,
-                                get = function() return E.db.thingsUI.clusterPositioning.targetCastBar.xOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.clusterPositioning.targetCastBar.xOffset = value
-                                    TUI:QueueClusterUpdate()
-                                end,
-                                disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.targetCastBar.enabled end,
+                                inline = true,
+                                args = {
+                                    castBarEnabled = {
+                                        order = 1,
+                                        type = "toggle",
+                                        name = "Position Target CastBar",
+                                        desc = "Anchor ElvUF_Target_CastBar below the target frame.",
+                                        get = function() return E.db.thingsUI.clusterPositioning.targetCastBar.enabled end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.clusterPositioning.targetCastBar.enabled = value
+                                            TUI:UpdateClusterPositioning()
+                                        end,
+                                    },
+                                    castBarGap = {
+                                        order = 2,
+                                        type = "range",
+                                        name = "CastBar Y Gap",
+                                        desc = "Vertical gap between Target frame and CastBar.",
+                                        min = -50, max = 50, step = 1,
+                                        get = function() return E.db.thingsUI.clusterPositioning.targetCastBar.gap end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.clusterPositioning.targetCastBar.gap = value
+                                            TUI:QueueClusterUpdate()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.targetCastBar.enabled end,
+                                    },
+                                    castBarXOffset = {
+                                        order = 3,
+                                        type = "range",
+                                        name = "CastBar X Offset",
+                                        desc = "Horizontal offset for CastBar.",
+                                        min = -100, max = 100, step = 1,
+                                        get = function() return E.db.thingsUI.clusterPositioning.targetCastBar.xOffset end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.clusterPositioning.targetCastBar.xOffset = value
+                                            TUI:QueueClusterUpdate()
+                                        end,
+                                        disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.targetCastBar.enabled end,
+                                    },
+                                },
                             },
                         },
                     },
