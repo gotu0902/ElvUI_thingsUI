@@ -10,7 +10,7 @@ ns.EP = EP
 ns.TUI = TUI
 ns.LSM = E.Libs.LSM
 
-TUI.version = "3.0.1"
+TUI.version = "3.0.2"
 TUI.name = "thingsUI"
 
 -- Shared state across files
