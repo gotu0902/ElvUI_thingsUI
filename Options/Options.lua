@@ -215,105 +215,6 @@ function TUI.ConfigTable()
                                     },
                                 },
                             },
-                            trinketsCDMGroup = {
-                                order = 2,
-                                type = "group",
-                                name = "Trinkets to CDM (BCDM Trinket Bar)",
-                                inline = true,
-                                args = {
-                                    trinketsCDMEnabled = {
-                                        order = 1,
-                                        type = "toggle",
-                                        name = "Enable",
-                                        desc = "Position BCDM's trinket bar relative to the Essential or Utility cooldown viewer.",
-                                        width = "full",
-                                        get = function() return E.db.thingsUI.trinketsCDM.enabled end,
-                                        set = function(_, value)
-                                            E.db.thingsUI.trinketsCDM.enabled = value
-                                            TUI:UpdateTrinketsCDM()
-                                            NotifyChange()
-                                        end,
-                                    },
-                                    trinketsCDMMode = {
-                                        order = 2,
-                                        type = "toggle",
-                                        name = "NHT (Horizontal)",
-                                        desc = "Trinkets extend the Essential row horizontally (grows left or right).",
-                                        hidden = function() return not E.db.thingsUI.trinketsCDM.enabled end,
-                                        get = function() return E.db.thingsUI.trinketsCDM.mode == "NHT" end,
-                                        set = function(_, value)
-                                            if value then
-                                                E.db.thingsUI.trinketsCDM.mode = "NHT"
-                                                TUI:UpdateTrinketsCDM()
-                                                NotifyChange()
-                                            end
-                                        end,
-                                    },
-                                    trinketsCDMModeFHT = {
-                                        order = 3,
-                                        type = "toggle",
-                                        name = "FHT (Vertical)",
-                                        desc = "Trinkets grow vertically from the end of Essential. If Essential + trinkets exceed the limit, they overflow to the Utility slot (Utility shifts down).",
-                                        hidden = function() return not E.db.thingsUI.trinketsCDM.enabled end,
-                                        get = function() return E.db.thingsUI.trinketsCDM.mode == "FHT" end,
-                                        set = function(_, value)
-                                            if value then
-                                                E.db.thingsUI.trinketsCDM.mode = "FHT"
-                                                TUI:UpdateTrinketsCDM()
-                                                NotifyChange()
-                                            end
-                                        end,
-                                    },
-                                    trinketsCDMSide = {
-                                        order = 5,
-                                        type = "select",
-                                        name = "Side",
-                                        desc = "Which end of EssentialCooldownViewer to anchor to.",
-                                        hidden = function()
-                                            local db = E.db.thingsUI.trinketsCDM
-                                            return not db.enabled or db.mode == "FHT"
-                                        end,
-                                        values = {
-                                            RIGHT = "Right",
-                                            LEFT  = "Left",
-                                        },
-                                        get = function() return E.db.thingsUI.trinketsCDM.side end,
-                                        set = function(_, value)
-                                            E.db.thingsUI.trinketsCDM.side = value
-                                            TUI:UpdateTrinketsCDM()
-                                        end,
-                                    },
-                                    trinketsCDMGap = {
-                                        order = 4,
-                                        type = "range",
-                                        name = "Gap",
-                                        desc = "Pixel gap between EssentialCooldownViewer and the trinket bar. NHT = horizontal, FHT = vertical.",
-                                        hidden = function() return not E.db.thingsUI.trinketsCDM.enabled end,
-                                        min = -20, max = 20, step = 0.01, bigStep = 1,
-                                        get = function() return E.db.thingsUI.trinketsCDM.gap end,
-                                        set = function(_, value)
-                                            E.db.thingsUI.trinketsCDM.gap = value
-                                            TUI:UpdateTrinketsCDM()
-                                        end,
-                                    },
-                                    trinketsCDMFhtLimit = {
-                                        order = 6,
-                                        type = "range",
-                                        name = "FHT Essential Limit",
-                                        desc = "Maximum combined icon count (Essential + trinkets) before trinkets overflow to the Utility slot.",
-                                        hidden = function()
-                                            return not E.db.thingsUI.trinketsCDM.enabled
-                                                or E.db.thingsUI.trinketsCDM.mode ~= "FHT"
-                                        end,
-                                        min = 1, max = 30, step = 1,
-                                        get = function() return E.db.thingsUI.trinketsCDM.fhtLimit end,
-                                        set = function(_, value)
-                                            E.db.thingsUI.trinketsCDM.fhtLimit = value
-                                            TUI:UpdateTrinketsCDM()
-                                        end,
-                                    },
-                                },
-                            },
                         },
                     },
                     positioningTab = {
@@ -1260,8 +1161,14 @@ function TUI.ConfigTable()
                 order = 30,
                 type = "group",
                 name = "BCDM + ElvUI",
-                childGroups = "tree",
+                childGroups = "tab",
                 args = {
+                    clusterPositioningSubTab = {
+                        order = 1,
+                        type = "group",
+                        name = "Cluster Positioning",
+                        childGroups = "tree",
+                        args = {
                     header = {
                         order = 1,
                         type = "header",
@@ -1631,6 +1538,121 @@ function TUI.ConfigTable()
                                     parts[#parts + 1] = "|cFFFFFF00SecondaryPowerBar:|r " .. (secondary and (secondary:IsShown() and "|cFF00FF00active|r" or "hidden") or "not found")
                                     return "\n" .. table.concat(parts, "\n")
                                 end,
+                            },
+                        },
+                    },
+                        },
+                    },
+                    trinketsCDMSubTab = {
+                        order = 2,
+                        type = "group",
+                        name = "Trinkets to CDM",
+                        args = {
+                            modeGroup = {
+                                order = 1,
+                                type = "group",
+                                name = "Mode",
+                                inline = true,
+                                args = {
+                                    trinketsCDMDesc = {
+                                        order = 0,
+                                        type = "description",
+                                        name = "Position BCDM's trinket bar relative to the Essential or Utility cooldown viewer.\n",
+                                    },
+                                    trinketsCDMEnabled = {
+                                        order = 1,
+                                        type = "toggle",
+                                        name = "Enable",
+                                        desc = "Position BCDM's trinket bar relative to the Essential or Utility cooldown viewer.",
+                                        width = "full",
+                                        get = function() return E.db.thingsUI.trinketsCDM.enabled end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.trinketsCDM.enabled = value
+                                            TUI:UpdateTrinketsCDM()
+                                            NotifyChange()
+                                        end,
+                                    },
+                                    trinketsCDMMode = {
+                                        order = 2,
+                                        type = "toggle",
+                                        name = "NHT (Horizontal)",
+                                        desc = "Trinkets extend the Essential row horizontally (grows left or right).",
+                                        hidden = function() return not E.db.thingsUI.trinketsCDM.enabled end,
+                                        get = function() return E.db.thingsUI.trinketsCDM.mode == "NHT" end,
+                                        set = function(_, value)
+                                            if value then
+                                                E.db.thingsUI.trinketsCDM.mode = "NHT"
+                                                TUI:UpdateTrinketsCDM()
+                                                NotifyChange()
+                                            end
+                                        end,
+                                    },
+                                    trinketsCDMModeFHT = {
+                                        order = 3,
+                                        type = "toggle",
+                                        name = "FHT (Vertical)",
+                                        desc = "Trinkets grow vertically from the end of Essential. If Essential + trinkets exceed the limit, they overflow to the Utility slot (Utility shifts down).",
+                                        hidden = function() return not E.db.thingsUI.trinketsCDM.enabled end,
+                                        get = function() return E.db.thingsUI.trinketsCDM.mode == "FHT" end,
+                                        set = function(_, value)
+                                            if value then
+                                                E.db.thingsUI.trinketsCDM.mode = "FHT"
+                                                TUI:UpdateTrinketsCDM()
+                                                NotifyChange()
+                                            end
+                                        end,
+                                    },
+                                },
+                            },
+                            layoutGroup = {
+                                order = 2,
+                                type = "group",
+                                name = "Layout",
+                                inline = true,
+                                hidden = function() return not E.db.thingsUI.trinketsCDM.enabled end,
+                                args = {
+                                    trinketsCDMSide = {
+                                        order = 1,
+                                        type = "select",
+                                        name = "Side",
+                                        desc = "Which end of EssentialCooldownViewer to anchor to.",
+                                        hidden = function() return E.db.thingsUI.trinketsCDM.mode == "FHT" end,
+                                        values = {
+                                            RIGHT = "Right",
+                                            LEFT  = "Left",
+                                        },
+                                        get = function() return E.db.thingsUI.trinketsCDM.side end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.trinketsCDM.side = value
+                                            TUI:UpdateTrinketsCDM()
+                                        end,
+                                    },
+                                    trinketsCDMGap = {
+                                        order = 2,
+                                        type = "range",
+                                        name = "Gap",
+                                        desc = "Pixel gap between EssentialCooldownViewer and the trinket bar. NHT = horizontal, FHT = vertical.",
+                                        min = -20, max = 20, step = 0.01, bigStep = 1,
+                                        get = function() return E.db.thingsUI.trinketsCDM.gap end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.trinketsCDM.gap = value
+                                            TUI:UpdateTrinketsCDM()
+                                        end,
+                                    },
+                                    trinketsCDMFhtLimit = {
+                                        order = 3,
+                                        type = "range",
+                                        name = "FHT Essential Limit",
+                                        desc = "Maximum combined icon count (Essential + trinkets) before trinkets overflow to the Utility slot.",
+                                        hidden = function() return E.db.thingsUI.trinketsCDM.mode ~= "FHT" end,
+                                        min = 1, max = 30, step = 1,
+                                        get = function() return E.db.thingsUI.trinketsCDM.fhtLimit end,
+                                        set = function(_, value)
+                                            E.db.thingsUI.trinketsCDM.fhtLimit = value
+                                            TUI:UpdateTrinketsCDM()
+                                        end,
+                                    },
+                                },
                             },
                         },
                     },

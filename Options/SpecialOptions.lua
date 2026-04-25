@@ -187,7 +187,27 @@ function TUI:SpecialBarOptions(barKey)
         set = function(_, v) if not v then SB.ReleaseBar(barKey) end; db().enabled = v; QueueUpdate() end,
         hidden = function() return not db().spellID end,
     }
-    commonArgs.divider = { order = 4, type = "header", name = "" }
+    commonArgs.restoreDefaults = {
+        order = 4.5, type = "execute", name = "Restore Defaults",
+        desc = "Reset all settings for this bar to their default values.",
+        hidden = function() return not db().spellID end,
+        confirm = function() return "Reset this bar's settings to defaults? Spell selection will be kept." end,
+        func = function()
+            local s = SB.GetSpecRoot()
+            local savedSpellID   = s.bars and s.bars[barKey] and s.bars[barKey].spellID
+            local savedSpellName = s.bars and s.bars[barKey] and s.bars[barKey].spellName
+            if s.bars then s.bars[barKey] = nil end
+            SB.ReleaseBar(barKey)
+            -- Re-create with defaults, then restore spell so user doesn't have to re-pick.
+            local fresh = SB.GetBarDB(barKey)
+            fresh.spellID   = savedSpellID
+            fresh.spellName = savedSpellName
+            fresh.enabled   = savedSpellID ~= nil
+            QueueUpdate()
+            NotifyChange()
+        end,
+    }
+    commonArgs.divider = { order = 5, type = "header", name = "" }
 
     local function merge(extra)
         local out = {}
@@ -307,11 +327,17 @@ function TUI:SpecialIconOptions(iconKey)
         order = 4.5, type = "execute", name = "Restore Defaults",
         desc = "Reset all settings for this icon to their default values.",
         hidden = function() return not db().spellID end,
+        confirm = function() return "Reset this icon's settings to defaults? Spell selection will be kept." end,
         func = function()
             local s = SB.GetSpecRoot()
-            local key = iconKey
-            if s.icons then s.icons[key] = nil end
-            SB.ReleaseIcon(key)
+            local savedSpellID   = s.icons and s.icons[iconKey] and s.icons[iconKey].spellID
+            local savedSpellName = s.icons and s.icons[iconKey] and s.icons[iconKey].spellName
+            if s.icons then s.icons[iconKey] = nil end
+            SB.ReleaseIcon(iconKey)
+            local fresh = SB.GetIconDB(iconKey)
+            fresh.spellID   = savedSpellID
+            fresh.spellName = savedSpellName
+            fresh.enabled   = savedSpellID ~= nil
             QueueUpdate()
             NotifyChange()
         end,
