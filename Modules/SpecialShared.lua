@@ -469,11 +469,19 @@ local function _registerShownSpell(childFrame)
             local si = C_Spell.GetSpellInfo(info.overrideSpellID or info.spellID)
             if si and si.spellID then
                 local cleanID = si.spellID
+                -- Also mark the first linked ID — that's the key BuildCDMSpellList
+                -- uses when multiple rows share a parent (Blooming Infusion etc).
+                local linkedID = info.linkedSpellIDs and info.linkedSpellIDs[1]
                 local changed = false
-                if childFrame.Bar and not knownBarSpells[cleanID] then
-                    knownBarSpells[cleanID] = true; changed = true
-                elseif childFrame.Icon and not childFrame.Bar and not knownIconSpells[cleanID] then
-                    knownIconSpells[cleanID] = true; changed = true
+                local function mark(set, key)
+                    if key and not set[key] then set[key] = true; changed = true end
+                end
+                if childFrame.Bar then
+                    mark(knownBarSpells, cleanID)
+                    mark(knownBarSpells, linkedID)
+                elseif childFrame.Icon then
+                    mark(knownIconSpells, cleanID)
+                    mark(knownIconSpells, linkedID)
                 end
                 if changed then InvalidateSpellListCache() end
             end
@@ -535,13 +543,29 @@ local function ScanAndHookCDMChildren()
     _scanViewers[1].frame = BuffBarCooldownViewer  or false
     _scanViewers[2].frame = BuffIconCooldownViewer or false
 
+    -- Rebuild known sets from the live viewer so spells that were moved
+    -- between Bar/Icon don't keep stale entries. CDM frames have a valid
+    -- cooldownID whether visible or not — the frame is hidden when the buff
+    -- isn't active, but it's still "tracked". So we count any child with a
+    -- cooldownID, not just shown ones.
+    local barViewer  = _scanViewers[1].frame
+    local iconViewer = _scanViewers[2].frame
+    local barHasChildren  = barViewer  and barViewer:GetNumChildren()  > 0
+    local iconHasChildren = iconViewer and iconViewer:GetNumChildren() > 0
+    local rebuilding = barHasChildren or iconHasChildren
+    if rebuilding then
+        wipe(knownBarSpells)
+        wipe(knownIconSpells)
+        InvalidateSpellListCache()
+    end
+
     for _, entry in ipairs(_scanViewers) do
         local viewer = entry.frame
         if viewer then
             local children, childCount = GetChildrenReuseScan(viewer)
             for i = 1, childCount do
                 local child = children[i]
-                if not InCombatLockdown() and C_CooldownViewer and child:IsShown() then
+                if not InCombatLockdown() and C_CooldownViewer then
                     local cid = child.cooldownID
                     if cid then
                         local ok, info = pcall(C_CooldownViewer.GetCooldownViewerCooldownInfo, cid)
@@ -549,13 +573,10 @@ local function ScanAndHookCDMChildren()
                             local si = C_Spell.GetSpellInfo(info.overrideSpellID or info.spellID)
                             if si and si.spellID then
                                 local cleanID = si.spellID
-                                local changed = false
-                                if entry.isBar and not knownBarSpells[cleanID] then
-                                    knownBarSpells[cleanID] = true; changed = true
-                                elseif not entry.isBar and not knownIconSpells[cleanID] then
-                                    knownIconSpells[cleanID] = true; changed = true
-                                end
-                                if changed then InvalidateSpellListCache() end
+                                local linkedID = info.linkedSpellIDs and info.linkedSpellIDs[1]
+                                local set = entry.isBar and knownBarSpells or knownIconSpells
+                                set[cleanID] = true
+                                if linkedID then set[linkedID] = true end
                             end
                         end
                     end
@@ -566,6 +587,35 @@ local function ScanAndHookCDMChildren()
                     child:HookScript("OnShow", OnCDMChildShown)
                     child:HookScript("OnHide", OnCDMChildHidden)
                     if child:IsShown() then OnCDMChildShown(child) end
+                end
+            end
+        end
+    end
+
+    -- Yoinked frames are reparented to our wrappers, so the viewer's children
+    -- list no longer includes them. Walk yoinkedBars to keep their spell IDs
+    -- in the known tables — otherwise active special slots would show as
+    -- "Not tracked" in the dropdown.
+    if rebuilding then
+        for child in pairs(yoinkedBars) do
+            if child and C_CooldownViewer then
+                local cid = child.cooldownID
+                if cid then
+                    local ok, info = pcall(C_CooldownViewer.GetCooldownViewerCooldownInfo, cid)
+                    if ok and info then
+                        local si = C_Spell.GetSpellInfo(info.overrideSpellID or info.spellID)
+                        if si and si.spellID then
+                            local cleanID = si.spellID
+                            local linkedID = info.linkedSpellIDs and info.linkedSpellIDs[1]
+                            local set
+                            if child.Bar then set = knownBarSpells
+                            elseif child.Icon then set = knownIconSpells end
+                            if set then
+                                set[cleanID] = true
+                                if linkedID then set[linkedID] = true end
+                            end
+                        end
+                    end
                 end
             end
         end
@@ -636,8 +686,6 @@ local function HookCDMWindow()
         cdmSettingsOpen    = true
         lastBarChildCount  = -1
         lastIconChildCount = -1
-        wipe(knownBarSpells)
-        wipe(knownIconSpells)
         InvalidateSpellListCache()
         if ns.MarkEnforceDirty then ns.MarkEnforceDirty() end
         TUI:QueueSpecialBarsUpdate()
@@ -647,8 +695,6 @@ local function HookCDMWindow()
         cdmSettingsOpen    = false
         lastBarChildCount  = -1
         lastIconChildCount = -1
-        wipe(knownBarSpells)
-        wipe(knownIconSpells)
         InvalidateSpellListCache()
         if ns.MarkEnforceDirty then ns.MarkEnforceDirty() end
         C_Timer.After(0.1, _onCDMHideDeferred)

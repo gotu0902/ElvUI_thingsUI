@@ -83,6 +83,10 @@ end
 
 local function GetChoicesTable(currentKey, isBar)
     local choices = { [""] = "|cFF888888— None —|r" }
+    -- Refresh known tables from the live viewer (rebuilds in place if frames
+    -- exist; otherwise leaves the previous snapshot intact so we don't lose
+    -- state when CDM is closed).
+    if SB.ScanAndHookCDMChildren then SB.ScanAndHookCDMChildren() end
     local rawList = GetEnrichedSpellList()
     local knownBar  = SB.knownBarSpells  or {}
     local knownIcon = SB.knownIconSpells or {}
@@ -112,43 +116,53 @@ local function GetChoicesTable(currentKey, isBar)
         end
 
         local pid = data.parentID
-        local seenBar  = knownBar[id]  or (pid and knownBar[pid])
-        local seenIcon = knownIcon[id] or (pid and knownIcon[pid])
-
-        local typeLabel
-        local isActive = false
-        if seenBar and seenIcon then
-            typeLabel = "|cFF888888(Bar & Icon)|r"
-            isActive = true
-        elseif seenBar then
-            typeLabel = "|cFF888888(Bar)|r"
-            isActive = true
-        elseif seenIcon then
-            typeLabel = "|cFF888888(Icon)|r"
-            isActive = true
-        elseif data.type and data.type ~= "Unknown" then
-            if data.notDisplayed then
-                typeLabel = "|cFF666666(" .. data.type .. " - Not Displayed)|r"
-            else
-                typeLabel = "|cFF888888(" .. data.type .. ")|r"
-                isActive = true
-            end
+        -- knownBar/knownIcon reflect the last CDM viewer scan and persist
+        -- across CDM open/close. For split-variant entries (key is a linkedID,
+        -- parentID is the shared parent — Blooming Infusion case) we must
+        -- only check the entry's own id, otherwise both variants would match
+        -- the parent and look "live". Non-split entries (id == parentID)
+        -- can fall back to parent, which catches base-spell tracking.
+        local isSplitVariant = pid and pid ~= id
+        local liveAsBar, liveAsIcon
+        if isSplitVariant then
+            liveAsBar  = knownBar[id]  or false
+            liveAsIcon = knownIcon[id] or false
         else
-            typeLabel = "|cFF555555(?)|r"
+            liveAsBar  = knownBar[id]  or (pid and knownBar[pid])
+            liveAsIcon = knownIcon[id] or (pid and knownIcon[pid])
+        end
+
+        local talented = IsPlayerSpell(id) or (pid and IsPlayerSpell(pid)) or false
+        local inCDM = data.type and data.type ~= "Unknown"
+
+        local liveType
+        if liveAsBar and liveAsIcon then liveType = "Bar & Icon"
+        elseif liveAsBar then liveType = "Bar"
+        elseif liveAsIcon then liveType = "Icon"
         end
 
         if usage then
-            -- In-use by another slot — orange/yellow so it stands out but clearly unavailable
-            choices[tostring(id)] = iconStr .. "|cFFFF8800" .. displayName .. "|r |cFFAA6600(In use: " .. usage .. ")|r"
-        elseif isActive then
-            -- Active in CDM viewer — bright green (fetches talented\available stuff as well, not sure how to fix that)
-            choices[tostring(id)] = iconStr .. "|cFF00FF00" .. displayName .. "|r " .. typeLabel
-        elseif data.type and data.type ~= "Unknown" then
-            -- In CDM API but not active — light gray (probably not talented)
-            choices[tostring(id)] = iconStr .. "|cFFAAAAAA" .. displayName .. "|r " .. typeLabel
+            -- In-use by another slot. Orange shades by slot type.
+            local isIconUsage = usage:find("Icon", 1, true)
+            local nameColor = isIconUsage and "|cFFFFB347" or "|cFFFF8800"
+            local tagColor  = isIconUsage and "|cFFCC8844" or "|cFFAA6600"
+            choices[tostring(id)] = iconStr .. nameColor .. displayName .. "|r " .. tagColor .. "(In use: " .. usage .. ")|r"
+        elseif liveType then
+            -- Currently visible in a CDM viewer. Yellow = Bar only, Green = Icon (or both).
+            local isBarOnly = liveType == "Bar"
+            local nameColor = isBarOnly and "|cFFFFFF00" or "|cFF00FF00"
+            local typeLabel = "|cFF888888(" .. liveType .. ")|r"
+            choices[tostring(id)] = iconStr .. nameColor .. displayName .. "|r " .. typeLabel
+        elseif inCDM and talented then
+            -- Talented but not currently displayed in CDM viewer (parked in Not
+            -- Displayed). Light blue — user can drag it into CDM to make it show.
+            choices[tostring(id)] = iconStr .. "|cFF66CCFF" .. displayName .. "|r |cFF6699CC(Not tracked)|r"
+        elseif inCDM then
+            -- In CDM's API but player doesn't have the spell.
+            choices[tostring(id)] = iconStr .. "|cFFAAAAAA" .. displayName .. "|r |cFF666666(Not talented)|r"
         else
             -- Unknown / not in CDM at all — dim
-            choices[tostring(id)] = iconStr .. "|cFF666666" .. displayName .. " " .. typeLabel .. "|r"
+            choices[tostring(id)] = iconStr .. "|cFF666666" .. displayName .. " |cFF555555(?)|r|r"
         end
     end
     return choices
