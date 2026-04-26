@@ -58,8 +58,6 @@ local function GetAnchorTarget(slot)
     return nil
 end
 
--- Returns the cluster bounding box (left, right) including the trinket bar
--- when it's currently visible beside EssentialCooldownViewer.
 local function GetClusterBounds()
     local essential = _G["EssentialCooldownViewer"]
     if not essential then return nil end
@@ -92,8 +90,6 @@ local function GetClusterBounds()
     return left, right
 end
 
--- Updates the classbar enable/detach config and (when desired state changed)
--- calls CreateAndUpdateUF so ElvUI rebuilds the player frame.
 local function ApplyEnableState(entry)
     if InCombatLockdown() then return false end
     if not playerEntered then return false end
@@ -125,9 +121,6 @@ local function ApplyEnableState(entry)
         end
         lastEnableState = desiredKey
 
-        -- The cast bar may have been anchored to our classbar holder; tell
-        -- DynamicCastBarAnchor to re-evaluate so it picks up secondary/primary
-        -- power bar after we disable, or our holder after we enable.
         if TUI.InvalidateDynamicCastBarAnchor then
             TUI:InvalidateDynamicCastBarAnchor()
         end
@@ -135,8 +128,6 @@ local function ApplyEnableState(entry)
     return true
 end
 
--- Pushes width into the classbar config and asks ElvUI to re-configure the
--- detached holder, then re-anchors the holder to the BCDM cluster.
 local function ApplyWidthAndPosition(entry)
     if not entry or not playerEntered then return end
 
@@ -164,14 +155,7 @@ local function ApplyWidthAndPosition(entry)
         holder:SetWidth(desiredWidth)
     end
 
-    -- Use two separate anchor points: LEFT defines the X edge from the
-    -- cluster's leftmost frame, BOTTOM defines the Y edge from the actual
-    -- target (power bar or essential viewer). This avoids the pixel-snapping
-    -- mismatch a center-anchor would cause and respects trinket bar width.
     local essential = _G["EssentialCooldownViewer"]
-    -- Anchor LEFT to essential and shift by (clusterLeft - essentialLeft) so
-    -- the bar's left edge sits at the cluster's true leftmost edge (which may
-    -- be on a trinket child whose container has 0 width).
     local leftAnchorFrame = essential or target
     local leftDelta = 0
     if essential and left then
@@ -257,9 +241,6 @@ HookEssential = function()
     end
 end
 
--- Re-apply our position whenever ElvUI reconfigures the classbar (e.g. when
--- the user changes height in the options panel). Without this the holder
--- drifts by 1px after each rebuild because of pixel-snapping rounding.
 local hookedConfigureClassBar = false
 local function HookConfigureClassBar()
     if hookedConfigureClassBar then return end
@@ -282,8 +263,7 @@ function TUI:UpdateClassbarMode()
         eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
         HookEssential()
         HookConfigureClassBar()
-        -- Defer initial apply — first call may run before UnitFrame styles
-        -- are registered. The PEW handler will MarkDirty once it's safe.
+        
         if playerEntered then
             C_Timer.After(0.2, MarkDirty)
         end
