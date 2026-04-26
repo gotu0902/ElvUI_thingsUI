@@ -1806,6 +1806,11 @@ function TUI.ConfigTable()
                     icon12Group = { order=212, type="group", childGroups="tree", name=function() return IconTabName("icon12",12) end, hidden=function() return not SB or (SB.GetSpecRoot().iconCount or 3) < 12 end, args=TUI:SpecialIconOptions("icon12") },
                 },
             },
+
+            -------------------------------------------------
+            -- CLASSBAR MODE TAB
+            -------------------------------------------------
+            classbarModeTab = TUI:ClassbarModeOptions(),
         },
     }
 end

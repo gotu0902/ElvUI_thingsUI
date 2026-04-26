@@ -140,6 +140,7 @@ function TUI:Initialize()
     self:UpdateSpecialBars()
     self:UpdateClusterPositioning()
     self:UpdateDynamicCastBarAnchor()
+    self:UpdateClassbarMode()
     self:UpdateTrinketsCDM()
 
     self:RegisterEvent("PLAYER_ENTERING_WORLD", function()
@@ -403,6 +404,7 @@ function TUI:Initialize()
             TUI:UpdateBuffBars()
             TUI:UpdateClusterPositioning()
             TUI:UpdateDynamicCastBarAnchor()
+            TUI:UpdateClassbarMode()
         end)
     end)
 
@@ -417,6 +419,7 @@ function TUI:ProfileUpdate()
     self:UpdateSpecialBars()
     self:UpdateClusterPositioning()
     self:UpdateDynamicCastBarAnchor()
+    self:UpdateClassbarMode()
     self:UpdateTrinketsCDM()
 end
 

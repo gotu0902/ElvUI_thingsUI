@@ -31,9 +31,12 @@ local function UpdateCastBarAnchor()
     
     local secondary = GetSecondaryPowerBar()
     local primary = GetPowerBar()
-    
+    local classbar = ns.ClassbarMode and ns.ClassbarMode.GetActiveAnchorFrame and ns.ClassbarMode.GetActiveAnchorFrame() or nil
+
     local anchorTarget
-    if secondary and secondary:IsShown() and secondary:GetWidth() > 0 then
+    if classbar then
+        anchorTarget = classbar
+    elseif secondary and secondary:IsShown() and secondary:GetWidth() > 0 then
         anchorTarget = secondary
     elseif primary and primary:IsShown() then
         anchorTarget = primary
