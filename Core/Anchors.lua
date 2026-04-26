@@ -11,6 +11,7 @@ ns.ANCHORS.SHARED_ANCHOR_VALUES = {
   ["BuffIconCooldownViewer"] = "Buff Icon Bar",
   ["BCDM_PowerBar"]        = "BCDM Power Bar",
   ["BCDM_SecondaryPowerBar"]        = "BCDM Secondary Power Bar",
+  ["BCDM_CastBar"]        = "BCDM Cast Bar",
   ["Grid2LayoutFrame"]   = "Grid2 Layout Frame",
   ["UIParent"]             = "Screen (UIParent)",
   ["CUSTOM"]               = "|cFFFFFF00Custom Frame...|r",
@@ -20,5 +21,5 @@ ns.ANCHORS.SHARED_ANCHOR_VALUES = {
 ns.ANCHORS.SHARED_ANCHOR_ORDER = {
   "ElvUF_Player", "ElvUF_Target", "ElvUF_Player_ClassBar",
   "EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer",
-  "BCDM_PowerBar", "BCDM_SecondaryPowerBar", "Grid2LayoutFrame", "UIParent", "CUSTOM", 
+  "BCDM_PowerBar", "BCDM_SecondaryPowerBar", "BCDM_CastBar", "Grid2LayoutFrame", "UIParent", "CUSTOM", 
 }
