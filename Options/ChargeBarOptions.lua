@@ -4,8 +4,9 @@ local E = ns.E
 local LSM = ns.LSM
 
 local SLOT_VALUES = {
-    SECONDARY = "Secondary Power slot",
-    POWER     = "Power slot",
+    SECONDARY       = "Secondary Power slot",
+    POWER           = "Power slot",
+    ABOVE_SECONDARY = "Above Secondary",
 }
 
 local OUTLINE_VALUES = {
@@ -27,6 +28,7 @@ end
 -- Add controls
 local selectedSpecToAdd = ""
 local selectedSlotToAdd = "SECONDARY"
+local selectedEditSpec  = nil -- key of spec currently being edited in Spec Options tab
 
 local function GetClassbarSlot(specKey)
     local cdb = E.db.thingsUI.classbarMode
@@ -182,6 +184,27 @@ local function BuildEnabledArgs()
 end
 
 function TUI:ChargeBarOptions()
+    local function GetEditSpec()
+        local list = GetEnabledSpecsList()
+        if #list == 0 then selectedEditSpec = nil; return nil end
+        -- auto-select first when invalid
+        local valid = false
+        if selectedEditSpec then
+            for _, e in ipairs(list) do
+                if e.key == selectedEditSpec then valid = true; break end
+            end
+        end
+        if not valid then selectedEditSpec = list[1].key end
+        return E.db.thingsUI.chargeBar.specs[selectedEditSpec]
+    end
+    local function GetEditSpecChoices()
+        local out = {}
+        for _, e in ipairs(GetEnabledSpecsList()) do
+            out[e.key] = FormatSpecLabel(e)
+        end
+        return out
+    end
+
     return {
         order = 53,
         type = "group",
@@ -212,7 +235,6 @@ function TUI:ChargeBarOptions()
                         get = function() return selectedSpecToAdd end,
                         set = function(_, v)
                             selectedSpecToAdd = v
-                            -- Reset slot if it conflicts
                             local conflict = GetClassbarSlot(v)
                             if conflict and selectedSlotToAdd == conflict then
                                 selectedSlotToAdd = (conflict == "SECONDARY") and "POWER" or "SECONDARY"
@@ -241,203 +263,378 @@ function TUI:ChargeBarOptions()
                                 textSize       = 12,
                                 textOutline    = "OUTLINE",
                             }
+                            selectedEditSpec = selectedSpecToAdd
                             selectedSpecToAdd = ""
                             Update()
                             NotifyChange()
                         end,
                     },
-                },
-            },
+                    addAllClass = {
+                        order = 4, type = "execute", name = "Add All My Class's Specs",
+                        desc = "Create charge bar entries for every spec of your current class. Each entry uses the chosen Slot (or the opposite slot when it would conflict with Classbar Mode for that spec).\n\nAfter adding, edit one spec and use |cFFFFD200Copy to All Specs|r to share the spell, color, and text settings.",
+                        width = 1.5,
+                        func = function()
+                            local _, playerClassFile = UnitClass("player")
+                            if not playerClassFile then return end
 
-            enabledList = {
-                order = 20, type = "group", inline = true, name = "Enabled Specs",
-                args = BuildEnabledArgs(),
-            },
+                            local db = E.db.thingsUI.chargeBar
+                            db.specs = db.specs or {}
 
-            appearance = {
-                order = 30, type = "group", inline = true, name = "Appearance",
-                disabled = function() return not E.db.thingsUI.chargeBar.enabled end,
-                args = {
-                    statusBarTexture = {
-                        order = 1, type = "select", dialogControl = "LSM30_Statusbar",
-                        name = "Bar Texture",
-                        values = (LSM and LSM.HashTable and LSM:HashTable("statusbar")) or {},
-                        get = function() return E.db.thingsUI.chargeBar.statusBarTexture end,
-                        set = function(_, v) E.db.thingsUI.chargeBar.statusBarTexture = v; Update() end,
-                    },
-                    height = {
-                        order = 2, type = "range", name = "Height",
-                        min = 6, max = 60, step = 1,
-                        get = function() return E.db.thingsUI.chargeBar.height or 18 end,
-                        set = function(_, v) E.db.thingsUI.chargeBar.height = v; Update() end,
-                    },
-                    xGap = {
-                        order = 3, type = "range", name = "Segment Gap",
-                        desc = "Horizontal gap between charge segments. Total bar width stays the same — segments shrink to make room.",
-                        min = 0, max = 20, step = 1,
-                        get = function() return E.db.thingsUI.chargeBar.xGap or 0 end,
-                        set = function(_, v) E.db.thingsUI.chargeBar.xGap = v; Update() end,
-                    },
-                    rechargeColor = {
-                        order = 4, type = "color", name = "Recharge Color", hasAlpha = true,
-                        get = function()
-                            local c = E.db.thingsUI.chargeBar.rechargeColor or {}
-                            return c.r or 0.5, c.g or 0.5, c.b or 0.5, c.a or 0.8
-                        end,
-                        set = function(_, r, g, b, a)
-                            E.db.thingsUI.chargeBar.rechargeColor = { r = r, g = g, b = b, a = a }
-                            Update()
-                        end,
-                    },
-                    showTicks = {
-                        order = 5, type = "toggle", name = "Show Ticks",
-                        disabled = function() return (E.db.thingsUI.chargeBar.xGap or 0) > 0 end,
-                        desc = "Disabled when Segment Gap > 0 since segments are already visually separated.",
-                        get = function() return E.db.thingsUI.chargeBar.showTicks end,
-                        set = function(_, v) E.db.thingsUI.chargeBar.showTicks = v; Update() end,
-                    },
-                    tickWidth = {
-                        order = 6, type = "range", name = "Tick Width",
-                        min = 1, max = 6, step = 1,
-                        disabled = function()
-                            return not E.db.thingsUI.chargeBar.showTicks
-                                or (E.db.thingsUI.chargeBar.xGap or 0) > 0
-                        end,
-                        get = function() return E.db.thingsUI.chargeBar.tickWidth or 1 end,
-                        set = function(_, v) E.db.thingsUI.chargeBar.tickWidth = v; Update() end,
-                    },
-                    tickColor = {
-                        order = 7, type = "color", name = "Tick Color", hasAlpha = true,
-                        disabled = function()
-                            return not E.db.thingsUI.chargeBar.showTicks
-                                or (E.db.thingsUI.chargeBar.xGap or 0) > 0
-                        end,
-                        get = function()
-                            local c = E.db.thingsUI.chargeBar.tickColor or {}
-                            return c.r or 0, c.g or 0, c.b or 0, c.a or 1
-                        end,
-                        set = function(_, r, g, b, a)
-                            E.db.thingsUI.chargeBar.tickColor = { r = r, g = g, b = b, a = a }
-                            Update()
+                            local desiredSlot = selectedSlotToAdd or "SECONDARY"
+                            local addedAny, lastKey
+
+                            for cid = 1, 13 do
+                                local numSpecs = GetNumSpecializationsForClassID and GetNumSpecializationsForClassID(cid) or 0
+                                for i = 1, numSpecs do
+                                    local sid = GetSpecializationInfoForClassID and GetSpecializationInfoForClassID(cid, i)
+                                    if sid then
+                                        local _, _, _, _, _, sClassFile = GetSpecializationInfoByID(sid)
+                                        if sClassFile == playerClassFile then
+                                            local key = tostring(sid)
+                                            if not db.specs[key] then
+                                                local slot = desiredSlot
+                                                local conflict = GetClassbarSlot(key)
+                                                if conflict and conflict == slot then
+                                                    slot = (slot == "SECONDARY") and "POWER" or "SECONDARY"
+                                                end
+                                                db.specs[key] = {
+                                                    slot           = slot,
+                                                    spellID        = nil,
+                                                    useClassColor  = true,
+                                                    showText       = true,
+                                                    textFont       = "Expressway",
+                                                    textSize       = 12,
+                                                    textOutline    = "OUTLINE",
+                                                }
+                                                addedAny = true
+                                                lastKey = key
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+
+                            if addedAny then
+                                selectedEditSpec = lastKey
+                                selectedSpecToAdd = ""
+                                Update()
+                                NotifyChange()
+                            end
                         end,
                     },
                 },
             },
 
-            colorPerSpec = {
-                order = 35, type = "group", inline = true, name = "Per-Spec Color",
-                disabled = function() return not E.db.thingsUI.chargeBar.enabled or #GetEnabledSpecsList() == 0 end,
-                args = (function()
-                    local out = {}
-                    for i = 1, 8 do
-                        local function entry()    return GetEnabledSpecsList()[i] end
-                        local function ent()
-                            local e = entry(); if not e then return nil end
-                            return E.db.thingsUI.chargeBar.specs[e.key]
-                        end
-                        out["row"..i] = {
-                            order = i * 10, type = "group", inline = true,
-                            name = function() return FormatSpecLabel(entry()) end,
-                            hidden = function() return entry() == nil end,
-                            args = {
-                                useClassColor = {
-                                    order = 1, type = "toggle", name = "Use Class Color", width = 1.2,
-                                    get = function() local e = ent(); return e and (e.useClassColor ~= false) end,
-                                    set = function(_, v) local e = ent(); if not e then return end; e.useClassColor = v; Update() end,
-                                },
-                                customColor = {
-                                    order = 2, type = "color", name = "Custom Color", width = 1.0,
-                                    disabled = function() local e = ent(); return not e or e.useClassColor ~= false end,
-                                    get = function()
-                                        local e = ent(); local c = (e and e.customColor) or {}
-                                        return c.r or 0.2, c.g or 0.6, c.b or 1.0
-                                    end,
-                                    set = function(_, r, g, b)
-                                        local e = ent(); if not e then return end
-                                        e.customColor = { r = r, g = g, b = b }
-                                        Update()
-                                    end,
-                                },
-                            },
-                        }
-                    end
-                    return out
-                end)(),
-            },
-
-            textGroup = {
-                order = 40, type = "group", inline = true, name = "Recharge Text",
-                disabled = function() return not E.db.thingsUI.chargeBar.enabled or #GetEnabledSpecsList() == 0 end,
-                args = (function()
-                    local out = {}
-                    for i = 1, 8 do
-                        local function entry()    return GetEnabledSpecsList()[i] end
-                        local function ent()
-                            local e = entry(); if not e then return nil end
-                            return E.db.thingsUI.chargeBar.specs[e.key]
-                        end
-                        out["row"..i] = {
-                            order = i * 10, type = "group", inline = true,
-                            name = function() return FormatSpecLabel(entry()) end,
-                            hidden = function() return entry() == nil end,
-                            args = {
-                                showText = {
-                                    order = 1, type = "toggle", name = "Show", width = 0.6,
-                                    get = function() local e = ent(); return e and (e.showText ~= false) end,
-                                    set = function(_, v) local e = ent(); if not e then return end; e.showText = v; Update() end,
-                                },
-                                textFont = {
-                                    order = 2, type = "select", dialogControl = "LSM30_Font",
-                                    name = "Font", width = 1.2,
-                                    values = (LSM and LSM.HashTable and LSM:HashTable("font")) or {},
-                                    disabled = function() local e = ent(); return not e or e.showText == false end,
-                                    get = function() local e = ent(); return e and (e.textFont or "Expressway") end,
-                                    set = function(_, v) local e = ent(); if not e then return end; e.textFont = v; Update() end,
-                                },
-                                textSize = {
-                                    order = 3, type = "range", name = "Size", width = 0.9,
-                                    min = 6, max = 32, step = 1,
-                                    disabled = function() local e = ent(); return not e or e.showText == false end,
-                                    get = function() local e = ent(); return e and (e.textSize or 12) or 12 end,
-                                    set = function(_, v) local e = ent(); if not e then return end; e.textSize = v; Update() end,
-                                },
-                                textOutline = {
-                                    order = 4, type = "select", name = "Outline", width = 1.0,
-                                    values = OUTLINE_VALUES,
-                                    disabled = function() local e = ent(); return not e or e.showText == false end,
-                                    get = function() local e = ent(); return e and (e.textOutline or "OUTLINE") or "OUTLINE" end,
-                                    set = function(_, v) local e = ent(); if not e then return end; e.textOutline = v; Update() end,
-                                },
-                            },
-                        }
-                    end
-                    return out
-                end)(),
-            },
-
-            offsetGroup = {
-                order = 50, type = "group", inline = true, name = "Position & Width",
+            -- ============================================================
+            -- TAB 1: Layout
+            -- ============================================================
+            layoutTab = {
+                order = 30, type = "group", name = "Layout",
                 disabled = function() return not E.db.thingsUI.chargeBar.enabled end,
                 args = {
-                    widthOffset = {
-                        order = 1, type = "range", name = "Width Offset",
-                        desc = "Pixels added to the inherited Essential Cooldown Viewer width.",
-                        min = -200, max = 200, step = 0.01, bigStep = 1,
-                        get = function() return E.db.thingsUI.chargeBar.widthOffset or 0 end,
-                        set = function(_, v) E.db.thingsUI.chargeBar.widthOffset = v; Update() end,
+                    appearance = {
+                        order = 1, type = "group", inline = true, name = "Appearance",
+                        args = {
+                            statusBarTexture = {
+                                order = 1, type = "select", dialogControl = "LSM30_Statusbar",
+                                name = "Bar Texture",
+                                values = (LSM and LSM.HashTable and LSM:HashTable("statusbar")) or {},
+                                get = function() return E.db.thingsUI.chargeBar.statusBarTexture end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.statusBarTexture = v; Update() end,
+                            },
+                            height = {
+                                order = 2, type = "range", name = "Height",
+                                min = 6, max = 60, step = 0.01, bigStep = 1,
+                                get = function() return E.db.thingsUI.chargeBar.height or 18 end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.height = v; Update() end,
+                            },
+                            xGap = {
+                                order = 3, type = "range", name = "Segment Gap",
+                                desc = "Horizontal gap between charge segments. Total bar width stays the same — segments shrink to make room.\n\n|cFFAAAAAA-1 makes adjacent segment borders share a 1px seam (recommended).|r",
+                                min = -10, max = 20, step = 1,
+                                get = function() return E.db.thingsUI.chargeBar.xGap or -1 end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.xGap = v; Update() end,
+                            },
+                            rechargeColor = {
+                                order = 4, type = "color", name = "Recharge Color", hasAlpha = true,
+                                get = function()
+                                    local c = E.db.thingsUI.chargeBar.rechargeColor or {}
+                                    return c.r or 0.5, c.g or 0.5, c.b or 0.5, c.a or 0.8
+                                end,
+                                set = function(_, r, g, b, a)
+                                    E.db.thingsUI.chargeBar.rechargeColor = { r = r, g = g, b = b, a = a }
+                                    Update()
+                                end,
+                            },
+                            showTicks = {
+                                order = 5, type = "toggle", name = "Show Ticks",
+                                disabled = function() return (E.db.thingsUI.chargeBar.xGap or 0) > 0 end,
+                                desc = "Disabled when Segment Gap > 0 since segments are already visually separated.",
+                                get = function() return E.db.thingsUI.chargeBar.showTicks end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.showTicks = v; Update() end,
+                            },
+                            tickWidth = {
+                                order = 6, type = "range", name = "Tick Width",
+                                min = 1, max = 6, step = 1,
+                                disabled = function()
+                                    return not E.db.thingsUI.chargeBar.showTicks
+                                        or (E.db.thingsUI.chargeBar.xGap or 0) > 0
+                                end,
+                                get = function() return E.db.thingsUI.chargeBar.tickWidth or 1 end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.tickWidth = v; Update() end,
+                            },
+                            tickColor = {
+                                order = 7, type = "color", name = "Tick Color", hasAlpha = true,
+                                disabled = function()
+                                    return not E.db.thingsUI.chargeBar.showTicks
+                                        or (E.db.thingsUI.chargeBar.xGap or 0) > 0
+                                end,
+                                get = function()
+                                    local c = E.db.thingsUI.chargeBar.tickColor or {}
+                                    return c.r or 0, c.g or 0, c.b or 0, c.a or 1
+                                end,
+                                set = function(_, r, g, b, a)
+                                    E.db.thingsUI.chargeBar.tickColor = { r = r, g = g, b = b, a = a }
+                                    Update()
+                                end,
+                            },
+                        },
                     },
-                    xOffset = {
-                        order = 2, type = "range", name = "X Offset",
-                        min = -200, max = 200, step = 0.01, bigStep = 1,
-                        get = function() return E.db.thingsUI.chargeBar.xOffset or 0 end,
-                        set = function(_, v) E.db.thingsUI.chargeBar.xOffset = v; Update() end,
+                    offsetGroup = {
+                        order = 2, type = "group", inline = true, name = "Position & Width",
+                        args = {
+                            widthOffset = {
+                                order = 1, type = "range", name = "Width Offset",
+                                desc = "Pixels added to the inherited Essential Cooldown Viewer width.",
+                                min = -200, max = 200, step = 0.01, bigStep = 1,
+                                get = function() return E.db.thingsUI.chargeBar.widthOffset or 0 end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.widthOffset = v; Update() end,
+                            },
+                            xOffset = {
+                                order = 2, type = "range", name = "X Offset",
+                                min = -200, max = 200, step = 0.01, bigStep = 1,
+                                get = function() return E.db.thingsUI.chargeBar.xOffset or 0 end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.xOffset = v; Update() end,
+                            },
+                            gap = {
+                                order = 3, type = "range", name = "Gap",
+                                desc = "Vertical gap between the charge bar and the bar below it.",
+                                min = -20, max = 50, step = 0.01, bigStep = 1,
+                                get = function() return E.db.thingsUI.chargeBar.gap or 1 end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.gap = v; Update() end,
+                            },
+                        },
                     },
-                    gap = {
-                        order = 3, type = "range", name = "Gap",
-                        desc = "Vertical gap between the charge bar and the bar below it.",
-                        min = -20, max = 50, step = 0.01, bigStep = 1,
-                        get = function() return E.db.thingsUI.chargeBar.gap or 1 end,
-                        set = function(_, v) E.db.thingsUI.chargeBar.gap = v; Update() end,
+                },
+            },
+
+            -- ============================================================
+            -- TAB 2: Spec Options
+            -- ============================================================
+            specTab = {
+                order = 40, type = "group", name = "Spec Options",
+                disabled = function() return not E.db.thingsUI.chargeBar.enabled end,
+                args = {
+                    empty = {
+                        order = 0, type = "description", fontSize = "medium",
+                        name = "|cFF888888No specs enabled. Add one above to configure it here.|r",
+                        hidden = function() return #GetEnabledSpecsList() > 0 end,
+                    },
+                    selector = {
+                        order = 1, type = "select", name = "Editing Spec", width = 2.0,
+                        desc = "Choose which enabled spec to configure.",
+                        hidden = function() return #GetEnabledSpecsList() == 0 end,
+                        values = GetEditSpecChoices,
+                        get = function() GetEditSpec(); return selectedEditSpec end,
+                        set = function(_, v) selectedEditSpec = v end,
+                    },
+                    remove = {
+                        order = 2, type = "execute", name = "Remove This Spec", width = 1.0,
+                        confirm = true,
+                        confirmText = "Remove this spec from the charge bar list?",
+                        hidden = function() return #GetEnabledSpecsList() == 0 end,
+                        func = function()
+                            if not selectedEditSpec then return end
+                            E.db.thingsUI.chargeBar.specs[selectedEditSpec] = nil
+                            selectedEditSpec = nil
+                            Update()
+                            NotifyChange()
+                        end,
+                    },
+                    copyToAll = {
+                        order = 3, type = "execute", name = "Copy to All Specs", width = 1.2,
+                        desc = "Copy this spec's Spell ID, Color, and Recharge Text settings to every other spec of the same class — adding new entries for any specs not yet enabled.\n\n|cFFAAAAAASlot is not copied|r — slots are kept per-spec to avoid Classbar Mode conflicts. New entries inherit this spec's slot, falling back to Secondary if it would conflict with Classbar Mode.",
+                        confirm = true,
+                        confirmText = "Copy this spec's Spell ID, Color and Text settings to all other specs of the same class?\n\nMissing specs will be added automatically.",
+                        hidden = function() return #GetEnabledSpecsList() == 0 end,
+                        disabled = function() return not selectedEditSpec end,
+                        func = function()
+                            local src = selectedEditSpec and E.db.thingsUI.chargeBar.specs[selectedEditSpec]
+                            if not src then return end
+
+                            -- Determine source spec's class.
+                            -- NOTE: `srcID and Func()` only returns the first value of Func() due to
+                            -- the `and` short-circuit, so we must call it on its own line to get all returns.
+                            local srcID = tonumber(selectedEditSpec)
+                            if not srcID then return end
+                            local _, _, _, _, _, srcClassFile = GetSpecializationInfoByID(srcID)
+                            if not srcClassFile then return end
+
+                            local function applySettings(dst)
+                                dst.spellID       = src.spellID
+                                dst.useClassColor = src.useClassColor
+                                if src.customColor then
+                                    dst.customColor = {
+                                        r = src.customColor.r,
+                                        g = src.customColor.g,
+                                        b = src.customColor.b,
+                                    }
+                                else
+                                    dst.customColor = nil
+                                end
+                                dst.showText    = src.showText
+                                dst.textFont    = src.textFont
+                                dst.textSize    = src.textSize
+                                dst.textOutline = src.textOutline
+                            end
+
+                            local db = E.db.thingsUI.chargeBar
+                            db.specs = db.specs or {}
+
+                            -- Walk every classID 1..13 and find specs whose classFile matches the source.
+                            -- This is more robust than GetClassInfo, which can vary across patches.
+                            for cid = 1, 13 do
+                                local numSpecs = GetNumSpecializationsForClassID and GetNumSpecializationsForClassID(cid) or 0
+                                for i = 1, numSpecs do
+                                    local sid = GetSpecializationInfoForClassID and GetSpecializationInfoForClassID(cid, i)
+                                    if sid then
+                                        local _, _, _, _, _, sClassFile = GetSpecializationInfoByID(sid)
+                                        if sClassFile == srcClassFile then
+                                            local key = tostring(sid)
+                                            if key ~= selectedEditSpec then
+                                                local dst = db.specs[key]
+                                                if not dst then
+                                                    -- Pick a slot: prefer src.slot, but avoid Classbar conflict
+                                                    local slot = src.slot or "SECONDARY"
+                                                    local conflict = GetClassbarSlot(key)
+                                                    if conflict and conflict == slot then
+                                                        slot = (slot == "SECONDARY") and "POWER" or "SECONDARY"
+                                                    end
+                                                    dst = { slot = slot }
+                                                    db.specs[key] = dst
+                                                end
+                                                applySettings(dst)
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+
+                            Update()
+                            NotifyChange()
+                        end,
+                    },
+
+                    -- Slot + Spell ID
+                    bindings = {
+                        order = 10, type = "group", inline = true, name = "Tracked Spell",
+                        hidden = function() return #GetEnabledSpecsList() == 0 end,
+                        args = {
+                            spellID = {
+                                order = 1, type = "input", name = "Spell ID", width = 1.2,
+                                desc = "Numeric spell ID of the ability to track. Must be a spell with charges (e.g. Charge=100, Hover=358267, Shimmer=212653).",
+                                get = function() local e = GetEditSpec(); return e and tostring(e.spellID or "") or "" end,
+                                set = function(_, v)
+                                    local e = GetEditSpec(); if not e then return end
+                                    v = (v or ""):gsub("%s", "")
+                                    e.spellID = (v ~= "" and tonumber(v)) or nil
+                                    Update()
+                                end,
+                            },
+                            slot = {
+                                order = 2, type = "select", name = "Slot", width = 1.3,
+                                values = function() return GetRowSlotChoices(selectedEditSpec) end,
+                                get = function() local e = GetEditSpec(); return e and (e.slot or "SECONDARY") or "SECONDARY" end,
+                                set = function(_, v) local e = GetEditSpec(); if not e then return end; e.slot = v; Update() end,
+                            },
+                            conflict = {
+                                order = 3, type = "description", width = "full", fontSize = "medium",
+                                name = function()
+                                    local e = GetEditSpec(); if not e then return "" end
+                                    local cs = GetClassbarSlot(selectedEditSpec)
+                                    if cs and (e.slot or "SECONDARY") == cs then
+                                        return "|cFFFF6B6B⚠ Classbar Mode is using this slot on this spec — the classbar wins and the charge bar is hidden.|r"
+                                    end
+                                    return ""
+                                end,
+                                hidden = function()
+                                    local e = GetEditSpec(); if not e then return true end
+                                    local cs = GetClassbarSlot(selectedEditSpec)
+                                    return not (cs and (e.slot or "SECONDARY") == cs)
+                                end,
+                            },
+                        },
+                    },
+
+                    -- Color
+                    color = {
+                        order = 20, type = "group", inline = true, name = "Color",
+                        hidden = function() return #GetEnabledSpecsList() == 0 end,
+                        args = {
+                            useClassColor = {
+                                order = 1, type = "toggle", name = "Use Class Color", width = 1.2,
+                                get = function() local e = GetEditSpec(); return e and (e.useClassColor ~= false) end,
+                                set = function(_, v) local e = GetEditSpec(); if not e then return end; e.useClassColor = v; Update() end,
+                            },
+                            customColor = {
+                                order = 2, type = "color", name = "Custom Color", width = 1.0,
+                                disabled = function() local e = GetEditSpec(); return not e or e.useClassColor ~= false end,
+                                get = function()
+                                    local e = GetEditSpec(); local c = (e and e.customColor) or {}
+                                    return c.r or 0.2, c.g or 0.6, c.b or 1.0
+                                end,
+                                set = function(_, r, g, b)
+                                    local e = GetEditSpec(); if not e then return end
+                                    e.customColor = { r = r, g = g, b = b }
+                                    Update()
+                                end,
+                            },
+                        },
+                    },
+
+                    -- Recharge text
+                    text = {
+                        order = 30, type = "group", inline = true, name = "Recharge Text",
+                        hidden = function() return #GetEnabledSpecsList() == 0 end,
+                        args = {
+                            showText = {
+                                order = 1, type = "toggle", name = "Show", width = 0.6,
+                                get = function() local e = GetEditSpec(); return e and (e.showText ~= false) end,
+                                set = function(_, v) local e = GetEditSpec(); if not e then return end; e.showText = v; Update() end,
+                            },
+                            textFont = {
+                                order = 2, type = "select", dialogControl = "LSM30_Font",
+                                name = "Font", width = 1.2,
+                                values = (LSM and LSM.HashTable and LSM:HashTable("font")) or {},
+                                disabled = function() local e = GetEditSpec(); return not e or e.showText == false end,
+                                get = function() local e = GetEditSpec(); return e and (e.textFont or "Expressway") end,
+                                set = function(_, v) local e = GetEditSpec(); if not e then return end; e.textFont = v; Update() end,
+                            },
+                            textSize = {
+                                order = 3, type = "range", name = "Size", width = 0.9,
+                                min = 6, max = 32, step = 1,
+                                disabled = function() local e = GetEditSpec(); return not e or e.showText == false end,
+                                get = function() local e = GetEditSpec(); return e and (e.textSize or 12) or 12 end,
+                                set = function(_, v) local e = GetEditSpec(); if not e then return end; e.textSize = v; Update() end,
+                            },
+                            textOutline = {
+                                order = 4, type = "select", name = "Outline", width = 1.0,
+                                values = OUTLINE_VALUES,
+                                disabled = function() local e = GetEditSpec(); return not e or e.showText == false end,
+                                get = function() local e = GetEditSpec(); return e and (e.textOutline or "OUTLINE") or "OUTLINE" end,
+                                set = function(_, v) local e = GetEditSpec(); if not e then return end; e.textOutline = v; Update() end,
+                            },
+                        },
                     },
                 },
             },

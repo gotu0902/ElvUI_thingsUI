@@ -1,7 +1,3 @@
--- ClassbarMode options tab. Per-spec list of which specs should have the
--- ElvUI player classbar enabled and where it should be placed (above primary
--- power or above secondary power slot in the BCDM cluster).
-
 local addon, ns = ...
 local TUI = ns.TUI
 local E = ns.E
@@ -24,8 +20,6 @@ local function GetClassFile()
     return E.myclass
 end
 
--- Build a select dict of all specs for current player class that aren't
--- already in the enabled list.
 local function GetAvailableSpecChoices()
     local choices = { [""] = "|cFF888888— Select Spec —|r" }
     local db = E.db.thingsUI.classbarMode
@@ -86,8 +80,6 @@ local function FormatSpecLabel(e)
 end
 
 local function BuildEnabledArgs()
-    -- Each enabled spec is wrapped in its own inline group so the row stays
-    -- as one line regardless of how wide the options panel is.
     local args = {}
 
     args.empty = {

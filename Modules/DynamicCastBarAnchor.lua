@@ -34,9 +34,6 @@ local function UpdateCastBarAnchor()
     local classbar = ns.ClassbarMode and ns.ClassbarMode.GetActiveAnchorFrame and ns.ClassbarMode.GetActiveAnchorFrame() or nil
     local chargebar = ns.ChargeBar and ns.ChargeBar.GetActiveAnchorFrame and ns.ChargeBar.GetActiveAnchorFrame() or nil
 
-    -- Pick the topmost (highest TOP) of classbar / chargebar so the cast bar
-    -- always sits above the entire stack regardless of which slot each one
-    -- is configured for.
     local topCustom
     local function consider(f)
         if not f or not f.GetTop then return end
@@ -158,9 +155,6 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     end
 end)
 
--- Public: invalidate the cached anchor target and re-evaluate next frame.
--- Used by other modules (e.g. ClassbarMode) when a frame the cast bar anchors
--- to appears, disappears, or changes identity.
 function TUI:InvalidateDynamicCastBarAnchor()
     lastAnchorTarget = nil
     MarkDirty()

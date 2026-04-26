@@ -97,7 +97,7 @@ P["thingsUI"] = {
         gap           = 1,
         height        = 18,
         statusBarTexture = "ElvUI Blank",
-        xGap          = 0, -- horizontal gap between charge segments (in pixels)
+        xGap          = -1, 
         showTicks     = true,
         tickWidth     = 1,
         tickColor     = { r = 0, g = 0, b = 0, a = 1 },

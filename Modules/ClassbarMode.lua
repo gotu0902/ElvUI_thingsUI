@@ -1,14 +1,3 @@
--- ClassbarMode
---
--- Per-spec ElvUI classbar enable/positioning. When the current spec is
--- registered, ElvUI's player classbar is enabled, detached, parented to
--- UIParent, and anchored above either BCDM's primary or secondary power bar
--- (per-spec choice). Width inherits from the visible BCDM cluster
--- (EssentialCooldownViewer + trinket bar bounding box).
---
--- DynamicCastBarAnchor consumes ns.ClassbarMode.GetActiveAnchorFrame() so the
--- BCDM cast bar stacks on top of the classbar when one is active.
-
 local addon, ns = ...
 local TUI = ns.TUI
 local E = ns.E
@@ -25,7 +14,6 @@ local isEnabled   = false
 local playerEntered = false -- safe to call CreateAndUpdateUF/Configure_ClassBar
 local lastEnableState = nil -- "ON" or "OFF"; tracks what we last applied
 
--- Forward declaration so UpdateNow can call HookEssential (defined later).
 local HookEssential = function() end
 
 local function GetCurrentSpecID()

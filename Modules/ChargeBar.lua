@@ -44,8 +44,8 @@ local function GetSpecEntry()
     return db.specs[tostring(id)]
 end
 
--- Returns true if classbarMode is occupying the same slot for this spec.
 local function HasClassbarConflict(slot)
+    if slot == "ABOVE_SECONDARY" then return false end
     local cdb = E.db.thingsUI.classbarMode
     if not cdb or not cdb.enabled or not cdb.specs then return false end
     local id = GetCurrentSpecID()
@@ -71,8 +71,18 @@ end
 
 local function GetAnchorTarget(slot)
     local primary   = _G["BCDM_PowerBar"]
+    local secondary = _G["BCDM_SecondaryPowerBar"]
     local essential = _G["EssentialCooldownViewer"]
     if slot == "POWER" then
+        if essential then return essential end
+    elseif slot == "ABOVE_SECONDARY" then
+        if secondary and secondary:IsShown() and secondary:GetWidth() > 0 then
+            return secondary
+        end
+
+        if primary and primary:IsShown() and primary:GetWidth() > 0 then
+            return primary
+        end
         if essential then return essential end
     else
         if primary and primary:IsShown() and primary:GetWidth() > 0 then
@@ -125,9 +135,6 @@ local function EnsureFrame()
     frame:SetFrameStrata("LOW")
     frame:Hide()
 
-    -- Note: no SetTemplate on the root frame. Each charge segment gets its
-    -- own ElvUI backdrop so gaps between segments stay transparent.
-
     barFrame = CreateFrame("Frame", nil, frame)
     barFrame:SetPoint("TOPLEFT",     frame, "TOPLEFT",     0, 0)
     barFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
@@ -145,8 +152,6 @@ end
 
 local function GetSegment(i)
     if not segmentPool[i] then
-        -- Backdrop wrapper holds the ElvUI border; inner StatusBar is inset
-        -- by E.Border so the border stays visible above the fill texture.
         local wrap = CreateFrame("Frame", nil, barFrame, "BackdropTemplate")
         if wrap.SetTemplate then wrap:SetTemplate("Default") end
 
@@ -245,32 +250,38 @@ local function ApplyChargeLayout()
 
     local n     = currentMaxCharges
     local xGap  = db.xGap or 0
-    local segW  = (barW - xGap * (n - 1)) / n
-    if segW < 1 then segW = 1 end
+    local barWInt = math.floor(barW + 0.5)
+    local D       = barWInt - xGap * (n - 1) -- total drawable pixel width
+    local function segLeft(i)  -- 0-based pixel offset of segment i's left edge
+        return math.floor(((i - 1) * D) / n + 0.5) + (i - 1) * xGap
+    end
+    local function segRight(i)
+        return math.floor((i * D) / n + 0.5) + (i - 1) * xGap
+    end
 
     -- Build / position N segment status bars
     local tex = (LSM and LSM:Fetch("statusbar", db.statusBarTexture)) or E.media.blankTex
+    local lastSegW = 1
     for i = 1, n do
         local s = GetSegment(i)
         s:SetStatusBarTexture(tex)
+        local left  = segLeft(i)
+        local w     = segRight(i) - left
+        if w < 1 then w = 1 end
+        lastSegW = w
         local wrap = s.wrap
         wrap:ClearAllPoints()
-        wrap:SetPoint("LEFT", barFrame, "LEFT", (i - 1) * (segW + xGap), 0)
-        wrap:SetSize(segW, barH)
+        wrap:SetPoint("LEFT", barFrame, "LEFT", left, 0)
+        wrap:SetSize(w, barH)
         wrap:Show()
         s:Show()
     end
     ReleaseSegments(n + 1)
     activeSegmentCount = n
 
-    -- Re-apply colors (texture / color)
-    -- Done by ApplyVisuals using activeSegmentCount.
-
-    rechargeFrame:SetWidth(segW)
+    rechargeFrame:SetWidth(lastSegW)
     rechargeFrame:SetHeight(barH)
 
-    -- Ticks between segments. Skip if xGap > 0 since segments are already
-    -- visually separated.
     ReleaseTicks()
     if (xGap or 0) <= 0 and db.showTicks and db.tickWidth and db.tickWidth > 0 then
         local tc = db.tickColor or {}
@@ -279,7 +290,8 @@ local function ApplyChargeLayout()
             t:SetColorTexture(tc.r or 0, tc.g or 0, tc.b or 0, tc.a or 1)
             t:SetSize(db.tickWidth, barH)
             t:ClearAllPoints()
-            t:SetPoint("CENTER", barFrame, "LEFT", segW * i, 0)
+            -- Place tick centered on the boundary between segment i and i+1.
+            t:SetPoint("CENTER", barFrame, "LEFT", segRight(i), 0)
             t:Show()
             activeTickCount = i
         end
@@ -295,10 +307,6 @@ local function _UpdateChargeStateInner()
     end
 
     local cur, mx = info.currentCharges, info.maxCharges
-    -- During combat, when our addon execution is tainted by ElvUI (we hook
-    -- UF.Configure_ClassBar in ClassbarMode), C_Spell.GetSpellCharges may
-    -- return secure-tainted or nil fields. Bail out and wait for the next
-    -- event after combat.
     if type(cur) ~= "number" or type(mx) ~= "number" then return end
 
     if mx ~= currentMaxCharges then
@@ -367,26 +375,37 @@ local function ApplyPosition(entry)
 
     local db = E.db.thingsUI.chargeBar
     local left, right = GetClusterBounds()
-    local clusterWidth = (left and right and right > left) and (right - left) or (target:GetWidth() or 0)
-    local desiredWidth = math.max(20, math.floor(clusterWidth + (db.widthOffset or 0) + 0.5))
 
-    frame:SetWidth(desiredWidth)
     frame:SetHeight(db.height or 18)
 
-    local essential = _G["EssentialCooldownViewer"]
-    -- Anchor LEFT to essential, shift by (clusterLeft - essentialLeft) so the
-    -- bar's left edge sits at the cluster's true leftmost edge (which may be
-    -- a trinket child whose container has 0 width).
+    local essential       = _G["EssentialCooldownViewer"]
     local leftAnchorFrame = essential or target
-    local leftDelta = 0
-    if essential and left then
+
+    local leftDelta, rightDelta
+    if essential and left and right then
         local el = essential:GetLeft()
-        if el then leftDelta = left - el end
+        if el then
+            leftDelta  = left  - el
+            rightDelta = right - el
+        end
     end
 
+    local xOff      = db.xOffset or 0
+    local widthOff  = db.widthOffset or 0
+
     frame:ClearAllPoints()
-    frame:SetPoint("LEFT",   leftAnchorFrame, "LEFT", (db.xOffset or 0) + leftDelta, 0)
-    frame:SetPoint("BOTTOM", target,          "TOP",  0,                              db.gap or 1)
+    if leftDelta and rightDelta then
+        local half = widthOff / 2
+        frame:SetPoint("LEFT",   leftAnchorFrame, "LEFT", leftDelta  + xOff - half, 0)
+        frame:SetPoint("RIGHT",  leftAnchorFrame, "LEFT", rightDelta + xOff + half, 0)
+    else
+        -- Fallback: cluster bounds unavailable; fall back to width math.
+        local clusterWidth = target:GetWidth() or 0
+        local desiredWidth = math.max(20, math.floor(clusterWidth + widthOff + 0.5))
+        frame:SetWidth(desiredWidth)
+        frame:SetPoint("LEFT", leftAnchorFrame, "LEFT", xOff, 0)
+    end
+    frame:SetPoint("BOTTOM", target, "TOP", 0, db.gap or 1)
 end
 
 local function ResolveSpellID(entry)
@@ -494,9 +513,6 @@ HookCluster = function()
         f._TUI_chargeBarHooked = true
         f:HookScript("OnSizeChanged", function() MarkDirty() end)
     end
-    -- Hook each essential icon's OnShow/OnHide so we react when icons are
-    -- added/removed (which changes EssentialCooldownViewer's effective width
-    -- but doesn't always fire its OnSizeChanged).
     if f then
         for i = 1, f:GetNumChildren() do
             local child = select(i, f:GetChildren())
@@ -529,15 +545,19 @@ HookCluster = function()
         p._TUI_chargeBarHooked = true
         p:HookScript("OnSizeChanged", function() MarkDirty() end)
     end
+    local sp = _G["BCDM_SecondaryPowerBar"]
+    if sp and not sp._TUI_chargeBarHooked then
+        sp._TUI_chargeBarHooked = true
+        sp:HookScript("OnSizeChanged", function() MarkDirty() end)
+        sp:HookScript("OnShow",        function() MarkDirty() end)
+        sp:HookScript("OnHide",        function() MarkDirty() end)
+    end
 end
 
 function TUI:UpdateChargeBar()
     local db = E.db.thingsUI.chargeBar
     if db and db.enabled then
         isEnabled = true
-        -- If the user toggles enable in-game (after PLAYER_ENTERING_WORLD
-        -- already fired), the event won't fire again, so seed the flag from
-        -- IsLoggedIn() here.
         if not playerEntered and IsLoggedIn and IsLoggedIn() then
             playerEntered = true
         end
