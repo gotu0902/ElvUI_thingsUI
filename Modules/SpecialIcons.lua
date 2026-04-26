@@ -13,8 +13,11 @@ local ReturnFrame    = function(...) return SB.ReturnFrame(...) end
 -- Mover registration. Mirrors the bar version in SpecialBars.lua —
 -- see comments there for the full strategy.
 local _iconMoverCreated = {}
+local _draggingIconMover = {}
 local function PostDragForIcon(iconKey)
     return function(self)
+        if not _draggingIconMover[iconKey] then return end
+        _draggingIconMover[iconKey] = nil
         local db = SB.GetIconDB(iconKey)
         if not db then return end
         local point, _, relPoint, x, y = self:GetPoint()
@@ -39,6 +42,11 @@ local function EnsureIconMover(wrapper, iconKey, displayName)
         "ALL,THINGSUI",
         function() return not (E.db.thingsUI and E.db.thingsUI.specialBars) end,
         "thingsUI,specialIconsTab," .. iconKey .. "Group")
+    local mover = _G[moverName]
+    if mover and not mover._tuiDragHooked then
+        mover._tuiDragHooked = true
+        mover:HookScript("OnDragStart", function() _draggingIconMover[iconKey] = true end)
+    end
     _iconMoverCreated[iconKey] = true
 end
 
@@ -386,17 +394,21 @@ UpdateIconSlot = function(iconKey)
     end
     EnsureIconMover(wrapper, iconKey, label)
 
-    -- Sync slider -> mover so option changes move the mover too.
+    -- Sync slider -> mover only when values actually differ. See bar version
+    -- for rationale.
     local mover = _G[moverName]
     if mover and anchorFrame then
         local point = db.anchorPoint or "CENTER"
         local relPoint = db.anchorRelativePoint or "CENTER"
         local x, y = db.anchorXOffset or 0, db.anchorYOffset or 0
-        mover:ClearAllPoints()
-        mover:SetPoint(point, anchorFrame, relPoint, x, y)
-        if E.db.movers then
-            E.db.movers[moverName] = string.format("%s,%s,%s,%d,%d",
-                point, anchorFrame:GetName() or "UIParent", relPoint, x, y)
+        local cp, _, crp, cx, cy = mover:GetPoint()
+        local same = cp == point and crp == relPoint
+            and cx and math.abs(cx - x) < 0.5
+            and cy and math.abs(cy - y) < 0.5
+        if not same then
+            mover:ClearAllPoints()
+            mover:SetPoint(point, anchorFrame, relPoint, x, y)
+            if E.SaveMoverPosition then E:SaveMoverPosition(moverName) end
         end
     end
 

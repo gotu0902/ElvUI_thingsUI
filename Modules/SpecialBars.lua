@@ -49,10 +49,14 @@ end
 -- via /moveui. Right-click opens our config via ElvUI's ToggleOptions hook.
 local _moverCreated = {}
 
--- After the user drags the mover, mirror the resulting offset back into our
--- own X/Y DB fields so the option sliders stay in sync with the mover.
+-- ElvUI fires postdrag both on OnDragStop AND on OnShow (after reload, CDM
+-- toggle, etc.). We only want to write our DB when the user actually moved
+-- the mover, so a flag is set in OnDragStart and consumed here.
+local _draggingMover = {}
 local function PostDragForBar(barKey)
     return function(self)
+        if not _draggingMover[barKey] then return end
+        _draggingMover[barKey] = nil
         local db = SB.GetBarDB(barKey)
         if not db then return end
         local point, _, relPoint, x, y = self:GetPoint()
@@ -61,11 +65,17 @@ local function PostDragForBar(barKey)
             db.anchorRelativePoint = relPoint or "CENTER"
             db.anchorXOffset = math.floor(x + 0.5)
             db.anchorYOffset = math.floor(y + 0.5)
-            -- Tell AceConfig to redraw sliders.
             local ok, reg = pcall(LibStub, "AceConfigRegistry-3.0")
             if ok and reg and reg.NotifyChange then reg:NotifyChange("ElvUI") end
         end
     end
+end
+
+local function HookMoverDragFlag(moverName, barKey, flagTable)
+    local mover = _G[moverName]
+    if not mover or mover._tuiDragHooked then return end
+    mover._tuiDragHooked = true
+    mover:HookScript("OnDragStart", function() flagTable[barKey] = true end)
 end
 
 local function EnsureMover(wrapper, barKey, displayName)
@@ -81,6 +91,7 @@ local function EnsureMover(wrapper, barKey, displayName)
         "ALL,THINGSUI",
         function() return not (E.db.thingsUI and E.db.thingsUI.specialBars) end,
         "thingsUI,specialBarsTab," .. barKey .. "Group")
+    HookMoverDragFlag(moverName, barKey, _draggingMover)
     _moverCreated[barKey] = true
 end
 
@@ -299,23 +310,25 @@ UpdateBarSlot = function(barKey)
     end
     EnsureMover(wrapper, barKey, label)
 
-    -- After mover exists, push the saved offsets back into the mover so
-    -- changes from the option sliders are reflected. This is what keeps the
-    -- sliders and the in-game mover in sync both ways (postdrag handles the
-    -- other direction).
+    -- Sync option sliders -> mover. We only push when values actually differ
+    -- so frequent UpdateBarSlot calls don't fight ElvUI's own SaveMoverPosition
+    -- after reload. Writing to E.db.movers directly is intentionally avoided —
+    -- ElvUI's SaveMoverPosition (called on drag end) is the source of truth
+    -- for that table; we only mutate it indirectly via mover:SetPoint and
+    -- letting the user drag.
     local mover = _G[moverName]
     if mover and anchorFrame then
         local point = db.anchorPoint or "CENTER"
         local relPoint = db.anchorRelativePoint or "CENTER"
         local x, y = db.anchorXOffset or 0, db.anchorYOffset or 0
-        mover:ClearAllPoints()
-        mover:SetPoint(point, anchorFrame, relPoint, x, y)
-        -- Persist into ElvUI's mover DB so /reload keeps the position.
-        if E.db.movers then
-            E.db.movers[moverName] = string.format("%s,%s,%s,%d,%d",
-                point,
-                anchorFrame:GetName() or "UIParent",
-                relPoint, x, y)
+        local cp, _, crp, cx, cy = mover:GetPoint()
+        local same = cp == point and crp == relPoint
+            and cx and math.abs(cx - x) < 0.5
+            and cy and math.abs(cy - y) < 0.5
+        if not same then
+            mover:ClearAllPoints()
+            mover:SetPoint(point, anchorFrame, relPoint, x, y)
+            if E.SaveMoverPosition then E:SaveMoverPosition(moverName) end
         end
     end
 
