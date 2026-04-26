@@ -30,6 +30,14 @@ local playerEntered = (IsLoggedIn and IsLoggedIn()) or false
 local currentSpellID
 local currentMaxCharges = 0
 local rechargeStart, rechargeDuration
+-- Last-seen recharge duration per spell, captured from C_Spell.GetSpellCharges
+-- when it returns valid (non-tainted) data. Used as a fallback during combat
+-- when the API may return secure-tainted nil fields, and as the source-of-
+-- truth duration when we predict a recharge start from UNIT_SPELLCAST_SUCCEEDED.
+local cachedRechargeDuration = {} -- [spellID] = seconds
+-- Predicted current charge count, used as a fallback when GetSpellCharges
+-- returns tainted/nil data during combat. Driven by UNIT_SPELLCAST_SUCCEEDED.
+local predictedCharges
 
 local function GetCurrentSpecID()
     local idx = GetSpecialization and GetSpecialization() or nil
@@ -301,18 +309,35 @@ end
 local function _UpdateChargeStateInner()
     if not currentSpellID then return end
     local info = C_Spell and C_Spell.GetSpellCharges and C_Spell.GetSpellCharges(currentSpellID) or nil
-    if not info then
-        frame:Hide()
-        return
+    if not info then return end -- don't hide; keep last predicted state visible
+
+    local cur, mx       = info.currentCharges, info.maxCharges
+    local cdStart       = info.cooldownStartTime
+    local cdDuration    = info.cooldownDuration
+
+    -- Capture duration whenever the API gave us a real number — used to
+    -- recover during combat when fields go nil due to secure taint.
+    if type(cdDuration) == "number" and cdDuration > 0 then
+        cachedRechargeDuration[currentSpellID] = cdDuration
     end
 
-    local cur, mx = info.currentCharges, info.maxCharges
-    if type(cur) ~= "number" or type(mx) ~= "number" then return end
+    -- Combat-taint fallback: API returned nil/garbage for charge counts.
+    -- Use our predicted charge count + a synthetic cooldown timer.
+    if type(cur) ~= "number" or type(mx) ~= "number" then
+        if predictedCharges == nil then return end -- nothing to fall back on
+        cur = predictedCharges
+        mx  = currentMaxCharges
+        cdStart    = rechargeStart or cdStart
+        cdDuration = rechargeDuration or cachedRechargeDuration[currentSpellID]
+    end
 
     if mx ~= currentMaxCharges then
         currentMaxCharges = mx
         ApplyChargeLayout()
     end
+
+    -- Sync prediction back to truth
+    predictedCharges = cur
 
     -- Fill each segment 0/1
     for i = 1, activeSegmentCount do
@@ -320,8 +345,6 @@ local function _UpdateChargeStateInner()
         if s then s:SetValue(i <= cur and 1 or 0) end
     end
 
-    local cdStart    = info.cooldownStartTime
-    local cdDuration = info.cooldownDuration
     if cur < mx and type(cdStart) == "number" and type(cdDuration) == "number" and cdDuration > 0 then
         rechargeStart    = cdStart
         rechargeDuration = cdDuration
@@ -335,6 +358,35 @@ local function _UpdateChargeStateInner()
         end
     else
         rechargeStart, rechargeDuration = nil, nil
+        rechargeFrame:Hide()
+    end
+end
+
+-- Pure prediction-driven render path. Does NOT call C_Spell APIs, so it works
+-- even when our addon is taint-locked during combat (we hooksecurefunc
+-- UF.Configure_ClassBar in ClassbarMode which propagates secret taint to all
+-- our Lua execution). Driven by UNIT_SPELLCAST_SUCCEEDED.
+local function RenderPredicted()
+    if not currentSpellID or not currentMaxCharges or currentMaxCharges <= 0 then return end
+    local cur = predictedCharges
+    if type(cur) ~= "number" then return end
+    local mx = currentMaxCharges
+
+    for i = 1, activeSegmentCount do
+        local s = segmentPool[i]
+        if s then s:SetValue(i <= cur and 1 or 0) end
+    end
+
+    if cur < mx and rechargeStart and rechargeDuration then
+        local target = segmentPool[cur + 1]
+        if target then
+            rechargeFrame:ClearAllPoints()
+            rechargeFrame:SetAllPoints(target)
+            rechargeFrame:Show()
+        else
+            rechargeFrame:Hide()
+        end
+    else
         rechargeFrame:Hide()
     end
 end
@@ -354,7 +406,23 @@ local function _OnRechargeUpdateInner()
     local elapsed = now - rechargeStart
     local remaining = rechargeDuration - elapsed
     if remaining <= 0 then
-        UpdateChargeState()
+        -- Charge regenerated. Predict an increment, then chain another timer
+        -- if we're still missing charges. Try the API too; if it works it'll
+        -- correct any drift.
+        if type(predictedCharges) == "number" then
+            predictedCharges = predictedCharges + 1
+            if currentMaxCharges and predictedCharges > currentMaxCharges then
+                predictedCharges = currentMaxCharges
+            end
+        end
+        if predictedCharges and currentMaxCharges and predictedCharges < currentMaxCharges
+           and type(rechargeDuration) == "number" and rechargeDuration > 0 then
+            rechargeStart = now -- chain next charge's timer from now
+        else
+            rechargeStart, rechargeDuration = nil, nil
+        end
+        RenderPredicted()
+        UpdateChargeState() -- best-effort sync
         return
     end
     rechargeFrame:SetMinMaxValues(0, rechargeDuration)
@@ -450,8 +518,17 @@ local function UpdateNow()
 
     EnsureFrame()
     HookCluster() -- re-scan for newly-added trinket / essential children
+    if currentSpellID ~= spellID then
+        -- Spell changed (e.g. spec swap): reset prediction state.
+        predictedCharges = nil
+        rechargeStart, rechargeDuration = nil, nil
+    end
     currentSpellID = spellID
     currentMaxCharges = info.maxCharges
+    -- Seed cached duration from current API value (works fine outside combat).
+    if type(info.cooldownDuration) == "number" and info.cooldownDuration > 0 then
+        cachedRechargeDuration[spellID] = info.cooldownDuration
+    end
 
     ApplyPosition(entry)
     ApplyChargeLayout()
@@ -493,7 +570,7 @@ rechargeTicker:SetScript("OnUpdate", function()
     OnRechargeUpdate()
 end)
 
-eventFrame:SetScript("OnEvent", function(_, event, arg1)
+eventFrame:SetScript("OnEvent", function(_, event, arg1, _, arg3)
     if event == "PLAYER_ENTERING_WORLD" then
         playerEntered = true
         C_Timer.After(0.5, MarkDirty)
@@ -504,6 +581,45 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "SPELL_UPDATE_CHARGES" or event == "SPELL_UPDATE_COOLDOWN" then
         if frame and frame:IsShown() then UpdateChargeState() end
         if frame and frame:IsShown() and rechargeStart then rechargeTicker:Show() end
+    elseif event == "UNIT_SPELLCAST_SUCCEEDED" and arg1 == "player" then
+        -- arg3 is spellID on this event
+        if currentSpellID and arg3 == currentSpellID and frame and frame:IsShown() then
+            -- Predict: decrement a charge and start a recharge timer if one
+            -- isn't already running. This is the source-of-truth path during
+            -- combat when C_Spell.GetSpellCharges may return tainted nils.
+            local pc = predictedCharges
+            if type(pc) ~= "number" then pc = currentMaxCharges or 0 end
+            if pc > 0 then pc = pc - 1 end
+            predictedCharges = pc
+
+            if not rechargeStart and currentMaxCharges and pc < currentMaxCharges then
+                -- Try cached duration first; fall back to GetSpellChargeDuration
+                -- which returns just a number (less taint-prone than the struct).
+                local dur = cachedRechargeDuration[currentSpellID]
+                if not (type(dur) == "number" and dur > 0) then
+                    local ok, d = pcall(function()
+                        return C_Spell and C_Spell.GetSpellChargeDuration
+                           and C_Spell.GetSpellChargeDuration(currentSpellID)
+                    end)
+                    if ok and type(d) == "number" and d > 0 then
+                        dur = d
+                        cachedRechargeDuration[currentSpellID] = d
+                    end
+                end
+                if type(dur) == "number" and dur > 0 then
+                    rechargeStart    = GetTime()
+                    rechargeDuration = dur
+                end
+            end
+
+            -- Render directly from predicted state — does not call
+            -- GetSpellCharges, so it works even when taint-locked.
+            RenderPredicted()
+            if rechargeStart then rechargeTicker:Show() end
+
+            -- Also try the normal API path; if it succeeds it'll sync truth.
+            UpdateChargeState()
+        end
     end
 end)
 
@@ -568,6 +684,7 @@ function TUI:UpdateChargeBar()
         eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
         eventFrame:RegisterEvent("SPELL_UPDATE_CHARGES")
         eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+        eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
         HookCluster()
         if playerEntered then C_Timer.After(0.2, MarkDirty) end
     else
