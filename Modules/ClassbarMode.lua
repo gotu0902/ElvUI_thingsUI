@@ -3,7 +3,8 @@
 -- Per-spec ElvUI classbar enable/positioning. When the current spec is
 -- registered, ElvUI's player classbar is enabled, detached, parented to
 -- UIParent, and anchored above either BCDM's primary or secondary power bar
--- (per-spec choice). Width inherits from EssentialCooldownViewer.
+-- (per-spec choice). Width inherits from the visible BCDM cluster
+-- (EssentialCooldownViewer + trinket bar bounding box).
 --
 -- DynamicCastBarAnchor consumes ns.ClassbarMode.GetActiveAnchorFrame() so the
 -- BCDM cast bar stacks on top of the classbar when one is active.
@@ -15,13 +16,14 @@ local E = ns.E
 local CM = {}
 ns.ClassbarMode = CM
 
-local UF = E and E:GetModule("UnitFrames")
+local function GetUF() return E and E:GetModule("UnitFrames", true) end
 
 local updateFrame = CreateFrame("Frame")
 local eventFrame  = CreateFrame("Frame")
 local isDirty     = false
 local isEnabled   = false
-local lastApplied = nil -- cached spec key we last applied for, prevents redundant CreateAndUpdateUF
+local playerEntered = false -- safe to call CreateAndUpdateUF/Configure_ClassBar
+local lastEnableState = nil -- "ON" or "OFF"; tracks what we last applied
 
 local function GetCurrentSpecID()
     local idx = GetSpecialization and GetSpecialization() or nil
@@ -40,8 +42,6 @@ function CM.IsActive()
     return isEnabled and GetSpecEntry() ~= nil
 end
 
--- Returns the frame that the BCDM cast bar should anchor above when classbar
--- mode is active. nil means classbar mode is not contributing an anchor.
 function CM.GetActiveAnchorFrame()
     if not CM.IsActive() then return nil end
     local frame = _G["ElvUF_Player"]
@@ -53,15 +53,12 @@ function CM.GetActiveAnchorFrame()
 end
 
 local function GetAnchorTarget(slot)
-    local secondary = _G["BCDM_SecondaryPowerBar"]
     local primary   = _G["BCDM_PowerBar"]
     local essential = _G["EssentialCooldownViewer"]
 
     if slot == "POWER" then
-        -- classbar replaces primary power slot: sit on top of essential viewer
         if essential then return essential, "TOP" end
     else -- SECONDARY (default)
-        -- classbar sits where the secondary power bar would: above primary
         if primary and primary:IsShown() and primary:GetWidth() > 0 then
             return primary, "TOP"
         end
@@ -70,31 +67,66 @@ local function GetAnchorTarget(slot)
     return nil
 end
 
+-- Returns the cluster bounding box (left, right) including the trinket bar
+-- when it's currently visible beside EssentialCooldownViewer.
+local function GetClusterBounds()
+    local essential = _G["EssentialCooldownViewer"]
+    if not essential then return nil end
+    local left, right = essential:GetLeft(), essential:GetRight()
+    if not left or not right then return nil end
+
+    local trinket = _G["BCDM_TrinketBar"]
+    if trinket and trinket:IsShown() and trinket:GetWidth() > 0 then
+        local tl, tr = trinket:GetLeft(), trinket:GetRight()
+        if tl and tr then
+            if tl < left  then left  = tl end
+            if tr > right then right = tr end
+        end
+    end
+    return left, right
+end
+
+-- Updates the classbar enable/detach config and (when desired state changed)
+-- calls CreateAndUpdateUF so ElvUI rebuilds the player frame.
 local function ApplyEnableState(entry)
     if InCombatLockdown() then return false end
+    if not playerEntered then return false end
+
+    local UF = GetUF()
+    if not UF or not UF.CreateAndUpdateUF then return false end
 
     local cb = E.db.unitframe and E.db.unitframe.units and E.db.unitframe.units.player and E.db.unitframe.units.player.classbar
     if not cb then return false end
 
-    local desiredEnable = entry ~= nil
-    local desiredDetach = desiredEnable
-    local desiredParent = "UIPARENT"
+    local desired = entry ~= nil
+    local desiredKey = desired and "ON" or "OFF"
 
-    local changed = false
-    if cb.enable ~= desiredEnable then cb.enable = desiredEnable; changed = true end
-    if desiredEnable then
-        if cb.detachFromFrame ~= desiredDetach then cb.detachFromFrame = desiredDetach; changed = true end
-        if cb.parent ~= desiredParent then cb.parent = desiredParent; changed = true end
+    if desired then
+        cb.enable         = true
+        cb.detachFromFrame = true
+        cb.parent         = "UIPARENT"
+    else
+        if lastEnableState == "ON" then
+            cb.enable = false
+        end
     end
 
-    if changed and UF and UF.CreateAndUpdateUF then
-        UF:CreateAndUpdateUF("player")
+    if desiredKey ~= lastEnableState then
+        local ok = pcall(UF.CreateAndUpdateUF, UF, "player")
+        if not ok then
+            -- Styles not registered yet etc — bail and let next dirty retry.
+            return false
+        end
+        lastEnableState = desiredKey
     end
     return true
 end
 
-local function PositionClassBar(entry)
-    if not entry then return end
+-- Pushes width into the classbar config and asks ElvUI to re-configure the
+-- detached holder, then re-anchors the holder to the BCDM cluster.
+local function ApplyWidthAndPosition(entry)
+    if not entry or not playerEntered then return end
+
     local frame = _G["ElvUF_Player"]
     local holder = frame and frame.ClassBarHolder
     if not holder then return end
@@ -103,33 +135,48 @@ local function PositionClassBar(entry)
     local target, point = GetAnchorTarget(entry.slot or "SECONDARY")
     if not target then return end
 
-    local essential = _G["EssentialCooldownViewer"]
-    local width = essential and essential:GetWidth() or 0
-    if width and width > 0 then
-        holder:SetWidth(width + (db.widthOffset or 0))
+    local left, right = GetClusterBounds()
+    local clusterWidth = (left and right and right > left) and (right - left) or (target:GetWidth() or 0)
+
+    if clusterWidth and clusterWidth > 0 then
+        local desiredWidth = math.floor(clusterWidth + (db.widthOffset or 0) + 0.5)
         local cb = E.db.unitframe.units.player.classbar
-        if cb then cb.detachedWidth = math.floor(width + (db.widthOffset or 0)) end
+        if cb and cb.detachedWidth ~= desiredWidth then
+            cb.detachedWidth = desiredWidth
+            local UF = GetUF()
+            if UF and UF.Configure_ClassBar and frame then
+                pcall(UF.Configure_ClassBar, UF, frame)
+            end
+        end
+        holder:SetWidth(desiredWidth)
     end
 
+    -- Use two separate anchor points: LEFT defines the X edge from the
+    -- cluster's leftmost frame, BOTTOM defines the Y edge from the actual
+    -- target (power bar or essential viewer). This avoids the pixel-snapping
+    -- mismatch a center-anchor would cause and respects trinket bar width.
+    local essential = _G["EssentialCooldownViewer"]
+    local trinket   = _G["BCDM_TrinketBar"]
+    local leftAnchor = essential
+    if trinket and trinket:IsShown() and trinket:GetWidth() > 0 then
+        local tl = trinket:GetLeft()
+        local el = essential and essential:GetLeft()
+        if tl and el and tl < el then leftAnchor = trinket end
+    end
+    if not leftAnchor then leftAnchor = target end
+
     holder:ClearAllPoints()
-    holder:SetPoint("BOTTOM", target, point, db.xOffset or 0, db.gap or 1)
+    holder:SetPoint("LEFT",   leftAnchor, "LEFT", db.xOffset or 0, 0)
+    holder:SetPoint("BOTTOM", target,     "TOP",  0,                db.gap or 1)
 end
 
 local function UpdateNow()
-    if not isEnabled then return end
+    if not isEnabled or not playerEntered then return end
     if InCombatLockdown() then return end
 
     local entry = GetSpecEntry()
-    local appliedKey = entry and ((entry.slot or "SECONDARY")..":"..tostring(GetCurrentSpecID())) or "OFF"
-
-    -- Always re-apply position even if enable state didn't change (essential
-    -- viewer width may have changed)
-    if appliedKey ~= lastApplied then
-        if not ApplyEnableState(entry) then return end
-        lastApplied = appliedKey
-    end
-
-    if entry then PositionClassBar(entry) end
+    if not ApplyEnableState(entry) then return end
+    if entry then ApplyWidthAndPosition(entry) end
 end
 
 local function OnNextFrame(self)
@@ -147,18 +194,48 @@ end
 CM.MarkDirty = MarkDirty
 
 eventFrame:SetScript("OnEvent", function(_, event)
-    if event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_SPECIALIZATION_CHANGED" then
-        lastApplied = nil
+    if event == "PLAYER_ENTERING_WORLD" then
+        playerEntered = true
+        C_Timer.After(0.5, MarkDirty)
+    elseif event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_SPECIALIZATION_CHANGED" then
         C_Timer.After(0.5, MarkDirty)
     end
 end)
 
--- Hook EssentialCooldownViewer size changes to refresh width
 local function HookEssential()
     local f = _G["EssentialCooldownViewer"]
-    if not f or f._TUI_classbarHooked then return end
-    f._TUI_classbarHooked = true
-    f:HookScript("OnSizeChanged", function() MarkDirty() end)
+    if f and not f._TUI_classbarHooked then
+        f._TUI_classbarHooked = true
+        f:HookScript("OnSizeChanged", function() MarkDirty() end)
+    end
+    local t = _G["BCDM_TrinketBar"]
+    if t and not t._TUI_classbarHooked then
+        t._TUI_classbarHooked = true
+        t:HookScript("OnSizeChanged", function() MarkDirty() end)
+        t:HookScript("OnShow",        function() MarkDirty() end)
+        t:HookScript("OnHide",        function() MarkDirty() end)
+    end
+    local p = _G["BCDM_PowerBar"]
+    if p and not p._TUI_classbarHooked then
+        p._TUI_classbarHooked = true
+        p:HookScript("OnSizeChanged", function() MarkDirty() end)
+    end
+end
+
+-- Re-apply our position whenever ElvUI reconfigures the classbar (e.g. when
+-- the user changes height in the options panel). Without this the holder
+-- drifts by 1px after each rebuild because of pixel-snapping rounding.
+local hookedConfigureClassBar = false
+local function HookConfigureClassBar()
+    if hookedConfigureClassBar then return end
+    local UF = GetUF()
+    if not UF or not UF.Configure_ClassBar then return end
+    hookedConfigureClassBar = true
+    hooksecurefunc(UF, "Configure_ClassBar", function(_, frame)
+        if not isEnabled then return end
+        if not frame or frame.unit ~= "player" then return end
+        MarkDirty()
+    end)
 end
 
 function TUI:UpdateClassbarMode()
@@ -169,22 +246,24 @@ function TUI:UpdateClassbarMode()
         eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
         eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
         HookEssential()
-        lastApplied = nil
-        C_Timer.After(0.2, MarkDirty)
+        HookConfigureClassBar()
+        -- Defer initial apply — first call may run before UnitFrame styles
+        -- are registered. The PEW handler will MarkDirty once it's safe.
+        if playerEntered then
+            C_Timer.After(0.2, MarkDirty)
+        end
     else
-        -- Disable: clear our enable so ElvUI returns to its native classbar setting.
-        if not InCombatLockdown() then
+        if playerEntered and not InCombatLockdown() then
             ApplyEnableState(nil)
         end
         isEnabled = false
         isDirty = false
-        lastApplied = nil
+        lastEnableState = nil
         updateFrame:SetScript("OnUpdate", nil)
         eventFrame:UnregisterAllEvents()
     end
 end
 
 function CM.RequestUpdate()
-    lastApplied = nil
     MarkDirty()
 end

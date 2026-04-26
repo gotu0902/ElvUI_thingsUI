@@ -187,7 +187,7 @@ function TUI:ClassbarModeOptions()
                     widthOffset = {
                         order = 1, type = "range", name = "Width Offset",
                         desc = "Pixels added to the inherited Essential Cooldown Viewer width.",
-                        min = -200, max = 200, step = 1,
+                        min = -200, max = 200, step = 0.01, bigStep = 1,
                         get = function() return E.db.thingsUI.classbarMode.widthOffset or 0 end,
                         set = function(_, v)
                             E.db.thingsUI.classbarMode.widthOffset = v
@@ -196,7 +196,7 @@ function TUI:ClassbarModeOptions()
                     },
                     xOffset = {
                         order = 2, type = "range", name = "X Offset",
-                        min = -200, max = 200, step = 1,
+                        min = -200, max = 200, step = 0.01, bigStep = 1,
                         get = function() return E.db.thingsUI.classbarMode.xOffset or 0 end,
                         set = function(_, v)
                             E.db.thingsUI.classbarMode.xOffset = v
@@ -206,7 +206,7 @@ function TUI:ClassbarModeOptions()
                     gap = {
                         order = 3, type = "range", name = "Gap",
                         desc = "Vertical gap between the classbar and the bar below it.",
-                        min = -20, max = 50, step = 1,
+                        min = -20, max = 50, step = 0.01, bigStep = 1,
                         get = function() return E.db.thingsUI.classbarMode.gap or 1 end,
                         set = function(_, v)
                             E.db.thingsUI.classbarMode.gap = v
