@@ -81,9 +81,6 @@ P["thingsUI"] = {
         yOffset       = 1,
     },
 
-    -- Per-spec ElvUI classbar enable. The classbar is placed where the
-    -- BCDM power / secondary power bar would sit, inheriting the Essential
-    -- Cooldown Viewer width.
     classbarMode = {
         enabled       = false,
         widthOffset   = 0,
@@ -93,9 +90,22 @@ P["thingsUI"] = {
         specs         = {}, -- [specIDstring] = { slot = "SECONDARY" or "POWER" }
     },
 
-    -- specialBars: per-spec storage only.
-    -- barCount / iconCount / bars{} / icons{} are created lazily in SpecialBars.lua
-    -- via GetSpecRoot() so no defaults are needed here beyond the top-level container.
+    chargeBar = {
+        enabled       = false,
+        widthOffset   = 0,
+        xOffset       = 0,
+        gap           = 1,
+        height        = 18,
+        statusBarTexture = "ElvUI Blank",
+        xGap          = 0, -- horizontal gap between charge segments (in pixels)
+        showTicks     = true,
+        tickWidth     = 1,
+        tickColor     = { r = 0, g = 0, b = 0, a = 1 },
+        rechargeColor = { r = 0.5, g = 0.5, b = 0.5, a = 0.8 },
+        specs         = {}, -- [specIDstring] = { slot, spellID, useClassColor, customColor, showText, textFont, textSize, textOutline }
+    },
+
+
     specialBars = {
         specs = {},
     },

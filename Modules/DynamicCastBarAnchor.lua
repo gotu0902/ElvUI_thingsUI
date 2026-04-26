@@ -32,10 +32,26 @@ local function UpdateCastBarAnchor()
     local secondary = GetSecondaryPowerBar()
     local primary = GetPowerBar()
     local classbar = ns.ClassbarMode and ns.ClassbarMode.GetActiveAnchorFrame and ns.ClassbarMode.GetActiveAnchorFrame() or nil
+    local chargebar = ns.ChargeBar and ns.ChargeBar.GetActiveAnchorFrame and ns.ChargeBar.GetActiveAnchorFrame() or nil
+
+    -- Pick the topmost (highest TOP) of classbar / chargebar so the cast bar
+    -- always sits above the entire stack regardless of which slot each one
+    -- is configured for.
+    local topCustom
+    local function consider(f)
+        if not f or not f.GetTop then return end
+        local t = f:GetTop()
+        if not t then return end
+        if not topCustom or t > topCustom:GetTop() then
+            topCustom = f
+        end
+    end
+    consider(classbar)
+    consider(chargebar)
 
     local anchorTarget
-    if classbar then
-        anchorTarget = classbar
+    if topCustom then
+        anchorTarget = topCustom
     elseif secondary and secondary:IsShown() and secondary:GetWidth() > 0 then
         anchorTarget = secondary
     elseif primary and primary:IsShown() then
@@ -106,12 +122,25 @@ local function HookSecondaryPowerBar()
     end)
 end
 
+local hookedCastBar = false
+local function HookCastBar()
+    if hookedCastBar then return end
+    local cb = GetCastBar()
+    if not cb then return end
+    hookedCastBar = true
+    cb:HookScript("OnShow", function()
+        lastAnchorTarget = nil
+        MarkDirty()
+    end)
+end
+
 local eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "PLAYER_ENTERING_WORLD" then
         C_Timer.After(1, function()
             HookSecondaryPowerBar()
             HookCDMSettings()
+            HookCastBar()
             lastAnchorTarget = nil
             MarkDirty()
         end)
@@ -147,6 +176,7 @@ function TUI:UpdateDynamicCastBarAnchor()
         
         HookSecondaryPowerBar()
         HookCDMSettings()
+        HookCastBar()
         lastAnchorTarget = nil
         MarkDirty()
     else

@@ -19,10 +19,12 @@ Modules\BuffBars.lua
 Modules\ClusterPositioning.lua
 Modules\DynamicCastBarAnchor.lua
 Modules\ClassbarMode.lua
+Modules\ChargeBar.lua
 Modules\TrinketsCDM.lua
 
 Options\SpecialOptions.lua
 Options\ClassbarModeOptions.lua
+Options\ChargeBarOptions.lua
 Options\Options.lua
 
 Core\Init.lua

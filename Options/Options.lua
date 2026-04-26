@@ -1811,6 +1811,11 @@ function TUI.ConfigTable()
             -- CLASSBAR MODE TAB
             -------------------------------------------------
             classbarModeTab = TUI:ClassbarModeOptions(),
+
+            -------------------------------------------------
+            -- CHARGE BAR TAB
+            -------------------------------------------------
+            chargeBarTab = TUI:ChargeBarOptions(),
         },
     }
 end

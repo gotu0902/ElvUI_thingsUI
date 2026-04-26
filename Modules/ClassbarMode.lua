@@ -25,6 +25,9 @@ local isEnabled   = false
 local playerEntered = false -- safe to call CreateAndUpdateUF/Configure_ClassBar
 local lastEnableState = nil -- "ON" or "OFF"; tracks what we last applied
 
+-- Forward declaration so UpdateNow can call HookEssential (defined later).
+local HookEssential = function() end
+
 local function GetCurrentSpecID()
     local idx = GetSpecialization and GetSpecialization() or nil
     return idx and select(1, GetSpecializationInfo(idx)) or 0
@@ -76,9 +79,24 @@ local function GetClusterBounds()
     if not left or not right then return nil end
 
     local trinket = _G["BCDM_TrinketBar"]
-    if trinket and trinket:IsShown() and trinket:GetWidth() > 0 then
+    if trinket then
         local tl, tr = trinket:GetLeft(), trinket:GetRight()
-        if tl and tr then
+        local hasTrinket = trinket:IsShown() and trinket:GetWidth() > 0 and tl and tr
+        if not hasTrinket then
+            -- Container may have 0 width; derive bounds from visible children.
+            for i = 1, trinket:GetNumChildren() do
+                local child = select(i, trinket:GetChildren())
+                if child and child:IsShown() and child.GetLeft then
+                    local cl, cr = child:GetLeft(), child:GetRight()
+                    if cl and cr then
+                        tl = (tl and math.min(tl, cl)) or cl
+                        tr = (tr and math.max(tr, cr)) or cr
+                        hasTrinket = true
+                    end
+                end
+            end
+        end
+        if hasTrinket and tl and tr then
             if tl < left  then left  = tl end
             if tr > right then right = tr end
         end
@@ -163,24 +181,26 @@ local function ApplyWidthAndPosition(entry)
     -- target (power bar or essential viewer). This avoids the pixel-snapping
     -- mismatch a center-anchor would cause and respects trinket bar width.
     local essential = _G["EssentialCooldownViewer"]
-    local trinket   = _G["BCDM_TrinketBar"]
-    local leftAnchor = essential
-    if trinket and trinket:IsShown() and trinket:GetWidth() > 0 then
-        local tl = trinket:GetLeft()
-        local el = essential and essential:GetLeft()
-        if tl and el and tl < el then leftAnchor = trinket end
+    -- Anchor LEFT to essential and shift by (clusterLeft - essentialLeft) so
+    -- the bar's left edge sits at the cluster's true leftmost edge (which may
+    -- be on a trinket child whose container has 0 width).
+    local leftAnchorFrame = essential or target
+    local leftDelta = 0
+    if essential and left then
+        local el = essential:GetLeft()
+        if el then leftDelta = left - el end
     end
-    if not leftAnchor then leftAnchor = target end
 
     holder:ClearAllPoints()
-    holder:SetPoint("LEFT",   leftAnchor, "LEFT", db.xOffset or 0, 0)
-    holder:SetPoint("BOTTOM", target,     "TOP",  0,                db.gap or 1)
+    holder:SetPoint("LEFT",   leftAnchorFrame, "LEFT", (db.xOffset or 0) + leftDelta, 0)
+    holder:SetPoint("BOTTOM", target,          "TOP",  0,                              db.gap or 1)
 end
 
 local function UpdateNow()
     if not isEnabled or not playerEntered then return end
     if InCombatLockdown() then return end
 
+    HookEssential() -- re-scan for newly-added trinket / essential children
     local entry = GetSpecEntry()
     if not ApplyEnableState(entry) then return end
     if entry then ApplyWidthAndPosition(entry) end
@@ -209,11 +229,21 @@ eventFrame:SetScript("OnEvent", function(_, event)
     end
 end)
 
-local function HookEssential()
+HookEssential = function()
     local f = _G["EssentialCooldownViewer"]
     if f and not f._TUI_classbarHooked then
         f._TUI_classbarHooked = true
         f:HookScript("OnSizeChanged", function() MarkDirty() end)
+    end
+    if f then
+        for i = 1, f:GetNumChildren() do
+            local child = select(i, f:GetChildren())
+            if child and not child._TUI_classbarHooked then
+                child._TUI_classbarHooked = true
+                child:HookScript("OnShow", function() MarkDirty() end)
+                child:HookScript("OnHide", function() MarkDirty() end)
+            end
+        end
     end
     local t = _G["BCDM_TrinketBar"]
     if t and not t._TUI_classbarHooked then
@@ -221,6 +251,16 @@ local function HookEssential()
         t:HookScript("OnSizeChanged", function() MarkDirty() end)
         t:HookScript("OnShow",        function() MarkDirty() end)
         t:HookScript("OnHide",        function() MarkDirty() end)
+    end
+    if t then
+        for i = 1, t:GetNumChildren() do
+            local child = select(i, t:GetChildren())
+            if child and not child._TUI_classbarHooked then
+                child._TUI_classbarHooked = true
+                child:HookScript("OnShow", function() MarkDirty() end)
+                child:HookScript("OnHide", function() MarkDirty() end)
+            end
+        end
     end
     local p = _G["BCDM_PowerBar"]
     if p and not p._TUI_classbarHooked then
