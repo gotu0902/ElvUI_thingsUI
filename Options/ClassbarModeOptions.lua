@@ -51,26 +51,47 @@ local function GetEnabledSpecsList()
     for key, entry in pairs(db.specs) do
         local id = tonumber(key)
         local name = "Spec "..key
-        local className
+        local className, classFile, icon
         if id and id > 0 then
-            local _, sName, _, _, _, _, cName = GetSpecializationInfoByID(id)
-            name = sName or name
+            local _, sName, _, sIcon, _, cFile, cName = GetSpecializationInfoByID(id)
+            name      = sName  or name
             className = cName
+            classFile = cFile
+            icon      = sIcon
         end
-        list[#list+1] = { key = key, name = name, className = className, slot = entry.slot or "SECONDARY" }
+        list[#list+1] = {
+            key = key, name = name, className = className,
+            classFile = classFile, icon = icon,
+            slot = entry.slot or "SECONDARY",
+        }
     end
     table.sort(list, function(a, b) return a.name < b.name end)
     return list
 end
 
+local function FormatSpecLabel(e)
+    if not e then return "" end
+    local label
+    if e.className then
+        local color = e.classFile and (RAID_CLASS_COLORS and RAID_CLASS_COLORS[e.classFile])
+        local hex = color and color.colorStr or "ffffffff"
+        label = ("|c%s%s|r |cFFAAAAAA-|r |c%s%s|r"):format(hex, e.className, hex, e.name)
+    else
+        label = e.name
+    end
+    if e.icon then
+        return ("|T%d:18:18:0:0:64:64:4:60:4:60|t  %s"):format(e.icon, label)
+    end
+    return label
+end
+
 local function BuildEnabledArgs()
-    -- AceConfig requires args to be a table. Allocate fixed slots (max specs
-    -- per class is small) and resolve each slot to the i-th enabled spec at
-    -- display time.
+    -- Each enabled spec is wrapped in its own inline group so the row stays
+    -- as one line regardless of how wide the options panel is.
     local args = {}
 
     args.empty = {
-        order = 0, type = "description",
+        order = 0, type = "description", fontSize = "medium",
         name = "|cFF888888No specs enabled. Use the controls above to add one.|r",
         hidden = function() return #GetEnabledSpecsList() > 0 end,
     }
@@ -82,39 +103,35 @@ local function BuildEnabledArgs()
         local function entryKey()
             local e = entry(); return e and e.key or nil
         end
-        local order = i * 10
-        args["hdr"..i] = {
-            order = order, type = "header",
-            name = function()
-                local e = entry()
-                if not e then return "" end
-                return e.className and (e.className.." - "..e.name) or e.name
-            end,
+
+        args["row"..i] = {
+            order = i * 10, type = "group", inline = true,
+            name = function() return FormatSpecLabel(entry()) end,
             hidden = function() return entry() == nil end,
-        }
-        args["slot"..i] = {
-            order = order + 1, type = "select", name = "Slot",
-            values = SLOT_VALUES,
-            hidden = function() return entry() == nil end,
-            get = function()
-                local k = entryKey(); if not k then return "SECONDARY" end
-                return E.db.thingsUI.classbarMode.specs[k].slot or "SECONDARY"
-            end,
-            set = function(_, v)
-                local k = entryKey(); if not k then return end
-                E.db.thingsUI.classbarMode.specs[k].slot = v
-                if ns.ClassbarMode and ns.ClassbarMode.RequestUpdate then ns.ClassbarMode.RequestUpdate() end
-            end,
-        }
-        args["remove"..i] = {
-            order = order + 2, type = "execute", name = "Remove",
-            hidden = function() return entry() == nil end,
-            func = function()
-                local k = entryKey(); if not k then return end
-                E.db.thingsUI.classbarMode.specs[k] = nil
-                if ns.ClassbarMode and ns.ClassbarMode.RequestUpdate then ns.ClassbarMode.RequestUpdate() end
-                NotifyChange()
-            end,
+            args = {
+                slot = {
+                    order = 1, type = "select", name = "Slot", width = 1.5,
+                    values = SLOT_VALUES,
+                    get = function()
+                        local k = entryKey(); if not k then return "SECONDARY" end
+                        return E.db.thingsUI.classbarMode.specs[k].slot or "SECONDARY"
+                    end,
+                    set = function(_, v)
+                        local k = entryKey(); if not k then return end
+                        E.db.thingsUI.classbarMode.specs[k].slot = v
+                        if ns.ClassbarMode and ns.ClassbarMode.RequestUpdate then ns.ClassbarMode.RequestUpdate() end
+                    end,
+                },
+                remove = {
+                    order = 2, type = "execute", name = "Remove", width = 0.7,
+                    func = function()
+                        local k = entryKey(); if not k then return end
+                        E.db.thingsUI.classbarMode.specs[k] = nil
+                        if ns.ClassbarMode and ns.ClassbarMode.RequestUpdate then ns.ClassbarMode.RequestUpdate() end
+                        NotifyChange()
+                    end,
+                },
+            },
         }
     end
 

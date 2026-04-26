@@ -118,6 +118,13 @@ local function ApplyEnableState(entry)
             return false
         end
         lastEnableState = desiredKey
+
+        -- The cast bar may have been anchored to our classbar holder; tell
+        -- DynamicCastBarAnchor to re-evaluate so it picks up secondary/primary
+        -- power bar after we disable, or our holder after we enable.
+        if TUI.InvalidateDynamicCastBarAnchor then
+            TUI:InvalidateDynamicCastBarAnchor()
+        end
     end
     return true
 end

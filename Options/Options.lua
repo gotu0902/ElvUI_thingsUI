@@ -1265,7 +1265,7 @@ function TUI.ConfigTable()
                                 type = "range",
                                 name = "Essential Icon Width",
                                 desc = "Width of Essential Cooldown icons.",
-                                min = 20, max = 80, step = 1,
+                                min = 20, max = 80, step = 0.01, bigStep = 1,
                                 get = function() return E.db.thingsUI.clusterPositioning.essentialIconWidth end,
                                 set = function(_, value)
                                     E.db.thingsUI.clusterPositioning.essentialIconWidth = value
@@ -1277,7 +1277,7 @@ function TUI.ConfigTable()
                                 type = "range",
                                 name = "Utility Icon Width",
                                 desc = "Width of Utility Cooldown icons (usually smaller).",
-                                min = 15, max = 60, step = 1,
+                                min = 15, max = 60, step = 0.01, bigStep = 1,
                                 get = function() return E.db.thingsUI.clusterPositioning.utilityIconWidth end,
                                 set = function(_, value)
                                     E.db.thingsUI.clusterPositioning.utilityIconWidth = value
@@ -1326,7 +1326,7 @@ function TUI.ConfigTable()
                                 type = "range",
                                 name = "Y Offset",
                                 desc = "Vertical offset for all unit frames.",
-                                min = -100, max = 100, step = 1,
+                                min = -100, max = 100, step = 0.01, bigStep = 1,
                                 get = function() return E.db.thingsUI.clusterPositioning.yOffset end,
                                 set = function(_, value)
                                     E.db.thingsUI.clusterPositioning.yOffset = value
@@ -1378,7 +1378,7 @@ function TUI.ConfigTable()
                                         type = "range",
                                         name = "Frame Gap",
                                         desc = "Gap between Player/Target frames and Essential.",
-                                        min = -50, max = 50, step = 1,
+                                        min = -50, max = 50, step = 0.01, bigStep = 1,
                                         get = function() return E.db.thingsUI.clusterPositioning.frameGap end,
                                         set = function(_, value)
                                             E.db.thingsUI.clusterPositioning.frameGap = value
@@ -1409,7 +1409,7 @@ function TUI.ConfigTable()
                                         type = "range",
                                         name = "ToT Gap",
                                         desc = "Gap between TargetTarget and Target frame.",
-                                        min = -50, max = 50, step = 1,
+                                        min = -50, max = 50, step = 0.01, bigStep = 1,
                                         get = function() return E.db.thingsUI.clusterPositioning.targetTargetFrame.gap end,
                                         set = function(_, value)
                                             E.db.thingsUI.clusterPositioning.targetTargetFrame.gap = value
@@ -1441,7 +1441,7 @@ function TUI.ConfigTable()
                                         type = "range",
                                         name = "CastBar Y Gap",
                                         desc = "Vertical gap between Target frame and CastBar.",
-                                        min = -50, max = 50, step = 1,
+                                        min = -50, max = 50, step = 0.01, bigStep = 1,
                                         get = function() return E.db.thingsUI.clusterPositioning.targetCastBar.gap end,
                                         set = function(_, value)
                                             E.db.thingsUI.clusterPositioning.targetCastBar.gap = value
@@ -1454,7 +1454,7 @@ function TUI.ConfigTable()
                                         type = "range",
                                         name = "CastBar X Offset",
                                         desc = "Horizontal offset for CastBar.",
-                                        min = -100, max = 100, step = 1,
+                                        min = -100, max = 100, step = 0.01, bigStep = 1,
                                         get = function() return E.db.thingsUI.clusterPositioning.targetCastBar.xOffset end,
                                         set = function(_, value)
                                             E.db.thingsUI.clusterPositioning.targetCastBar.xOffset = value
@@ -1534,7 +1534,7 @@ function TUI.ConfigTable()
                                 order = 5,
                                 type = "range",
                                 name = "X Offset",
-                                min = -100, max = 100, step = 1,
+                                min = -100, max = 100, step = 0.01, bigStep = 1,
                                 get = function() return E.db.thingsUI.dynamicCastBarAnchor.xOffset end,
                                 set = function(_, value)
                                     E.db.thingsUI.dynamicCastBarAnchor.xOffset = value
@@ -1546,7 +1546,7 @@ function TUI.ConfigTable()
                                 order = 6,
                                 type = "range",
                                 name = "Y Offset",
-                                min = -100, max = 100, step = 1,
+                                min = -100, max = 100, step = 0.01, bigStep = 1,
                                 get = function() return E.db.thingsUI.dynamicCastBarAnchor.yOffset end,
                                 set = function(_, value)
                                     E.db.thingsUI.dynamicCastBarAnchor.yOffset = value

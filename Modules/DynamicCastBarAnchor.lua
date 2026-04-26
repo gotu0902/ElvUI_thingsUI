@@ -129,6 +129,14 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     end
 end)
 
+-- Public: invalidate the cached anchor target and re-evaluate next frame.
+-- Used by other modules (e.g. ClassbarMode) when a frame the cast bar anchors
+-- to appears, disappears, or changes identity.
+function TUI:InvalidateDynamicCastBarAnchor()
+    lastAnchorTarget = nil
+    MarkDirty()
+end
+
 function TUI:UpdateDynamicCastBarAnchor()
     local db = E.db.thingsUI.dynamicCastBarAnchor
     if db and db.enabled then
