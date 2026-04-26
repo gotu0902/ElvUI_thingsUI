@@ -108,9 +108,13 @@ local function ApplyEnableState(entry)
         cb.detachFromFrame = true
         cb.parent         = "UIPARENT"
     else
-        if lastEnableState == "ON" then
-            cb.enable = false
-        end
+        -- Always force-disable when no entry exists. The previous guard
+        -- (`lastEnableState == "ON"`) skipped this on first login when
+        -- lastEnableState was still nil — but cb.enable persists in the
+        -- ElvUI profile DB across sessions, so it could remain `true` from
+        -- the previous spec. Always set it to false to converge to the
+        -- desired state.
+        cb.enable = false
     end
 
     if desiredKey ~= lastEnableState then
@@ -263,7 +267,7 @@ function TUI:UpdateClassbarMode()
         eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
         HookEssential()
         HookConfigureClassBar()
-        
+
         if playerEntered then
             C_Timer.After(0.2, MarkDirty)
         end
