@@ -135,11 +135,17 @@ local function GetTickTexture()
     return (LSM and LSM:Fetch("statusbar", E.db.thingsUI.chargeBar.statusBarTexture)) or E.media.blankTex
 end
 
+local function ApplyStrata()
+    if not frame then return end
+    local s = (E.db.thingsUI.chargeBar and E.db.thingsUI.chargeBar.frameStrata) or "LOW"
+    frame:SetFrameStrata(s)
+end
+
 local function EnsureFrame()
     if frame then return end
 
     frame = CreateFrame("Frame", "ElvUI_thingsUI_ChargeBar", E.UIParent, "BackdropTemplate")
-    frame:SetFrameStrata("LOW")
+    ApplyStrata()
     frame:Hide()
 
     barFrame = CreateFrame("Frame", nil, frame)
@@ -579,6 +585,7 @@ local function UpdateNow()
     else
         ApplyPosition(entry)
     end
+    ApplyStrata()
     ApplyChargeLayout()
     ApplyVisuals(entry)
     UpdateChargeState()

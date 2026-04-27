@@ -3,6 +3,8 @@ local TUI = ns.TUI
 local E = ns.E
 local LSM = ns.LSM
 local SHARED_ANCHOR_VALUES = ns.ANCHORS.SHARED_ANCHOR_VALUES
+local STRATA_VALUES = ns.STRATA.VALUES
+local STRATA_ORDER  = ns.STRATA.ORDER
 
 function TUI:BuffBarsOptions()
     return {
@@ -604,6 +606,19 @@ function TUI:BuffBarsOptions()
                                 get = function() return E.db.thingsUI.buffBars.anchorEnabled end,
                                 set = function(_, value)
                                     E.db.thingsUI.buffBars.anchorEnabled = value
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
+                            frameStrata = {
+                                order = 0.5,
+                                type = "select",
+                                name = "Frame Strata",
+                                desc = "Render layer for the buff bars. Higher strata draws on top of lower ones.",
+                                values = STRATA_VALUES,
+                                sorting = STRATA_ORDER,
+                                get = function() return E.db.thingsUI.buffBars.frameStrata or "MEDIUM" end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.frameStrata = value
                                     TUI:UpdateBuffBars()
                                 end,
                             },

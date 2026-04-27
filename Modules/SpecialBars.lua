@@ -12,7 +12,8 @@ local ReturnFrame     = function(...) return SB.ReturnFrame(...) end
 local function GetOrCreateWrapper(barKey)
     local name    = "TUI_SpecialBar_" .. barKey
     local wrapper = _G[name] or CreateFrame("Frame", name, UIParent)
-    wrapper:SetFrameStrata("MEDIUM")
+    local db = SB.GetBarDB(barKey)
+    wrapper:SetFrameStrata((db and db.frameStrata) or "MEDIUM")
     wrapper:SetFrameLevel(10)
     if not wrapper.backdrop then
         local bd = CreateFrame("Frame", nil, wrapper, "BackdropTemplate")

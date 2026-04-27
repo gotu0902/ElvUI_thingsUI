@@ -5,6 +5,9 @@ local LSM   = ns.LSM
 
 local SB = ns.SpecialBars
 
+local STRATA_VALUES = ns.STRATA.VALUES
+local STRATA_ORDER  = ns.STRATA.ORDER
+
 local function BuildAnchorValues(includeBars, includeIcons)
     local t = {}
     for k, v in pairs(ns.ANCHORS.SHARED_ANCHOR_VALUES) do t[k] = v end
@@ -316,6 +319,13 @@ function TUI:SpecialBarOptions(barKey)
                         statusBarTexture = { order = 1, type = "select", name = "Texture", dialogControl = "LSM30_Statusbar", values = LSM:HashTable("statusbar"), get = function() return get("statusBarTexture") end, set = function(_, v) set("statusBarTexture", v) end },
                         useClassColor = { order = 2, type = "toggle", name = "Use Class Color", get = function() return get("useClassColor") end, set = function(_, v) set("useClassColor", v) end },
                         customColor = { order = 3, type = "color", name = "Custom Color", hasAlpha = false, disabled = function() return get("useClassColor") end, get = function() return unpackColor(get("customColor"), false) end, set = function(_, r, g, b) set("customColor", { r=r, g=g, b=b }) end },
+                        frameStrata = {
+                            order = 4, type = "select", name = "Frame Strata",
+                            desc = "Render layer for this bar. Higher strata draws on top of lower ones.",
+                            values = STRATA_VALUES, sorting = STRATA_ORDER,
+                            get = function() return get("frameStrata") or "MEDIUM" end,
+                            set = function(_, v) set("frameStrata", v) end,
+                        },
                     },
                 },
                 placeholderGroup = {
@@ -498,6 +508,13 @@ function TUI:SpecialIconOptions(iconKey)
                             set = function(_, v) set("height", v) end },
                         zoom   = { order = 5, type = "range", name = "Zoom", min = 0, max = 0.45, step = 0.01, bigStep = 0.05, isPercent = true, get = function() return get("zoom") end, set = function(_, v) set("zoom", v) end },
                         desaturate = { order = 6, type = "toggle", name = "Show when Inactive", get = function() return get("desaturateWhenInactive") end, set = function(_, v) set("desaturateWhenInactive", v) end },
+                        frameStrata = {
+                            order = 7, type = "select", name = "Frame Strata",
+                            desc = "Render layer for this icon. Higher strata draws on top of lower ones.",
+                            values = STRATA_VALUES, sorting = STRATA_ORDER,
+                            get = function() return get("frameStrata") or "MEDIUM" end,
+                            set = function(_, v) set("frameStrata", v) end,
+                        },
                     },
                 },
                 cooldownGroup = {

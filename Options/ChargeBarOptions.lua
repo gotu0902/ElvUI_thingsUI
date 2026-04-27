@@ -2,6 +2,8 @@ local addon, ns = ...
 local TUI = ns.TUI
 local E = ns.E
 local LSM = ns.LSM
+local STRATA_VALUES = ns.STRATA.VALUES
+local STRATA_ORDER  = ns.STRATA.ORDER
 
 -- Filter the shared anchor list:
 --   CUSTOM      → not a real frame, would error on SetPoint.
@@ -391,6 +393,13 @@ function TUI:ChargeBarOptions()
                                 values = (LSM and LSM.HashTable and LSM:HashTable("statusbar")) or {},
                                 get = function() return E.db.thingsUI.chargeBar.statusBarTexture end,
                                 set = function(_, v) E.db.thingsUI.chargeBar.statusBarTexture = v; Update() end,
+                            },
+                            frameStrata = {
+                                order = 1.5, type = "select", name = "Frame Strata",
+                                desc = "Render layer for the charge bar. Higher strata draws on top of lower ones.",
+                                values = STRATA_VALUES, sorting = STRATA_ORDER,
+                                get = function() return E.db.thingsUI.chargeBar.frameStrata or "LOW" end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.frameStrata = v; Update() end,
                             },
                             height = {
                                 order = 2, type = "range", name = "Height",

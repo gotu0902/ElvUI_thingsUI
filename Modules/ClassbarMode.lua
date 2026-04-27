@@ -134,6 +134,7 @@ local function ApplyWidthAndPosition(entry)
     if not holder then return end
 
     local db = E.db.thingsUI.classbarMode
+    holder:SetFrameStrata(db.frameStrata or "MEDIUM")
     local target, point = GetAnchorTarget(entry.slot or "SECONDARY")
     if not target then return end
 

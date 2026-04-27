@@ -2,6 +2,9 @@ local addon, ns = ...
 local TUI = ns.TUI
 local E = ns.E
 
+local STRATA_VALUES = ns.STRATA.VALUES
+local STRATA_ORDER  = ns.STRATA.ORDER
+
 local SLOT_VALUES = {
     SECONDARY = "Secondary Power slot",
     POWER     = "Power slot",
@@ -193,6 +196,16 @@ function TUI:ClassbarModeOptions()
                 order = 30, type = "group", inline = true, name = "Position & Width",
                 disabled = function() return not E.db.thingsUI.classbarMode.enabled end,
                 args = {
+                    frameStrata = {
+                        order = 0.5, type = "select", name = "Frame Strata",
+                        desc = "Render layer for the classbar. Higher strata draws on top of lower ones.",
+                        values = STRATA_VALUES, sorting = STRATA_ORDER,
+                        get = function() return E.db.thingsUI.classbarMode.frameStrata or "MEDIUM" end,
+                        set = function(_, v)
+                            E.db.thingsUI.classbarMode.frameStrata = v
+                            if ns.ClassbarMode and ns.ClassbarMode.RequestUpdate then ns.ClassbarMode.RequestUpdate() end
+                        end,
+                    },
                     widthOffset = {
                         order = 1, type = "range", name = "Width Offset",
                         desc = "Pixels added to the inherited Essential Cooldown Viewer width.",

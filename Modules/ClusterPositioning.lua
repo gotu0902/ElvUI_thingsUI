@@ -118,7 +118,7 @@ local function UpdateClusterPositioning()
     
     local yOffset = db.yOffset
     local sideOverflow = utilityOverflow / 2
-t
+
     local nhtSide      = ns.TrinketsCDM and ns.TrinketsCDM.GetNHTAnchor and ns.TrinketsCDM.GetNHTAnchor()
     local trinketFrame = nhtSide and _G["BCDM_TrinketBar"]
 

@@ -19,6 +19,7 @@ P["thingsUI"] = {
 
     buffBars = {
         enabled            = false,
+        frameStrata        = "MEDIUM",
         growthDirection    = "UP",
         width              = 240,
         height             = 23,
@@ -83,6 +84,7 @@ P["thingsUI"] = {
 
     classbarMode = {
         enabled       = false,
+        frameStrata   = "MEDIUM",
         widthOffset   = 0,
         xOffset       = 0,
         yOffset       = 1,
@@ -92,6 +94,7 @@ P["thingsUI"] = {
 
     chargeBar = {
         enabled       = false,
+        frameStrata   = "LOW",
         mode          = "NHT", -- "NHT" = anchor into BCDM cluster (Power/Secondary slot); "FHT" = free anchor (no BCDM dependency)
         widthOffset   = 0,
         xOffset       = 0,

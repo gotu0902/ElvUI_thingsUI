@@ -30,6 +30,7 @@ local SPECIAL_BAR_DEFAULTS = ns.SPECIAL_BAR_DEFAULTS or {
     stackPoint = "CENTER", stackAnchor = "ICON", stackXOffset = 0, stackYOffset = 0, showName = true, namePoint = "LEFT",
     nameXOffset = 2, nameYOffset = 0, showDuration = true, durationPoint = "RIGHT", durationXOffset = -4, durationYOffset = 0,
     anchorMode = "UIParent", anchorFrame = "UIParent", anchorPoint = "CENTER", anchorRelativePoint = "CENTER", anchorXOffset = 0, anchorYOffset = 0,
+    frameStrata = "MEDIUM",
 }
 
 local SPECIAL_ICON_DEFAULTS = ns.SPECIAL_ICON_DEFAULTS or {
@@ -43,6 +44,7 @@ local SPECIAL_ICON_DEFAULTS = ns.SPECIAL_ICON_DEFAULTS or {
     showGlow = false, glowType = "pixel", glowColor = { r = 1, g = 1, b = 0, a = 1 },
     glowN = 8, glowFrequency = 0.25, glowLength = 10, glowThickness = 2,
     glowXOffset = 0, glowYOffset = 0, glowInsideBorder = false,
+    frameStrata = "MEDIUM",
 }
 
 ns.SPECIAL_BAR_DEFAULTS  = SPECIAL_BAR_DEFAULTS

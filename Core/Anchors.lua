@@ -20,5 +20,22 @@ ns.ANCHORS.SHARED_ANCHOR_VALUES = {
 ns.ANCHORS.SHARED_ANCHOR_ORDER = {
   "ElvUF_Player", "ElvUF_Target", "ElvUF_Player_ClassBar",
   "EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer",
-  "BCDM_PowerBar", "BCDM_SecondaryPowerBar", "BCDM_CastBar", "Grid2LayoutFrame", "UIParent", "CUSTOM", 
+  "BCDM_PowerBar", "BCDM_SecondaryPowerBar", "BCDM_CastBar", "Grid2LayoutFrame", "UIParent", "CUSTOM",
+}
+
+-- Frame strata values for the dropdown shared by every module that exposes a strata option.
+ns.STRATA = ns.STRATA or {}
+ns.STRATA.VALUES = {
+  BACKGROUND        = "Background",
+  LOW               = "Low",
+  MEDIUM            = "Medium",
+  HIGH              = "High",
+  DIALOG            = "Dialog",
+  FULLSCREEN        = "Fullscreen",
+  FULLSCREEN_DIALOG = "Fullscreen Dialog",
+  TOOLTIP           = "Tooltip",
+}
+ns.STRATA.ORDER = {
+  "BACKGROUND", "LOW", "MEDIUM", "HIGH",
+  "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP",
 }
