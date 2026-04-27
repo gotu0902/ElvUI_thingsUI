@@ -28,15 +28,15 @@ ns.ANCHORS.SHARED_ANCHOR_ORDER = {
 -- passed to SetPoint.
 ns.POINTS = ns.POINTS or {}
 ns.POINTS.VALUES = {
-  CENTER      = "Center",
-  TOP         = "Top",
-  BOTTOM      = "Bottom",
-  LEFT        = "Left",
-  RIGHT       = "Right",
-  TOPLEFT     = "Top Left",
-  TOPRIGHT    = "Top Right",
-  BOTTOMLEFT  = "Bottom Left",
-  BOTTOMRIGHT = "Bottom Right",
+  CENTER      = "CENTER",
+  TOP         = "TOP",
+  BOTTOM      = "BOTTOM",
+  LEFT        = "LEFT",
+  RIGHT       = "RIGHT",
+  TOPLEFT     = "TOPLEFT",
+  TOPRIGHT    = "TOPRIGHT",
+  BOTTOMLEFT  = "BOTTOMLEFT",
+  BOTTOMRIGHT = "BOTTOMRIGHT",
 }
 ns.POINTS.ORDER = {
   "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT",
@@ -46,14 +46,12 @@ ns.POINTS.ORDER = {
 -- Frame strata values for the dropdown shared by every module that exposes a strata option.
 ns.STRATA = ns.STRATA or {}
 ns.STRATA.VALUES = {
-  BACKGROUND        = "Background",
-  LOW               = "Low",
-  MEDIUM            = "Medium",
-  HIGH              = "High",
-  DIALOG            = "Dialog",
-  FULLSCREEN        = "Fullscreen",
-  FULLSCREEN_DIALOG = "Fullscreen Dialog",
-  TOOLTIP           = "Tooltip",
+  BACKGROUND        = "BACKGROUND",
+  LOW               = "LOW",
+  MEDIUM            = "MEDIUM",
+  HIGH              = "HIGH",
+  DIALOG            = "DIALOG",
+  TOOLTIP           = "TOOLTIP",
 }
 ns.STRATA.ORDER = {
   "BACKGROUND", "LOW", "MEDIUM", "HIGH",
