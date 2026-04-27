@@ -139,11 +139,11 @@ function TUI:ClassbarModeOptions()
         args = {
             description = {
                 order = 1, type = "description",
-                name = "Per-spec ElvUI player classbar enable. When the current spec is in the list below the classbar is enabled, detached, parented to UIParent, and anchored above the BCDM cluster (inheriting the Essential Cooldown Viewer width). The dynamic cast bar will stack above the classbar.\n\n|cFFFF6B6BNote:|r Spec switching only re-applies out of combat.\n\n",
+                name = "Per-spec ElvUI player classbar enable. When the current spec is in the list below the classbar is enabled, detached, parented to UIParent, and anchored above the BCDM cluster (inheriting the Essential Cooldown Viewer width). The dynamic cast bar will stack above the classbar.\n\n|cFFFFD200This module is for NHT only.|r For FHT profiles, leave this disabled — enable/disable and reposition the ElvUI classbar normally via /emove.\n\n|cFFFF6B6BNote:|r Spec switching only re-applies out of combat.\n\n",
             },
             enabled = {
-                order = 2, type = "toggle", name = "Enable Classbar Mode",
-                desc = "Master toggle. When off, this module won't touch the ElvUI classbar settings.",
+                order = 2, type = "toggle", name = "Enable Classbar Mode (NHT Only)",
+                desc = "Master toggle. When off, this module won't touch the ElvUI classbar settings — use /emove to position the classbar normally (FHT workflow).",
                 width = "full",
                 get = function() return E.db.thingsUI.classbarMode.enabled end,
                 set = function(_, v)

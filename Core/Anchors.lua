@@ -17,7 +17,6 @@ ns.ANCHORS.SHARED_ANCHOR_VALUES = {
   ["CUSTOM"]               = "|cFFFFFF00Custom Frame...|r",
 }
 
--- Ordered list of shared anchor keys (for deterministic sort in dropdowns)
 ns.ANCHORS.SHARED_ANCHOR_ORDER = {
   "ElvUF_Player", "ElvUF_Target", "ElvUF_Player_ClassBar",
   "EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer",

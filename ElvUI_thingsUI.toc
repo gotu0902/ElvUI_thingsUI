@@ -23,6 +23,10 @@ Modules\ChargeBar.lua
 Modules\TrinketsCDM.lua
 
 Options\SpecialOptions.lua
+Options\GeneralOptions.lua
+Options\BuffBarsOptions.lua
+Options\BCDMElvUIOptions.lua
+Options\CDMSpecialsOptions.lua
 Options\ClassbarModeOptions.lua
 Options\ChargeBarOptions.lua
 Options\Options.lua

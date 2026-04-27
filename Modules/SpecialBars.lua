@@ -44,14 +44,8 @@ local function EnsureConfigMode()
     ns.__tuiConfigModeRegistered = true
 end
 
--- Register an ElvUI mover for the wrapper. The mover frame stores its position
--- in E.db.movers (absolute, anchored to UIParent) and is what the user drags
--- via /moveui. Right-click opens our config via ElvUI's ToggleOptions hook.
 local _moverCreated = {}
 
--- ElvUI fires postdrag both on OnDragStop AND on OnShow (after reload, CDM
--- toggle, etc.). We only want to write our DB when the user actually moved
--- the mover, so a flag is set in OnDragStart and consumed here.
 local _draggingMover = {}
 local function PostDragForBar(barKey)
     return function(self)
@@ -310,12 +304,6 @@ UpdateBarSlot = function(barKey)
     end
     EnsureMover(wrapper, barKey, label)
 
-    -- Sync option sliders -> mover. We only push when values actually differ
-    -- so frequent UpdateBarSlot calls don't fight ElvUI's own SaveMoverPosition
-    -- after reload. Writing to E.db.movers directly is intentionally avoided —
-    -- ElvUI's SaveMoverPosition (called on drag end) is the source of truth
-    -- for that table; we only mutate it indirectly via mover:SetPoint and
-    -- letting the user drag.
     local mover = _G[moverName]
     if mover and anchorFrame then
         local point = db.anchorPoint or "CENTER"

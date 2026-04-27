@@ -92,16 +92,26 @@ P["thingsUI"] = {
 
     chargeBar = {
         enabled       = false,
+        mode          = "NHT", -- "NHT" = anchor into BCDM cluster (Power/Secondary slot); "FHT" = free anchor (no BCDM dependency)
         widthOffset   = 0,
         xOffset       = 0,
         gap           = 1,
         height        = 18,
         statusBarTexture = "ElvUI Blank",
-        xGap          = -1, 
+        xGap          = -1,
         showTicks     = true,
         tickWidth     = 1,
         tickColor     = { r = 0, g = 0, b = 0, a = 1 },
         rechargeColor = { r = 0.5, g = 0.5, b = 0.5, a = 0.8 },
+        -- FHT mode positioning (ignored in NHT)
+        anchorFrame         = "UIParent",
+        anchorPoint         = "CENTER",
+        anchorRelativePoint = "CENTER",
+        fhtWidth            = 200,
+        fhtXOffset          = 0,
+        fhtYOffset          = 0,
+        inheritWidth        = false,
+        inheritWidthOffset  = 0,
         specs         = {}, -- [specIDstring] = { slot, spellID, useClassColor, customColor, showText, textFont, textSize, textOutline }
     },
 

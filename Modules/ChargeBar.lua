@@ -56,16 +56,22 @@ local function HasClassbarConflict(slot)
     return (entry.slot or "SECONDARY") == slot
 end
 
+local function IsFHT()
+    local db = E.db.thingsUI.chargeBar
+    return db and db.mode == "FHT"
+end
+
 function CB.GetActiveSlot()
+    if IsFHT() then return nil end
     local entry = GetSpecEntry()
     if not entry then return nil end
     if HasClassbarConflict(entry.slot or "SECONDARY") then return nil end
     return entry.slot or "SECONDARY"
 end
 
--- For the dynamic cast bar to stack above us when shown.
 function CB.GetActiveAnchorFrame()
     if not isEnabled or not frame or not frame:IsShown() then return nil end
+    if IsFHT() then return nil end
     if not CB.GetActiveSlot() then return nil end
     return frame
 end
@@ -468,6 +474,41 @@ local function ApplyPosition(entry)
     frame:SetPoint("BOTTOM", target, "TOP", 0, db.gap or 1)
 end
 
+local function ResolveAnchorTarget(anchorName)
+    -- Reject anything that isn't a real frame (e.g. "CUSTOM" sentinel, or a
+    -- string leaking through from another addon). _G[name] must be a table
+    -- with GetObjectType, otherwise SetPoint will throw.
+    local f = _G[anchorName]
+    if type(f) == "table" and type(f.GetObjectType) == "function" then
+        -- Don't anchor to ourselves — would create a SetPoint dependency loop.
+        if f ~= frame then return f, anchorName end
+    end
+    return UIParent, "UIParent"
+end
+
+local function ApplyPositionFHT()
+    if not frame then return end
+    local db = E.db.thingsUI.chargeBar
+
+    local target, resolvedName = ResolveAnchorTarget(db.anchorFrame or "UIParent")
+    local point = db.anchorPoint or "CENTER"
+    local relative = db.anchorRelativePoint or "CENTER"
+
+    -- Width: fixed width, optionally inherit from anchor (skipped when anchor is UIParent — would span full screen).
+    local w = db.fhtWidth or 200
+    if db.inheritWidth and resolvedName ~= "UIParent" then
+        local aw = target:GetWidth()
+        if aw and aw > 0 then w = aw + (db.inheritWidthOffset or 0) end
+    end
+    if w < 20 then w = 20 end
+
+    frame:SetWidth(w)
+    frame:SetHeight(db.height or 18)
+
+    frame:ClearAllPoints()
+    frame:SetPoint(point, target, relative, db.fhtXOffset or 0, db.fhtYOffset or 0)
+end
+
 local function ResolveSpellID(entry)
     if not entry then return nil end
     local raw = entry.spellID
@@ -496,8 +537,11 @@ local function UpdateNow()
     local entry = GetSpecEntry()
     if not entry then HideAll() return end
 
-    local slot = entry.slot or "SECONDARY"
-    if HasClassbarConflict(slot) then HideAll() return end
+    local fht = IsFHT()
+    if not fht then
+        local slot = entry.slot or "SECONDARY"
+        if HasClassbarConflict(slot) then HideAll() return end
+    end
 
     local spellID = ResolveSpellID(entry)
     if not spellID then HideAll() return end
@@ -514,7 +558,7 @@ local function UpdateNow()
     end
 
     EnsureFrame()
-    HookCluster() -- re-scan for newly-added trinket / essential children
+    if not fht then HookCluster() end -- BCDM-only; FHT does not need cluster hooks
     if currentSpellID ~= spellID then
         -- Spell changed (e.g. spec swap): reset prediction state.
         predictedCharges = nil
@@ -530,7 +574,11 @@ local function UpdateNow()
         end
     end)
 
-    ApplyPosition(entry)
+    if fht then
+        ApplyPositionFHT()
+    else
+        ApplyPosition(entry)
+    end
     ApplyChargeLayout()
     ApplyVisuals(entry)
     UpdateChargeState()
@@ -582,7 +630,6 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, _, arg3)
         if frame and frame:IsShown() then UpdateChargeState() end
         if frame and frame:IsShown() and rechargeStart then rechargeTicker:Show() end
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" and arg1 == "player" then
-        -- arg3 is spellID on this event
         if currentSpellID and arg3 == currentSpellID and frame and frame:IsShown() then
 
             local pc = predictedCharges

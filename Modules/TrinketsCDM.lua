@@ -5,9 +5,6 @@ local E = ns.E
 ns.TrinketsCDM = ns.TrinketsCDM or {}
 local M = ns.TrinketsCDM
 
--- Saved container position (restored when feature is disabled).
--- BCDM's private namespace is NOT a global (_G["BCDM"] is nil), so we work
--- directly with the named frame _G["BCDM_TrinketBar"] instead.
 local savedContainerPoint  = nil
 local savedEssPoint        = nil   -- EssentialCooldownViewer position before our shift
 local savedUtilityPoint    = nil   -- UtilityCooldownViewer position before FHT overflow nudge
@@ -15,16 +12,10 @@ local savedUtilityPoint    = nil   -- UtilityCooldownViewer position before FHT 
 local isApplied      = false
 local isInUtilityMode = false   -- true when FHT overflow has trinkets at utility position
 
--- Suppresses our SetPoint post-hook during our own PlaceContainer calls.
 M._suppressHook    = false
--- Suppresses EssentialCooldownViewer SetPoint hook during our own shifts.
 M._suppressEssHook = false
--- Suppresses dependent bar SetPoint hooks during our own shifts.
 M._suppressDepHook = false
 
--- Bars that may be anchored to EssentialCooldownViewer and need the
--- inverse of Essential's centering shift so they stay centred over the
--- combined Essential+Trinket group.
 local ESSENTIAL_DEPENDENTS = {
     "UtilityCooldownViewer",
     "BuffIconCooldownViewer",
@@ -33,19 +24,8 @@ local ESSENTIAL_DEPENDENTS = {
     "BCDM_CastBar",
 }
 
--- Per-bar tracking of the X shift we've applied.  When BCDM repositions a
--- bar, its per-bar hook resets the entry to 0.  ShiftAllDependents then
--- computes the netDelta (target − current) so we never double-shift.
 local currentDepShifts = {}
-
--- Debounce: prevents running UpdateTrinketsCDM multiple times in one frame
--- when several hooks fire simultaneously (e.g. BCDM's Position() moving
--- Essential, Utility, and sub-bars in the same call).
 local updateQueued = false
-
--- ---------------------------------------------------------------------------
--- BCDMDB helpers (BCDMDB is the SavedVariables global — always accessible)
--- ---------------------------------------------------------------------------
 
 local function GetBCDMProfile()
     if type(BCDMDB) ~= "table" then return nil end
@@ -95,10 +75,6 @@ local function GetBCDMUtilityIconSize()
         and profile.CooldownManager.Utility.IconSize) or 42
 end
 
--- ---------------------------------------------------------------------------
--- Helpers
--- ---------------------------------------------------------------------------
-
 local function CountVisibleChildren(frame)
     if not frame then return 0 end
     local count = 0
@@ -113,19 +89,11 @@ local function CountActiveTrinkets()
     return CountVisibleChildren(_G["BCDM_TrinketBar"])
 end
 
--- ---------------------------------------------------------------------------
--- Public: queried by ClusterPositioning to get extra essential icon count
--- ---------------------------------------------------------------------------
-
 function M.GetExtraEssentialCount()
     local db = E.db.thingsUI and E.db.thingsUI.trinketsCDM
     if not db or not db.enabled or not isApplied or isInUtilityMode then return 0 end
     return CountActiveTrinkets()
 end
-
--- ---------------------------------------------------------------------------
--- Save / restore trinket container position
--- ---------------------------------------------------------------------------
 
 local function SaveContainerPoint()
     if savedContainerPoint then return end  -- already saved
@@ -152,10 +120,6 @@ local function RestoreContainerPoint()
     savedContainerPoint = nil
 end
 
--- ---------------------------------------------------------------------------
--- Save / restore EssentialCooldownViewer position (for centering shift)
--- ---------------------------------------------------------------------------
-
 local function SaveEssentialPoint()
     if savedEssPoint then return end  -- already saved
     local ev = _G["EssentialCooldownViewer"]
@@ -181,8 +145,6 @@ local function RestoreEssentialPoint()
     savedEssPoint = nil
 end
 
--- Shift EssentialCooldownViewer by xDelta relative to its saved (BCDM) position.
--- This re-centers the combined (essential + trinket) group at BCDM's intended centre.
 local function ShiftEssentialViewer(xDelta)
     if not savedEssPoint then return end
     local ev = _G["EssentialCooldownViewer"]
@@ -195,12 +157,6 @@ local function ShiftEssentialViewer(xDelta)
     )
     M._suppressEssHook = false
 end
-
--- ---------------------------------------------------------------------------
--- Resize trinket icons to match the Essential icon size.
--- Children of BCDM_TrinketBar are the icon buttons; sub-frames use
--- SetAllPoints so they resize automatically.
--- ---------------------------------------------------------------------------
 
 local function ResizeTrinketIcons(iconSize, spacing, vertical)
     iconSize = tonumber(iconSize) or 42
@@ -242,15 +198,6 @@ local function ResizeTrinketIcons(iconSize, spacing, vertical)
     end
 end
 
--- ---------------------------------------------------------------------------
--- Shift dependent bars anchored to EssentialCooldownViewer.
--- Uses delta-tracking instead of save/restore to avoid double-shifts.
--- ---------------------------------------------------------------------------
-
--- Apply (or update) a target X shift to all dependent bars anchored to
--- EssentialCooldownViewer.  Only the net difference from the currently
--- applied shift is added, so calling this twice with the same target is
--- a no-op.
 local function ShiftAllDependents(targetShift)
     local essViewer = _G["EssentialCooldownViewer"]
     for _, name in ipairs(ESSENTIAL_DEPENDENTS) do
@@ -293,15 +240,9 @@ local function RestoreAllDependents()
     end
 end
 
--- Called from per-bar SetPoint hooks in Init.lua when BCDM repositions
--- a dependent bar (which removes our shift for that bar).
 function M.ResetDepShift(barName)
     currentDepShifts[barName] = 0
 end
-
--- ---------------------------------------------------------------------------
--- Save / restore UtilityCooldownViewer position (for FHT overflow nudge)
--- ---------------------------------------------------------------------------
 
 local function SaveUtilityPoint()
     if savedUtilityPoint then return end
@@ -326,12 +267,6 @@ local function RestoreUtilityPoint()
     savedUtilityPoint = nil
 end
 
--- ---------------------------------------------------------------------------
--- Place the trinket container at the desired anchor.
--- Does NOT call BCDM internals — just moves the frame directly.
--- Icons are children of the container and follow automatically.
--- ---------------------------------------------------------------------------
-
 local function PlaceContainer(anchorPoint, anchorParent, anchorRelPoint, xOff, yOff)
     local c = _G["BCDM_TrinketBar"]
     if not c then return end
@@ -340,10 +275,6 @@ local function PlaceContainer(anchorPoint, anchorParent, anchorRelPoint, xOff, y
     c:SetPoint(anchorPoint, anchorParent, anchorRelPoint, xOff or 0, yOff or 0)
     M._suppressHook = false
 end
-
--- ---------------------------------------------------------------------------
--- Core apply logic
--- ---------------------------------------------------------------------------
 
 local function ApplyTrinketPosition(db)
     if InCombatLockdown() then
@@ -368,9 +299,7 @@ local function ApplyTrinketPosition(db)
     local side         = db.side or "RIGHT"
     local essIconSize  = GetBCDMEssentialIconSize()
     local trinketSpace = GetBCDMTrinketSpacing()
-    -- -----------------------------------------------------------------------
-    -- NHT: trinkets extend the Essential row horizontally
-    -- -----------------------------------------------------------------------
+
     if db.mode == "NHT" then
         if isInUtilityMode then
             RestoreUtilityPoint()
@@ -387,10 +316,6 @@ local function ApplyTrinketPosition(db)
 
         -- Resize trinket icons to match Essential and update container dimensions.
         ResizeTrinketIcons(essIconSize, trinketSpace)
-
-        -- Shift EssentialCooldownViewer so the combined (essential + trinket)
-        -- group stays centred where BCDM intended the essential-only group.
-        -- We always restore to BCDM's position first (idempotent against double-calls).
         RestoreEssentialPoint()
         SaveEssentialPoint()
         local trinketCount = CountActiveTrinkets()
@@ -398,11 +323,6 @@ local function ApplyTrinketPosition(db)
             local trinketBarW  = trinketCount * essIconSize + math.max(0, trinketCount - 1) * trinketSpace
             local xDelta = (side == "RIGHT") and -((trinketBarW + gap) / 2) or ((trinketBarW + gap) / 2)
             ShiftEssentialViewer(xDelta)
-
-            -- Bars anchored to EssentialCooldownViewer (Utility, PowerBar, etc.)
-            -- follow Essential's shift automatically, but they should stay centred
-            -- on the combined group.  Shift them by the inverse of Essential's
-            -- delta so they end up at BCDM's original intended centre.
             ShiftAllDependents(-xDelta)
 
             -- MatchWidthOfAnchor bars should span the full combined width (including gap).
@@ -418,12 +338,8 @@ local function ApplyTrinketPosition(db)
         isApplied      = true
         isInUtilityMode = false
 
-    -- -----------------------------------------------------------------------
-    -- FHT: fit trinkets below Essential, split overflow to Utility slot
-    -- -----------------------------------------------------------------------
     elseif db.mode == "FHT" then
-        -- FHT mode: trinkets go below Essential, not beside it.
-        -- Essential and dependents stay at BCDM's positions — restore any NHT shifts.
+
         RestoreEssentialPoint()
         RestoreAllDependents()
 
@@ -520,9 +436,6 @@ local function ApplyTrinketPosition(db)
 
     if TUI.QueueClusterUpdate then TUI:QueueClusterUpdate() end
 
-    -- Update "Match Width Of Anchor" bars after a short delay.
-    -- NHT with active trinkets already schedules ApplyMatchWidth with the
-    -- correct combined width above, so skip it here for that case.
     local db = E.db.thingsUI and E.db.thingsUI.trinketsCDM
     local isNHTWithTrinkets = db.mode == "NHT" and isApplied and CountActiveTrinkets() > 0
     if not isNHTWithTrinkets then
@@ -531,11 +444,6 @@ local function ApplyTrinketPosition(db)
         end)
     end
 end
-
--- ---------------------------------------------------------------------------
--- Public: apply combined width to BCDM bars with MatchWidthOfAnchor.
--- Called from ApplyTrinketPosition timer and from Init.lua OnShow hooks.
--- ---------------------------------------------------------------------------
 
 function M.ApplyMatchWidth(overrideWidth)
     local essViewer = _G["EssentialCooldownViewer"]
@@ -559,18 +467,11 @@ function M.ApplyMatchWidth(overrideWidth)
     end
 end
 
--- ---------------------------------------------------------------------------
--- Public entry point
--- ---------------------------------------------------------------------------
-
 -- Called from Init.lua hooks when BCDM repositions Essential.
 function M.ResetEssentialSavedPoint()
     savedEssPoint = nil
 end
 
--- Debounced update — coalesces multiple hook-triggered updates into one
--- per frame so that when BCDM's Position() moves Essential, Utility,
--- PowerBar etc. simultaneously we only run ApplyTrinketPosition once.
 function M.QueueUpdate()
     if updateQueued then return end
     updateQueued = true
@@ -582,8 +483,6 @@ function M.QueueUpdate()
     end)
 end
 
--- Returns the NHT side ('RIGHT' or 'LEFT') when NHT is active and applied,
--- nil otherwise. Used by ClusterPositioning to pick the correct anchor edge.
 function M.GetNHTAnchor()
     if not isApplied or isInUtilityMode then return nil end
     local db = E.db.thingsUI and E.db.thingsUI.trinketsCDM
@@ -608,8 +507,6 @@ function TUI:UpdateTrinketsCDM()
         return
     end
 
-    -- BCDM's private namespace is never set as a global (_G["BCDM"] is nil).
-    -- We interact with BCDM via its named frame _G["BCDM_TrinketBar"] instead.
     if not _G["BCDM_TrinketBar"] then return end
 
     ApplyTrinketPosition(db)

@@ -3,11 +3,32 @@ local TUI = ns.TUI
 local E = ns.E
 local LSM = ns.LSM
 
+-- Filter the shared anchor list:
+--   CUSTOM      → not a real frame, would error on SetPoint.
+--   BCDM_CastBar → DynamicCastBarAnchor anchors the castbar onto its own targets,
+--                  picking it here can create a SetPoint dependency loop.
+local CHARGE_BAR_ANCHOR_VALUES = {}
+do
+    for k, v in pairs(ns.ANCHORS.SHARED_ANCHOR_VALUES) do
+        if k ~= "CUSTOM" and k ~= "BCDM_CastBar" then
+            CHARGE_BAR_ANCHOR_VALUES[k] = v
+        end
+    end
+end
+
 local SLOT_VALUES = {
     SECONDARY       = "Secondary Power slot",
     POWER           = "Power slot",
     ABOVE_SECONDARY = "Above Secondary",
 }
+
+local POINT_VALUES = {
+    TOP = "Top", BOTTOM = "Bottom", LEFT = "Left", RIGHT = "Right", CENTER = "Center",
+    TOPLEFT = "Top Left", TOPRIGHT = "Top Right",
+    BOTTOMLEFT = "Bottom Left", BOTTOMRIGHT = "Bottom Right",
+}
+
+local function IsFHT() return E.db.thingsUI.chargeBar.mode == "FHT" end
 
 local OUTLINE_VALUES = {
     NONE             = "None",
@@ -148,6 +169,7 @@ local function BuildEnabledArgs()
                 },
                 slot = {
                     order = 2, type = "select", name = "Slot", width = 1.3,
+                    hidden = function() return IsFHT() end,
                     values = function() local e = entry(); return GetRowSlotChoices(e and e.key) end,
                     get = function() local e = ent(); return e and (e.slot or "SECONDARY") or "SECONDARY" end,
                     set = function(_, v) local e = ent(); if not e then return end; e.slot = v; Update() end,
@@ -163,6 +185,7 @@ local function BuildEnabledArgs()
                         return ""
                     end,
                     hidden = function()
+                        if IsFHT() then return true end
                         local e = entry(); if not e then return true end
                         local cs = GetClassbarSlot(e.key)
                         return not (cs and (ent() and ent().slot or "SECONDARY") == cs)
@@ -213,7 +236,7 @@ function TUI:ChargeBarOptions()
         args = {
             description = {
                 order = 1, type = "description",
-                name = "Per-spec spell-charge tracker. Place a charge bar in the BCDM cluster (Power or Secondary Power slot) inheriting the Essential Cooldown Viewer width.\n\n|cFFFF6B6BNote:|r If Classbar Mode is enabled for the same spec on the same slot, the classbar wins and the charge bar is hidden.\n\n",
+                name = "Per-spec spell-charge tracker.\n\n|cFFFFD200NHT|r places the bar in the BCDM cluster (Power or Secondary Power slot) inheriting the Essential Cooldown Viewer width. \nIf Classbar Mode is enabled for the same spec on the same slot, the classbar wins and the charge bar is hidden, so, keep an eye on that.\n\n|cFFFFD200FHT|r doesn't use BCDM Power Bars so it's more free, or you could anchor it to something.\nCan also use it for NHT if you want I guess.\n\n",
             },
             enabled = {
                 order = 2, type = "toggle", name = "Enable Charge Bar",
@@ -223,6 +246,32 @@ function TUI:ChargeBarOptions()
                 set = function(_, v)
                     E.db.thingsUI.chargeBar.enabled = v
                     TUI:UpdateChargeBar()
+                end,
+            },
+            modeNHT = {
+                order = 3, type = "toggle", name = "NHT (BCDM Slots)",
+                desc = "Anchor charge bars into the BCDM cluster — Power slot, Secondary Power slot, or above Secondary.",
+                hidden = function() return not E.db.thingsUI.chargeBar.enabled end,
+                get = function() return E.db.thingsUI.chargeBar.mode == "NHT" end,
+                set = function(_, v)
+                    if v then
+                        E.db.thingsUI.chargeBar.mode = "NHT"
+                        Update()
+                        NotifyChange()
+                    end
+                end,
+            },
+            modeFHT = {
+                order = 4, type = "toggle", name = "FHT (Free Anchor)",
+                desc = "Anchor the charge bar to any frame (UIParent, ElvUI Player Frame, etc.). For FHT/Healer profiles that don't use BCDM Power Bars.",
+                hidden = function() return not E.db.thingsUI.chargeBar.enabled end,
+                get = function() return E.db.thingsUI.chargeBar.mode == "FHT" end,
+                set = function(_, v)
+                    if v then
+                        E.db.thingsUI.chargeBar.mode = "FHT"
+                        Update()
+                        NotifyChange()
+                    end
                 end,
             },
 
@@ -243,6 +292,7 @@ function TUI:ChargeBarOptions()
                     },
                     slotSelect = {
                         order = 2, type = "select", name = "Slot",
+                        hidden = function() return IsFHT() end,
                         values = GetAddSlotChoices,
                         get = function() return selectedSlotToAdd end,
                         set = function(_, v) selectedSlotToAdd = v end,
@@ -401,7 +451,8 @@ function TUI:ChargeBarOptions()
                         },
                     },
                     offsetGroup = {
-                        order = 2, type = "group", inline = true, name = "Position & Width",
+                        order = 2, type = "group", inline = true, name = "Position & Width (NHT)",
+                        hidden = function() return IsFHT() end,
                         args = {
                             widthOffset = {
                                 order = 1, type = "range", name = "Width Offset",
@@ -422,6 +473,73 @@ function TUI:ChargeBarOptions()
                                 min = -20, max = 50, step = 0.01, bigStep = 1,
                                 get = function() return E.db.thingsUI.chargeBar.gap or 1 end,
                                 set = function(_, v) E.db.thingsUI.chargeBar.gap = v; Update() end,
+                            },
+                        },
+                    },
+                    fhtAnchorGroup = {
+                        order = 3, type = "group", inline = true, name = "Anchor (FHT)",
+                        hidden = function() return not IsFHT() end,
+                        args = {
+                            anchorFrame = {
+                                order = 1, type = "select", name = "Anchor Frame",
+                                desc = "Frame the charge bar attaches to.",
+                                values = CHARGE_BAR_ANCHOR_VALUES,
+                                get = function() return E.db.thingsUI.chargeBar.anchorFrame or "UIParent" end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.anchorFrame = v; Update() end,
+                            },
+                            anchorPoint = {
+                                order = 2, type = "select", name = "Anchor From",
+                                desc = "Point on the charge bar that anchors.",
+                                values = POINT_VALUES,
+                                get = function() return E.db.thingsUI.chargeBar.anchorPoint or "CENTER" end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.anchorPoint = v; Update() end,
+                            },
+                            anchorRelativePoint = {
+                                order = 3, type = "select", name = "Anchor To",
+                                desc = "Point on the anchor frame to attach to.",
+                                values = POINT_VALUES,
+                                get = function() return E.db.thingsUI.chargeBar.anchorRelativePoint or "CENTER" end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.anchorRelativePoint = v; Update() end,
+                            },
+                            fhtWidth = {
+                                order = 10, type = "range", name = "Width",
+                                min = 20, max = 800, step = 0.01, bigStep = 1,
+                                disabled = function()
+                                    local db = E.db.thingsUI.chargeBar
+                                    return db.inheritWidth and db.anchorFrame ~= "UIParent"
+                                end,
+                                get = function() return E.db.thingsUI.chargeBar.fhtWidth or 200 end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.fhtWidth = v; Update() end,
+                            },
+                            inheritWidth = {
+                                order = 11, type = "toggle", name = "Inherit Width from Anchor",
+                                desc = "Match the width of the anchor frame. Ignored when anchor is UIParent (would span the whole screen).",
+                                disabled = function() return E.db.thingsUI.chargeBar.anchorFrame == "UIParent" end,
+                                get = function() return E.db.thingsUI.chargeBar.inheritWidth end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.inheritWidth = v; Update() end,
+                            },
+                            inheritWidthOffset = {
+                                order = 12, type = "range", name = "Width Nudge",
+                                desc = "Pixels added to the inherited width.",
+                                min = -200, max = 200, step = 0.01, bigStep = 1,
+                                disabled = function()
+                                    local db = E.db.thingsUI.chargeBar
+                                    return not db.inheritWidth or db.anchorFrame == "UIParent"
+                                end,
+                                get = function() return E.db.thingsUI.chargeBar.inheritWidthOffset or 0 end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.inheritWidthOffset = v; Update() end,
+                            },
+                            fhtXOffset = {
+                                order = 20, type = "range", name = "X Offset",
+                                min = -800, max = 800, step = 0.01, bigStep = 1,
+                                get = function() return E.db.thingsUI.chargeBar.fhtXOffset or 0 end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.fhtXOffset = v; Update() end,
+                            },
+                            fhtYOffset = {
+                                order = 21, type = "range", name = "Y Offset",
+                                min = -800, max = 800, step = 0.01, bigStep = 1,
+                                get = function() return E.db.thingsUI.chargeBar.fhtYOffset or 0 end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.fhtYOffset = v; Update() end,
                             },
                         },
                     },
@@ -553,6 +671,7 @@ function TUI:ChargeBarOptions()
                             },
                             slot = {
                                 order = 2, type = "select", name = "Slot", width = 1.3,
+                                hidden = function() return IsFHT() end,
                                 values = function() return GetRowSlotChoices(selectedEditSpec) end,
                                 get = function() local e = GetEditSpec(); return e and (e.slot or "SECONDARY") or "SECONDARY" end,
                                 set = function(_, v) local e = GetEditSpec(); if not e then return end; e.slot = v; Update() end,
@@ -568,6 +687,7 @@ function TUI:ChargeBarOptions()
                                     return ""
                                 end,
                                 hidden = function()
+                                    if IsFHT() then return true end
                                     local e = GetEditSpec(); if not e then return true end
                                     local cs = GetClassbarSlot(selectedEditSpec)
                                     return not (cs and (e.slot or "SECONDARY") == cs)

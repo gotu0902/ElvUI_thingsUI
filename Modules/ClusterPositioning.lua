@@ -118,11 +118,7 @@ local function UpdateClusterPositioning()
     
     local yOffset = db.yOffset
     local sideOverflow = utilityOverflow / 2
-    
-    -- In NHT mode the trinket bar sits beside EssentialCooldownViewer.
-    -- The cluster must anchor to the outer edge of the trinket bar, not to
-    -- EssentialCooldownViewer's inner edge, so that player/target frames sit
-    -- at the true extremes of the combined (essential + trinket) group.
+t
     local nhtSide      = ns.TrinketsCDM and ns.TrinketsCDM.GetNHTAnchor and ns.TrinketsCDM.GetNHTAnchor()
     local trinketFrame = nhtSide and _G["BCDM_TrinketBar"]
 
