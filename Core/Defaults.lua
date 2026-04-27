@@ -19,6 +19,7 @@ P["thingsUI"] = {
 
     buffBars = {
         enabled            = false,
+        frameStrata        = "MEDIUM",
         growthDirection    = "UP",
         width              = 240,
         height             = 23,
@@ -81,9 +82,43 @@ P["thingsUI"] = {
         yOffset       = 1,
     },
 
-    -- specialBars: per-spec storage only.
-    -- barCount / iconCount / bars{} / icons{} are created lazily in SpecialBars.lua
-    -- via GetSpecRoot() so no defaults are needed here beyond the top-level container.
+    classbarMode = {
+        enabled       = false,
+        frameStrata   = "MEDIUM",
+        widthOffset   = 0,
+        xOffset       = 0,
+        yOffset       = 1,
+        gap           = 1, -- spacing between classbar and the frame below it
+        specs         = {}, -- [specIDstring] = { slot = "SECONDARY" or "POWER" }
+    },
+
+    chargeBar = {
+        enabled       = false,
+        frameStrata   = "LOW",
+        mode          = "NHT", -- "NHT" = anchor into BCDM cluster (Power/Secondary slot); "FHT" = free anchor (no BCDM dependency)
+        widthOffset   = 0,
+        xOffset       = 0,
+        gap           = 1,
+        height        = 18,
+        statusBarTexture = "ElvUI Blank",
+        xGap          = -1,
+        showTicks     = true,
+        tickWidth     = 1,
+        tickColor     = { r = 0, g = 0, b = 0, a = 1 },
+        rechargeColor = { r = 0.5, g = 0.5, b = 0.5, a = 0.8 },
+        -- FHT mode positioning (ignored in NHT)
+        anchorFrame         = "UIParent",
+        anchorPoint         = "CENTER",
+        anchorRelativePoint = "CENTER",
+        fhtWidth            = 200,
+        fhtXOffset          = 0,
+        fhtYOffset          = 0,
+        inheritWidth        = false,
+        inheritWidthOffset  = 0,
+        specs         = {}, -- [specIDstring] = { slot, spellID, useClassColor, customColor, showText, textFont, textSize, textOutline }
+    },
+
+
     specialBars = {
         specs = {},
     },

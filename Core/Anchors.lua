@@ -1,4 +1,3 @@
--- Core/Anchors.lua
 local _, ns = ...
 ns.ANCHORS = ns.ANCHORS or {}
 
@@ -17,9 +16,37 @@ ns.ANCHORS.SHARED_ANCHOR_VALUES = {
   ["CUSTOM"]               = "|cFFFFFF00Custom Frame...|r",
 }
 
--- Ordered list of shared anchor keys (for deterministic sort in dropdowns)
 ns.ANCHORS.SHARED_ANCHOR_ORDER = {
   "ElvUF_Player", "ElvUF_Target", "ElvUF_Player_ClassBar",
   "EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer",
-  "BCDM_PowerBar", "BCDM_SecondaryPowerBar", "BCDM_CastBar", "Grid2LayoutFrame", "UIParent", "CUSTOM", 
+  "BCDM_PowerBar", "BCDM_SecondaryPowerBar", "BCDM_CastBar", "Grid2LayoutFrame", "UIParent", "CUSTOM",
+}
+
+ns.POINTS = ns.POINTS or {}
+ns.POINTS.VALUES = {
+  CENTER      = "CENTER",
+  TOP         = "TOP",
+  BOTTOM      = "BOTTOM",
+  LEFT        = "LEFT",
+  RIGHT       = "RIGHT",
+  TOPLEFT     = "TOPLEFT",
+  TOPRIGHT    = "TOPRIGHT",
+  BOTTOMLEFT  = "BOTTOMLEFT",
+  BOTTOMRIGHT = "BOTTOMRIGHT",
+}
+ns.POINTS.ORDER = {
+  "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT",
+  "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT",
+}
+ns.STRATA = ns.STRATA or {}
+ns.STRATA.VALUES = {
+  BACKGROUND        = "BACKGROUND",
+  LOW               = "LOW",
+  MEDIUM            = "MEDIUM",
+  HIGH              = "HIGH",
+  DIALOG            = "DIALOG",
+  TOOLTIP           = "TOOLTIP",
+}
+ns.STRATA.ORDER = {
+  "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "TOOLTIP",
 }

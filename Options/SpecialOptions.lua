@@ -5,6 +5,11 @@ local LSM   = ns.LSM
 
 local SB = ns.SpecialBars
 
+local STRATA_VALUES = ns.STRATA.VALUES
+local STRATA_ORDER  = ns.STRATA.ORDER
+local POINT_VALUES  = ns.POINTS.VALUES
+local POINT_ORDER   = ns.POINTS.ORDER
+
 local function BuildAnchorValues(includeBars, includeIcons)
     local t = {}
     for k, v in pairs(ns.ANCHORS.SHARED_ANCHOR_VALUES) do t[k] = v end
@@ -59,10 +64,6 @@ local function GetEnrichedSpellList()
         if data.name then nameToID[data.name] = id end
     end
 
-    -- If a slot's saved spellID isn't in CDM's list but shares a name with a
-    -- CDM entry (e.g. user previously saved aura ID 164812 for Moonfire while
-    -- CDM exposes parent 8921), migrate the slot to the canonical CDM ID so
-    -- the dropdown shows the correct selection and we don't duplicate rows.
     local function migrate(db)
         if not db or not db.spellID or enriched[db.spellID] then return end
         local info = C_Spell.GetSpellInfo(db.spellID)
@@ -83,9 +84,7 @@ end
 
 local function GetChoicesTable(currentKey, isBar)
     local choices = { [""] = "|cFF888888— None —|r" }
-    -- Refresh known tables from the live viewer (rebuilds in place if frames
-    -- exist; otherwise leaves the previous snapshot intact so we don't lose
-    -- state when CDM is closed).
+
     if SB.ScanAndHookCDMChildren then SB.ScanAndHookCDMChildren() end
     local rawList = GetEnrichedSpellList()
     local knownBar  = SB.knownBarSpells  or {}
@@ -116,12 +115,7 @@ local function GetChoicesTable(currentKey, isBar)
         end
 
         local pid = data.parentID
-        -- knownBar/knownIcon reflect the last CDM viewer scan and persist
-        -- across CDM open/close. For split-variant entries (key is a linkedID,
-        -- parentID is the shared parent — Blooming Infusion case) we must
-        -- only check the entry's own id, otherwise both variants would match
-        -- the parent and look "live". Non-split entries (id == parentID)
-        -- can fall back to parent, which catches base-spell tracking.
+
         local isSplitVariant = pid and pid ~= id
         local liveAsBar, liveAsIcon
         if isSplitVariant then
@@ -142,38 +136,26 @@ local function GetChoicesTable(currentKey, isBar)
         end
 
         if usage then
-            -- In-use by another slot. Orange shades by slot type.
             local isIconUsage = usage:find("Icon", 1, true)
             local nameColor = isIconUsage and "|cFFFFB347" or "|cFFFF8800"
             local tagColor  = isIconUsage and "|cFFCC8844" or "|cFFAA6600"
             choices[tostring(id)] = iconStr .. nameColor .. displayName .. "|r " .. tagColor .. "(In use: " .. usage .. ")|r"
         elseif liveType then
-            -- Currently visible in a CDM viewer. Yellow = Bar only, Green = Icon (or both).
             local isBarOnly = liveType == "Bar"
             local nameColor = isBarOnly and "|cFFFFFF00" or "|cFF00FF00"
             local typeLabel = "|cFF888888(" .. liveType .. ")|r"
             choices[tostring(id)] = iconStr .. nameColor .. displayName .. "|r " .. typeLabel
         elseif inCDM and talented then
-            -- Talented but not currently displayed in CDM viewer (parked in Not
-            -- Displayed). Light blue — user can drag it into CDM to make it show.
             choices[tostring(id)] = iconStr .. "|cFF66CCFF" .. displayName .. "|r |cFF6699CC(Not tracked)|r"
         elseif inCDM then
-            -- In CDM's API but player doesn't have the spell.
             choices[tostring(id)] = iconStr .. "|cFFAAAAAA" .. displayName .. "|r |cFF666666(Not talented)|r"
         else
-            -- Unknown / not in CDM at all — dim
             choices[tostring(id)] = iconStr .. "|cFF666666" .. displayName .. " |cFF555555(?)|r|r"
         end
     end
     return choices
 end
 
--- Sort buckets, lower = appears first in dropdown:
---   1: in use as Bar           2: in use as Icon
---   3: live as Bar             4: live as Icon (or Bar & Icon)
---   5: in CDM, talented (Not tracked)
---   6: in CDM, not talented
---   7: unknown / not in CDM
 local function GetSortRank(id, data, knownBar, knownIcon)
     local pid = data.parentID
     local isSplitVariant = pid and pid ~= id
@@ -316,6 +298,13 @@ function TUI:SpecialBarOptions(barKey)
                         statusBarTexture = { order = 1, type = "select", name = "Texture", dialogControl = "LSM30_Statusbar", values = LSM:HashTable("statusbar"), get = function() return get("statusBarTexture") end, set = function(_, v) set("statusBarTexture", v) end },
                         useClassColor = { order = 2, type = "toggle", name = "Use Class Color", get = function() return get("useClassColor") end, set = function(_, v) set("useClassColor", v) end },
                         customColor = { order = 3, type = "color", name = "Custom Color", hasAlpha = false, disabled = function() return get("useClassColor") end, get = function() return unpackColor(get("customColor"), false) end, set = function(_, r, g, b) set("customColor", { r=r, g=g, b=b }) end },
+                        frameStrata = {
+                            order = 4, type = "select", name = "Frame Strata",
+                            desc = "Render layer for this bar. Higher strata draws on top of lower ones.",
+                            values = STRATA_VALUES, sorting = STRATA_ORDER,
+                            get = function() return get("frameStrata") or "MEDIUM" end,
+                            set = function(_, v) set("frameStrata", v) end,
+                        },
                     },
                 },
                 placeholderGroup = {
@@ -371,7 +360,7 @@ function TUI:SpecialBarOptions(barKey)
                         stackAnchor = { order = 2, type = "select", name = "Anchor To", values = { ["ICON"]="Icon", ["BAR"]="Bar" }, disabled = function() return not get("showStacks") end, get = function() return get("stackAnchor") or "ICON" end, set = function(_, v) set("stackAnchor", v) end },
                         stackFontSize = { order = 3, type = "range", name = "Stack Font Size", min = 6, max = 72, step = 1, disabled = function() return not get("showStacks") end, get = function() return get("stackFontSize") end, set = function(_, v) set("stackFontSize", v) end },
                         stackFontOutline = { order = 4, type = "select", name = "Stack Outline", values = { ["NONE"]="None", ["OUTLINE"]="Outline", ["THICKOUTLINE"]="Thick" }, disabled = function() return not get("showStacks") end, get = function() return get("stackFontOutline") end, set = function(_, v) set("stackFontOutline", v) end },
-                        stackPoint = { order = 5, type = "select", name = "Stack Position", values = { ["CENTER"]="Center", ["LEFT"]="Left", ["RIGHT"]="Right", ["TOP"]="Top", ["BOTTOM"]="Bottom", ["TOPLEFT"]="Top Left", ["TOPRIGHT"]="Top Right", ["BOTTOMLEFT"]="Bottom Left", ["BOTTOMRIGHT"]="Bottom Right" }, disabled = function() return not get("showStacks") end, get = function() return get("stackPoint") end, set = function(_, v) set("stackPoint", v) end },
+                        stackPoint = { order = 5, type = "select", name = "Stack Position", values = POINT_VALUES, sorting = POINT_ORDER, disabled = function() return not get("showStacks") end, get = function() return get("stackPoint") end, set = function(_, v) set("stackPoint", v) end },
                         stackXOffset = { order = 6, type = "range", name = "Stack X Offset", min = -20, max = 20, step = 0.5, disabled = function() return not get("showStacks") end, get = function() return get("stackXOffset") end, set = function(_, v) set("stackXOffset", v) end },
                         stackYOffset = { order = 7, type = "range", name = "Stack Y Offset", min = -20, max = 20, step = 0.5, disabled = function() return not get("showStacks") end, get = function() return get("stackYOffset") end, set = function(_, v) set("stackYOffset", v) end },
                     },
@@ -379,10 +368,10 @@ function TUI:SpecialBarOptions(barKey)
             }),
         },
         anchorGroup = {
-            order = 30, type = "group", name = "Anchor",
+            order = 30, type = "group", name = "Anchor & Position",
             args = merge({
                 anchorSettingsGroup = {
-                    order = 50, type = "group", name = "Anchor", inline = true,
+                    order = 50, type = "group", name = "Anchor & Position", inline = true,
                     args = {
                         toggleMovers = {
                             order = 0, type = "execute", name = "Toggle Movers (thingsUI)",
@@ -397,8 +386,8 @@ function TUI:SpecialBarOptions(barKey)
                             get = function() return get("anchorMode") or "UIParent" end,
                             set = function(_, v) db().anchorMode = v; if v ~= "CUSTOM" then db().anchorFrame = v end; QueueUpdate() end },
                         anchorFrame = { order = 2, type = "input", name = "Custom Frame Name", width = "double", hidden = function() return get("anchorMode") ~= "CUSTOM" end, get = function() return get("anchorFrame") end, set = function(_, v) set("anchorFrame", v) end },
-                        anchorPoint = { order = 3, type = "select", name = "Anchor From", values = { ["TOP"]="TOP", ["BOTTOM"]="BOTTOM", ["LEFT"]="LEFT", ["RIGHT"]="RIGHT", ["CENTER"]="CENTER", ["TOPLEFT"]="TOPLEFT", ["TOPRIGHT"]="TOPRIGHT", ["BOTTOMLEFT"]="BOTTOMLEFT", ["BOTTOMRIGHT"]="BOTTOMRIGHT" }, get = function() return get("anchorPoint") end, set = function(_, v) set("anchorPoint", v) end },
-                        anchorRelativePoint = { order = 4, type = "select", name = "Anchor To", values = { ["TOP"]="TOP", ["BOTTOM"]="BOTTOM", ["LEFT"]="LEFT", ["RIGHT"]="RIGHT", ["CENTER"]="CENTER", ["TOPLEFT"]="TOPLEFT", ["TOPRIGHT"]="TOPRIGHT", ["BOTTOMLEFT"]="BOTTOMLEFT", ["BOTTOMRIGHT"]="BOTTOMRIGHT" }, get = function() return get("anchorRelativePoint") end, set = function(_, v) set("anchorRelativePoint", v) end },
+                        anchorPoint = { order = 3, type = "select", name = "Anchor From", values = POINT_VALUES, sorting = POINT_ORDER, get = function() return get("anchorPoint") end, set = function(_, v) set("anchorPoint", v) end },
+                        anchorRelativePoint = { order = 4, type = "select", name = "Anchor To", values = POINT_VALUES, sorting = POINT_ORDER, get = function() return get("anchorRelativePoint") end, set = function(_, v) set("anchorRelativePoint", v) end },
                         anchorXOffset = { order = 5, type = "range", name = "X Offset", min = -500, max = 500, step = 0.5, bigStep = 1, get = function() return get("anchorXOffset") end, set = function(_, v) set("anchorXOffset", v) end },
                         anchorYOffset = { order = 6, type = "range", name = "Y Offset", min = -500, max = 500, step = 0.5, bigStep = 1, get = function() return get("anchorYOffset") end, set = function(_, v) set("anchorYOffset", v) end },
                     },
@@ -498,6 +487,13 @@ function TUI:SpecialIconOptions(iconKey)
                             set = function(_, v) set("height", v) end },
                         zoom   = { order = 5, type = "range", name = "Zoom", min = 0, max = 0.45, step = 0.01, bigStep = 0.05, isPercent = true, get = function() return get("zoom") end, set = function(_, v) set("zoom", v) end },
                         desaturate = { order = 6, type = "toggle", name = "Show when Inactive", get = function() return get("desaturateWhenInactive") end, set = function(_, v) set("desaturateWhenInactive", v) end },
+                        frameStrata = {
+                            order = 7, type = "select", name = "Frame Strata",
+                            desc = "Render layer for this icon. Higher strata draws on top of lower ones.",
+                            values = STRATA_VALUES, sorting = STRATA_ORDER,
+                            get = function() return get("frameStrata") or "MEDIUM" end,
+                            set = function(_, v) set("frameStrata", v) end,
+                        },
                     },
                 },
                 cooldownGroup = {
@@ -617,7 +613,7 @@ function TUI:SpecialIconOptions(iconKey)
                             get = function() return unpackColor(get("stackColor"), false) end,
                             set = function(_, r, g, b) set("stackColor", { r=r, g=g, b=b }) end },
                         stackPoint  = { order = 6, type = "select", name = "Position",
-                            values = { ["CENTER"]="Center", ["TOPLEFT"]="Top Left", ["TOP"]="Top", ["TOPRIGHT"]="Top Right", ["RIGHT"]="Right", ["BOTTOMRIGHT"]="Bottom Right", ["BOTTOM"]="Bottom", ["BOTTOMLEFT"]="Bottom Left", ["LEFT"]="Left" },
+                            values = POINT_VALUES, sorting = POINT_ORDER,
                             disabled = function() return not get("showStacks") end,
                             get = function() return get("stackPoint") or "BOTTOMRIGHT" end,
                             set = function(_, v) set("stackPoint", v) end },
@@ -656,7 +652,7 @@ function TUI:SpecialIconOptions(iconKey)
                             get = function() return unpackColor(get("durationColor"), false) end,
                             set = function(_, r, g, b) set("durationColor", { r=r, g=g, b=b }) end },
                         durationPoint  = { order = 6, type = "select", name = "Position",
-                            values = { ["CENTER"]="Center", ["TOPLEFT"]="Top Left", ["TOP"]="Top", ["TOPRIGHT"]="Top Right", ["RIGHT"]="Right", ["BOTTOMRIGHT"]="Bottom Right", ["BOTTOM"]="Bottom", ["BOTTOMLEFT"]="Bottom Left", ["LEFT"]="Left" },
+                            values = POINT_VALUES, sorting = POINT_ORDER,
                             disabled = function() return not get("showDuration") end,
                             get = function() return get("durationPoint") or "CENTER" end,
                             set = function(_, v) set("durationPoint", v) end },
@@ -673,10 +669,10 @@ function TUI:SpecialIconOptions(iconKey)
             }),
         },
         anchorGroup = {
-            order = 20, type = "group", name = "Anchor",
+            order = 20, type = "group", name = "Anchor & Position",
             args = merge({
                 anchorSettingsGroup = {
-                    order = 50, type = "group", name = "Anchor", inline = true,
+                    order = 50, type = "group", name = "Anchor & Position", inline = true,
                     args = {
                         toggleMovers = {
                             order = 0, type = "execute", name = "Toggle Movers (thingsUI)",
@@ -692,10 +688,10 @@ function TUI:SpecialIconOptions(iconKey)
                             set = function(_, v) db().anchorMode = v; if v ~= "CUSTOM" then db().anchorFrame = v end; QueueUpdate() end },
                         anchorFrame = { order = 2, type = "input", name = "Custom Frame Name", width = "double", hidden = function() return get("anchorMode") ~= "CUSTOM" end, get = function() return get("anchorFrame") end, set = function(_, v) set("anchorFrame", v) end },
                         anchorPoint = { order = 3, type = "select", name = "Anchor From",
-                            values = { ["TOP"]="TOP", ["BOTTOM"]="BOTTOM", ["LEFT"]="LEFT", ["RIGHT"]="RIGHT", ["CENTER"]="CENTER", ["TOPLEFT"]="TOPLEFT", ["TOPRIGHT"]="TOPRIGHT", ["BOTTOMLEFT"]="BOTTOMLEFT", ["BOTTOMRIGHT"]="BOTTOMRIGHT" },
+                            values = POINT_VALUES, sorting = POINT_ORDER,
                             get = function() return get("anchorPoint") end, set = function(_, v) set("anchorPoint", v) end },
                         anchorRelativePoint = { order = 4, type = "select", name = "Anchor To",
-                            values = { ["TOP"]="TOP", ["BOTTOM"]="BOTTOM", ["LEFT"]="LEFT", ["RIGHT"]="RIGHT", ["CENTER"]="CENTER", ["TOPLEFT"]="TOPLEFT", ["TOPRIGHT"]="TOPRIGHT", ["BOTTOMLEFT"]="BOTTOMLEFT", ["BOTTOMRIGHT"]="BOTTOMRIGHT" },
+                            values = POINT_VALUES, sorting = POINT_ORDER,
                             get = function() return get("anchorRelativePoint") end, set = function(_, v) set("anchorRelativePoint", v) end },
                         anchorXOffset = { order = 5, type = "range", name = "X Offset", min = -500, max = 500, step = 0.01, bigStep = 1, get = function() return get("anchorXOffset") end, set = function(_, v) set("anchorXOffset", v) end },
                         anchorYOffset = { order = 6, type = "range", name = "Y Offset", min = -500, max = 500, step = 0.01, bigStep = 1, get = function() return get("anchorYOffset") end, set = function(_, v) set("anchorYOffset", v) end },

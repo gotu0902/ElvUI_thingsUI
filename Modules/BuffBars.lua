@@ -208,9 +208,16 @@ local function LayoutBuffBar(childFrame)
     end
 end
 
+local function ApplyContainerStrata()
+    if not BuffBarCooldownViewer then return end
+    local db = E.db.thingsUI.buffBars
+    BuffBarCooldownViewer:SetFrameStrata((db and db.frameStrata) or "MEDIUM")
+end
+
 local function AnchorBuffBarContainer()
     if not BuffBarCooldownViewer then return end
     local db = E.db.thingsUI.buffBars
+    ApplyContainerStrata()
     if not db.anchorEnabled then return end
     local anchorFrame = _G[db.anchorFrame]
     if not anchorFrame then return end

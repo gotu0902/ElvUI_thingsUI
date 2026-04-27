@@ -31,9 +31,25 @@ local function UpdateCastBarAnchor()
     
     local secondary = GetSecondaryPowerBar()
     local primary = GetPowerBar()
-    
+    local classbar = ns.ClassbarMode and ns.ClassbarMode.GetActiveAnchorFrame and ns.ClassbarMode.GetActiveAnchorFrame() or nil
+    local chargebar = ns.ChargeBar and ns.ChargeBar.GetActiveAnchorFrame and ns.ChargeBar.GetActiveAnchorFrame() or nil
+
+    local topCustom
+    local function consider(f)
+        if not f or not f.GetTop then return end
+        local t = f:GetTop()
+        if not t then return end
+        if not topCustom or t > topCustom:GetTop() then
+            topCustom = f
+        end
+    end
+    consider(classbar)
+    consider(chargebar)
+
     local anchorTarget
-    if secondary and secondary:IsShown() and secondary:GetWidth() > 0 then
+    if topCustom then
+        anchorTarget = topCustom
+    elseif secondary and secondary:IsShown() and secondary:GetWidth() > 0 then
         anchorTarget = secondary
     elseif primary and primary:IsShown() then
         anchorTarget = primary
@@ -103,12 +119,25 @@ local function HookSecondaryPowerBar()
     end)
 end
 
+local hookedCastBar = false
+local function HookCastBar()
+    if hookedCastBar then return end
+    local cb = GetCastBar()
+    if not cb then return end
+    hookedCastBar = true
+    cb:HookScript("OnShow", function()
+        lastAnchorTarget = nil
+        MarkDirty()
+    end)
+end
+
 local eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "PLAYER_ENTERING_WORLD" then
         C_Timer.After(1, function()
             HookSecondaryPowerBar()
             HookCDMSettings()
+            HookCastBar()
             lastAnchorTarget = nil
             MarkDirty()
         end)
@@ -126,6 +155,11 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     end
 end)
 
+function TUI:InvalidateDynamicCastBarAnchor()
+    lastAnchorTarget = nil
+    MarkDirty()
+end
+
 function TUI:UpdateDynamicCastBarAnchor()
     local db = E.db.thingsUI.dynamicCastBarAnchor
     if db and db.enabled then
@@ -136,6 +170,7 @@ function TUI:UpdateDynamicCastBarAnchor()
         
         HookSecondaryPowerBar()
         HookCDMSettings()
+        HookCastBar()
         lastAnchorTarget = nil
         MarkDirty()
     else

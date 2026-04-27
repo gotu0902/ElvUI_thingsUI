@@ -62,7 +62,8 @@ SB.HideIconMover = HideIconMover
 local function GetOrCreateIconFrame(iconKey)
     local name    = 'TUI_SpecialIcon_' .. iconKey
     local wrapper = _G[name] or CreateFrame('Frame', name, UIParent)
-    wrapper:SetFrameStrata('MEDIUM')
+    local db = SB.GetIconDB(iconKey)
+    wrapper:SetFrameStrata((db and db.frameStrata) or 'MEDIUM')
     wrapper:SetFrameLevel(10)
     if not wrapper.fallback then
         wrapper.fallback = wrapper:CreateTexture(nil, 'ARTWORK')

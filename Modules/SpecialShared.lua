@@ -30,6 +30,7 @@ local SPECIAL_BAR_DEFAULTS = ns.SPECIAL_BAR_DEFAULTS or {
     stackPoint = "CENTER", stackAnchor = "ICON", stackXOffset = 0, stackYOffset = 0, showName = true, namePoint = "LEFT",
     nameXOffset = 2, nameYOffset = 0, showDuration = true, durationPoint = "RIGHT", durationXOffset = -4, durationYOffset = 0,
     anchorMode = "UIParent", anchorFrame = "UIParent", anchorPoint = "CENTER", anchorRelativePoint = "CENTER", anchorXOffset = 0, anchorYOffset = 0,
+    frameStrata = "MEDIUM",
 }
 
 local SPECIAL_ICON_DEFAULTS = ns.SPECIAL_ICON_DEFAULTS or {
@@ -43,6 +44,7 @@ local SPECIAL_ICON_DEFAULTS = ns.SPECIAL_ICON_DEFAULTS or {
     showGlow = false, glowType = "pixel", glowColor = { r = 1, g = 1, b = 0, a = 1 },
     glowN = 8, glowFrequency = 0.25, glowLength = 10, glowThickness = 2,
     glowXOffset = 0, glowYOffset = 0, glowInsideBorder = false,
+    frameStrata = "MEDIUM",
 }
 
 ns.SPECIAL_BAR_DEFAULTS  = SPECIAL_BAR_DEFAULTS
@@ -133,14 +135,6 @@ local function BuildCDMSpellList()
     local list = {}
     if not C_CooldownViewer then return list end
 
-    -- First pass: count how many CDM rows share each parent spellID. If more than
-    -- one row points to the same spellID, the rows must be telling different
-    -- variants apart via linkedSpellIDs (e.g. Eclipse Solar/Lunar both share
-    -- parent 1239669 but link to 48517/48518). For those we key by the linked
-    -- ID so each variant becomes its own entry. Single-row spells stay keyed
-    -- by their spellID, which collapses Ascendant Eclipses' multiple rows
-    -- (different parent IDs but same name) into one — wait, that's the other
-    -- case. We additionally collapse same-name rows that already share key.
     local rowSpellCount = {}
     local function preCount(cat, includeAll)
         if not cat then return end
@@ -197,15 +191,6 @@ local function BuildCDMSpellList()
     collect(CAT_BUFF, "Icon", true,  true)
     collect(CAT_BAR,  "Bar",  true,  true)
 
-    -- We don't collapse same-name entries here. Talent variants of the same
-    -- buff (e.g. Ascendant Eclipses parents 1261564 and 1261565) and real
-    -- distinct variants (e.g. Blooming Infusion's two linked auras) look the
-    -- same to the API. The dropdown disambiguates duplicates with #spellID.
-
-    -- Frame-type observation overrides API category. CDM's API sometimes lists
-    -- a spell under TrackedBar even though it actually renders as an icon
-    -- (e.g. Eclipse Solar/Lunar). When we've seen the parent frame live, trust
-    -- that over the API category.
     for key, data in pairs(list) do
         local pid = data.parentID
         local isBarFrame  = (key and knownBarSpells[key])  or (pid and knownBarSpells[pid])
@@ -246,8 +231,6 @@ local function GetCachedSpellInfo(spellID)
     return info
 end
 
--- Only pass plain numbers from our own DB — CDM-sourced values may be secret numbers
--- that pass type() checks but still taint table indexing.
 local function GetBaseSpellID(spellID)
     if type(spellID) ~= "number" then return nil end
     local cached = baseSpellCache[spellID]
@@ -277,8 +260,6 @@ local function EnsureSlotKeys(barCount, iconCount)
     if iconCount > #_iconKeys then for i = #_iconKeys + 1, iconCount do _iconKeys[i] = "icon" .. i end end
 end
 
--- Two separate buffers: ScanAndHookCDMChildren iterates one and may call
--- OnCDMChildShown → UpdateSlot → FindBySpell which needs its own.
 local _childrenBufScan = {}
 local _childrenBufFind = {}
 
@@ -425,9 +406,6 @@ local function _doReturnFrame(child)
         if child.Cooldown then
             if orig.drawSwipe ~= nil then child.Cooldown:SetDrawSwipe(orig.drawSwipe) end
             if orig.drawEdge  ~= nil then child.Cooldown:SetDrawEdge(orig.drawEdge) end
-            -- Restore font/color/visibility only. Anchors are owned by CDM and
-            -- re-applied automatically on the next RefreshData; touching them
-            -- here can throw if GetPoint(1) returned partial values during capture.
             if orig.cdFont then
                 for i = 1, child.Cooldown:GetNumRegions() do
                     local r = select(i, child.Cooldown:GetRegions())
@@ -716,9 +694,7 @@ function TUI:UpdateSpecialBars()
         local idx = tonumber(key:match("^bar(%d+)$"))
         if not idx or idx > barCount then releaseBar(key) end
     end
-    -- Hide movers for any slot beyond the current count, even if it never
-    -- had an active spell. Movers are created lazily so we only iterate
-    -- numbers up to a reasonable max (matches the option's range cap).
+
     if hideBarMover then
         for i = barCount + 1, 12 do hideBarMover("bar" .. i) end
     end
@@ -741,9 +717,6 @@ function TUI:UpdateSpecialBars()
     for i = 1, iconCount do updateIcon(_iconKeys[i]) end
 end
 
--- Event-driven enforcer: replaces a 20Hz polling loop. Dirty flag is set by
--- triggers that can cause CDM to re-parent/re-size yoinked frames; OnUpdate
--- drains the flag at most once per ENFORCE_INTERVAL.
 local enforcer = CreateFrame("Frame")
 local enforceDirty = false
 local enforceTimer = 0
@@ -816,8 +789,6 @@ enforcer:SetScript("OnUpdate", function(_, elapsed)
     RunEnforce()
 end)
 
--- Triggers that can cause CDM to re-parent/re-size yoinked frames.
--- We mark dirty and let the next OnUpdate (within ENFORCE_INTERVAL) reconcile.
 local enforceTriggers = CreateFrame("Frame")
 enforceTriggers:RegisterUnitEvent("UNIT_AURA", "player")
 enforceTriggers:RegisterEvent("PLAYER_REGEN_ENABLED")
