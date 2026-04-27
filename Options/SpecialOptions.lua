@@ -389,10 +389,10 @@ function TUI:SpecialBarOptions(barKey)
             }),
         },
         anchorGroup = {
-            order = 30, type = "group", name = "Anchor",
+            order = 30, type = "group", name = "Anchor & Position",
             args = merge({
                 anchorSettingsGroup = {
-                    order = 50, type = "group", name = "Anchor", inline = true,
+                    order = 50, type = "group", name = "Anchor & Position", inline = true,
                     args = {
                         toggleMovers = {
                             order = 0, type = "execute", name = "Toggle Movers (thingsUI)",
@@ -690,10 +690,10 @@ function TUI:SpecialIconOptions(iconKey)
             }),
         },
         anchorGroup = {
-            order = 20, type = "group", name = "Anchor",
+            order = 20, type = "group", name = "Anchor & Position",
             args = merge({
                 anchorSettingsGroup = {
-                    order = 50, type = "group", name = "Anchor", inline = true,
+                    order = 50, type = "group", name = "Anchor & Position", inline = true,
                     args = {
                         toggleMovers = {
                             order = 0, type = "execute", name = "Toggle Movers (thingsUI)",
