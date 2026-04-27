@@ -64,10 +64,6 @@ local function GetEnrichedSpellList()
         if data.name then nameToID[data.name] = id end
     end
 
-    -- If a slot's saved spellID isn't in CDM's list but shares a name with a
-    -- CDM entry (e.g. user previously saved aura ID 164812 for Moonfire while
-    -- CDM exposes parent 8921), migrate the slot to the canonical CDM ID so
-    -- the dropdown shows the correct selection and we don't duplicate rows.
     local function migrate(db)
         if not db or not db.spellID or enriched[db.spellID] then return end
         local info = C_Spell.GetSpellInfo(db.spellID)
@@ -88,9 +84,7 @@ end
 
 local function GetChoicesTable(currentKey, isBar)
     local choices = { [""] = "|cFF888888— None —|r" }
-    -- Refresh known tables from the live viewer (rebuilds in place if frames
-    -- exist; otherwise leaves the previous snapshot intact so we don't lose
-    -- state when CDM is closed).
+
     if SB.ScanAndHookCDMChildren then SB.ScanAndHookCDMChildren() end
     local rawList = GetEnrichedSpellList()
     local knownBar  = SB.knownBarSpells  or {}
@@ -121,12 +115,7 @@ local function GetChoicesTable(currentKey, isBar)
         end
 
         local pid = data.parentID
-        -- knownBar/knownIcon reflect the last CDM viewer scan and persist
-        -- across CDM open/close. For split-variant entries (key is a linkedID,
-        -- parentID is the shared parent — Blooming Infusion case) we must
-        -- only check the entry's own id, otherwise both variants would match
-        -- the parent and look "live". Non-split entries (id == parentID)
-        -- can fall back to parent, which catches base-spell tracking.
+
         local isSplitVariant = pid and pid ~= id
         local liveAsBar, liveAsIcon
         if isSplitVariant then
@@ -147,38 +136,26 @@ local function GetChoicesTable(currentKey, isBar)
         end
 
         if usage then
-            -- In-use by another slot. Orange shades by slot type.
             local isIconUsage = usage:find("Icon", 1, true)
             local nameColor = isIconUsage and "|cFFFFB347" or "|cFFFF8800"
             local tagColor  = isIconUsage and "|cFFCC8844" or "|cFFAA6600"
             choices[tostring(id)] = iconStr .. nameColor .. displayName .. "|r " .. tagColor .. "(In use: " .. usage .. ")|r"
         elseif liveType then
-            -- Currently visible in a CDM viewer. Yellow = Bar only, Green = Icon (or both).
             local isBarOnly = liveType == "Bar"
             local nameColor = isBarOnly and "|cFFFFFF00" or "|cFF00FF00"
             local typeLabel = "|cFF888888(" .. liveType .. ")|r"
             choices[tostring(id)] = iconStr .. nameColor .. displayName .. "|r " .. typeLabel
         elseif inCDM and talented then
-            -- Talented but not currently displayed in CDM viewer (parked in Not
-            -- Displayed). Light blue — user can drag it into CDM to make it show.
             choices[tostring(id)] = iconStr .. "|cFF66CCFF" .. displayName .. "|r |cFF6699CC(Not tracked)|r"
         elseif inCDM then
-            -- In CDM's API but player doesn't have the spell.
             choices[tostring(id)] = iconStr .. "|cFFAAAAAA" .. displayName .. "|r |cFF666666(Not talented)|r"
         else
-            -- Unknown / not in CDM at all — dim
             choices[tostring(id)] = iconStr .. "|cFF666666" .. displayName .. " |cFF555555(?)|r|r"
         end
     end
     return choices
 end
 
--- Sort buckets, lower = appears first in dropdown:
---   1: in use as Bar           2: in use as Icon
---   3: live as Bar             4: live as Icon (or Bar & Icon)
---   5: in CDM, talented (Not tracked)
---   6: in CDM, not talented
---   7: unknown / not in CDM
 local function GetSortRank(id, data, knownBar, knownIcon)
     local pid = data.parentID
     local isSplitVariant = pid and pid ~= id
