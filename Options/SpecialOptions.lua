@@ -7,6 +7,8 @@ local SB = ns.SpecialBars
 
 local STRATA_VALUES = ns.STRATA.VALUES
 local STRATA_ORDER  = ns.STRATA.ORDER
+local POINT_VALUES  = ns.POINTS.VALUES
+local POINT_ORDER   = ns.POINTS.ORDER
 
 local function BuildAnchorValues(includeBars, includeIcons)
     local t = {}
@@ -381,7 +383,7 @@ function TUI:SpecialBarOptions(barKey)
                         stackAnchor = { order = 2, type = "select", name = "Anchor To", values = { ["ICON"]="Icon", ["BAR"]="Bar" }, disabled = function() return not get("showStacks") end, get = function() return get("stackAnchor") or "ICON" end, set = function(_, v) set("stackAnchor", v) end },
                         stackFontSize = { order = 3, type = "range", name = "Stack Font Size", min = 6, max = 72, step = 1, disabled = function() return not get("showStacks") end, get = function() return get("stackFontSize") end, set = function(_, v) set("stackFontSize", v) end },
                         stackFontOutline = { order = 4, type = "select", name = "Stack Outline", values = { ["NONE"]="None", ["OUTLINE"]="Outline", ["THICKOUTLINE"]="Thick" }, disabled = function() return not get("showStacks") end, get = function() return get("stackFontOutline") end, set = function(_, v) set("stackFontOutline", v) end },
-                        stackPoint = { order = 5, type = "select", name = "Stack Position", values = { ["CENTER"]="Center", ["LEFT"]="Left", ["RIGHT"]="Right", ["TOP"]="Top", ["BOTTOM"]="Bottom", ["TOPLEFT"]="Top Left", ["TOPRIGHT"]="Top Right", ["BOTTOMLEFT"]="Bottom Left", ["BOTTOMRIGHT"]="Bottom Right" }, disabled = function() return not get("showStacks") end, get = function() return get("stackPoint") end, set = function(_, v) set("stackPoint", v) end },
+                        stackPoint = { order = 5, type = "select", name = "Stack Position", values = POINT_VALUES, sorting = POINT_ORDER, disabled = function() return not get("showStacks") end, get = function() return get("stackPoint") end, set = function(_, v) set("stackPoint", v) end },
                         stackXOffset = { order = 6, type = "range", name = "Stack X Offset", min = -20, max = 20, step = 0.5, disabled = function() return not get("showStacks") end, get = function() return get("stackXOffset") end, set = function(_, v) set("stackXOffset", v) end },
                         stackYOffset = { order = 7, type = "range", name = "Stack Y Offset", min = -20, max = 20, step = 0.5, disabled = function() return not get("showStacks") end, get = function() return get("stackYOffset") end, set = function(_, v) set("stackYOffset", v) end },
                     },
@@ -407,8 +409,8 @@ function TUI:SpecialBarOptions(barKey)
                             get = function() return get("anchorMode") or "UIParent" end,
                             set = function(_, v) db().anchorMode = v; if v ~= "CUSTOM" then db().anchorFrame = v end; QueueUpdate() end },
                         anchorFrame = { order = 2, type = "input", name = "Custom Frame Name", width = "double", hidden = function() return get("anchorMode") ~= "CUSTOM" end, get = function() return get("anchorFrame") end, set = function(_, v) set("anchorFrame", v) end },
-                        anchorPoint = { order = 3, type = "select", name = "Anchor From", values = { ["TOP"]="TOP", ["BOTTOM"]="BOTTOM", ["LEFT"]="LEFT", ["RIGHT"]="RIGHT", ["CENTER"]="CENTER", ["TOPLEFT"]="TOPLEFT", ["TOPRIGHT"]="TOPRIGHT", ["BOTTOMLEFT"]="BOTTOMLEFT", ["BOTTOMRIGHT"]="BOTTOMRIGHT" }, get = function() return get("anchorPoint") end, set = function(_, v) set("anchorPoint", v) end },
-                        anchorRelativePoint = { order = 4, type = "select", name = "Anchor To", values = { ["TOP"]="TOP", ["BOTTOM"]="BOTTOM", ["LEFT"]="LEFT", ["RIGHT"]="RIGHT", ["CENTER"]="CENTER", ["TOPLEFT"]="TOPLEFT", ["TOPRIGHT"]="TOPRIGHT", ["BOTTOMLEFT"]="BOTTOMLEFT", ["BOTTOMRIGHT"]="BOTTOMRIGHT" }, get = function() return get("anchorRelativePoint") end, set = function(_, v) set("anchorRelativePoint", v) end },
+                        anchorPoint = { order = 3, type = "select", name = "Anchor From", values = POINT_VALUES, sorting = POINT_ORDER, get = function() return get("anchorPoint") end, set = function(_, v) set("anchorPoint", v) end },
+                        anchorRelativePoint = { order = 4, type = "select", name = "Anchor To", values = POINT_VALUES, sorting = POINT_ORDER, get = function() return get("anchorRelativePoint") end, set = function(_, v) set("anchorRelativePoint", v) end },
                         anchorXOffset = { order = 5, type = "range", name = "X Offset", min = -500, max = 500, step = 0.5, bigStep = 1, get = function() return get("anchorXOffset") end, set = function(_, v) set("anchorXOffset", v) end },
                         anchorYOffset = { order = 6, type = "range", name = "Y Offset", min = -500, max = 500, step = 0.5, bigStep = 1, get = function() return get("anchorYOffset") end, set = function(_, v) set("anchorYOffset", v) end },
                     },
@@ -634,7 +636,7 @@ function TUI:SpecialIconOptions(iconKey)
                             get = function() return unpackColor(get("stackColor"), false) end,
                             set = function(_, r, g, b) set("stackColor", { r=r, g=g, b=b }) end },
                         stackPoint  = { order = 6, type = "select", name = "Position",
-                            values = { ["CENTER"]="Center", ["TOPLEFT"]="Top Left", ["TOP"]="Top", ["TOPRIGHT"]="Top Right", ["RIGHT"]="Right", ["BOTTOMRIGHT"]="Bottom Right", ["BOTTOM"]="Bottom", ["BOTTOMLEFT"]="Bottom Left", ["LEFT"]="Left" },
+                            values = POINT_VALUES, sorting = POINT_ORDER,
                             disabled = function() return not get("showStacks") end,
                             get = function() return get("stackPoint") or "BOTTOMRIGHT" end,
                             set = function(_, v) set("stackPoint", v) end },
@@ -673,7 +675,7 @@ function TUI:SpecialIconOptions(iconKey)
                             get = function() return unpackColor(get("durationColor"), false) end,
                             set = function(_, r, g, b) set("durationColor", { r=r, g=g, b=b }) end },
                         durationPoint  = { order = 6, type = "select", name = "Position",
-                            values = { ["CENTER"]="Center", ["TOPLEFT"]="Top Left", ["TOP"]="Top", ["TOPRIGHT"]="Top Right", ["RIGHT"]="Right", ["BOTTOMRIGHT"]="Bottom Right", ["BOTTOM"]="Bottom", ["BOTTOMLEFT"]="Bottom Left", ["LEFT"]="Left" },
+                            values = POINT_VALUES, sorting = POINT_ORDER,
                             disabled = function() return not get("showDuration") end,
                             get = function() return get("durationPoint") or "CENTER" end,
                             set = function(_, v) set("durationPoint", v) end },
@@ -709,10 +711,10 @@ function TUI:SpecialIconOptions(iconKey)
                             set = function(_, v) db().anchorMode = v; if v ~= "CUSTOM" then db().anchorFrame = v end; QueueUpdate() end },
                         anchorFrame = { order = 2, type = "input", name = "Custom Frame Name", width = "double", hidden = function() return get("anchorMode") ~= "CUSTOM" end, get = function() return get("anchorFrame") end, set = function(_, v) set("anchorFrame", v) end },
                         anchorPoint = { order = 3, type = "select", name = "Anchor From",
-                            values = { ["TOP"]="TOP", ["BOTTOM"]="BOTTOM", ["LEFT"]="LEFT", ["RIGHT"]="RIGHT", ["CENTER"]="CENTER", ["TOPLEFT"]="TOPLEFT", ["TOPRIGHT"]="TOPRIGHT", ["BOTTOMLEFT"]="BOTTOMLEFT", ["BOTTOMRIGHT"]="BOTTOMRIGHT" },
+                            values = POINT_VALUES, sorting = POINT_ORDER,
                             get = function() return get("anchorPoint") end, set = function(_, v) set("anchorPoint", v) end },
                         anchorRelativePoint = { order = 4, type = "select", name = "Anchor To",
-                            values = { ["TOP"]="TOP", ["BOTTOM"]="BOTTOM", ["LEFT"]="LEFT", ["RIGHT"]="RIGHT", ["CENTER"]="CENTER", ["TOPLEFT"]="TOPLEFT", ["TOPRIGHT"]="TOPRIGHT", ["BOTTOMLEFT"]="BOTTOMLEFT", ["BOTTOMRIGHT"]="BOTTOMRIGHT" },
+                            values = POINT_VALUES, sorting = POINT_ORDER,
                             get = function() return get("anchorRelativePoint") end, set = function(_, v) set("anchorRelativePoint", v) end },
                         anchorXOffset = { order = 5, type = "range", name = "X Offset", min = -500, max = 500, step = 0.01, bigStep = 1, get = function() return get("anchorXOffset") end, set = function(_, v) set("anchorXOffset", v) end },
                         anchorYOffset = { order = 6, type = "range", name = "Y Offset", min = -500, max = 500, step = 0.01, bigStep = 1, get = function() return get("anchorYOffset") end, set = function(_, v) set("anchorYOffset", v) end },

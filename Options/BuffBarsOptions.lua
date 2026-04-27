@@ -5,6 +5,8 @@ local LSM = ns.LSM
 local SHARED_ANCHOR_VALUES = ns.ANCHORS.SHARED_ANCHOR_VALUES
 local STRATA_VALUES = ns.STRATA.VALUES
 local STRATA_ORDER  = ns.STRATA.ORDER
+local POINT_VALUES  = ns.POINTS.VALUES
+local POINT_ORDER   = ns.POINTS.ORDER
 
 function TUI:BuffBarsOptions()
     return {
@@ -501,17 +503,8 @@ function TUI:BuffBarsOptions()
                                 type = "select",
                                 name = "Stack Position",
                                 desc = "Anchor point for the stack count on the icon.",
-                                values = {
-                                    ["CENTER"] = "Center",
-                                    ["LEFT"] = "Left",
-                                    ["RIGHT"] = "Right",
-                                    ["TOP"] = "Top",
-                                    ["BOTTOM"] = "Bottom",
-                                    ["TOPLEFT"] = "Top Left",
-                                    ["TOPRIGHT"] = "Top Right",
-                                    ["BOTTOMLEFT"] = "Bottom Left",
-                                    ["BOTTOMRIGHT"] = "Bottom Right",
-                                },
+                                values = POINT_VALUES,
+                                sorting = POINT_ORDER,
                                 get = function() return E.db.thingsUI.buffBars.stackPoint end,
                                 set = function(_, value)
                                     E.db.thingsUI.buffBars.stackPoint = value
@@ -640,17 +633,8 @@ function TUI:BuffBarsOptions()
                                 type = "select",
                                 name = "Anchor From",
                                 desc = "The point on the buff bars to anchor.",
-                                values = {
-                                    ["TOP"] = "TOP",
-                                    ["BOTTOM"] = "BOTTOM",
-                                    ["LEFT"] = "LEFT",
-                                    ["RIGHT"] = "RIGHT",
-                                    ["CENTER"] = "CENTER",
-                                    ["TOPLEFT"] = "TOPLEFT",
-                                    ["TOPRIGHT"] = "TOPRIGHT",
-                                    ["BOTTOMLEFT"] = "BOTTOMLEFT",
-                                    ["BOTTOMRIGHT"] = "BOTTOMRIGHT",
-                                },
+                                values = POINT_VALUES,
+                                sorting = POINT_ORDER,
                                 get = function() return E.db.thingsUI.buffBars.anchorPoint end,
                                 set = function(_, value)
                                     E.db.thingsUI.buffBars.anchorPoint = value
@@ -663,17 +647,8 @@ function TUI:BuffBarsOptions()
                                 type = "select",
                                 name = "Anchor To",
                                 desc = "The point on the target frame to anchor to.",
-                                values = {
-                                    ["TOP"] = "TOP",
-                                    ["BOTTOM"] = "BOTTOM",
-                                    ["LEFT"] = "LEFT",
-                                    ["RIGHT"] = "RIGHT",
-                                    ["CENTER"] = "CENTER",
-                                    ["TOPLEFT"] = "TOPLEFT",
-                                    ["TOPRIGHT"] = "TOPRIGHT",
-                                    ["BOTTOMLEFT"] = "BOTTOMLEFT",
-                                    ["BOTTOMRIGHT"] = "BOTTOMRIGHT",
-                                },
+                                values = POINT_VALUES,
+                                sorting = POINT_ORDER,
                                 get = function() return E.db.thingsUI.buffBars.anchorRelativePoint end,
                                 set = function(_, value)
                                     E.db.thingsUI.buffBars.anchorRelativePoint = value

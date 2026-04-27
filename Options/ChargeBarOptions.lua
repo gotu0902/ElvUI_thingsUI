@@ -24,11 +24,8 @@ local SLOT_VALUES = {
     ABOVE_SECONDARY = "Above Secondary",
 }
 
-local POINT_VALUES = {
-    TOP = "Top", BOTTOM = "Bottom", LEFT = "Left", RIGHT = "Right", CENTER = "Center",
-    TOPLEFT = "Top Left", TOPRIGHT = "Top Right",
-    BOTTOMLEFT = "Bottom Left", BOTTOMRIGHT = "Bottom Right",
-}
+local POINT_VALUES = ns.POINTS.VALUES
+local POINT_ORDER  = ns.POINTS.ORDER
 
 local function IsFHT() return E.db.thingsUI.chargeBar.mode == "FHT" end
 
@@ -499,14 +496,14 @@ function TUI:ChargeBarOptions()
                             anchorPoint = {
                                 order = 2, type = "select", name = "Anchor From",
                                 desc = "Point on the charge bar that anchors.",
-                                values = POINT_VALUES,
+                                values = POINT_VALUES, sorting = POINT_ORDER,
                                 get = function() return E.db.thingsUI.chargeBar.anchorPoint or "CENTER" end,
                                 set = function(_, v) E.db.thingsUI.chargeBar.anchorPoint = v; Update() end,
                             },
                             anchorRelativePoint = {
                                 order = 3, type = "select", name = "Anchor To",
                                 desc = "Point on the anchor frame to attach to.",
-                                values = POINT_VALUES,
+                                values = POINT_VALUES, sorting = POINT_ORDER,
                                 get = function() return E.db.thingsUI.chargeBar.anchorRelativePoint or "CENTER" end,
                                 set = function(_, v) E.db.thingsUI.chargeBar.anchorRelativePoint = v; Update() end,
                             },
