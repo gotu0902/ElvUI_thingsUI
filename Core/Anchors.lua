@@ -1,4 +1,3 @@
--- Core/Anchors.lua
 local _, ns = ...
 ns.ANCHORS = ns.ANCHORS or {}
 
@@ -23,9 +22,6 @@ ns.ANCHORS.SHARED_ANCHOR_ORDER = {
   "BCDM_PowerBar", "BCDM_SecondaryPowerBar", "BCDM_CastBar", "Grid2LayoutFrame", "UIParent", "CUSTOM",
 }
 
--- Frame anchor points (CENTER, TOPLEFT, ...) shared by every dropdown that picks
--- a SetPoint corner. Title Case for display; keys are the actual point strings
--- passed to SetPoint.
 ns.POINTS = ns.POINTS or {}
 ns.POINTS.VALUES = {
   CENTER      = "CENTER",
@@ -42,8 +38,6 @@ ns.POINTS.ORDER = {
   "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT",
   "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT",
 }
-
--- Frame strata values for the dropdown shared by every module that exposes a strata option.
 ns.STRATA = ns.STRATA or {}
 ns.STRATA.VALUES = {
   BACKGROUND        = "BACKGROUND",
