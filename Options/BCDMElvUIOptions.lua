@@ -106,7 +106,7 @@ function TUI:TrinketBlacklistOptions()
                 if bl and bl[t.id] then
                     return ("|cFF888888Trinket 14: %s (blacklisted)|r"):format(t.name)
                 end
-                return ("|cFFA20000Blacklist Trinket 14|r :|cFFFFFF00 %s|r"):format(t.name)
+                return ("|cFFA20000Blacklist Trinket 14|r :|cFF00FF00 %s|r"):format(t.name)
             end,
             disabled = function()
                 local t = GetEquippedTrinketInfo(14); if not t then return true end
