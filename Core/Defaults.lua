@@ -23,7 +23,7 @@ P["thingsUI"] = {
         frameStrata        = "MEDIUM",
         growthDirection    = "UP",
         width              = 240,
-        height             = 23,
+        height             = 25,
         spacing            = 1,
         statusBarTexture   = "ElvUI Blank",
         font               = "Expressway",
@@ -54,7 +54,7 @@ P["thingsUI"] = {
         anchorPoint        = "BOTTOM",
         anchorRelativePoint = "TOP",
         anchorXOffset      = 0,
-        anchorYOffset      = 50,
+        anchorYOffset      = 38,
     },
 
     clusterPositioning = {
