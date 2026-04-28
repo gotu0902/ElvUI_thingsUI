@@ -54,7 +54,7 @@ function TUI:TrinketBlacklistOptions()
     local args = {
         desc = {
             order = 1, type = "description",
-            name = "Hide specific trinkets from the CDM bar when Trinket to CDM is .\n\n",
+            name = "Hide specific trinkets from the CDM bar when Trinket to CDM is enabled.\n\n",
         },
         addItemID = {
             order = 10, type = "input", name = "Item ID",
@@ -85,7 +85,7 @@ function TUI:TrinketBlacklistOptions()
                 if bl and bl[t.id] then
                     return ("|cFF888888Trinket 13: %s (blacklisted)|r"):format(t.name)
                 end
-                return ("|cFFFFFF00Blacklist Trinket 13: %s|r"):format(t.name)
+                return ("|cFFA20000Blacklist Trinket 13|r :|cFFFFFF00 %s|r"):format(t.name)
             end,
             disabled = function()
                 local t = GetEquippedTrinketInfo(13); if not t then return true end
@@ -106,7 +106,7 @@ function TUI:TrinketBlacklistOptions()
                 if bl and bl[t.id] then
                     return ("|cFF888888Trinket 14: %s (blacklisted)|r"):format(t.name)
                 end
-                return ("|cFF00FF00Blacklist Trinket 14: %s|r"):format(t.name)
+                return ("|cFFA20000Blacklist Trinket 14|r :|cFFFFFF00 %s|r"):format(t.name)
             end,
             disabled = function()
                 local t = GetEquippedTrinketInfo(14); if not t then return true end
