@@ -49,6 +49,14 @@ local function GetAnchorTarget(slot)
 
     if slot == "POWER" then
         if essential then return essential, "TOP" end
+    elseif slot == "ABOVE_CHARGEBAR" then
+        -- Stack on top of the Charge Bar frame. Falls back if Charge Bar isn't
+        -- active on this spec (the dropdown should hide this choice in that
+        -- case, but be defensive).
+        local cb = ns.ChargeBar and ns.ChargeBar.GetActiveAnchorFrame and ns.ChargeBar.GetActiveAnchorFrame()
+        if cb then return cb, "TOP" end
+        if primary and primary:IsShown() and primary:GetWidth() > 0 then return primary, "TOP" end
+        if essential then return essential, "TOP" end
     else -- SECONDARY (default)
         if primary and primary:IsShown() and primary:GetWidth() > 0 then
             return primary, "TOP"
@@ -65,24 +73,23 @@ local function GetClusterBounds()
     if not left or not right then return nil end
 
     local trinket = _G["BCDM_TrinketBar"]
+    local isBlacklisted = ns.TrinketsCDM and ns.TrinketsCDM.IsTrinketBlacklisted
     if trinket then
-        local tl, tr = trinket:GetLeft(), trinket:GetRight()
-        local hasTrinket = trinket:IsShown() and trinket:GetWidth() > 0 and tl and tr
-        if not hasTrinket then
-            -- Container may have 0 width; derive bounds from visible children.
-            for i = 1, trinket:GetNumChildren() do
-                local child = select(i, trinket:GetChildren())
-                if child and child:IsShown() and child.GetLeft then
-                    local cl, cr = child:GetLeft(), child:GetRight()
-                    if cl and cr then
-                        tl = (tl and math.min(tl, cl)) or cl
-                        tr = (tr and math.max(tr, cr)) or cr
-                        hasTrinket = true
-                    end
+        -- Always derive trinket bounds from non-blacklisted children. The
+        -- container's own GetLeft/GetRight reflect BCDM's pre-filter layout
+        -- and would include hidden trinkets in the cluster width.
+        local tl, tr
+        for i = 1, trinket:GetNumChildren() do
+            local child = select(i, trinket:GetChildren())
+            if child and child:IsShown() and child.GetLeft and not (isBlacklisted and isBlacklisted(child)) then
+                local cl, cr = child:GetLeft(), child:GetRight()
+                if cl and cr then
+                    tl = (tl and math.min(tl, cl)) or cl
+                    tr = (tr and math.max(tr, cr)) or cr
                 end
             end
         end
-        if hasTrinket and tl and tr then
+        if tl and tr then
             if tl < left  then left  = tl end
             if tr > right then right = tr end
         end
@@ -167,6 +174,18 @@ local function ApplyWidthAndPosition(entry)
     holder:SetPoint("BOTTOM", target,          "TOP",  0,                              db.gap or 1)
 end
 
+local function ChargeBarWantsUs()
+    -- True if ChargeBar's current spec entry is set to ABOVE_CLASSBAR — i.e.
+    -- the chargebar is anchored to our holder and needs a poke after we move.
+    local cbDB = E.db.thingsUI and E.db.thingsUI.chargeBar
+    if not cbDB or not cbDB.enabled or not cbDB.specs then return false end
+    local idx = GetSpecialization and GetSpecialization() or nil
+    local id  = idx and select(1, GetSpecializationInfo(idx)) or 0
+    if id == 0 then return false end
+    local entry = cbDB.specs[tostring(id)]
+    return entry and (entry.slot == "ABOVE_CLASSBAR") or false
+end
+
 local function UpdateNow()
     if not isEnabled or not playerEntered then return end
     if InCombatLockdown() then return end
@@ -175,6 +194,13 @@ local function UpdateNow()
     local entry = GetSpecEntry()
     if not ApplyEnableState(entry) then return end
     if entry then ApplyWidthAndPosition(entry) end
+
+    -- ChargeBar might be anchored to our holder (slot = ABOVE_CLASSBAR); poke it
+    -- so its width/position re-resolves against the classbar's new bounds.
+    -- Guarded to avoid feedback loops when ChargeBar is anchored elsewhere.
+    if ChargeBarWantsUs() and ns.ChargeBar and ns.ChargeBar.RequestUpdate then
+        ns.ChargeBar.RequestUpdate()
+    end
 end
 
 local function OnNextFrame(self)

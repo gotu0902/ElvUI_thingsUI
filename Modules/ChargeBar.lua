@@ -46,7 +46,7 @@ local function GetSpecEntry()
 end
 
 local function HasClassbarConflict(slot)
-    if slot == "ABOVE_SECONDARY" then return false end
+    if slot == "ABOVE_SECONDARY" or slot == "ABOVE_CLASSBAR" then return false end
     local cdb = E.db.thingsUI.classbarMode
     if not cdb or not cdb.enabled or not cdb.specs then return false end
     local id = GetCurrentSpecID()
@@ -91,6 +91,14 @@ local function GetAnchorTarget(slot)
             return primary
         end
         if essential then return essential end
+    elseif slot == "ABOVE_CLASSBAR" then
+        -- Stack on top of the ClassbarMode holder. Falls back if ClassbarMode
+        -- isn't active on this spec (the dropdown should hide this choice in
+        -- that case, but be defensive).
+        local classbar = ns.ClassbarMode and ns.ClassbarMode.GetActiveAnchorFrame and ns.ClassbarMode.GetActiveAnchorFrame()
+        if classbar then return classbar end
+        if primary and primary:IsShown() and primary:GetWidth() > 0 then return primary end
+        if essential then return essential end
     else
         if primary and primary:IsShown() and primary:GetWidth() > 0 then
             return primary
@@ -106,24 +114,23 @@ local function GetClusterBounds()
     local left, right = essential:GetLeft(), essential:GetRight()
     if not left or not right then return nil end
     local trinket = _G["BCDM_TrinketBar"]
+    local isBlacklisted = ns.TrinketsCDM and ns.TrinketsCDM.IsTrinketBlacklisted
     if trinket then
-        local tl, tr = trinket:GetLeft(), trinket:GetRight()
-        local hasTrinket = trinket:IsShown() and trinket:GetWidth() > 0 and tl and tr
-        if not hasTrinket then
-            -- Container may have 0 width; derive bounds from visible children.
-            for i = 1, trinket:GetNumChildren() do
-                local child = select(i, trinket:GetChildren())
-                if child and child:IsShown() and child.GetLeft then
-                    local cl, cr = child:GetLeft(), child:GetRight()
-                    if cl and cr then
-                        tl = (tl and math.min(tl, cl)) or cl
-                        tr = (tr and math.max(tr, cr)) or cr
-                        hasTrinket = true
-                    end
+        -- Always derive trinket bounds from non-blacklisted children. The
+        -- container's own GetLeft/GetRight reflect BCDM's pre-filter layout
+        -- and would include hidden trinkets in the cluster width.
+        local tl, tr
+        for i = 1, trinket:GetNumChildren() do
+            local child = select(i, trinket:GetChildren())
+            if child and child:IsShown() and child.GetLeft and not (isBlacklisted and isBlacklisted(child)) then
+                local cl, cr = child:GetLeft(), child:GetRight()
+                if cl and cr then
+                    tl = (tl and math.min(tl, cl)) or cl
+                    tr = (tr and math.max(tr, cr)) or cr
                 end
             end
         end
-        if hasTrinket and tl and tr then
+        if tl and tr then
             if tl < left  then left  = tl end
             if tr > right then right = tr end
         end
@@ -594,6 +601,20 @@ local function UpdateNow()
     frame:Show()
     if not wasShown and TUI.InvalidateDynamicCastBarAnchor then
         TUI:InvalidateDynamicCastBarAnchor()
+    end
+
+    -- ClassbarMode might be anchored to our frame (slot = ABOVE_CHARGEBAR);
+    -- poke it once when we go from hidden→shown so its position re-resolves.
+    if not wasShown and ns.ClassbarMode and ns.ClassbarMode.RequestUpdate then
+        local cdb = E.db.thingsUI.classbarMode
+        if cdb and cdb.enabled and cdb.specs then
+            local idx = GetSpecialization and GetSpecialization() or nil
+            local id  = idx and select(1, GetSpecializationInfo(idx)) or 0
+            local cEntry = id ~= 0 and cdb.specs[tostring(id)]
+            if cEntry and cEntry.slot == "ABOVE_CHARGEBAR" then
+                ns.ClassbarMode.RequestUpdate()
+            end
+        end
     end
 
     if rechargeStart then

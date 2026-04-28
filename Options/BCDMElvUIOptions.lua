@@ -7,6 +7,165 @@ local function NotifyChange()
     if ok and reg and reg.NotifyChange then reg:NotifyChange("ElvUI") end
 end
 
+-- Pending text in the "Add Item ID" input box. Module-local so it survives
+-- AceConfig refreshes between keystroke and Add click.
+local pendingItemID = ""
+
+local function GetEquippedTrinketInfo(slotID)
+    local itemID = GetInventoryItemID("player", slotID)
+    if not itemID then return nil end
+    local name, _, _, _, _, _, _, _, _, icon = C_Item.GetItemInfo(itemID)
+    return { id = itemID, name = name or ("Item " .. itemID), icon = icon }
+end
+
+local function GetBlacklist()
+    local db = E.db.thingsUI and E.db.thingsUI.trinketsCDM
+    if not db then return nil end
+    db.blacklist = db.blacklist or {}
+    return db.blacklist
+end
+
+local function AddToBlacklist(itemID)
+    local bl = GetBlacklist(); if not bl or not itemID then return end
+    bl[itemID] = true
+    if TUI.UpdateTrinketsCDM then TUI:UpdateTrinketsCDM() end
+    NotifyChange()
+end
+
+local function RemoveFromBlacklist(itemID)
+    local bl = GetBlacklist(); if not bl or not itemID then return end
+    bl[itemID] = nil
+    if TUI.UpdateTrinketsCDM then TUI:UpdateTrinketsCDM() end
+    NotifyChange()
+end
+
+-- Returns a sorted list of {id, name} for currently blacklisted items.
+local function GetBlacklistEntries()
+    local bl = GetBlacklist() or {}
+    local out = {}
+    for id in pairs(bl) do
+        out[#out + 1] = { id = id, name = (C_Item.GetItemInfo(id)) or ("Item " .. id) }
+    end
+    table.sort(out, function(a, b) return a.name < b.name end)
+    return out
+end
+
+function TUI:TrinketBlacklistOptions()
+    local args = {
+        desc = {
+            order = 1, type = "description",
+            name = "Hide specific trinkets from the BCDM trinket bar so they're excluded from the layout (Essential width / Utility shift / FHT overflow). Useful for trinkets that aren't actual on-use abilities you want tracked.\n\n",
+        },
+        addItemID = {
+            order = 10, type = "input", name = "Item ID",
+            desc = "Numeric item ID. Find it via /dump GetInventoryItemID('player', 13) or 14.",
+            get = function() return pendingItemID end,
+            set = function(_, v)
+                v = (v or ""):gsub("%s", "")
+                pendingItemID = v
+            end,
+        },
+        addButton = {
+            order = 11, type = "execute", name = "Add",
+            disabled = function() return tonumber(pendingItemID) == nil end,
+            func = function()
+                local id = tonumber(pendingItemID)
+                if id then AddToBlacklist(id); pendingItemID = "" end
+            end,
+        },
+        quickAddHeader = {
+            order = 19, type = "header", name = "Currently Equipped",
+        },
+        quickAdd13 = {
+            order = 20, type = "execute", width = "double",
+            name = function()
+                local t = GetEquippedTrinketInfo(13)
+                if not t then return "|cFFFFFF00Trinket 13 (empty)|r" end
+                local bl = GetBlacklist()
+                if bl and bl[t.id] then
+                    return ("|cFF888888Trinket 13: %s (blacklisted)|r"):format(t.name)
+                end
+                return ("|cFFFFFF00Blacklist Trinket 13: %s|r"):format(t.name)
+            end,
+            disabled = function()
+                local t = GetEquippedTrinketInfo(13); if not t then return true end
+                local bl = GetBlacklist()
+                return bl and bl[t.id] or false
+            end,
+            func = function()
+                local t = GetEquippedTrinketInfo(13)
+                if t then AddToBlacklist(t.id) end
+            end,
+        },
+        quickAdd14 = {
+            order = 21, type = "execute", width = "double",
+            name = function()
+                local t = GetEquippedTrinketInfo(14)
+                if not t then return "|cFF00FF00Trinket 14 (empty)|r" end
+                local bl = GetBlacklist()
+                if bl and bl[t.id] then
+                    return ("|cFF888888Trinket 14: %s (blacklisted)|r"):format(t.name)
+                end
+                return ("|cFF00FF00Blacklist Trinket 14: %s|r"):format(t.name)
+            end,
+            disabled = function()
+                local t = GetEquippedTrinketInfo(14); if not t then return true end
+                local bl = GetBlacklist()
+                return bl and bl[t.id] or false
+            end,
+            func = function()
+                local t = GetEquippedTrinketInfo(14)
+                if t then AddToBlacklist(t.id) end
+            end,
+        },
+        listHeader = {
+            order = 29, type = "header", name = "Blacklisted Items",
+        },
+        emptyDesc = {
+            order = 30, type = "description",
+            name = "|cFF888888No items blacklisted.|r",
+            hidden = function() return #GetBlacklistEntries() > 0 end,
+        },
+    }
+
+    -- Pre-allocate a fixed pool of rows; bind each to its current entry via
+    -- an index lookup. Show only rows that have a corresponding entry.
+    -- 12 is plenty — anyone past that has bigger problems than 13/14 trinket bloat.
+    for i = 1, 12 do
+        local idx = i
+        local function entry() return GetBlacklistEntries()[idx] end
+        args["row" .. i] = {
+            order = 100 + i, type = "group", inline = true,
+            name = "",
+            hidden = function() return entry() == nil end,
+            args = {
+                label = {
+                    order = 1, type = "description", width = 2.5, fontSize = "medium",
+                    name = function()
+                        local e = entry(); if not e then return "" end
+                        return ("|cFFFFD200%s|r |cFF888888(%d)|r"):format(e.name, e.id)
+                    end,
+                },
+                remove = {
+                    order = 2, type = "execute", name = "Remove", width = 0.7,
+                    func = function()
+                        local e = entry(); if e then RemoveFromBlacklist(e.id) end
+                    end,
+                },
+            },
+        }
+    end
+
+    return {
+        order = 3,
+        type = "group",
+        name = "Trinket Blacklist",
+        inline = true,
+        hidden = function() return not E.db.thingsUI.trinketsCDM.enabled end,
+        args = args,
+    }
+end
+
 function TUI:BCDMElvUIOptions()
     return {
         order = 30,
@@ -515,6 +674,7 @@ function TUI:BCDMElvUIOptions()
                             },
                         },
                     },
+                    blacklistGroup = TUI:TrinketBlacklistOptions(),
                 },
             },
         },

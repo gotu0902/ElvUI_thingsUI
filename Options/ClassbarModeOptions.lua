@@ -6,9 +6,39 @@ local STRATA_VALUES = ns.STRATA.VALUES
 local STRATA_ORDER  = ns.STRATA.ORDER
 
 local SLOT_VALUES = {
-    SECONDARY = "Secondary Power slot",
-    POWER     = "Power slot",
+    SECONDARY       = "Secondary Power slot",
+    POWER           = "Power slot",
+    ABOVE_CHARGEBAR = "|cFFC780FFAbove Charge Bar|r",
 }
+
+-- True if the given spec has ChargeBar enabled (any slot). Used to gate the
+-- ABOVE_CHARGEBAR choice so it only shows when there's actually a charge bar
+-- to anchor to. Also blocks circular anchors (chargebar = ABOVE_CLASSBAR).
+local function GetChargeBarSlot(specKey)
+    if not specKey or specKey == "" then return nil end
+    local cdb = E.db.thingsUI.chargeBar
+    if not cdb or not cdb.enabled or not cdb.specs then return nil end
+    local entry = cdb.specs[specKey]
+    return entry and (entry.slot or "SECONDARY") or nil
+end
+
+local function CanUseAboveChargeBar(specKey)
+    local slot = GetChargeBarSlot(specKey)
+    return slot ~= nil and slot ~= "ABOVE_CLASSBAR"
+end
+
+-- Filtered slot values for a given spec — hides ABOVE_CHARGEBAR when not valid.
+local function FilterSlotValues(specKey)
+    local out = {}
+    for k, v in pairs(SLOT_VALUES) do
+        if k == "ABOVE_CHARGEBAR" then
+            if CanUseAboveChargeBar(specKey) then out[k] = v end
+        else
+            out[k] = v
+        end
+    end
+    return out
+end
 
 local function NotifyChange()
     local ok, reg = pcall(LibStub, "AceConfigRegistry-3.0")
@@ -106,7 +136,7 @@ local function BuildEnabledArgs()
             args = {
                 slot = {
                     order = 1, type = "select", name = "Slot", width = 1.5,
-                    values = SLOT_VALUES,
+                    values = function() return FilterSlotValues(entryKey()) end,
                     get = function()
                         local k = entryKey(); if not k then return "SECONDARY" end
                         return E.db.thingsUI.classbarMode.specs[k].slot or "SECONDARY"
@@ -166,8 +196,8 @@ function TUI:ClassbarModeOptions()
                     },
                     slotSelect = {
                         order = 2, type = "select", name = "Slot",
-                        desc = "Where the classbar should sit:\n• Secondary Power slot: above the primary power bar (e.g. Frost Mage icicles).\n• Power slot: above the Essential Cooldown Viewer.",
-                        values = SLOT_VALUES,
+                        desc = "Where the classbar should sit:\n• Secondary Power slot: above the primary power bar (e.g. Frost Mage icicles).\n• Power slot: above the Essential Cooldown Viewer.\n• Above Charge Bar: stack on top of the Charge Bar (only available when Charge Bar is enabled for this spec).",
+                        values = function() return FilterSlotValues(selectedSpecToAdd) end,
                         get = function() return selectedSlotToAdd end,
                         set = function(_, v) selectedSlotToAdd = v end,
                     },

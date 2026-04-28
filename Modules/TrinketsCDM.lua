@@ -75,6 +75,41 @@ local function GetBCDMUtilityIconSize()
         and profile.CooldownManager.Utility.IconSize) or 42
 end
 
+local function GetTrinketItemID(child)
+    if not child then return nil end
+    local name = child.GetName and child:GetName() or nil
+    if not name then return nil end
+    local slotStr = name:match("^BCDM_Custom_Trinket_(%d+)$")
+    local slotID = slotStr and tonumber(slotStr)
+    if not slotID then return nil end
+    return GetInventoryItemID("player", slotID), slotID
+end
+
+local function IsBlacklisted(child)
+    local db = E.db.thingsUI and E.db.thingsUI.trinketsCDM
+    local bl = db and db.blacklist
+    if not bl then return false end
+    local itemID = GetTrinketItemID(child)
+    return itemID and bl[itemID] or false
+end
+M.IsTrinketBlacklisted = IsBlacklisted
+
+-- Sync a child's visibility with its blacklist status. Returns true if the
+-- child should be excluded from layout (i.e. is blacklisted).
+local function EnforceBlacklistVisibility(child)
+    if IsBlacklisted(child) then
+        child:Hide()
+        return true
+    end
+    -- Was previously blacklisted but isn't anymore — bring it back so users
+    -- don't have to re-equip the trinket to see it again.
+    if not child:IsShown() then child:Show() end
+    return false
+end
+
+-- Backwards-compat alias used elsewhere in this file. Identical behavior.
+local HideIfBlacklisted = EnforceBlacklistVisibility
+
 local function CountVisibleChildren(frame)
     if not frame then return 0 end
     local count = 0
@@ -85,8 +120,18 @@ local function CountVisibleChildren(frame)
     return count
 end
 
+-- Count trinkets that are both shown and not blacklisted.
 local function CountActiveTrinkets()
-    return CountVisibleChildren(_G["BCDM_TrinketBar"])
+    local c = _G["BCDM_TrinketBar"]
+    if not c then return 0 end
+    local count = 0
+    for i = 1, c:GetNumChildren() do
+        local child = select(i, c:GetChildren())
+        if child and child:IsShown() and not IsBlacklisted(child) then
+            count = count + 1
+        end
+    end
+    return count
 end
 
 function M.GetExtraEssentialCount()
@@ -169,24 +214,32 @@ local function ResizeTrinketIcons(iconSize, spacing, vertical)
     local prevIcon = nil
     for i = 1, c:GetNumChildren() do
         local child = select(i, c:GetChildren())
-        if child and child:IsShown() then
-            count = count + 1
-            child:SetSize(iconSize, iconSize)
-            child:ClearAllPoints()
-            if vertical then
-                if count == 1 then
-                    child:SetPoint("TOPLEFT", c, "TOPLEFT", 0, 0)
-                else
-                    child:SetPoint("TOP", prevIcon, "BOTTOM", 0, -spacing)
-                end
+        if child then
+            -- EnforceBlacklistVisibility hides blacklisted children AND re-shows
+            -- ones that were unblacklisted. Skipping the IsShown() pre-check is
+            -- intentional so removing an item from the blacklist immediately
+            -- brings the equipped trinket back without needing a re-equip.
+            if EnforceBlacklistVisibility(child) then
+                -- Blacklisted — out of layout.
             else
-                if count == 1 then
-                    child:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", 0, 0)
+                count = count + 1
+                child:SetSize(iconSize, iconSize)
+                child:ClearAllPoints()
+                if vertical then
+                    if count == 1 then
+                        child:SetPoint("TOPLEFT", c, "TOPLEFT", 0, 0)
+                    else
+                        child:SetPoint("TOP", prevIcon, "BOTTOM", 0, -spacing)
+                    end
                 else
-                    child:SetPoint("LEFT", prevIcon, "RIGHT", spacing, 0)
+                    if count == 1 then
+                        child:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", 0, 0)
+                    else
+                        child:SetPoint("LEFT", prevIcon, "RIGHT", spacing, 0)
+                    end
                 end
+                prevIcon = child
             end
-            prevIcon = child
         end
     end
     if count > 0 then
@@ -377,14 +430,12 @@ local function ApplyTrinketPosition(db)
             local c  = _G["BCDM_TrinketBar"]
             if not uv or not c then return end
 
-            -- Layout all icons manually: fitsCount in container below Essential,
-            -- overflow icons anchored directly to Utility (outside container).
             local count = 0
             local prevFit = nil
             local prevOver = nil
             for i = 1, c:GetNumChildren() do
                 local child = select(i, c:GetChildren())
-                if child and child:IsShown() then
+                if child and child:IsShown() and not HideIfBlacklisted(child) then
                     count = count + 1
                     local overflowIdx = count - fitsCount
                     if overflowIdx <= 0 then

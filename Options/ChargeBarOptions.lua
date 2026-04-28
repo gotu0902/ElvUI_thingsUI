@@ -22,6 +22,7 @@ local SLOT_VALUES = {
     SECONDARY       = "Secondary Power slot",
     POWER           = "Power slot",
     ABOVE_SECONDARY = "Above Secondary",
+    ABOVE_CLASSBAR  = "|cFF6FB7FFAbove Classbar|r",
 }
 
 local POINT_VALUES = ns.POINTS.VALUES
@@ -74,12 +75,26 @@ local function GetAvailableSpecChoices()
     return choices
 end
 
+-- True if the given spec has ClassbarMode enabled AND the classbar isn't
+-- already pointing at us (which would be a circular anchor).
+local function CanUseAboveClassbar(specKey)
+    if not specKey or specKey == "" then return false end
+    local slot = GetClassbarSlot(specKey)
+    return slot ~= nil and slot ~= "ABOVE_CHARGEBAR"
+end
+
 -- Slot choices for add row, filtered by classbarMode conflict on selected spec
 local function GetAddSlotChoices()
     local conflict = GetClassbarSlot(selectedSpecToAdd)
     local out = {}
     for k, v in pairs(SLOT_VALUES) do
-        if k ~= conflict then out[k] = v end
+        if k ~= conflict then
+            if k == "ABOVE_CLASSBAR" then
+                if CanUseAboveClassbar(selectedSpecToAdd) then out[k] = v end
+            else
+                out[k] = v
+            end
+        end
     end
     return out
 end
@@ -129,7 +144,13 @@ local function GetRowSlotChoices(specKey)
     local conflict = GetClassbarSlot(specKey)
     local out = {}
     for k, v in pairs(SLOT_VALUES) do
-        if k ~= conflict then out[k] = v end
+        if k ~= conflict then
+            if k == "ABOVE_CLASSBAR" then
+                if CanUseAboveClassbar(specKey) then out[k] = v end
+            else
+                out[k] = v
+            end
+        end
     end
     return out
 end
@@ -209,14 +230,28 @@ function TUI:ChargeBarOptions()
     local function GetEditSpec()
         local list = GetEnabledSpecsList()
         if #list == 0 then selectedEditSpec = nil; return nil end
-        -- auto-select first when invalid
+        -- Validate the current selection.
         local valid = false
         if selectedEditSpec then
             for _, e in ipairs(list) do
                 if e.key == selectedEditSpec then valid = true; break end
             end
         end
-        if not valid then selectedEditSpec = list[1].key end
+        if not valid then
+            -- Prefer the player's current spec when it's in the list, otherwise
+            -- fall back to the first entry. This makes the panel open straight
+            -- to "the spec you're playing right now" — usually what you want.
+            local idx = GetSpecialization and GetSpecialization() or nil
+            local curID = idx and select(1, GetSpecializationInfo(idx)) or 0
+            local curKey = curID ~= 0 and tostring(curID) or nil
+            local pick
+            if curKey then
+                for _, e in ipairs(list) do
+                    if e.key == curKey then pick = e.key; break end
+                end
+            end
+            selectedEditSpec = pick or list[1].key
+        end
         return E.db.thingsUI.chargeBar.specs[selectedEditSpec]
     end
     local function GetEditSpecChoices()

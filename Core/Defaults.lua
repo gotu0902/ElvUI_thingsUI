@@ -15,6 +15,7 @@ P["thingsUI"] = {
         side     = "RIGHT",  -- "RIGHT" or "LEFT" (NHT + FHT-in-essential side)
         fhtLimit = 9,        -- max combined essential+trinket count before overflow
         gap      = 1,        -- pixel gap between Essential and trinket bar
+        blacklist = {},      -- [itemID] = true; blacklisted trinkets are hidden from our layout
     },
 
     buffBars = {
