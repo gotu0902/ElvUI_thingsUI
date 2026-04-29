@@ -9,7 +9,8 @@ Toggle vertical growth for Buffs, overriding BCDM's horizontal mode, used for FH
 Pretty much all it does, and all it's supposed to do.
 
 ### Trinket to CDM
-Adds BCDM TrinketBar to Essentials for NHT (Left or Right), and essentials\utility for FHT (For instance if you have 8 essentials and set limit to 9, 1 trinket will go essentials, if you have 2 the second trinket anchors to utility)
+- Adds BCDM TrinketBar to Essentials for NHT (Left or Right), and essentials\utility for FHT (For instance if you have 8 essentials and set limit to 9, 1 trinket will go essentials, if you have 2 the second trinket anchors to utility)
+- Blacklist trinkets you don't need to track.
 
 ## Positioning Tweaks
 
@@ -54,6 +55,20 @@ Example: 6 Essential + 9 Utility = +3 extra, frames move. Figure it out
 
 ### Icons
 - Same thing as bars, change up the text or border if you want, add glow, anchor it, all the stuffings.
+
+## Classbar Mode
+- Enable ElvUI Classbar for chosen specs.
+- Anchor them dynamically where a Power Bar or Secondary Power Bar would've been, the Castbar will then anchor on top if it automatically, depending on where the bar is and if something is above that one again.
+
+## Charge Bars
+- Add the spec you want to have a charge bar for, or add them all up to you.
+- Select which slot you want the classbar to anchor.
+  - For instance: You play Shadow Priest, you use BCDM Power Bar and that's it. Then it will make sense to put the Class Bar in the Secondary Power slot, which will anchor above the Power Bar.
+   - But, say you play Frost Mage, but don't care about seing mana as a power bar. You could then set it to Power Slot and just have a higher frame strata to cover it, should have a solid backdrop if you decide to do that. Same goes for Classbar.
+- Add spell with the spellID (find in spellbook -> hover -> number in bottom corner)
+- Change up the slot if needed, if you added all specs you should look this over
+
+NB: This will only enabled the bars for your current ElvUI profile, so if you're on NHT and then go FHT their not there so, ye.
 
 # Installation
 
