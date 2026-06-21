@@ -1,34 +1,17 @@
-## Interface: 120000, 120001, 120005
+## Interface: 120000, 120001, 120005, 120007
 ## Title: |cFF8080FFElvUI_thingsUI|r
 ## Notes: ElvUI plugin for doing things
 ## Author: ._.
-## Version: 3.0.3
+## Version: 4.0.0
 ## RequiredDeps: ElvUI
+## OptionalDeps:
 ## DefaultState: Enabled
 ## X-Wago-ID: mKODDZGx
+## X-Curse-Project-ID: 1528585
+## SavedVariables: thingsUIGlobalDB
 
-Core\Core.lua
-Core\Defaults.lua
-Core\Anchors.lua
-
-Modules\VerticalBuffs.lua
-Modules\SpecialShared.lua
-Modules\SpecialBars.lua
-Modules\SpecialIcons.lua
-Modules\BuffBars.lua
-Modules\ClusterPositioning.lua
-Modules\DynamicCastBarAnchor.lua
-Modules\ClassbarMode.lua
-Modules\ChargeBar.lua
-Modules\TrinketsCDM.lua
-
-Options\SpecialOptions.lua
-Options\GeneralOptions.lua
-Options\BuffBarsOptions.lua
-Options\BCDMElvUIOptions.lua
-Options\CDMSpecialsOptions.lua
-Options\ClassbarModeOptions.lua
-Options\ChargeBarOptions.lua
-Options\Options.lua
-
+Core\load_core.xml
+Defaults\load_defaults.xml
+Modules\load_modules.xml
+Options\load_options.xml
 Core\Init.lua

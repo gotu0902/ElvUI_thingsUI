@@ -2,13 +2,8 @@ local addon, ns = ...
 local TUI = ns.TUI
 local E = ns.E
 
-local function NotifyChange()
-    local ok, reg = pcall(LibStub, "AceConfigRegistry-3.0")
-    if ok and reg and reg.NotifyChange then reg:NotifyChange("ElvUI") end
-end
+local NotifyChange = ns.NotifyChange
 
--- Pending text in the "Add Item ID" input box. Module-local so it survives
--- AceConfig refreshes between keystroke and Add click.
 local pendingItemID = ""
 
 local function GetEquippedTrinketInfo(slotID)
@@ -54,11 +49,10 @@ function TUI:TrinketBlacklistOptions()
     local args = {
         desc = {
             order = 1, type = "description",
-            name = "Hide specific trinkets from the CDM bar when Trinket to CDM is enabled.\n\n",
+            name = "Hide specific trinkets from the bar by item ID. Hidden trinkets still get cooldowns processed in the background - they're just not shown.\n\n",
         },
         addItemID = {
             order = 10, type = "input", name = "Item ID",
-            desc = "Numeric item ID. Find it via /dump GetInventoryItemID('player', 13) or 14.",
             get = function() return pendingItemID end,
             set = function(_, v)
                 v = (v or ""):gsub("%s", "")
@@ -128,9 +122,6 @@ function TUI:TrinketBlacklistOptions()
         },
     }
 
-    -- Pre-allocate a fixed pool of rows; bind each to its current entry via
-    -- an index lookup. Show only rows that have a corresponding entry.
-    -- 12 is plenty — anyone past that has bigger problems than 13/14 trinket bloat.
     for i = 1, 12 do
         local idx = i
         local function entry() return GetBlacklistEntries()[idx] end
@@ -166,14 +157,8 @@ function TUI:TrinketBlacklistOptions()
     }
 end
 
-function TUI:BCDMElvUIOptions()
+function TUI:ClusterPositioningSubTab()
     return {
-        order = 30,
-        type = "group",
-        name = "BCDM + ElvUI",
-        childGroups = "tab",
-        args = {
-            clusterPositioningSubTab = {
                 order = 1,
                 type = "group",
                 name = "Cluster Positioning",
@@ -182,7 +167,7 @@ function TUI:BCDMElvUIOptions()
                     header = {
                         order = 1,
                         type = "header",
-                        name = "Dynamic BCDM + ElvUI Positioning",
+                        name = "Cluster Positioning",
                     },
                     description = {
                         order = 2,
@@ -193,7 +178,6 @@ function TUI:BCDMElvUIOptions()
                         order = 3,
                         type = "toggle",
                         name = "Enable Cluster Positioning",
-                        desc = "Anchor unit frames to the Essential Cooldown Viewer.",
                         width = "full",
                         get = function() return E.db.thingsUI.clusterPositioning.enabled end,
                         set = function(_, value)
@@ -205,7 +189,6 @@ function TUI:BCDMElvUIOptions()
                         order = 4,
                         type = "execute",
                         name = "Recalculate Now",
-                        desc = "Manually trigger repositioning.",
                         func = function() TUI:RecalculateCluster() end,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                     },
@@ -231,6 +214,17 @@ function TUI:BCDMElvUIOptions()
                                             if child and child:IsShown() then utilityCount = utilityCount + 1 end
                                         end
                                     end
+
+                                    local TR = ns.TrinketsCDM
+                                    local trinketCount = (TR and TR.GetExtraEssentialCount and TR.GetExtraEssentialCount()) or 0
+                                    if trinketCount > 0 then
+                                        local key = (TR.GetTrinketAttachKey and TR.GetTrinketAttachKey()) or "essential"
+                                        if key == "utility" then
+                                            utilityCount = utilityCount + trinketCount
+                                        else
+                                            essentialCount = essentialCount + trinketCount
+                                        end
+                                    end
                                     return string.format("|cFFFFFF00Essential Icons:|r %d\n|cFFFFFF00Utility Icons:|r %d", essentialCount, utilityCount)
                                 end,
                             },
@@ -251,35 +245,14 @@ function TUI:BCDMElvUIOptions()
                         name = "Icon Settings",
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                         args = {
-                            essentialIconWidth = {
-                                order = 1,
-                                type = "range",
-                                name = "Essential Icon Width",
-                                desc = "Width of Essential Cooldown icons.",
-                                min = 20, max = 80, step = 0.01, bigStep = 1,
-                                get = function() return E.db.thingsUI.clusterPositioning.essentialIconWidth end,
-                                set = function(_, value)
-                                    E.db.thingsUI.clusterPositioning.essentialIconWidth = value
-                                    TUI:QueueClusterUpdate()
-                                end,
-                            },
-                            utilityIconWidth = {
-                                order = 2,
-                                type = "range",
-                                name = "Utility Icon Width",
-                                desc = "Width of Utility Cooldown icons (usually smaller).",
-                                min = 15, max = 60, step = 0.01, bigStep = 1,
-                                get = function() return E.db.thingsUI.clusterPositioning.utilityIconWidth end,
-                                set = function(_, value)
-                                    E.db.thingsUI.clusterPositioning.utilityIconWidth = value
-                                    TUI:QueueClusterUpdate()
-                                end,
+                            iconSizeInfo = {
+                                order = 1, type = "description",
+                                name = "|cFF888888Essential and Utility icon widths are read from the CDM Icons tabs (Essential / Utility -> Icon Size).|r\n",
                             },
                             accountForUtility = {
                                 order = 3,
                                 type = "toggle",
                                 name = "Account for Utility Overflow",
-                                desc = "Move frames outward if Utility icons exceed Essential icons.",
                                 get = function() return E.db.thingsUI.clusterPositioning.accountForUtility end,
                                 set = function(_, value)
                                     E.db.thingsUI.clusterPositioning.accountForUtility = value
@@ -290,7 +263,6 @@ function TUI:BCDMElvUIOptions()
                                 order = 4,
                                 type = "range",
                                 name = "Utility Threshold",
-                                desc = "How many MORE utility icons than essential icons to trigger movement.",
                                 min = 1, max = 10, step = 1,
                                 get = function() return E.db.thingsUI.clusterPositioning.utilityThreshold end,
                                 set = function(_, value)
@@ -303,7 +275,6 @@ function TUI:BCDMElvUIOptions()
                                 order = 5,
                                 type = "range",
                                 name = "Overflow Offset",
-                                desc = "Pixels to move each frame outward when threshold is met.",
                                 min = 10, max = 200, step = 5,
                                 get = function() return E.db.thingsUI.clusterPositioning.utilityOverflowOffset end,
                                 set = function(_, value)
@@ -311,18 +282,6 @@ function TUI:BCDMElvUIOptions()
                                     TUI:QueueClusterUpdate()
                                 end,
                                 disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not E.db.thingsUI.clusterPositioning.accountForUtility end,
-                            },
-                            yOffset = {
-                                order = 6,
-                                type = "range",
-                                name = "Y Offset",
-                                desc = "Vertical offset for all unit frames.",
-                                min = -100, max = 100, step = 0.01, bigStep = 1,
-                                get = function() return E.db.thingsUI.clusterPositioning.yOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.clusterPositioning.yOffset = value
-                                    TUI:QueueClusterUpdate()
-                                end,
                             },
                         },
                     },
@@ -346,7 +305,6 @@ function TUI:BCDMElvUIOptions()
                                         order = 1,
                                         type = "toggle",
                                         name = "Position Player Frame",
-                                        desc = "Anchor ElvUF_Player to the left of Essential.",
                                         get = function() return E.db.thingsUI.clusterPositioning.playerFrame.enabled end,
                                         set = function(_, value)
                                             E.db.thingsUI.clusterPositioning.playerFrame.enabled = value
@@ -357,7 +315,6 @@ function TUI:BCDMElvUIOptions()
                                         order = 2,
                                         type = "toggle",
                                         name = "Position Target Frame",
-                                        desc = "Anchor ElvUF_Target to the right of Essential.",
                                         get = function() return E.db.thingsUI.clusterPositioning.targetFrame.enabled end,
                                         set = function(_, value)
                                             E.db.thingsUI.clusterPositioning.targetFrame.enabled = value
@@ -368,7 +325,6 @@ function TUI:BCDMElvUIOptions()
                                         order = 3,
                                         type = "range",
                                         name = "Frame Gap",
-                                        desc = "Gap between Player/Target frames and Essential.",
                                         min = -50, max = 50, step = 0.01, bigStep = 1,
                                         get = function() return E.db.thingsUI.clusterPositioning.frameGap end,
                                         set = function(_, value)
@@ -388,7 +344,6 @@ function TUI:BCDMElvUIOptions()
                                         order = 1,
                                         type = "toggle",
                                         name = "Position TargetTarget Frame",
-                                        desc = "Anchor ElvUF_TargetTarget to the target frame.",
                                         get = function() return E.db.thingsUI.clusterPositioning.targetTargetFrame.enabled end,
                                         set = function(_, value)
                                             E.db.thingsUI.clusterPositioning.targetTargetFrame.enabled = value
@@ -399,7 +354,6 @@ function TUI:BCDMElvUIOptions()
                                         order = 2,
                                         type = "range",
                                         name = "ToT Gap",
-                                        desc = "Gap between TargetTarget and Target frame.",
                                         min = -50, max = 50, step = 0.01, bigStep = 1,
                                         get = function() return E.db.thingsUI.clusterPositioning.targetTargetFrame.gap end,
                                         set = function(_, value)
@@ -420,7 +374,6 @@ function TUI:BCDMElvUIOptions()
                                         order = 1,
                                         type = "toggle",
                                         name = "Position Target CastBar",
-                                        desc = "Anchor ElvUF_Target_CastBar below the target frame.",
                                         get = function() return E.db.thingsUI.clusterPositioning.targetCastBar.enabled end,
                                         set = function(_, value)
                                             E.db.thingsUI.clusterPositioning.targetCastBar.enabled = value
@@ -431,7 +384,6 @@ function TUI:BCDMElvUIOptions()
                                         order = 2,
                                         type = "range",
                                         name = "CastBar Y Gap",
-                                        desc = "Vertical gap between Target frame and CastBar.",
                                         min = -50, max = 50, step = 0.01, bigStep = 1,
                                         get = function() return E.db.thingsUI.clusterPositioning.targetCastBar.gap end,
                                         set = function(_, value)
@@ -444,7 +396,6 @@ function TUI:BCDMElvUIOptions()
                                         order = 3,
                                         type = "range",
                                         name = "CastBar X Offset",
-                                        desc = "Horizontal offset for CastBar.",
                                         min = -100, max = 100, step = 0.01, bigStep = 1,
                                         get = function() return E.db.thingsUI.clusterPositioning.targetCastBar.xOffset end,
                                         set = function(_, value)
@@ -458,225 +409,268 @@ function TUI:BCDMElvUIOptions()
                         },
                     },
 
-                    -----------------------------------------
-                    -- DYNAMIC CASTBAR
-                    -----------------------------------------
-                    dynamicCastBarGroup = {
-                        order = 30,
-                        type = "group",
-                        name = "Dynamic Castbar",
-                        args = {
-                            dynamicCastBarDesc = {
-                                order = 1,
-                                type = "description",
-                                name = "Dynamically anchor the BCDM CastBar to the Secondary Power Bar when it is active, otherwise fall back to the Power Bar.\n\nUseful for specs with both bars or only Secondary, without needing multiple profiles.\n\nDruids who shapeshift mid cast like Convoke will get a 0.5s resize thing.\nCould maybe fix it with superfast updates, but kinda seemed like overkill. Better safe than sorry (:\n",
-                            },
-                            dynamicCastBarEnabled = {
-                                order = 2,
-                                type = "toggle",
-                                name = "Enable Dynamic BCDM Castbar",
-                                desc = "Automatically switch BCDM Castbar anchor between Power Bar and Secondary Power Bar.",
-                                width = "full",
-                                get = function() return E.db.thingsUI.dynamicCastBarAnchor.enabled end,
-                                set = function(_, value)
-                                    E.db.thingsUI.dynamicCastBarAnchor.enabled = value
-                                    TUI:UpdateDynamicCastBarAnchor()
-                                end,
-                            },
-                            dynamicCastBarPoint = {
-                                order = 3,
-                                type = "select",
-                                name = "Anchor From",
-                                desc = "The point on the CastBar to anchor.",
-                                values = {
-                                    ["TOP"] = "Top",
-                                    ["BOTTOM"] = "Bottom",
-                                    ["LEFT"] = "Left",
-                                    ["RIGHT"] = "Right",
-                                    ["CENTER"] = "Center",
-                                },
-                                get = function() return E.db.thingsUI.dynamicCastBarAnchor.point end,
-                                set = function(_, value)
-                                    E.db.thingsUI.dynamicCastBarAnchor.point = value
-                                    TUI:UpdateDynamicCastBarAnchor()
-                                end,
-                                disabled = function() return not E.db.thingsUI.dynamicCastBarAnchor.enabled end,
-                            },
-                            dynamicCastBarRelative = {
-                                order = 4,
-                                type = "select",
-                                name = "Anchor To",
-                                desc = "The point on the Power Bar to anchor to.",
-                                values = {
-                                    ["TOP"] = "Top",
-                                    ["BOTTOM"] = "Bottom",
-                                    ["LEFT"] = "Left",
-                                    ["RIGHT"] = "Right",
-                                    ["CENTER"] = "Center",
-                                },
-                                get = function() return E.db.thingsUI.dynamicCastBarAnchor.relativePoint end,
-                                set = function(_, value)
-                                    E.db.thingsUI.dynamicCastBarAnchor.relativePoint = value
-                                    TUI:UpdateDynamicCastBarAnchor()
-                                end,
-                                disabled = function() return not E.db.thingsUI.dynamicCastBarAnchor.enabled end,
-                            },
-                            dynamicCastBarX = {
-                                order = 5,
-                                type = "range",
-                                name = "X Offset",
-                                min = -100, max = 100, step = 0.01, bigStep = 1,
-                                get = function() return E.db.thingsUI.dynamicCastBarAnchor.xOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.dynamicCastBarAnchor.xOffset = value
-                                    TUI:UpdateDynamicCastBarAnchor()
-                                end,
-                                disabled = function() return not E.db.thingsUI.dynamicCastBarAnchor.enabled end,
-                            },
-                            dynamicCastBarY = {
-                                order = 6,
-                                type = "range",
-                                name = "Y Offset",
-                                min = -100, max = 100, step = 0.01, bigStep = 1,
-                                get = function() return E.db.thingsUI.dynamicCastBarAnchor.yOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.dynamicCastBarAnchor.yOffset = value
-                                    TUI:UpdateDynamicCastBarAnchor()
-                                end,
-                                disabled = function() return not E.db.thingsUI.dynamicCastBarAnchor.enabled end,
-                            },
-                            dynamicCastBarStatus = {
-                                order = 7,
-                                type = "description",
-                                name = function()
-                                    local secondary = _G["BCDM_SecondaryPowerBar"]
-                                    local primary = _G["BCDM_PowerBar"]
-                                    local castBar = _G["BCDM_CastBar"]
-                                    local parts = {}
-                                    parts[#parts + 1] = "|cFFFFFF00CastBar:|r " .. (castBar and "found" or "|cFFFF0000not found|r")
-                                    parts[#parts + 1] = "|cFFFFFF00PowerBar:|r " .. (primary and (primary:IsShown() and "active" or "hidden") or "|cFFFF0000not found|r")
-                                    parts[#parts + 1] = "|cFFFFFF00SecondaryPowerBar:|r " .. (secondary and (secondary:IsShown() and "|cFF00FF00active|r" or "hidden") or "not found")
-                                    return "\n" .. table.concat(parts, "\n")
-                                end,
-                            },
-                        },
-                    },
                 },
+            }
+end
+
+function TUI:TrinketsOptions()
+    local function tdb() return E.db.thingsUI.trinketsCDM end
+    -- Migrate old NHT/FHT + nhtSide profiles so the selects show the right values.
+    if ns.TrinketsCDM and ns.TrinketsCDM.MigrateDB then ns.TrinketsCDM.MigrateDB(tdb()) end
+    local function set(k, v) tdb()[k] = v; TUI:UpdateTrinketsCDM(); NotifyChange() end
+    local function isEmbedded() return (tdb().mode or "EMBEDDED") == "EMBEDDED" end
+    local function isBar()      return (tdb().mode or "EMBEDDED") == "BAR" end
+    local function isGrouped()  return (tdb().mode or "EMBEDDED") == "GROUP" end
+    local SIDES = { TOP = "Top", BOTTOM = "Bottom", LEFT = "Left", RIGHT = "Right" }
+
+    -- Trinket Bar (mode == "BAR") helpers.
+    local function bdb() return tdb().bar end
+    local function bset(k, v) bdb()[k] = v; TUI:UpdateTrinketsCDM(); NotifyChange() end
+    local function tset(k, v) bdb().text[k] = v; TUI:UpdateTrinketsCDM(); NotifyChange() end
+    local function isUIParent() return (bdb().anchorFrame or "UIParent") == "UIParent" end
+    local function noCD() return not bdb().text.showCooldown end
+    return {
+        order = 2, type = "group", name = "Trinkets",
+        args = {
+            desc = {
+                order = 0, type = "description",
+                name = "Show trinket cooldowns embedded in a CDM row, as a standalone bar, or folded into a Custom Group. \n\n",
             },
-            trinketsCDMSubTab = {
-                order = 2,
-                type = "group",
-                name = "Trinkets to CDM",
+            enabled = {
+                order = 1, type = "toggle", name = "Enable", width = "full",
+                get = function() return tdb().enabled end,
+                set = function(_, v) set("enabled", v) end,
+            },
+            includePassive = {
+                order = 2, type = "toggle", name = "Include Passive Trinkets",
+                hidden = function() return not tdb().enabled end,
+                get = function() return tdb().includePassive end,
+                set = function(_, v) set("includePassive", v) end,
+            },
+            modeGroup = {
+                order = 10, type = "group", inline = true, name = "Mode",
+                hidden = function() return not tdb().enabled end,
                 args = {
-                    modeGroup = {
-                        order = 1,
-                        type = "group",
-                        name = "Mode",
-                        inline = true,
-                        args = {
-                            trinketsCDMDesc = {
-                                order = 0,
-                                type = "description",
-                                name = "Position BCDM's trinket bar relative to the Essential or Utility cooldown viewer.\n",
-                            },
-                            trinketsCDMEnabled = {
-                                order = 1,
-                                type = "toggle",
-                                name = "Enable",
-                                desc = "Position BCDM's trinket bar relative to the Essential or Utility cooldown viewer.",
-                                width = "full",
-                                get = function() return E.db.thingsUI.trinketsCDM.enabled end,
-                                set = function(_, value)
-                                    E.db.thingsUI.trinketsCDM.enabled = value
-                                    TUI:UpdateTrinketsCDM()
-                                    NotifyChange()
-                                end,
-                            },
-                            trinketsCDMMode = {
-                                order = 2,
-                                type = "toggle",
-                                name = "NHT (Horizontal)",
-                                desc = "Trinkets extend the Essential row horizontally (grows left or right).",
-                                hidden = function() return not E.db.thingsUI.trinketsCDM.enabled end,
-                                get = function() return E.db.thingsUI.trinketsCDM.mode == "NHT" end,
-                                set = function(_, value)
-                                    if value then
-                                        E.db.thingsUI.trinketsCDM.mode = "NHT"
-                                        TUI:UpdateTrinketsCDM()
-                                        NotifyChange()
-                                    end
-                                end,
-                            },
-                            trinketsCDMModeFHT = {
-                                order = 3,
-                                type = "toggle",
-                                name = "FHT (Vertical)",
-                                desc = "Trinkets grow vertically from the end of Essential. If Essential + trinkets exceed the limit, they overflow to the Utility slot (Utility shifts down).",
-                                hidden = function() return not E.db.thingsUI.trinketsCDM.enabled end,
-                                get = function() return E.db.thingsUI.trinketsCDM.mode == "FHT" end,
-                                set = function(_, value)
-                                    if value then
-                                        E.db.thingsUI.trinketsCDM.mode = "FHT"
-                                        TUI:UpdateTrinketsCDM()
-                                        NotifyChange()
-                                    end
-                                end,
-                            },
-                        },
+                    mode = {
+                        order = 1, type = "select", name = "Mode",
+                        values = { EMBEDDED = "Embedded", BAR = "Trinket Bar", GROUP = "Custom Group" },
+                        sorting = { "EMBEDDED", "BAR", "GROUP" },
+                        get = function() return tdb().mode or "EMBEDDED" end,
+                        set = function(_, v) set("mode", v) end,
                     },
-                    layoutGroup = {
-                        order = 2,
-                        type = "group",
-                        name = "Layout",
-                        inline = true,
-                        hidden = function() return not E.db.thingsUI.trinketsCDM.enabled end,
-                        args = {
-                            trinketsCDMSide = {
-                                order = 1,
-                                type = "select",
-                                name = "Side",
-                                desc = "Which end of EssentialCooldownViewer to anchor to.",
-                                hidden = function() return E.db.thingsUI.trinketsCDM.mode == "FHT" end,
-                                values = {
-                                    RIGHT = "Right",
-                                    LEFT  = "Left",
-                                },
-                                get = function() return E.db.thingsUI.trinketsCDM.side end,
-                                set = function(_, value)
-                                    E.db.thingsUI.trinketsCDM.side = value
-                                    TUI:UpdateTrinketsCDM()
-                                end,
-                            },
-                            trinketsCDMGap = {
-                                order = 2,
-                                type = "range",
-                                name = "Gap",
-                                desc = "Pixel gap between EssentialCooldownViewer and the trinket bar. NHT = horizontal, FHT = vertical.",
-                                min = -20, max = 20, step = 0.01, bigStep = 1,
-                                get = function() return E.db.thingsUI.trinketsCDM.gap end,
-                                set = function(_, value)
-                                    E.db.thingsUI.trinketsCDM.gap = value
-                                    TUI:UpdateTrinketsCDM()
-                                end,
-                            },
-                            trinketsCDMFhtLimit = {
-                                order = 3,
-                                type = "range",
-                                name = "FHT Essential Limit",
-                                desc = "Maximum combined icon count (Essential + trinkets) before trinkets overflow to the Utility slot.",
-                                hidden = function() return E.db.thingsUI.trinketsCDM.mode ~= "FHT" end,
-                                min = 1, max = 30, step = 1,
-                                get = function() return E.db.thingsUI.trinketsCDM.fhtLimit end,
-                                set = function(_, value)
-                                    E.db.thingsUI.trinketsCDM.fhtLimit = value
-                                    TUI:UpdateTrinketsCDM()
-                                end,
-                            },
-                        },
-                    },
-                    blacklistGroup = TUI:TrinketBlacklistOptions(),
                 },
             },
+            groupGroup = {
+                order = 15, type = "group", inline = true, name = "Custom Group",
+                hidden = function() return not tdb().enabled or not isGrouped() end,
+                args = {
+                    group = {
+                        order = 1, type = "select", name = "Group",
+                        values = function()
+                            local v = {}
+                            if ns.CustomGroups and ns.CustomGroups.GetGroups then
+                                for _, g in ipairs(ns.CustomGroups.GetGroups()) do v[g.id] = g.name or ("Group " .. g.id) end
+                            end
+                            return v
+                        end,
+                        sorting = function()
+                            local sorted = {}
+                            if ns.CustomGroups and ns.CustomGroups.GetGroups then
+                                for _, g in ipairs(ns.CustomGroups.GetGroups()) do sorted[#sorted + 1] = g end
+                            end
+                            table.sort(sorted, function(a, b) return (a.name or "") < (b.name or "") end)
+                            local order = {}
+                            for _, g in ipairs(sorted) do order[#order + 1] = g.id end
+                            return order
+                        end,
+                        get = function() return tdb().group end,
+                        set = function(_, v) set("group", v) end,
+                    },
+                    position = {
+                        order = 2, type = "select", name = "Position",
+                        values = { START = "First", END = "Last" },
+                        sorting = { "START", "END" },
+                        get = function() return tdb().groupPosition or "END" end,
+                        set = function(_, v) set("groupPosition", v) end,
+                    },
+                    gotoGroup = {
+                        order = 3, type = "execute", name = "Go to Custom Group",
+                        hidden = function() return not tdb().group end,
+                        func = function()
+                            local idx
+                            if ns.CustomGroups and ns.CustomGroups.GetGroups then
+                                for i, g in ipairs(ns.CustomGroups.GetGroups()) do
+                                    if g.id == tdb().group then idx = i; break end
+                                end
+                            end
+                            E:ToggleOptions(idx and ("thingsUI,modulesTab,customGroups,group" .. idx)
+                                or "thingsUI,modulesTab,customGroups")
+                        end,
+                    },
+                },
+            },
+            embeddedGroup = {
+                order = 20, type = "group", inline = true, name = "Embedded Settings",
+                hidden = function() return not tdb().enabled or not isEmbedded() end,
+                args = {
+                    attach = {
+                        order = 1, type = "select", name = "Attach To",
+                        values = {
+                            ESSENTIAL = "Essential",
+                            UTILITY   = "Utility",
+                            DYNAMIC   = "Dynamic (Essential -> Utility on overflow)",
+                        },
+                        get = function() return tdb().attach end,
+                        set = function(_, v) set("attach", v) end,
+                    },
+                    dynamicThreshold = {
+                        order = 2, type = "range", name = "Dynamic Threshold",
+                        min = 1, max = 20, step = 1,
+                        hidden = function() return tdb().attach ~= "DYNAMIC" end,
+                        get = function() return tdb().dynamicThreshold end,
+                        set = function(_, v) set("dynamicThreshold", v) end,
+                    },
+                    sideHeader = {
+                        order = 9, type = "header", name = "Side",
+                    },
+                    essentialSide = {
+                        order = 10, type = "select", name = "When in Essential",
+                        values = SIDES,
+                        hidden = function() return tdb().attach == "UTILITY" end,
+                        get = function() return tdb().essentialSide or "RIGHT" end,
+                        set = function(_, v) set("essentialSide", v) end,
+                    },
+                    utilitySide = {
+                        order = 11, type = "select", name = "When in Utility",
+                        values = SIDES,
+                        hidden = function() return tdb().attach == "ESSENTIAL" end,
+                        get = function() return tdb().utilitySide or "RIGHT" end,
+                        set = function(_, v) set("utilitySide", v) end,
+                    },
+                    sizeHint = {
+                        order = 20, type = "description", fontSize = "medium",
+                        name = "\n|cFF888888Trinkets inherit icon size and spacing from the viewer they're embedded in (set under CDM -> Essential / Utility), and follow its growth direction.|r",
+                    },
+                },
+            },
+            barGroup = {
+                order = 30, type = "group", inline = true, name = "Trinket Bar",
+                hidden = function() return not tdb().enabled or not isBar() end,
+                args = {
+                    moveHint = {
+                        order = 0, type = "description",
+                        name = "A standalone bar. Move it via |cFFFFD200/emove|r (\"thingsUI Trinket Bar\") when Anchor To = UIParent, or snap it to a frame below.\n",
+                    },
+                    -- Sizing
+                    sizeHeader = { order = 1, type = "header", name = "Sizing" },
+                    iconSize = {
+                        order = 2, type = "range", name = "Icon Size", min = 8, max = 64, step = 1,
+                        get = function() return bdb().iconSize end,
+                        set = function(_, v) bset("iconSize", v) end,
+                    },
+                    spacing = {
+                        order = 3, type = "range", name = "Spacing", min = -10, max = 10, step = 0.01, bigStep = 1,
+                        get = function() return bdb().spacing end,
+                        set = function(_, v) bset("spacing", v) end,
+                    },
+                    growth = {
+                        order = 4, type = "select", name = "Growth Direction", values = ns.GROWTH.DIRECTIONAL, sorting = ns.GROWTH.DIRECTIONAL_ORDER,
+                        get = function() return bdb().growth end,
+                        set = function(_, v) bset("growth", v) end,
+                    },
+                    -- Anchor
+                    anchorHeader = { order = 10, type = "header", name = "Anchor" },
+                    anchorFrame = {
+                        order = 11, type = "select", name = "Anchor To",
+                        values = ns.ANCHORS.FilteredValues, sorting = ns.ANCHORS.FilteredOrder,
+                        get = function() return bdb().anchorFrame or "UIParent" end,
+                        set = function(_, v) bset("anchorFrame", v) end,
+                    },
+                    anchorPoint = {
+                        order = 12, type = "select", name = "Anchor From (self)",
+                        values = ns.POINTS.VALUES, sorting = ns.POINTS.ORDER,
+                        hidden = isUIParent,
+                        get = function() return bdb().anchorPoint end,
+                        set = function(_, v) bset("anchorPoint", v) end,
+                    },
+                    anchorRelativePoint = {
+                        order = 13, type = "select", name = "Anchor To (target)",
+                        values = ns.POINTS.VALUES, sorting = ns.POINTS.ORDER,
+                        hidden = isUIParent,
+                        get = function() return bdb().anchorRelativePoint end,
+                        set = function(_, v) bset("anchorRelativePoint", v) end,
+                    },
+                    anchorXOffset = {
+                        order = 14, type = "range", name = "X Offset", min = -400, max = 400, step = 1,
+                        hidden = isUIParent,
+                        get = function() return bdb().anchorXOffset end,
+                        set = function(_, v) bset("anchorXOffset", v) end,
+                    },
+                    anchorYOffset = {
+                        order = 15, type = "range", name = "Y Offset", min = -400, max = 400, step = 1,
+                        hidden = isUIParent,
+                        get = function() return bdb().anchorYOffset end,
+                        set = function(_, v) bset("anchorYOffset", v) end,
+                    },
+                    -- Cooldown text
+                    textHeader = { order = 20, type = "header", name = "Cooldown Text" },
+                    showCooldown = {
+                        order = 21, type = "toggle", name = "Show Cooldown Text", width = "full",
+                        get = function() return bdb().text.showCooldown end,
+                        set = function(_, v) tset("showCooldown", v) end,
+                    },
+                    cdFont = {
+                        order = 22, type = "select", dialogControl = "LSM30_Font",
+                        name = "Font", values = ns.FontValues, disabled = noCD,
+                        get = function() return bdb().text.cooldownFont end,
+                        set = function(_, v) tset("cooldownFont", v) end,
+                    },
+                    cdSize = {
+                        order = 23, type = "range", name = "Font Size", min = 6, max = 40, step = 1,
+                        disabled = noCD,
+                        get = function() return bdb().text.cooldownFontSize end,
+                        set = function(_, v) tset("cooldownFontSize", v) end,
+                    },
+                    cdOutline = {
+                        order = 24, type = "select", name = "Outline", values = ns.OUTLINE.VALUES, sorting = ns.OUTLINE.ORDER,
+                        disabled = noCD,
+                        get = function() return bdb().text.cooldownFontOutline end,
+                        set = function(_, v) tset("cooldownFontOutline", v) end,
+                    },
+                    cdColor = {
+                        order = 25, type = "color", name = "Color", disabled = noCD,
+                        get = function()
+                            local c = bdb().text.cooldownColor or {}
+                            return c.r or 1, c.g or 1, c.b or 1
+                        end,
+                        set = function(_, r, g, b)
+                            local c = bdb().text.cooldownColor or {}
+                            c.r, c.g, c.b = r, g, b
+                            bdb().text.cooldownColor = c
+                            TUI:UpdateTrinketsCDM(); NotifyChange()
+                        end,
+                    },
+                    cdPoint = {
+                        order = 26, type = "select", name = "Text Position",
+                        values = ns.POINTS.VALUES, sorting = ns.POINTS.ORDER, disabled = noCD,
+                        get = function() return bdb().text.cooldownPoint end,
+                        set = function(_, v) tset("cooldownPoint", v) end,
+                    },
+                    cdX = {
+                        order = 27, type = "range", name = "Text X", min = -50, max = 50, step = 1,
+                        disabled = noCD,
+                        get = function() return bdb().text.cooldownXOffset end,
+                        set = function(_, v) tset("cooldownXOffset", v) end,
+                    },
+                    cdY = {
+                        order = 28, type = "range", name = "Text Y", min = -50, max = 50, step = 1,
+                        disabled = noCD,
+                        get = function() return bdb().text.cooldownYOffset end,
+                        set = function(_, v) tset("cooldownYOffset", v) end,
+                    },
+                },
+            },
+            blacklistGroup = TUI:TrinketBlacklistOptions(),
         },
     }
 end

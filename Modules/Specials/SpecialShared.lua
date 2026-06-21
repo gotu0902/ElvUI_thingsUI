@@ -8,8 +8,8 @@ ns.SpecialBars = ns.SpecialBars or {}
 local specialBarState  = {}
 local iconGroupState   = {}
 local hookedCDMChildren = {}
-local lastBarChildCount  = -1
-local lastIconChildCount = -1
+local lastBarShownSig  = -1
+local lastIconShownSig = -1
 local cdmSettingsOpen    = false
 
 local knownBarSpells  = {}
@@ -18,239 +18,24 @@ local knownIconSpells = {}
 local yoinkedBars = ns.yoinkedBars or {}
 ns.yoinkedBars = yoinkedBars
 
-local CAT_BUFF = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.TrackedBuff
-local CAT_BAR  = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.TrackedBar
+local SB = ns.SpecialBars
 
-local SPECIAL_BAR_DEFAULTS = ns.SPECIAL_BAR_DEFAULTS or {
-    enabled = false, spellID = nil, spellName = "", width = 230, inheritWidth = false, inheritWidthOffset = 0,
-    height = 24, inheritHeight = false, inheritHeightOffset = 0, statusBarTexture = "ElvUI Blank",
-    font = "Expressway", fontSize = 14, fontOutline = "OUTLINE", useClassColor = true, customColor = { r = 0.2, g = 0.6, b = 1.0 },
-    backgroundColor = { r = 0.1, g = 0.1, b = 0.1, a = 0.6 }, showBackdrop = false, backdropColor = { r = 0.1, g = 0.1, b = 0.1, a = 0.6 },
-    iconEnabled = true, iconSpacing = 1, iconZoom = 0.1, showStacks = true, stackFontSize = 14, stackFontOutline = "OUTLINE",
-    stackPoint = "CENTER", stackAnchor = "ICON", stackXOffset = 0, stackYOffset = 0, showName = true, namePoint = "LEFT",
-    nameXOffset = 2, nameYOffset = 0, showDuration = true, durationPoint = "RIGHT", durationXOffset = -4, durationYOffset = 0,
-    anchorMode = "UIParent", anchorFrame = "UIParent", anchorPoint = "CENTER", anchorRelativePoint = "CENTER", anchorXOffset = 0, anchorYOffset = 0,
-    frameStrata = "MEDIUM",
-}
+-- DB getters
+local GetSpecRoot   = SB.GetSpecRoot
+local GetBarDB      = SB.GetBarDB
+local GetIconDB     = SB.GetIconDB
+local GetBarCount   = SB.GetBarCount
+local GetIconCount  = SB.GetIconCount
+local GetCachedSpellInfo       = SB.GetCachedSpellInfo
+local GetBaseSpellID           = SB.GetBaseSpellID
+local InvalidateSpellListCache = SB.InvalidateSpellListCache
+local InvalidateSpellCaches    = SB.InvalidateSpellCaches
 
-local SPECIAL_ICON_DEFAULTS = ns.SPECIAL_ICON_DEFAULTS or {
-    enabled = false, spellID = nil, spellName = "", width = 36, height = 36, keepAspectRatio = true, zoom = 0.1, anchorMode = "UIParent", anchorFrame = "UIParent",
-    anchorPoint = "CENTER", anchorRelativePoint = "CENTER", anchorXOffset = 0, anchorYOffset = 0, showCooldown = true, desaturateWhenInactive = false,
-    showBorder = false, borderSize = 1, borderColor = { r = 0, g = 0, b = 0, a = 1 }, borderInset = 0, borderStroke = false,
-    showStacks = true, stackFont = "Expressway", stackFontSize = 14, stackFontOutline = "OUTLINE", stackColor = { r = 1, g = 1, b = 1 },
-    stackPoint = "BOTTOMRIGHT", stackXOffset = 0, stackYOffset = 0,
-    showDuration = true, durationFont = "Expressway", durationFontSize = 14, durationFontOutline = "OUTLINE",
-    durationColor = { r = 1, g = 1, b = 1 }, durationPoint = "CENTER", durationXOffset = 0, durationYOffset = 0,
-    showGlow = false, glowType = "pixel", glowColor = { r = 1, g = 1, b = 0, a = 1 },
-    glowN = 8, glowFrequency = 0.25, glowLength = 10, glowThickness = 2,
-    glowXOffset = 0, glowYOffset = 0, glowInsideBorder = false,
-    frameStrata = "MEDIUM",
-}
-
-ns.SPECIAL_BAR_DEFAULTS  = SPECIAL_BAR_DEFAULTS
-ns.SPECIAL_ICON_DEFAULTS = SPECIAL_ICON_DEFAULTS
-
-local function GetCurrentSpecID()
-    local idx = GetSpecialization()
-    return idx and GetSpecializationInfo(idx) or 0
-end
-
-local function DeepCopy(src)
-    if type(src) ~= "table" then return src end
-    local t = {}
-    for k, v in pairs(src) do t[k] = DeepCopy(v) end
-    return t
-end
-
-local function FillDefaults(tbl, defaults)
-    for k, v in pairs(defaults) do
-        if tbl[k] == nil then tbl[k] = DeepCopy(v)
-        elseif type(v) == "table" and type(tbl[k]) == "table" then FillDefaults(tbl[k], v) end
-    end
-end
-
-local function GetSpecRoot()
-    local db = E.db.thingsUI.specialBars
-    if not db.specs then db.specs = {} end
-    local specID = GetCurrentSpecID()
-    if specID == 0 then specID = 1 end
-    local key = tostring(specID)
-    if not db.specs[key] then db.specs[key] = { bars = {}, icons = {}, barCount = 3, iconCount = 3 } end
-    local s = db.specs[key]
-    if not s.bars      then s.bars      = {} end
-    if not s.icons     then s.icons     = {} end
-    if not s.barCount  then s.barCount  = 3  end
-    if not s.iconCount then s.iconCount = 3  end
-    return s
-end
-
-local function GetBarDB(barKey)
-    local s = GetSpecRoot()
-    if not s.bars[barKey] then
-        s.bars[barKey] = {}
-        FillDefaults(s.bars[barKey], SPECIAL_BAR_DEFAULTS)
-    end
-    return s.bars[barKey]
-end
-
-local function GetIconDB(iconKey)
-    local s = GetSpecRoot()
-    if not s.icons[iconKey] then
-        s.icons[iconKey] = {}
-        FillDefaults(s.icons[iconKey], SPECIAL_ICON_DEFAULTS)
-    end
-    return s.icons[iconKey]
-end
-
-local function GetBarCount()  return GetSpecRoot().barCount  or 3 end
-local function GetIconCount() return GetSpecRoot().iconCount or 3 end
-
-local cachedSpellList     = nil
-local cachedSpellListSpec = nil
-
-local function MergeType(curType, newLabel)
-    if not curType or curType == "Unknown" then return newLabel end
-    if curType:find(newLabel, 1, true) then return curType end
-    return curType .. " & " .. newLabel
-end
-
-local function BuildCDMSpellList()
-    local specID = GetCurrentSpecID()
-    if cachedSpellList and cachedSpellListSpec == specID then
-        for spellID in pairs(knownBarSpells) do
-            if cachedSpellList[spellID] then
-                cachedSpellList[spellID].type = MergeType(cachedSpellList[spellID].type, "Bar")
-                cachedSpellList[spellID].notDisplayed = nil
-            end
-        end
-        for spellID in pairs(knownIconSpells) do
-            if cachedSpellList[spellID] then
-                cachedSpellList[spellID].type = MergeType(cachedSpellList[spellID].type, "Icon")
-                cachedSpellList[spellID].notDisplayed = nil
-            end
-        end
-        return cachedSpellList
-    end
-
-    local list = {}
-    if not C_CooldownViewer then return list end
-
-    local rowSpellCount = {}
-    local function preCount(cat, includeAll)
-        if not cat then return end
-        local ids = C_CooldownViewer.GetCooldownViewerCategorySet(cat, includeAll)
-        if not ids then return end
-        for _, cdID in ipairs(ids) do
-            local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
-            if info then
-                local sid = info.overrideSpellID or info.spellID
-                if sid then rowSpellCount[sid] = (rowSpellCount[sid] or 0) + 1 end
-            end
-        end
-    end
-    preCount(CAT_BUFF, false); preCount(CAT_BAR, false)
-    preCount(CAT_BUFF, true);  preCount(CAT_BAR, true)
-
-    local function collect(cat, label, includeAll, notDisplayedFlag)
-        if not cat then return end
-        local ids = C_CooldownViewer.GetCooldownViewerCategorySet(cat, includeAll)
-        if ids then
-            for _, cdID in ipairs(ids) do
-                local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
-                if info then
-                    local parentID = info.overrideSpellID or info.spellID
-                    -- If multiple CDM rows share this parent, the linked ID
-                    -- distinguishes them; use it as the key so variants split.
-                    local key = parentID
-                    if parentID and rowSpellCount[parentID] and rowSpellCount[parentID] > 1
-                        and info.linkedSpellIDs and info.linkedSpellIDs[1] then
-                        key = info.linkedSpellIDs[1]
-                    end
-                    local displayInfo = key and C_Spell.GetSpellInfo(key)
-                    if displayInfo then
-                        if not list[key] then
-                            list[key] = {
-                                name = displayInfo.name,
-                                icon = displayInfo.iconID,
-                                type = label,
-                                notDisplayed = notDisplayedFlag or nil,
-                                parentID = parentID,
-                            }
-                        else
-                            list[key].type = MergeType(list[key].type, label)
-                            if not notDisplayedFlag then list[key].notDisplayed = nil end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    collect(CAT_BUFF, "Icon", false, false)
-    collect(CAT_BAR,  "Bar",  false, false)
-    collect(CAT_BUFF, "Icon", true,  true)
-    collect(CAT_BAR,  "Bar",  true,  true)
-
-    for key, data in pairs(list) do
-        local pid = data.parentID
-        local isBarFrame  = (key and knownBarSpells[key])  or (pid and knownBarSpells[pid])
-        local isIconFrame = (key and knownIconSpells[key]) or (pid and knownIconSpells[pid])
-        if isBarFrame and isIconFrame then
-            data.type = "Bar & Icon"
-            data.notDisplayed = nil
-        elseif isBarFrame then
-            data.type = "Bar"
-            data.notDisplayed = nil
-        elseif isIconFrame then
-            data.type = "Icon"
-            data.notDisplayed = nil
-        end
-    end
-
-    cachedSpellList     = list
-    cachedSpellListSpec = specID
-    return list
-end
-
-local function InvalidateSpellListCache()
-    cachedSpellList     = nil
-    cachedSpellListSpec = nil
-end
-
-local function GetRawSpellList() return BuildCDMSpellList() end
-
-local spellInfoCache = {}
-local baseSpellCache = {}
-
-local function GetCachedSpellInfo(spellID)
-    if not spellID then return nil end
-    local cached = spellInfoCache[spellID]
-    if cached ~= nil then return cached ~= false and cached or nil end
-    local info = C_Spell.GetSpellInfo(spellID)
-    spellInfoCache[spellID] = info or false
-    return info
-end
-
-local function GetBaseSpellID(spellID)
-    if type(spellID) ~= "number" then return nil end
-    local cached = baseSpellCache[spellID]
-    if cached ~= nil then return cached end
-    local base = C_Spell.GetBaseSpell and C_Spell.GetBaseSpell(spellID)
-    local result = (base and base ~= 0) and base or spellID
-    baseSpellCache[spellID] = result
-    return result
-end
-
--- Mirrors CDM's IsSafeNumber — rejects tainted values before indexing/comparison.
+-- Mirrors CDM's IsSafeNumber - rejects tainted values before indexing/comparison.
 local function IsSafeID(value)
     return value ~= nil
         and type(value) == "number"
         and not issecretvalue(value)
-end
-
-local function InvalidateSpellCaches()
-    wipe(spellInfoCache)
-    wipe(baseSpellCache)
 end
 
 local _barKeys  = {}
@@ -311,14 +96,13 @@ end
 
 local function GetCooldownInfoForFrame(child)
     if child.GetCooldownInfo then
-        local ok, info = pcall(child.GetCooldownInfo, child)
-        if ok and info then return info end
+        local info = child:GetCooldownInfo()
+        if info then return info end
     end
     if child.cooldownInfo then return child.cooldownInfo end
     local cid = child.cooldownID
     if cid and C_CooldownViewer then
-        local ok, info = pcall(C_CooldownViewer.GetCooldownViewerCooldownInfo, cid)
-        if ok then return info end
+        return C_CooldownViewer.GetCooldownViewerCooldownInfo(cid)
     end
     return nil
 end
@@ -368,10 +152,12 @@ local function SafeMatch(child, spellID, wantsBar)
 
     -- Bars only: fall back to name text match. Texture is tainted, can't use it.
     local spellInfo = GetCachedSpellInfo(spellID)
-    if not spellInfo then return false end    if wantsBar and spellInfo.name then
-        local targetName = CleanString(spellInfo.name)        if child.Bar and child.Bar.Name then
-            local ok, raw = pcall(child.Bar.Name.GetText, child.Bar.Name)
-            if ok and raw and not issecretvalue(raw) then
+    if not spellInfo then return false end
+    if wantsBar and spellInfo.name then
+        local targetName = CleanString(spellInfo.name)
+        if child.Bar and child.Bar.Name then
+            local raw = child.Bar.Name:GetText()
+            if raw and not issecretvalue(raw) then
                 local barText = CleanString(raw)
                 if barText == targetName then return true end
             end
@@ -381,16 +167,36 @@ local function SafeMatch(child, spellID, wantsBar)
     return false
 end
 
+local function IsChildClaimedBySpecial(child)
+    if not (child and child.Bar) then return false end
+    local bc = GetBarCount()
+    EnsureSlotKeys(bc, 0)
+    for i = 1, bc do
+        local db = GetBarDB(_barKeys[i])
+        if db.enabled and db.spellID and SafeMatch(child, db.spellID, true) then
+            return true
+        end
+    end
+    return false
+end
+ns.SpecialBars.IsChildClaimedBySpecial = IsChildClaimedBySpecial
+
 local function GetUpdateBarSlot()  return ns.SpecialBars.UpdateBarSlot  end
 local function GetUpdateIconSlot() return ns.SpecialBars.UpdateIconSlot end
 local function GetReleaseBar()     return ns.SpecialBars.ReleaseBar     end
 local function GetReleaseIcon()    return ns.SpecialBars.ReleaseIcon    end
 
 local function _doReturnFrame(child)
-    child:SetParent(child._cdmOriginalParent)
-    child:ClearAllPoints()
+
+    UIParent.SetParent(child, child._cdmOriginalParent)
+    UIParent.ClearAllPoints(child)
     if child._cdmOriginalW and child._cdmOriginalH then
-        child:SetSize(child._cdmOriginalW, child._cdmOriginalH)
+        UIParent.SetSize(child, child._cdmOriginalW, child._cdmOriginalH)
+    end
+
+    if child._cdmOriginalStrata then
+        UIParent.SetFrameStrata(child, child._cdmOriginalStrata)
+        UIParent.SetFrameLevel(child, child._cdmOriginalLevel or 0)
     end
     if child._tuiBarBgRegions then
         for r, alpha in pairs(child._tuiBarBgRegions) do
@@ -398,10 +204,22 @@ local function _doReturnFrame(child)
         end
         wipe(child._tuiBarBgRegions)
     end
+    -- Un-hide Bar Name/Duration we may have alpha'd out (else a released bar stays nameless).
+    if child._tuiBarTextSaved then
+        local s, bar = child._tuiBarTextSaved, child.Bar
+        if bar then
+            if bar.Name     and s.nameAlpha then bar.Name:SetAlpha(s.nameAlpha) end
+            if bar.Duration and s.durAlpha  then bar.Duration:SetAlpha(s.durAlpha) end
+        end
+        child._tuiBarTextSaved = nil
+    end
     local orig = child._tuiOrigStyle
     if orig then
         if child.Icon and orig.iconTexCoords and child.Icon.SetTexCoord then
             child.Icon:SetTexCoord(unpack(orig.iconTexCoords))
+        end
+        if child.Icon and orig.iconScale and child.Icon.SetScale then
+            child.Icon:SetScale(orig.iconScale)
         end
         if child.Cooldown then
             if orig.drawSwipe ~= nil then child.Cooldown:SetDrawSwipe(orig.drawSwipe) end
@@ -410,9 +228,15 @@ local function _doReturnFrame(child)
                 for i = 1, child.Cooldown:GetNumRegions() do
                     local r = select(i, child.Cooldown:GetRegions())
                     if r and r.GetObjectType and r:GetObjectType() == 'FontString' then
-                        r:SetFont(orig.cdFont, orig.cdFontSize, orig.cdFontOut)
+                        E:SetFont(r, orig.cdFont, orig.cdFontSize, orig.cdFontOut)
                         if orig.cdR then r:SetTextColor(orig.cdR, orig.cdG, orig.cdB) end
                         r:SetAlpha(orig.cdShown and 1 or 0)
+                        -- Restore the timer's anchor
+                        local c = orig.cdPoint
+                        if c and not (issecretvalue(c.p) or issecretvalue(c.rp) or issecretvalue(c.x) or issecretvalue(c.y)) then
+                            r:ClearAllPoints()
+                            r:SetPoint(c.p, c.rel, c.rp or c.p, c.x, c.y)
+                        end
                     end
                 end
             end
@@ -422,10 +246,15 @@ local function _doReturnFrame(child)
             or  child.Applications
         if app then
             if orig.appFont then
-                app:SetFont(orig.appFont, orig.appFontSize, orig.appFontOut)
+                E:SetFont(app, orig.appFont, orig.appFontSize, orig.appFontOut)
             end
             if orig.appR then app:SetTextColor(orig.appR, orig.appG, orig.appB) end
             app:SetAlpha(orig.appAlpha or 1)
+            local c = orig.appPoint
+            if c and not (issecretvalue(c.p) or issecretvalue(c.rp) or issecretvalue(c.x) or issecretvalue(c.y)) then
+                app:ClearAllPoints()
+                app:SetPoint(c.p, c.rel, c.rp or c.p, c.x, c.y)
+            end
         end
         child._tuiOrigStyle = nil
     end
@@ -435,8 +264,16 @@ local function ReturnFrame(child)
     if not child then return end
     if child._cdmOriginalParent then
         _doReturnFrame(child)
+
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function()
+                if ns.CDMIcons and ns.CDMIcons.RefreshAll then ns.CDMIcons.RefreshAll() end
+                if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
+            end)
+        end
     end
     yoinkedBars[child] = nil
+    child._tuiYoinkActive = nil
 end
 
 local function _registerShownSpell(childFrame)
@@ -447,8 +284,7 @@ local function _registerShownSpell(childFrame)
             local si = C_Spell.GetSpellInfo(info.overrideSpellID or info.spellID)
             if si and si.spellID then
                 local cleanID = si.spellID
-                -- Also mark the first linked ID — that's the key BuildCDMSpellList
-                -- uses when multiple rows share a parent (Blooming Infusion etc).
+
                 local linkedID = info.linkedSpellIDs and info.linkedSpellIDs[1]
                 local changed = false
                 local function mark(set, key)
@@ -511,21 +347,43 @@ local function OnCDMChildHidden(childFrame)
     end
 end
 
--- Frames may not exist at load; rebuilt in-place each call.
+-- Frames rebuild
 local _scanViewers = {
     { frame = false, isBar = true  },
     { frame = false, isBar = false },
 }
 
+local OnSpecialChildAura
+
+local _iconSpellToKey = {}
+
+local _applyingSpecialIcon = false
+local function OnSpecialChildSetPoint(child)
+    local key = child._tuiSpecialIconKey
+    if not key or _applyingSpecialIcon then return end
+    local upd = ns.SpecialBars.UpdateIconSlot
+    if yoinkedBars[child] then
+
+        local wrapper = _G["TUI_SpecialIcon_" .. key]
+        if not wrapper then return end
+        _applyingSpecialIcon = true
+        UIParent.SetFrameStrata(child, wrapper:GetFrameStrata())
+        UIParent.SetFrameLevel(child, wrapper:GetFrameLevel() + 1)
+        UIParent.ClearAllPoints(child)
+        UIParent.SetPoint(child, "CENTER", wrapper, "CENTER", 0, 0)
+        _applyingSpecialIcon = nil
+        return
+    end
+    if not upd then return end
+    _applyingSpecialIcon = true
+    upd(key)
+    _applyingSpecialIcon = nil
+end
+
 local function ScanAndHookCDMChildren()
     _scanViewers[1].frame = BuffBarCooldownViewer  or false
     _scanViewers[2].frame = BuffIconCooldownViewer or false
 
-    -- Rebuild known sets from the live viewer so spells that were moved
-    -- between Bar/Icon don't keep stale entries. CDM frames have a valid
-    -- cooldownID whether visible or not — the frame is hidden when the buff
-    -- isn't active, but it's still "tracked". So we count any child with a
-    -- cooldownID, not just shown ones.
     local barViewer  = _scanViewers[1].frame
     local iconViewer = _scanViewers[2].frame
     local barHasChildren  = barViewer  and barViewer:GetNumChildren()  > 0
@@ -537,6 +395,12 @@ local function ScanAndHookCDMChildren()
         InvalidateSpellListCache()
     end
 
+    wipe(_iconSpellToKey)
+    for i = 1, GetIconCount() do
+        local idb = GetIconDB("icon" .. i)
+        if idb and idb.enabled ~= false and idb.spellID then _iconSpellToKey[idb.spellID] = "icon" .. i end
+    end
+
     for _, entry in ipairs(_scanViewers) do
         local viewer = entry.frame
         if viewer then
@@ -546,8 +410,8 @@ local function ScanAndHookCDMChildren()
                 if not InCombatLockdown() and C_CooldownViewer then
                     local cid = child.cooldownID
                     if cid then
-                        local ok, info = pcall(C_CooldownViewer.GetCooldownViewerCooldownInfo, cid)
-                        if ok and info then
+                        local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cid)
+                        if info then
                             local si = C_Spell.GetSpellInfo(info.overrideSpellID or info.spellID)
                             if si and si.spellID then
                                 local cleanID = si.spellID
@@ -555,6 +419,13 @@ local function ScanAndHookCDMChildren()
                                 local set = entry.isBar and knownBarSpells or knownIconSpells
                                 set[cleanID] = true
                                 if linkedID then set[linkedID] = true end
+                                -- Tag icon children so OnSpecialChildSetPoint can
+                                -- claim them synchronously the instant Blizzard
+                                -- positions them (no grid flash).
+                                if not entry.isBar then
+                                    child._tuiSpecialIconKey = _iconSpellToKey[cleanID]
+                                        or (linkedID and _iconSpellToKey[linkedID]) or nil
+                                end
                             end
                         end
                     end
@@ -562,25 +433,32 @@ local function ScanAndHookCDMChildren()
                 if not hookedCDMChildren[child] then
                     hookedCDMChildren[child] = true
                     child._cdmOriginalParent = child:GetParent()
-                    child:HookScript("OnShow", OnCDMChildShown)
-                    child:HookScript("OnHide", OnCDMChildHidden)
+   
+                    hooksecurefunc(child, "SetPoint", OnSpecialChildSetPoint)
+
+                    if type(child.OnAuraInstanceInfoSet) == "function" then
+                        hooksecurefunc(child, "OnAuraInstanceInfoSet", function()
+                            if OnSpecialChildAura then OnSpecialChildAura() end
+                        end)
+                    end
+                    if type(child.OnAuraInstanceInfoCleared) == "function" then
+                        hooksecurefunc(child, "OnAuraInstanceInfoCleared", function()
+                            if OnSpecialChildAura then OnSpecialChildAura() end
+                        end)
+                    end
                     if child:IsShown() then OnCDMChildShown(child) end
                 end
             end
         end
     end
 
-    -- Yoinked frames are reparented to our wrappers, so the viewer's children
-    -- list no longer includes them. Walk yoinkedBars to keep their spell IDs
-    -- in the known tables — otherwise active special slots would show as
-    -- "Not tracked" in the dropdown.
     if rebuilding then
         for child in pairs(yoinkedBars) do
             if child and C_CooldownViewer then
                 local cid = child.cooldownID
                 if cid then
-                    local ok, info = pcall(C_CooldownViewer.GetCooldownViewerCooldownInfo, cid)
-                    if ok and info then
+                    local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cid)
+                    if info then
                         local si = C_Spell.GetSpellInfo(info.overrideSpellID or info.spellID)
                         if si and si.spellID then
                             local cleanID = si.spellID
@@ -616,7 +494,7 @@ end
 local cdmMixinHooked = false
 local function HookCDMMixins()
     if cdmMixinHooked then return end
-    -- info fields may be secret — route through GetSpellInfo to get a clean key.
+    -- info fields may be secret - route through GetSpellInfo to get a clean key.
     local function OnCooldownIDSetIcon(frame)
         if C_CooldownViewer then
             local info = GetCooldownInfoForFrame(frame)
@@ -662,8 +540,8 @@ local function HookCDMWindow()
     ns.__cdmWindowHooked = true
     local function _onCDMShow()
         cdmSettingsOpen    = true
-        lastBarChildCount  = -1
-        lastIconChildCount = -1
+        lastBarShownSig  = -1
+        lastIconShownSig = -1
         InvalidateSpellListCache()
         if ns.MarkEnforceDirty then ns.MarkEnforceDirty() end
         TUI:QueueSpecialBarsUpdate()
@@ -671,8 +549,8 @@ local function HookCDMWindow()
     local function _onCDMHideDeferred() TUI:UpdateSpecialBars() end
     local function _onCDMHide()
         cdmSettingsOpen    = false
-        lastBarChildCount  = -1
-        lastIconChildCount = -1
+        lastBarShownSig  = -1
+        lastIconShownSig = -1
         InvalidateSpellListCache()
         if ns.MarkEnforceDirty then ns.MarkEnforceDirty() end
         C_Timer.After(0.1, _onCDMHideDeferred)
@@ -681,10 +559,58 @@ local function HookCDMWindow()
     f:HookScript("OnHide", _onCDMHide)
 end
 
+local function HookViewerRefreshLayouts()
+    if ns.__cdmViewerRefreshHooked then return end
+    local viewers = {
+        "EssentialCooldownViewer", "UtilityCooldownViewer",
+        "BuffIconCooldownViewer", "BuffBarCooldownViewer",
+    }
+    local anyHooked = false
+    for _, name in ipairs(viewers) do
+        local v = _G[name]
+        if v and type(v.RefreshLayout) == "function" then
+            hooksecurefunc(v, "RefreshLayout", function()
+                lastBarShownSig  = -1
+                lastIconShownSig = -1
+                InvalidateSpellListCache()
+                if ns.SpecialBars._ResetRetryBudget then
+                    ns.SpecialBars._ResetRetryBudget()
+                end
+                if ns.MarkEnforceDirty then ns.MarkEnforceDirty() end
+                TUI:QueueSpecialBarsUpdate()
+            end)
+            anyHooked = true
+        end
+    end
+    if anyHooked then ns.__cdmViewerRefreshHooked = true end
+end
+
+local retryScheduled = false
+local retriesUsed = 0
+local MAX_RETRIES_PER_ROUND = 2
+
+local function ResetRetryBudget()
+    retriesUsed = 0
+end
+-- Exposed so OnSpecChanged / RefreshLayout hooks can reset the budget.
+ns.SpecialBars._ResetRetryBudget = ResetRetryBudget
+
+local function ScheduleSlotRetry()
+    if retryScheduled then return end
+    if retriesUsed >= MAX_RETRIES_PER_ROUND then return end
+    retryScheduled = true
+    retriesUsed = retriesUsed + 1
+    C_Timer.After(0.3, function()
+        retryScheduled = false
+        if TUI and TUI.UpdateSpecialBars then TUI:UpdateSpecialBars() end
+    end)
+end
+
 function TUI:UpdateSpecialBars()
     if not E.db.thingsUI.specialBars then return end
     ScanAndHookCDMChildren()
     HookCDMWindow()
+    HookViewerRefreshLayouts()
     HookCDMMixins()
 
     local barCount = GetBarCount()
@@ -692,7 +618,7 @@ function TUI:UpdateSpecialBars()
     local hideBarMover = ns.SpecialBars.HideBarMover
     for key in pairs(specialBarState) do
         local idx = tonumber(key:match("^bar(%d+)$"))
-        if not idx or idx > barCount then releaseBar(key) end
+        if not idx or idx > barCount then if releaseBar then releaseBar(key) end end
     end
 
     if hideBarMover then
@@ -700,21 +626,40 @@ function TUI:UpdateSpecialBars()
     end
     EnsureSlotKeys(barCount, 0)
     local updateBar = ns.SpecialBars.UpdateBarSlot
-    for i = 1, barCount do updateBar(_barKeys[i]) end
+    if updateBar then for i = 1, barCount do updateBar(_barKeys[i]) end end
 
     local iconCount = GetIconCount()
     local releaseIcon = ns.SpecialBars.ReleaseIcon
     local hideIconMover = ns.SpecialBars.HideIconMover
     for key in pairs(iconGroupState) do
         local idx = tonumber(key:match("^icon(%d+)$"))
-        if not idx or idx > iconCount then releaseIcon(key) end
+        if not idx or idx > iconCount then if releaseIcon then releaseIcon(key) end end
     end
     if hideIconMover then
         for i = iconCount + 1, 12 do hideIconMover("icon" .. i) end
     end
     EnsureSlotKeys(0, iconCount)
     local updateIcon = ns.SpecialBars.UpdateIconSlot
-    for i = 1, iconCount do updateIcon(_iconKeys[i]) end
+    if updateIcon then for i = 1, iconCount do updateIcon(_iconKeys[i]) end end
+
+    local needsRetry = false
+    for i = 1, barCount do
+        local db = GetBarDB(_barKeys[i])
+        local st = specialBarState[_barKeys[i]]
+        if db and db.enabled and db.spellID and not (st and st.childFrame) then
+            needsRetry = true; break
+        end
+    end
+    if not needsRetry then
+        for i = 1, iconCount do
+            local db = GetIconDB(_iconKeys[i])
+            local st = iconGroupState[_iconKeys[i]]
+            if db and db.enabled and db.spellID and not (st and st.childFrame) then
+                needsRetry = true; break
+            end
+        end
+    end
+    if needsRetry then ScheduleSlotRetry() end
 end
 
 local enforcer = CreateFrame("Frame")
@@ -727,12 +672,41 @@ local function MarkEnforceDirty()
 end
 ns.MarkEnforceDirty = MarkEnforceDirty
 
-local function RunEnforce()
-    local curBarCount  = BuffBarCooldownViewer  and BuffBarCooldownViewer:GetNumChildren()  or 0
-    local curIconCount = BuffIconCooldownViewer and BuffIconCooldownViewer:GetNumChildren() or 0
-    if curBarCount ~= lastBarChildCount or curIconCount ~= lastIconChildCount then
-        lastBarChildCount  = curBarCount
-        lastIconChildCount = curIconCount
+local function ShownSig(viewer)
+    if not viewer then return 0 end
+    local sig = 0
+    local kids, n = GetChildrenReuseScan(viewer)
+    for i = 1, n do
+        local c = kids[i]
+        if c and c:IsShown() then
+            local id = c.cooldownID
+            if type(id) ~= "number" then id = 0 end
+            sig = sig + id * i
+        end
+    end
+    return sig
+end
+
+local function HeldShownSig(stateTable)
+    local sig = 0
+    for key, state in pairs(stateTable) do
+        local c = state.childFrame
+        if c and c:IsShown() then
+            sig = sig + (tonumber(key:match("(%d+)$")) or 0)
+        end
+    end
+    return sig
+end
+
+local function RunEnforce(force)
+    -- Skip the whole pass while CDM rebuilds pool
+    if ns.CDMIcons and ns.CDMIcons.IsRebuilding and ns.CDMIcons.IsRebuilding() then return end
+    local curBarSig  = ShownSig(BuffBarCooldownViewer)  + HeldShownSig(specialBarState)
+    local curIconSig = ShownSig(BuffIconCooldownViewer) + HeldShownSig(iconGroupState)
+    local changed = (curBarSig ~= lastBarShownSig or curIconSig ~= lastIconShownSig)
+    if changed then
+        lastBarShownSig  = curBarSig
+        lastIconShownSig = curIconSig
         ScanAndHookCDMChildren()
         local bc = GetBarCount()
         local ic = GetIconCount()
@@ -743,19 +717,22 @@ local function RunEnforce()
         if updateIcon then for i = 1, ic do updateIcon(_iconKeys[i]) end end
     end
 
+    if not (changed or force) then return end
+
     for _, state in pairs(specialBarState) do
         local child   = state.childFrame
         local wrapper = state.wrapper
         if child and wrapper and child:IsShown() then
             if child:GetParent() ~= wrapper then
-                child:SetParent(wrapper)
-                child:ClearAllPoints()
-                child:SetPoint("CENTER", wrapper, "CENTER", 0, 0)
+                -- Secure method refs (taint-safe).
+                UIParent.SetParent(child, wrapper)
+                UIParent.ClearAllPoints(child)
+                UIParent.SetPoint(child, "CENTER", wrapper, "CENTER", 0, 0)
             end
             if state.w and state.h then
                 local cw, ch = child:GetSize()
                 if cw ~= state.w or ch ~= state.h then
-                    child:SetSize(state.w, state.h)
+                    UIParent.SetSize(child, state.w, state.h)
                 end
             end
         end
@@ -765,28 +742,36 @@ local function RunEnforce()
         local child   = state.childFrame
         local wrapper = state.wrapper
         if child and wrapper and child:IsShown() then
-            if child:GetParent() ~= wrapper then
-                child:SetParent(wrapper)
-                child:ClearAllPoints()
-                child:SetPoint("CENTER", wrapper, "CENTER", 0, 0)
-            end
-            if state.w and state.h then
-                local cw, ch = child:GetSize()
-                if cw ~= state.w or ch ~= state.h then
-                    child:SetSize(state.w, state.h)
-                end
+
+            local p, rel = child:GetPoint()
+            if rel ~= wrapper then
+                UIParent.SetFrameStrata(child, wrapper:GetFrameStrata())
+                UIParent.SetFrameLevel(child, wrapper:GetFrameLevel() + 1)
+                UIParent.ClearAllPoints(child)
+                UIParent.SetPoint(child, "CENTER", wrapper, "CENTER", 0, 0)
             end
         end
     end
 end
 
+local auraKickScheduled = false
+OnSpecialChildAura = function()
+    if auraKickScheduled then return end
+    auraKickScheduled = true
+    C_Timer.After(0, function()
+        auraKickScheduled = false
+        RunEnforce(true)  -- aura changed: force the reparent pass even if ShownSig held
+    end)
+end
+
+-- Might delete, makes SBars a little more responsive..
 enforcer:SetScript("OnUpdate", function(_, elapsed)
-    if not enforceDirty then return end
     enforceTimer = enforceTimer + elapsed
     if enforceTimer < ENFORCE_INTERVAL then return end
     enforceTimer = 0
+    local wasDirty = enforceDirty
     enforceDirty = false
-    RunEnforce()
+    RunEnforce(wasDirty)  -- force the reparent pass only if an event flagged us
 end)
 
 local enforceTriggers = CreateFrame("Frame")
@@ -808,8 +793,9 @@ local function OnSpecChanged()
     wipe(ns.yoinkedBars)
     wipe(knownBarSpells)
     wipe(knownIconSpells)
-    lastBarChildCount  = -1
-    lastIconChildCount = -1
+    lastBarShownSig  = -1
+    lastIconShownSig = -1
+    ResetRetryBudget()
     TUI:QueueSpecialBarsUpdate()
 end
 
@@ -824,20 +810,61 @@ do
     end)
 end
 
-local SB = ns.SpecialBars
+-- Resolve a Special Bar / Icon anchor name to a live frame.
+local function ResolveAnchorTarget(anchorName)
+    if not anchorName or anchorName == "" then return nil end
+    if anchorName == "BARSETUP_TOP" then
+        local bs = ns.BarSetup
+        if bs and bs.GetTopmostBarFrame then
+            local top = bs.GetTopmostBarFrame()
+            if top then return top end
+        end
+        local setup = bs and bs.GetActiveSetup and bs.GetActiveSetup()
+        return setup and _G[setup.anchorFrame or ""] or nil
+    end
 
-SB.GetSpecRoot             = GetSpecRoot
-SB.GetBarDB                = GetBarDB
-SB.GetIconDB               = GetIconDB
-SB.GetBarCount             = GetBarCount
-SB.GetIconCount            = GetIconCount
-SB.GetRawSpellList         = GetRawSpellList
-SB.InvalidateSpellListCache = InvalidateSpellListCache
-SB.InvalidateSpellCaches   = InvalidateSpellCaches
-SB.GetBaseSpellID          = GetBaseSpellID
+    if anchorName == "ElvUF_Player_ClassBar" then
+        local p = _G.ElvUF_Player
+        return p and (p.ClassBarHolder or p.ClassBar) or nil
+    end
+    local target = _G[anchorName]
+    if anchorName == "ElvUF_Player_CastBar" and target and target.Holder then
+        return target.Holder
+    end
+    return target
+end
+
+-- Delete a bar/icon slot: shift higher slots down, drop the last, decrement count.
+local function RemoveBarSlot(index)
+    local s = GetSpecRoot()
+    local count = s.barCount or 3
+    if not index or index < 1 or index > count then return end
+    local release = ns.SpecialBars.ReleaseBar
+    if release then for i = 1, count do release("bar" .. i) end end
+    s.bars = s.bars or {}
+    for i = index, count - 1 do s.bars["bar" .. i] = s.bars["bar" .. (i + 1)] end
+    s.bars["bar" .. count] = nil
+    s.barCount = math.max(1, count - 1)
+end
+local function RemoveIconSlot(index)
+    local s = GetSpecRoot()
+    local count = s.iconCount or 3
+    if not index or index < 1 or index > count then return end
+    local release = ns.SpecialBars.ReleaseIcon
+    if release then for i = 1, count do release("icon" .. i) end end
+    s.icons = s.icons or {}
+    for i = index, count - 1 do s.icons["icon" .. i] = s.icons["icon" .. (i + 1)] end
+    s.icons["icon" .. count] = nil
+    s.iconCount = math.max(1, count - 1)
+end
+
+SB.RemoveBarSlot           = RemoveBarSlot
+SB.RemoveIconSlot          = RemoveIconSlot
+SB.ResolveAnchorTarget     = ResolveAnchorTarget
 SB.ScanAndHookCDMChildren  = ScanAndHookCDMChildren
 SB.ReturnFrame             = ReturnFrame
 SB.SafeMatch               = SafeMatch
+SB.CleanString             = CleanString
 SB.specialBarState         = specialBarState
 SB.iconGroupState          = iconGroupState
 SB.knownBarSpells          = knownBarSpells
@@ -846,6 +873,35 @@ SB.yoinkedBars             = yoinkedBars
 SB.RebuildClaimedBarFrames  = RebuildClaimedBarFrames
 SB.RebuildClaimedIconFrames = RebuildClaimedIconFrames
 SB.GetChildrenReuseFind     = GetChildrenReuseFind
+
+-- The wrapper frame for one Special Icon (by key) so Custom Groups can fold it in at order.
+function SB.GetIconWrapper(iconKey)
+    local st = iconKey and iconGroupState[iconKey]
+    return st and st.wrapper or nil
+end
+
+-- Resize a group's assigned icons (wrapper + held child + snap-back) to the group's cell.
+function SB.SyncGroupedIconSizes(groupID, w, h)
+    if not groupID then return end
+    local ic = GetIconCount()
+    EnsureSlotKeys(0, ic)
+    for i = 1, ic do
+        local key = _iconKeys[i]
+        local db = GetIconDB(key)
+        if db.enabled and db.spellID and db.customGroup == groupID then
+            local st = iconGroupState[key]
+            if st then
+                if st.wrapper then ns.Pixel.SetSize(st.wrapper, w, h) end
+                local child = st.childFrame
+                if child then
+                    child._tuiSpecialW, child._tuiSpecialH = w, h
+                    UIParent.SetSize(child, w, h)
+                end
+                st.w, st.h = w, h
+            end
+        end
+    end
+end
 
 local function GetSpellUsageInfo(spellID, excludeBarKey, excludeIconKey)
     if not spellID then return nil end

@@ -1,0 +1,16 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+	<Script file="SpecialOptions.lua"/>
+	<Script file="GeneralOptions.lua"/>
+	<Script file="BuffBarsOptions.lua"/>
+	<Script file="TrinketsClusterOptions.lua"/>
+	<Script file="CDMSpecialsOptions.lua"/>
+	<Script file="ClassbarModeOptions.lua"/>
+	<Script file="ChargeBarOptions.lua"/>
+	<Script file="CDMIconsOptions.lua"/>
+	<Script file="BarSetupOptions.lua"/>
+	<Script file="CustomGroupsOptions.lua"/>
+	<Script file="TimersOptions.lua"/>
+	<Script file="ShareOptions.lua"/>
+	<Script file="Grid2Options.lua"/>
+	<Script file="Options.lua"/>
+</Ui>

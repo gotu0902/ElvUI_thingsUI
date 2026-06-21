@@ -10,45 +10,96 @@ local STRATA_ORDER  = ns.STRATA.ORDER
 local POINT_VALUES  = ns.POINTS.VALUES
 local POINT_ORDER   = ns.POINTS.ORDER
 
-local function BuildAnchorValues(includeBars, includeIcons)
+local function BuildAnchorValues(includeBars, includeIcons, excludeFrame)
     local t = {}
-    for k, v in pairs(ns.ANCHORS.SHARED_ANCHOR_VALUES) do t[k] = v end
-    if includeBars then
-        local n = SB and SB.GetSpecRoot and (SB.GetSpecRoot().barCount or 0) or 0
-        for i = 1, n do t["TUI_SpecialBar_bar"..i] = "Special Bar "..i end
-    end
-    if includeIcons then
-        local n = SB and SB.GetSpecRoot and (SB.GetSpecRoot().iconCount or 0) or 0
-        for i = 1, n do t["TUI_SpecialIcon_icon"..i] = "Special Icon "..i end
+    for k, v in pairs(ns.ANCHORS.GetSharedAnchorValues()) do
+        if k == excludeFrame then
+            -- skip self-anchor
+        elseif k:find("^TUI_SpecialBar_") then
+            if includeBars then t[k] = v end
+        elseif k:find("^TUI_SpecialIcon_") then
+            if includeIcons then t[k] = v end
+        else
+            t[k] = v
+        end
     end
     return t
 end
 
-local function BuildAnchorSorting(includeBars, includeIcons)
-    local order = {}
-    for _, k in ipairs(ns.ANCHORS.SHARED_ANCHOR_ORDER) do order[#order+1] = k end
-    if includeBars then
-        local n = SB and SB.GetSpecRoot and (SB.GetSpecRoot().barCount or 0) or 0
-        for i = 1, n do order[#order+1] = "TUI_SpecialBar_bar"..i end
+local function FindAnchorsTargetingFrame(targetFrame)
+    if not targetFrame or targetFrame == "" then return {} end
+    local out = {}
+
+    -- Special Bars / Icons
+    local barCount  = (SB and SB.GetBarCount  and SB.GetBarCount())  or 0
+    local iconCount = (SB and SB.GetIconCount and SB.GetIconCount()) or 0
+    for i = 1, barCount do
+        local key = "bar" .. i
+        local bdb = SB and SB.GetBarDB and SB.GetBarDB(key)
+        if bdb and (bdb.anchorMode == targetFrame or bdb.anchorFrame == targetFrame) then
+            out[#out + 1] = "Special Bar " .. i
+        end
     end
-    if includeIcons then
-        local n = SB and SB.GetSpecRoot and (SB.GetSpecRoot().iconCount or 0) or 0
-        for i = 1, n do order[#order+1] = "TUI_SpecialIcon_icon"..i end
+    for i = 1, iconCount do
+        local key = "icon" .. i
+        local idb = SB and SB.GetIconDB and SB.GetIconDB(key)
+        if idb and (idb.anchorMode == targetFrame or idb.anchorFrame == targetFrame) then
+            out[#out + 1] = "Special Icon " .. i
+        end
+    end
+
+    -- Bar Setup bars in FHT mode that point to us.
+    local bs = ns.BarSetup
+    if bs and bs.GetActiveSetup then
+        local setup = bs.GetActiveSetup()
+        if setup and setup.bars then
+            local labels = bs.BAR_LABELS or {}
+            for k, b in pairs(setup.bars) do
+                if b.mode == "FHT" and b.anchorFrame == targetFrame then
+                    out[#out + 1] = labels[k] or k
+                end
+            end
+
+            if setup.anchorFrame == targetFrame then
+                out[#out + 1] = "Bar Setup stack"
+            end
+        end
+    end
+
+    return out
+end
+
+local function BuildAnchorSorting(includeBars, includeIcons, excludeFrame)
+    local order = {}
+    for _, k in ipairs(ns.ANCHORS.GetSharedAnchorOrder()) do
+        if k == excludeFrame then
+            -- skip
+        elseif k:find("^TUI_SpecialBar_") then
+            if includeBars then order[#order+1] = k end
+        elseif k:find("^TUI_SpecialIcon_") then
+            if includeIcons then order[#order+1] = k end
+        else
+            order[#order+1] = k
+        end
     end
     return order
 end
 
-local function NotifyChange()
-    local ok, reg = pcall(LibStub, "AceConfigRegistry-3.0")
-    if ok and reg and reg.NotifyChange then reg:NotifyChange("ElvUI") end
-end
+local NotifyChange = ns.NotifyChange
 
 local function QueueUpdate()
     if TUI.QueueSpecialBarsUpdate then TUI:QueueSpecialBarsUpdate() else TUI:UpdateSpecialBars() end
+    if ns.BarSetup and ns.BarSetup.ApplyStack then
+        C_Timer.After(0.05, ns.BarSetup.ApplyStack)
+    end
+    -- Re-fold groups after the deferred yoink shows the wrapper.
+    if ns.CustomGroups and ns.CustomGroups.QueueLayout then
+        C_Timer.After(0.1, ns.CustomGroups.QueueLayout)
+    end
     C_Timer.After(0.05, NotifyChange)
 end
 
--- Safe color unpacker — returns fallback values when the DB entry is nil
+-- Safe color unpacker - returns fallback values when the DB entry is nil
 local function unpackColor(c, hasAlpha)
     if not c then return 1, 1, 1, hasAlpha and 1 or nil end
     if hasAlpha then return c.r or 1, c.g or 1, c.b or 1, c.a or 1 end
@@ -83,7 +134,7 @@ local function GetEnrichedSpellList()
 end
 
 local function GetChoicesTable(currentKey, isBar)
-    local choices = { [""] = "|cFF888888— None —|r" }
+    local choices = { [""] = "|cFF888888- None -|r" }
 
     if SB.ScanAndHookCDMChildren then SB.ScanAndHookCDMChildren() end
     local rawList = GetEnrichedSpellList()
@@ -219,6 +270,22 @@ function TUI:SpecialBarOptions(barKey)
     local function get(k) return db()[k] end
     local function set(k, v) db()[k] = v; QueueUpdate() end
 
+    local function IsInBarSetup()
+        local bs = ns.BarSetup
+        if not bs or not bs.GetActiveSetup then return false end
+        local setup = bs.GetActiveSetup()
+        if not (setup and setup.order) then return false end
+        local target = "special:" .. barKey
+        for _, k in ipairs(setup.order) do
+            if k == target then
+
+                local b = setup.bars and setup.bars[k]
+                return b ~= nil and b.enabled == true
+            end
+        end
+        return false
+    end
+
     local commonArgs = CommonHeader()
     commonArgs.spellSelect = {
         order = 1, type = "select", name = "Select Spell", width = "double",
@@ -230,10 +297,12 @@ function TUI:SpecialBarOptions(barKey)
             if id then
                 local usage = SB.GetSpellUsageInfo(id, barKey, nil)
                 if usage then
-                    E:Print("Denne spellen er allerede i bruk av " .. usage .. "!")
+                    E:Print("This spell is already used by " .. usage .. "!")
                     return
                 end
             end
+
+            if SB.ReleaseBar then SB.ReleaseBar(barKey) end
             db().spellID = id
             local rawList = SB.GetRawSpellList()
             db().spellName = id and (rawList[id] and rawList[id].name or "") or ""
@@ -250,8 +319,6 @@ function TUI:SpecialBarOptions(barKey)
     }
     commonArgs.restoreDefaults = {
         order = 4.5, type = "execute", name = "Restore Defaults",
-        desc = "Reset all settings for this bar to their default values.",
-        hidden = function() return not db().spellID end,
         confirm = function() return "Reset this bar's settings to defaults? Spell selection will be kept." end,
         func = function()
             local s = SB.GetSpecRoot()
@@ -268,6 +335,15 @@ function TUI:SpecialBarOptions(barKey)
             NotifyChange()
         end,
     }
+    commonArgs.deleteBar = {
+        order = 4.6, type = "execute", name = "Delete Bar",
+        confirm = function() return "Delete this Special Bar?" end,
+        func = function()
+            local idx = tonumber(barKey:match("%d+"))
+            if SB.RemoveBarSlot then SB.RemoveBarSlot(idx) end
+            TUI:UpdateSpecialBars(); NotifyChange()
+        end,
+    }
     commonArgs.divider = { order = 5, type = "header", name = "" }
 
     local function merge(extra)
@@ -279,28 +355,47 @@ function TUI:SpecialBarOptions(barKey)
 
     return {
         layoutGroup = {
-            order = 10, type = "group", name = "Layout & Style",
+            order = 10, type = "group", name = "Layout",
             args = merge({
                 sizeGroup = {
                     order = 10, type = "group", name = "Size", inline = true,
                     args = {
-                        width = { order = 1, type = "range", name = "Width", min = 50, max = 600, step = 1, get = function() return get("width") end, set = function(_, v) set("width", v) end, disabled = function() return get("inheritWidth") end },
-                        inheritWidth = { order = 2, type = "toggle", name = "Inherit Width from Anchor", get = function() return get("inheritWidth") end, set = function(_, v) set("inheritWidth", v) end },
-                        inheritWidthOffset = { order = 3, type = "range", name = "Width Nudge", min = -200, max = 200, step = 0.5, get = function() return get("inheritWidthOffset") end, set = function(_, v) set("inheritWidthOffset", v) end, disabled = function() return not get("inheritWidth") end },
+                        barSetupHint = {
+                            order = 0, type = "description", width = "full", fontSize = "medium",
+                            hidden = function() return not IsInBarSetup() end,
+                            name = "|cFFFF4040Active in Bar Setup - width is owned by the Bar Setup tab.|r\n",
+                        },
+                        width = {
+                            order = 1, type = "range", name = "Width", min = 50, max = 600, step = 1,
+                            get = function() return get("width") end,
+                            set = function(_, v) set("width", v) end,
+                            disabled = function() return get("inheritWidth") or IsInBarSetup() end,
+                        },
+                        inheritWidth = {
+                            order = 2, type = "toggle", name = "Inherit Width from Anchor",
+                            get = function() return get("inheritWidth") end,
+                            set = function(_, v) set("inheritWidth", v) end,
+                            disabled = function() return IsInBarSetup() end,
+                        },
+                        inheritWidthOffset = {
+                            order = 3, type = "range", name = "Width Nudge", min = -200, max = 200, step = 0.5,
+                            get = function() return get("inheritWidthOffset") end,
+                            set = function(_, v) set("inheritWidthOffset", v) end,
+                            disabled = function() return (not get("inheritWidth")) or IsInBarSetup() end,
+                        },
                         height = { order = 4, type = "range", name = "Height", min = 8, max = 60, step = 1, get = function() return get("height") end, set = function(_, v) set("height", v) end, disabled = function() return get("inheritHeight") end },
                         inheritHeight = { order = 5, type = "toggle", name = "Inherit Height from Anchor", get = function() return get("inheritHeight") end, set = function(_, v) set("inheritHeight", v) end },
                         inheritHeightOffset = { order = 6, type = "range", name = "Height Nudge", min = -50, max = 50, step = 0.5, get = function() return get("inheritHeightOffset") end, set = function(_, v) set("inheritHeightOffset", v) end, disabled = function() return not get("inheritHeight") end },
                     },
                 },
                 appearanceGroup = {
-                    order = 11, type = "group", name = "Appearance", inline = true,
+                    order = 11, type = "group", name = "Layout", inline = true,
                     args = {
                         statusBarTexture = { order = 1, type = "select", name = "Texture", dialogControl = "LSM30_Statusbar", values = LSM:HashTable("statusbar"), get = function() return get("statusBarTexture") end, set = function(_, v) set("statusBarTexture", v) end },
                         useClassColor = { order = 2, type = "toggle", name = "Use Class Color", get = function() return get("useClassColor") end, set = function(_, v) set("useClassColor", v) end },
                         customColor = { order = 3, type = "color", name = "Custom Color", hasAlpha = false, disabled = function() return get("useClassColor") end, get = function() return unpackColor(get("customColor"), false) end, set = function(_, r, g, b) set("customColor", { r=r, g=g, b=b }) end },
                         frameStrata = {
                             order = 4, type = "select", name = "Frame Strata",
-                            desc = "Render layer for this bar. Higher strata draws on top of lower ones.",
                             values = STRATA_VALUES, sorting = STRATA_ORDER,
                             get = function() return get("frameStrata") or "MEDIUM" end,
                             set = function(_, v) set("frameStrata", v) end,
@@ -310,8 +405,13 @@ function TUI:SpecialBarOptions(barKey)
                 placeholderGroup = {
                     order = 12, type = "group", name = "Edit Mode Placeholder", inline = true,
                     args = {
-                        showBackdrop = { order = 1, type = "toggle", name = "Show Placeholder Backdrop", desc = "Show an empty background when not active.", get = function() return get("showBackdrop") end, set = function(_, v) set("showBackdrop", v) end },
-                        backdropColor = { order = 2, type = "color", name = "Backdrop Color", hasAlpha = true, disabled = function() return not get("showBackdrop") end, get = function() return unpackColor(get("backdropColor"), true) end, set = function(_, r, g, b, a) set("backdropColor", {r=r,g=g,b=b,a=a}) end },
+                        placeholderHint = {
+                            order = 0, type = "description", width = "full", fontSize = "medium",
+                            hidden = function() return not IsInBarSetup() end,
+                            name = "|cFFFF4040Forced on in Bar Setup - reserves the bar's slot in the stack.|r\n",
+                        },
+                        showBackdrop = { order = 1, type = "toggle", name = "Show Placeholder Backdrop", desc = "Show an empty background when not active.", disabled = function() return IsInBarSetup() end, get = function() return get("showBackdrop") or IsInBarSetup() end, set = function(_, v) set("showBackdrop", v) end },
+                        backdropColor = { order = 2, type = "color", name = "Backdrop Color", hasAlpha = true, disabled = function() return not (get("showBackdrop") or IsInBarSetup()) end, get = function() return unpackColor(get("backdropColor"), true) end, set = function(_, r, g, b, a) set("backdropColor", {r=r,g=g,b=b,a=a}) end },
                     },
                 },
                 iconGroup = {
@@ -332,7 +432,7 @@ function TUI:SpecialBarOptions(barKey)
                     args = {
                         font = { order = 1, type = "select", name = "Font", dialogControl = "LSM30_Font", values = LSM:HashTable("font"), get = function() return get("font") end, set = function(_, v) set("font", v) end },
                         fontSize = { order = 2, type = "range", name = "Size", min = 6, max = 72, step = 1, get = function() return get("fontSize") end, set = function(_, v) set("fontSize", v) end },
-                        fontOutline = { order = 3, type = "select", name = "Outline", values = { ["NONE"]="None", ["OUTLINE"]="Outline", ["THICKOUTLINE"]="Thick" }, get = function() return get("fontOutline") end, set = function(_, v) set("fontOutline", v) end },
+                        fontOutline = { order = 3, type = "select", name = "Outline", values = ns.OUTLINE.VALUES, sorting = ns.OUTLINE.ORDER, get = function() return get("fontOutline") end, set = function(_, v) set("fontOutline", v) end },
                     },
                 },
                 nameGroup = {
@@ -359,7 +459,7 @@ function TUI:SpecialBarOptions(barKey)
                         showStacks = { order = 1, type = "toggle", name = "Show Stacks", get = function() return get("showStacks") end, set = function(_, v) set("showStacks", v) end },
                         stackAnchor = { order = 2, type = "select", name = "Anchor To", values = { ["ICON"]="Icon", ["BAR"]="Bar" }, disabled = function() return not get("showStacks") end, get = function() return get("stackAnchor") or "ICON" end, set = function(_, v) set("stackAnchor", v) end },
                         stackFontSize = { order = 3, type = "range", name = "Stack Font Size", min = 6, max = 72, step = 1, disabled = function() return not get("showStacks") end, get = function() return get("stackFontSize") end, set = function(_, v) set("stackFontSize", v) end },
-                        stackFontOutline = { order = 4, type = "select", name = "Stack Outline", values = { ["NONE"]="None", ["OUTLINE"]="Outline", ["THICKOUTLINE"]="Thick" }, disabled = function() return not get("showStacks") end, get = function() return get("stackFontOutline") end, set = function(_, v) set("stackFontOutline", v) end },
+                        stackFontOutline = { order = 4, type = "select", name = "Stack Outline", values = ns.OUTLINE.VALUES, sorting = ns.OUTLINE.ORDER, disabled = function() return not get("showStacks") end, get = function() return get("stackFontOutline") end, set = function(_, v) set("stackFontOutline", v) end },
                         stackPoint = { order = 5, type = "select", name = "Stack Position", values = POINT_VALUES, sorting = POINT_ORDER, disabled = function() return not get("showStacks") end, get = function() return get("stackPoint") end, set = function(_, v) set("stackPoint", v) end },
                         stackXOffset = { order = 6, type = "range", name = "Stack X Offset", min = -20, max = 20, step = 0.5, disabled = function() return not get("showStacks") end, get = function() return get("stackXOffset") end, set = function(_, v) set("stackXOffset", v) end },
                         stackYOffset = { order = 7, type = "range", name = "Stack Y Offset", min = -20, max = 20, step = 0.5, disabled = function() return not get("showStacks") end, get = function() return get("stackYOffset") end, set = function(_, v) set("stackYOffset", v) end },
@@ -375,21 +475,38 @@ function TUI:SpecialBarOptions(barKey)
                     args = {
                         toggleMovers = {
                             order = 0, type = "execute", name = "Toggle Movers (thingsUI)",
-                            desc = "Open ElvUI's mover panel filtered to thingsUI movers.",
                             func = function()
                                 if E and E.ToggleMoveMode then E:ToggleMoveMode("THINGSUI") end
                             end,
                         },
+                        barSetupHint = {
+                            order = 0.4, type = "description", width = "full", fontSize = "medium",
+                            hidden = function() return not IsInBarSetup() end,
+                            name = "|cFFFF4040Active in Bar Setup - position is owned by the Bar Setup tab.|r\n",
+                        },
                         anchorMode = { order = 1, type = "select", name = "Anchor Frame", width = "double",
-                            values  = function() return BuildAnchorValues(true, false) end,
-                            sorting = function() return BuildAnchorSorting(true, false) end,
+                            -- Exclude this bar's own frame so users can't anchor it to itself.
+                            values  = function() return BuildAnchorValues(true, true, "TUI_SpecialBar_" .. barKey) end,
+                            sorting = function() return BuildAnchorSorting(true, true, "TUI_SpecialBar_" .. barKey) end,
+                            disabled = function() return IsInBarSetup() end,
                             get = function() return get("anchorMode") or "UIParent" end,
                             set = function(_, v) db().anchorMode = v; if v ~= "CUSTOM" then db().anchorFrame = v end; QueueUpdate() end },
-                        anchorFrame = { order = 2, type = "input", name = "Custom Frame Name", width = "double", hidden = function() return get("anchorMode") ~= "CUSTOM" end, get = function() return get("anchorFrame") end, set = function(_, v) set("anchorFrame", v) end },
-                        anchorPoint = { order = 3, type = "select", name = "Anchor From", values = POINT_VALUES, sorting = POINT_ORDER, get = function() return get("anchorPoint") end, set = function(_, v) set("anchorPoint", v) end },
-                        anchorRelativePoint = { order = 4, type = "select", name = "Anchor To", values = POINT_VALUES, sorting = POINT_ORDER, get = function() return get("anchorRelativePoint") end, set = function(_, v) set("anchorRelativePoint", v) end },
-                        anchorXOffset = { order = 5, type = "range", name = "X Offset", min = -500, max = 500, step = 0.5, bigStep = 1, get = function() return get("anchorXOffset") end, set = function(_, v) set("anchorXOffset", v) end },
-                        anchorYOffset = { order = 6, type = "range", name = "Y Offset", min = -500, max = 500, step = 0.5, bigStep = 1, get = function() return get("anchorYOffset") end, set = function(_, v) set("anchorYOffset", v) end },
+                        anchoredToHint = {
+                            order = 0.5, type = "description", width = "full", fontSize = "medium",
+                            name = function()
+                                local users = FindAnchorsTargetingFrame("TUI_SpecialBar_" .. barKey)
+                                if #users == 0 then return "" end
+                                return "|cFFFFD200Bar anchored to this:|r " .. table.concat(users, ", ") .. "\n"
+                            end,
+                            hidden = function()
+                                return #FindAnchorsTargetingFrame("TUI_SpecialBar_" .. barKey) == 0
+                            end,
+                        },
+                        anchorFrame = { order = 2, type = "input", name = "Custom Frame Name", width = "double", hidden = function() return get("anchorMode") ~= "CUSTOM" end, disabled = function() return IsInBarSetup() end, get = function() return get("anchorFrame") end, set = function(_, v) set("anchorFrame", v) end },
+                        anchorPoint = { order = 3, type = "select", name = "Anchor From", values = POINT_VALUES, sorting = POINT_ORDER, disabled = function() return IsInBarSetup() end, get = function() return get("anchorPoint") end, set = function(_, v) set("anchorPoint", v) end },
+                        anchorRelativePoint = { order = 4, type = "select", name = "Anchor To", values = POINT_VALUES, sorting = POINT_ORDER, disabled = function() return IsInBarSetup() end, get = function() return get("anchorRelativePoint") end, set = function(_, v) set("anchorRelativePoint", v) end },
+                        anchorXOffset = { order = 5, type = "range", name = "X Offset", min = -500, max = 500, step = 0.5, bigStep = 1, disabled = function() return IsInBarSetup() end, get = function() return get("anchorXOffset") end, set = function(_, v) set("anchorXOffset", v) end },
+                        anchorYOffset = { order = 6, type = "range", name = "Y Offset", min = -500, max = 500, step = 0.5, bigStep = 1, disabled = function() return IsInBarSetup() end, get = function() return get("anchorYOffset") end, set = function(_, v) set("anchorYOffset", v) end },
                     },
                 },
             }),
@@ -397,26 +514,36 @@ function TUI:SpecialBarOptions(barKey)
     }
 end
 
-function TUI:SpecialIconOptions(iconKey)
-    local function db() return SB.GetIconDB(iconKey) end
+function TUI:SpecialIconOptions(keyArg)
+
+    local function curKey() return type(keyArg) == "function" and keyArg() or keyArg end
+    local function db() return SB.GetIconDB(curKey()) end
     local function get(k) return db()[k] end
     local function set(k, v) db()[k] = v; QueueUpdate() end
+    local function isGrouped()
+        local gid = db().customGroup
+        if not gid then return false end
+        local g = ns.CustomGroups and ns.CustomGroups.GroupByID and ns.CustomGroups.GroupByID(gid)
+        return (g and g.enabled) and true or false
+    end
 
     local commonArgs = CommonHeader()
     commonArgs.spellSelect = {
         order = 1, type = "select", name = "Spell", width = "double",
-        values = function() return GetChoicesTable(iconKey, false) end,
+        values = function() return GetChoicesTable(curKey(), false) end,
         sorting = GetSortedKeys,
         get = function() return db().spellID and tostring(db().spellID) or "" end,
         set = function(_, v)
             local id = tonumber(v)
             if id then
-                local usage = SB.GetSpellUsageInfo(id, nil, iconKey)
+                local usage = SB.GetSpellUsageInfo(id, nil, curKey())
                 if usage then
-                    E:Print("Denne spellen er allerede i bruk av " .. usage .. "!")
+                    E:Print("This spell is already used by " .. usage .. "!")
                     return
                 end
             end
+
+            if SB.ReleaseIcon then SB.ReleaseIcon(curKey()) end
             db().spellID = id
             local rawList = SB.GetRawSpellList()
             db().spellName = id and (rawList[id] and rawList[id].name or "") or ""
@@ -429,25 +556,97 @@ function TUI:SpecialIconOptions(iconKey)
         order = 3, type = "toggle", name = "Enable",
         hidden = function() return not db().spellID end,
         get = function() return get("enabled") end,
-        set = function(_, v) db().enabled = v; if not v then SB.ReleaseIcon(iconKey) end; QueueUpdate() end,
+        set = function(_, v) db().enabled = v; if not v then SB.ReleaseIcon(curKey()) end; QueueUpdate() end,
+    }
+    commonArgs.customGroup = {
+        order = 3.5, type = "select",
+        name = "|cFF8AC8FFCustom Group|r",
+        hidden = function()
+            if not db().spellID then return true end
+            local groups = ns.CustomGroups and ns.CustomGroups.GetGroups and ns.CustomGroups.GetGroups()
+            return not (groups and #groups > 0)
+        end,
+        values = function()
+            local t = { [0] = "|cFF888888Standalone|r" }
+            local groups = ns.CustomGroups and ns.CustomGroups.GetGroups and ns.CustomGroups.GetGroups() or {}
+            for _, g in ipairs(groups) do t[g.id] = g.name or ("Group " .. g.id) end
+            return t
+        end,
+        sorting = function()
+            local groups = ns.CustomGroups and ns.CustomGroups.GetGroups and ns.CustomGroups.GetGroups() or {}
+            local sorted = {}
+            for _, g in ipairs(groups) do sorted[#sorted + 1] = g end
+            table.sort(sorted, function(a, b) return (a.name or "") < (b.name or "") end)
+            local order = { 0 }   -- Standalone first
+            for _, g in ipairs(sorted) do order[#order + 1] = g.id end
+            return order
+        end,
+        get = function() return db().customGroup or 0 end,
+        set = function(_, v)
+            db().customGroup = (v ~= 0) and v or nil
+            SB.ReleaseIcon(curKey())   -- drop current placement so it re-yoinks cleanly into/out of the group
+            QueueUpdate()
+            if ns.CustomGroups and ns.CustomGroups.QueueLayout then ns.CustomGroups.QueueLayout() end
+            NotifyChange()
+        end,
+    }
+    commonArgs.customGroupLink = {
+        order = 3.6, type = "execute", name = "|cFF8AC8FFGo to Custom Group|r",
+        hidden = function() return not isGrouped() end,
+        func = function()
+            local idx
+            if ns.CustomGroups and ns.CustomGroups.GetGroups then
+                for i, g in ipairs(ns.CustomGroups.GetGroups()) do
+                    if g.id == db().customGroup then idx = i; break end
+                end
+            end
+            E:ToggleOptions(idx and ("thingsUI,modulesTab,customGroups,group" .. idx)
+                or "thingsUI,modulesTab,customGroups")
+        end,
     }
     commonArgs.restoreDefaults = {
         order = 4.5, type = "execute", name = "Restore Defaults",
-        desc = "Reset all settings for this icon to their default values.",
-        hidden = function() return not db().spellID end,
         confirm = function() return "Reset this icon's settings to defaults? Spell selection will be kept." end,
         func = function()
             local s = SB.GetSpecRoot()
-            local savedSpellID   = s.icons and s.icons[iconKey] and s.icons[iconKey].spellID
-            local savedSpellName = s.icons and s.icons[iconKey] and s.icons[iconKey].spellName
-            if s.icons then s.icons[iconKey] = nil end
-            SB.ReleaseIcon(iconKey)
-            local fresh = SB.GetIconDB(iconKey)
+            local savedSpellID   = s.icons and s.icons[curKey()] and s.icons[curKey()].spellID
+            local savedSpellName = s.icons and s.icons[curKey()] and s.icons[curKey()].spellName
+            if s.icons then s.icons[curKey()] = nil end
+            SB.ReleaseIcon(curKey())
+            local fresh = SB.GetIconDB(curKey())
             fresh.spellID   = savedSpellID
             fresh.spellName = savedSpellName
             fresh.enabled   = savedSpellID ~= nil
             QueueUpdate()
             NotifyChange()
+        end,
+    }
+    commonArgs.copyIcon = {
+        order = 4.4, type = "execute", name = "|cFF8AC8FFCopy Icon|r",
+        hidden = function() return not db().spellID end,
+        disabled = function() local s = SB.GetSpecRoot(); return (s.iconCount or 3) >= 12 end,
+        func = function()
+            local s = SB.GetSpecRoot(); local c = s.iconCount or 3
+            if c >= 12 then return end
+            local copy = ns.DeepCopy(db())
+            copy.spellID, copy.spellName = nil, nil   -- can't track one spell twice; keep the style, pick a new spell
+            copy.enabled = false
+            local newKey = "icon" .. (c + 1)
+            s.icons = s.icons or {}
+            s.icons[newKey] = copy
+            s.iconCount = c + 1
+            TUI:UpdateSpecialBars(); NotifyChange()
+            if ns.SB_OpenIconEditor then ns.SB_OpenIconEditor(newKey) end
+        end,
+    }
+    commonArgs.deleteIcon = {
+        order = 4.6, type = "execute", name = "Delete Icon",
+        confirm = function() return "Delete this Special Icon?" end,
+        func = function()
+            local idx = tonumber(curKey():match("%d+"))
+            if SB.RemoveIconSlot then SB.RemoveIconSlot(idx) end
+            if ns.SB_CloseIconEditor then ns.SB_CloseIconEditor() end
+            TUI:UpdateSpecialBars(); NotifyChange()
         end,
     }
     commonArgs.divider = { order = 5, type = "header", name = "" }
@@ -461,13 +660,13 @@ function TUI:SpecialIconOptions(iconKey)
 
     return {
         appearGroup = {
-            order = 10, type = "group", name = "Appearance",
+            order = 10, type = "group", name = "Layout",
             args = merge({
                 sizeStyleGroup = {
                     order = 10, type = "group", name = "Size & Style", inline = true,
                     args = {
-                        keepAspectRatio = { order = 1, type = "toggle", name = "Keep Aspect Ratio",
-                            desc = "Lock width and height together. Drag 'Size' to scale uniformly.",
+                        keepAspectRatio = { order = 1, type = "toggle", name = "Square Icons",
+                            disabled = function() return isGrouped() end,
                             get = function() return get("keepAspectRatio") ~= false end,
                             set = function(_, v)
                                 if v then set("height", get("width") or 36) end
@@ -475,21 +674,27 @@ function TUI:SpecialIconOptions(iconKey)
                             end },
                         size = { order = 2, type = "range", name = "Size", min = 16, max = 128, step = 0.01, bigStep = 1,
                             hidden = function() return get("keepAspectRatio") == false end,
+                            disabled = function() return isGrouped() end,
                             get = function() return get("width") or 36 end,
                             set = function(_, v) set("width", v); set("height", v) end },
                         width  = { order = 3, type = "range", name = "Width",  min = 16, max = 128, step = 0.01, bigStep = 1,
                             hidden = function() return get("keepAspectRatio") ~= false end,
+                            disabled = function() return isGrouped() end,
                             get = function() return get("width") or 36 end,
                             set = function(_, v) set("width", v) end },
                         height = { order = 4, type = "range", name = "Height", min = 16, max = 128, step = 0.01, bigStep = 1,
                             hidden = function() return get("keepAspectRatio") ~= false end,
+                            disabled = function() return isGrouped() end,
                             get = function() return get("height") or 36 end,
                             set = function(_, v) set("height", v) end },
+                        iconLockAspectRatio = { order = 4.5, type = "toggle", name = "Lock Icon Aspect Ratio",
+                            hidden = function() return get("keepAspectRatio") ~= false end,
+                            get = function() return get("iconLockAspectRatio") ~= false end,
+                            set = function(_, v) set("iconLockAspectRatio", v) end },
                         zoom   = { order = 5, type = "range", name = "Zoom", min = 0, max = 0.45, step = 0.01, bigStep = 0.05, isPercent = true, get = function() return get("zoom") end, set = function(_, v) set("zoom", v) end },
-                        desaturate = { order = 6, type = "toggle", name = "Show when Inactive", get = function() return get("desaturateWhenInactive") end, set = function(_, v) set("desaturateWhenInactive", v) end },
+                        desaturate = { order = 6, type = "toggle", name = "Show when Idle", get = function() return get("desaturateWhenInactive") end, set = function(_, v) set("desaturateWhenInactive", v) end },
                         frameStrata = {
                             order = 7, type = "select", name = "Frame Strata",
-                            desc = "Render layer for this icon. Higher strata draws on top of lower ones.",
                             values = STRATA_VALUES, sorting = STRATA_ORDER,
                             get = function() return get("frameStrata") or "MEDIUM" end,
                             set = function(_, v) set("frameStrata", v) end,
@@ -517,12 +722,10 @@ function TUI:SpecialIconOptions(iconKey)
                             get = function() return unpackColor(get("borderColor"), true) end,
                             set = function(_, r, g, b, a) set("borderColor", { r=r, g=g, b=b, a=a }) end },
                         borderInset = { order = 4, type = "range", name = "Inset", min = -10, max = 10, step = 0.01, bigStep = 1,
-                            desc = "Expands (+) or shrinks (−) the border away from the icon edge.",
                             disabled = function() return not get("showBorder") end,
                             get = function() return get("borderInset") end,
                             set = function(_, v) set("borderInset", v) end },
                         borderStroke = { order = 5, type = "toggle", name = "Stroke",
-                            desc = "Adds a thin black outline on both sides of the border.",
                             disabled = function() return not get("showBorder") end,
                             get = function() return get("borderStroke") end,
                             set = function(_, v) set("borderStroke", v) end },
@@ -544,7 +747,6 @@ function TUI:SpecialIconOptions(iconKey)
                             get = function() return unpackColor(get("glowColor"), true) end,
                             set = function(_, r, g, b, a) set("glowColor", { r=r, g=g, b=b, a=a }) end },
                         glowThickness = { order = 4, type = "range", name = "Thickness", min = 0.5, max = 10, step = 0.5,
-                            desc = "Line thickness. Auto-matched to Border Size when 'Glow Inside Border' is on.",
                             disabled = function()
                                 return not get("showGlow")
                                     or get("glowType") == "button"
@@ -554,17 +756,14 @@ function TUI:SpecialIconOptions(iconKey)
                             get = function() return get("glowThickness") or 2 end,
                             set = function(_, v) set("glowThickness", v) end },
                         glowLength = { order = 5, type = "range", name = "Length", min = 1, max = 40, step = 1,
-                            desc = "Length of each pixel line.",
                             disabled = function() return not get("showGlow") or get("glowType") ~= "pixel" end,
                             get = function() return get("glowLength") or 10 end,
                             set = function(_, v) set("glowLength", v) end },
                         glowN = { order = 6, type = "range", name = "Particles", min = 1, max = 32, step = 1,
-                            desc = "Number of lines / particles.",
                             disabled = function() return not get("showGlow") or get("glowType") == "button" or get("glowType") == "proc" end,
                             get = function() return get("glowN") or 8 end,
                             set = function(_, v) set("glowN", v) end },
                         glowFrequency = { order = 7, type = "range", name = "Speed", min = -2, max = 2, step = 0.05, bigStep = 0.25,
-                            desc = "Animation speed. Negative values reverse direction.",
                             disabled = function() return not get("showGlow") end,
                             get = function() return get("glowFrequency") or 0.25 end,
                             set = function(_, v) set("glowFrequency", v) end },
@@ -577,7 +776,6 @@ function TUI:SpecialIconOptions(iconKey)
                             get = function() return get("glowYOffset") or 0 end,
                             set = function(_, v) set("glowYOffset", v) end },
                         glowInsideBorder = { order = 10, type = "toggle", name = "Glow Inside Border",
-                            desc = "Attach the glow to the border frame instead of the icon edge.",
                             disabled = function() return not get("showGlow") or not get("showBorder") end,
                             get = function() return get("glowInsideBorder") end,
                             set = function(_, v) set("glowInsideBorder", v) end },
@@ -588,6 +786,17 @@ function TUI:SpecialIconOptions(iconKey)
         textGroup = {
             order = 15, type = "group", name = "Text",
             args = merge({
+                overrideGroupText = {
+                    order = 5, type = "toggle", name = "|cFF8AC8FFOverride Custom Group Text|r", width = "full",
+                    hidden = function() return not isGrouped() end,
+                    get = function() return get("overrideGroupText") end,
+                    set = function(_, v) set("overrideGroupText", v) end,
+                },
+                groupTextNote = {
+                    order = 6, type = "description", width = "full", fontSize = "medium",
+                    hidden = function() return not isGrouped() or get("overrideGroupText") end,
+                    name = "|cFF888888Cooldown text follows the Custom Group. Enable the toggle above to set your own.|r\n",
+                },
                 stackGroup = {
                     order = 10, type = "group", name = "Stack Count", inline = true,
                     args = {
@@ -604,7 +813,7 @@ function TUI:SpecialIconOptions(iconKey)
                             get = function() return get("stackFontSize") end,
                             set = function(_, v) set("stackFontSize", v) end },
                         stackFontOutline = { order = 4, type = "select", name = "Outline",
-                            values = { ["NONE"]="None", ["OUTLINE"]="Outline", ["THICKOUTLINE"]="Thick" },
+                            values = ns.OUTLINE.VALUES, sorting = ns.OUTLINE.ORDER,
                             disabled = function() return not get("showStacks") end,
                             get = function() return get("stackFontOutline") end,
                             set = function(_, v) set("stackFontOutline", v) end },
@@ -643,7 +852,7 @@ function TUI:SpecialIconOptions(iconKey)
                             get = function() return get("durationFontSize") end,
                             set = function(_, v) set("durationFontSize", v) end },
                         durationFontOutline = { order = 4, type = "select", name = "Outline",
-                            values = { ["NONE"]="None", ["OUTLINE"]="Outline", ["THICKOUTLINE"]="Thick" },
+                            values = ns.OUTLINE.VALUES, sorting = ns.OUTLINE.ORDER,
                             disabled = function() return not get("showDuration") end,
                             get = function() return get("durationFontOutline") end,
                             set = function(_, v) set("durationFontOutline", v) end },
@@ -670,22 +879,34 @@ function TUI:SpecialIconOptions(iconKey)
         },
         anchorGroup = {
             order = 20, type = "group", name = "Anchor & Position",
+            hidden = function() return isGrouped() end,   -- the group owns position when grouped
             args = merge({
                 anchorSettingsGroup = {
                     order = 50, type = "group", name = "Anchor & Position", inline = true,
                     args = {
                         toggleMovers = {
                             order = 0, type = "execute", name = "Toggle Movers (thingsUI)",
-                            desc = "Open ElvUI's mover panel filtered to thingsUI movers.",
                             func = function()
                                 if E and E.ToggleMoveMode then E:ToggleMoveMode("THINGSUI") end
                             end,
                         },
                         anchorMode = { order = 1, type = "select", name = "Anchor Frame", width = "double",
-                            values  = function() return BuildAnchorValues(false, true) end,
-                            sorting = function() return BuildAnchorSorting(false, true) end,
+                            -- Exclude this icon's own frame so users can't anchor it to itself.
+                            values  = function() return BuildAnchorValues(true, true, "TUI_SpecialIcon_" .. curKey()) end,
+                            sorting = function() return BuildAnchorSorting(true, true, "TUI_SpecialIcon_" .. curKey()) end,
                             get = function() return get("anchorMode") or "UIParent" end,
                             set = function(_, v) db().anchorMode = v; if v ~= "CUSTOM" then db().anchorFrame = v end; QueueUpdate() end },
+                        anchoredToHint = {
+                            order = 0.5, type = "description", width = "full", fontSize = "medium",
+                            name = function()
+                                local users = FindAnchorsTargetingFrame("TUI_SpecialIcon_" .. curKey())
+                                if #users == 0 then return "" end
+                                return "|cFFFFD200Anchored to this:|r " .. table.concat(users, ", ") .. "\n"
+                            end,
+                            hidden = function()
+                                return #FindAnchorsTargetingFrame("TUI_SpecialIcon_" .. curKey()) == 0
+                            end,
+                        },
                         anchorFrame = { order = 2, type = "input", name = "Custom Frame Name", width = "double", hidden = function() return get("anchorMode") ~= "CUSTOM" end, get = function() return get("anchorFrame") end, set = function(_, v) set("anchorFrame", v) end },
                         anchorPoint = { order = 3, type = "select", name = "Anchor From",
                             values = POINT_VALUES, sorting = POINT_ORDER,

@@ -1,4 +1,4 @@
-﻿local addon, ns = ...
+local addon, ns = ...
 local TUI = ns.TUI
 local E = ns.E
 local LSM = ns.LSM
@@ -28,84 +28,39 @@ local function GetOrCreateWrapper(barKey)
     return wrapper
 end
 
--- Register thingsUI as its own ElvUI Config Mode category so users can filter
--- the mover panel to just our movers. Done once; safe to call repeatedly.
-local function EnsureConfigMode()
-    if not E or not E.ConfigModeLayouts then return end
-    if ns.__tuiConfigModeRegistered then return end
-    -- Append our category once.
-    local already = false
-    for _, v in ipairs(E.ConfigModeLayouts) do
-        if v == "THINGSUI" then already = true; break end
-    end
-    if not already then table.insert(E.ConfigModeLayouts, "THINGSUI") end
-    if E.ConfigModeLocalizedStrings then
-        E.ConfigModeLocalizedStrings.THINGSUI = "thingsUI"
-    end
-    ns.__tuiConfigModeRegistered = true
-end
-
 local _moverCreated = {}
 
-local _draggingMover = {}
-local function PostDragForBar(barKey)
-    return function(self)
-        if not _draggingMover[barKey] then return end
-        _draggingMover[barKey] = nil
-        local db = SB.GetBarDB(barKey)
-        if not db then return end
-        local point, _, relPoint, x, y = self:GetPoint()
-        if point and x and y then
-            db.anchorPoint = point
-            db.anchorRelativePoint = relPoint or "CENTER"
-            db.anchorXOffset = math.floor(x + 0.5)
-            db.anchorYOffset = math.floor(y + 0.5)
-            local ok, reg = pcall(LibStub, "AceConfigRegistry-3.0")
-            if ok and reg and reg.NotifyChange then reg:NotifyChange("ElvUI") end
-        end
-    end
-end
-
-local function HookMoverDragFlag(moverName, barKey, flagTable)
-    local mover = _G[moverName]
-    if not mover or mover._tuiDragHooked then return end
-    mover._tuiDragHooked = true
-    mover:HookScript("OnDragStart", function() flagTable[barKey] = true end)
-end
-
 local function EnsureMover(wrapper, barKey, displayName)
-    if not E or not E.CreateMover then return end
-    EnsureConfigMode()
     if _moverCreated[barKey] then return end
-    local moverName = "TUI_SpecialBarMover_" .. barKey
-    -- configString is passed to E:ToggleOptions on right-click. ElvUI parses
-    -- it as comma-separated AceConfig path nodes within the ElvUI app.
-    E:CreateMover(wrapper, moverName, displayName or ("Special Bar "..barKey),
-        nil, nil,
-        PostDragForBar(barKey),
-        "ALL,THINGSUI",
-        function() return not (E.db.thingsUI and E.db.thingsUI.specialBars) end,
-        "thingsUI,specialBarsTab," .. barKey .. "Group")
-    HookMoverDragFlag(moverName, barKey, _draggingMover)
+    local ms = ns.MoverSync
+    if not (ms and ms.CreateManaged) then return end
+    ms.CreateManaged(wrapper, "TUI_SpecialBarMover_" .. barKey, displayName or ("Special Bar " .. barKey), {
+        configString  = "thingsUI,modulesTab,specialBars," .. barKey .. "Group,anchorGroup",
+        shouldDisable = function() return not (E.db.thingsUI and E.db.thingsUI.specialBars) end,
+        onSave = function(point, relPoint, x, y)
+            local db = SB.GetBarDB(barKey)
+            if not db then return end
+            db.anchorPoint = point
+            db.anchorRelativePoint = relPoint
+            db.anchorXOffset = x
+            db.anchorYOffset = y
+            ns.NotifyChange()
+        end,
+    })
     _moverCreated[barKey] = true
 end
 
--- Hide the mover and drop our created flag. We don't fully delete from
--- E.CreatedMovers (no public API for that) — hiding is enough to keep the
--- mover panel clean. Re-creating uses the same name so on next slot use the
--- existing CreatedMovers entry is reused.
+-- Disable + hide wrapper.
 local function HideBarMover(barKey)
-    local moverName = "TUI_SpecialBarMover_" .. barKey
-    local mover = _G[moverName]
-    if mover and mover.Hide then mover:Hide() end
-    -- Mark the wrapper hidden so ElvUI's enable-mover pass skips it.
     local wrapper = _G["TUI_SpecialBar_" .. barKey]
-    if wrapper then wrapper:Hide() end
+    if ns.MoverSync and ns.MoverSync.RemoveManaged then
+        ns.MoverSync.RemoveManaged("TUI_SpecialBarMover_" .. barKey, wrapper)
+    elseif wrapper then
+        wrapper:Hide()
+    end
 end
 SB.HideBarMover = HideBarMover
 
--- Separate backdrop tables per frame — SetBackdrop stores the reference, so sharing
--- a single table between two frames causes the last call to overwrite both.
 local _bdBar  = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
 local _bdIcon = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
 
@@ -178,7 +133,7 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
         icon:SetPoint("LEFT", childFrame, "LEFT", 0, 0)
         barOffset = effectiveHeight + (db.iconSpacing or 1)
     elseif icon then
-        -- SetAlpha instead of Hide — icon is a CDM sub-frame.
+        -- SetAlpha instead of Hide - icon is a CDM sub-frame.
         icon:SetAlpha(0)
     end
 
@@ -191,7 +146,6 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
     bar:SetPoint("TOPLEFT",     childFrame.tuiBackdrop, "TOPLEFT",     1, -1)
     bar:SetPoint("BOTTOMRIGHT", childFrame.tuiBackdrop, "BOTTOMRIGHT", -1, 1)
 
-    -- Hide BACKGROUND-layer textures (CDM's BarBG + BCDM's barBackground)
     if not childFrame._tuiBarBgRegions then childFrame._tuiBarBgRegions = {} end
     for i = 1, bar:GetNumRegions() do
         local r = select(i, bar:GetRegions())
@@ -205,10 +159,17 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
     end
 
     local font = LSM:Fetch("font", db.font)
+    -- Save Name/Duration alpha once (before we touch it) so ReturnFrame can un-hide them.
+    if not childFrame._tuiBarTextSaved then
+        childFrame._tuiBarTextSaved = {
+            nameAlpha = bar.Name and bar.Name:GetAlpha() or 1,
+            durAlpha  = bar.Duration and bar.Duration:GetAlpha() or 1,
+        }
+    end
     if bar.Name then
         if db.showName then
             bar.Name:SetAlpha(1)
-            bar.Name:SetFont(font, db.fontSize, db.fontOutline)
+            E:SetFont(bar.Name, font, db.fontSize, db.fontOutline)
             bar.Name:ClearAllPoints()
             bar.Name:SetPoint(db.namePoint or "LEFT", bar, db.namePoint or "LEFT", db.nameXOffset or 2, db.nameYOffset or 0)
         else bar.Name:SetAlpha(0) end
@@ -217,7 +178,7 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
     if bar.Duration then
         if db.showDuration then
             bar.Duration:SetAlpha(1)
-            bar.Duration:SetFont(font, db.fontSize, db.fontOutline)
+            E:SetFont(bar.Duration, font, db.fontSize, db.fontOutline)
             bar.Duration:ClearAllPoints()
             bar.Duration:SetPoint(db.durationPoint or "RIGHT", bar, db.durationPoint or "RIGHT", db.durationXOffset or -4, db.durationYOffset or 0)
         else bar.Duration:SetAlpha(0) end
@@ -236,7 +197,7 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
     if icon and icon.Applications then
         local stackFont = LSM:Fetch("font", db.font)
         if icon.Applications.SetFont then
-            icon.Applications:SetFont(stackFont, db.stackFontSize or 14, db.stackFontOutline or "OUTLINE")
+            E:SetFont(icon.Applications, stackFont, db.stackFontSize or 14, db.stackFontOutline or "OUTLINE")
         end
         local stackParent = (db.stackAnchor == "BAR") and bar or icon
         if icon.Applications:GetParent() ~= stackParent then
@@ -257,67 +218,135 @@ end
 
 local function ReleaseBar(barKey)
     local state = specialBarState[barKey]
-    if not state then return end
-    ReturnFrame(state.childFrame)
-    if state.wrapper then state.wrapper:Hide() end
-    specialBarState[barKey] = nil
+    if state then
+        ReturnFrame(state.childFrame)
+        if state.wrapper then state.wrapper:Hide() end
+        specialBarState[barKey] = nil
+    end
+
+    local moverName = "TUI_SpecialBarMover_" .. barKey
+    if E and E.CreatedMovers and E.CreatedMovers[moverName] and E.DisableMover then
+        E:DisableMover(moverName)
+    end
 end
 
 local UpdateBarSlot
+
+local function IsManagedByBarSetup(barKey)
+    local bs = ns.BarSetup
+    if not bs or not bs.GetActiveSetup then return false end
+    local setup = bs.GetActiveSetup()
+    if not (setup and setup.bars and setup.order) then return false end
+    local target = "special:" .. barKey
+
+    local inOrder = false
+    for _, k in ipairs(setup.order) do
+        if k == target then inOrder = true; break end
+    end
+    if not inOrder then return false end
+    local b = setup.bars[target]
+    return b ~= nil and b.enabled == true
+end
+
 UpdateBarSlot = function(barKey)
     local db = SB.GetBarDB(barKey)
     if not db.enabled or not db.spellID then ReleaseBar(barKey); return end
 
     local wrapper     = GetOrCreateWrapper(barKey)
-    local anchorName  = (db.anchorMode ~= "CUSTOM") and db.anchorMode or db.anchorFrame
-    local anchorFrame = anchorName and _G[anchorName]
+    local managedByBS = IsManagedByBarSetup(barKey)
 
-    local effectiveWidth = db.width
-    if db.inheritWidth and anchorFrame then
-        local aw = anchorFrame:GetWidth()
-        if aw and aw > 0 then effectiveWidth = aw + (db.inheritWidthOffset or 0) end
+    local anchorName  = (db.anchorMode ~= "CUSTOM") and db.anchorMode or db.anchorFrame
+    local anchorFrame = SB.ResolveAnchorTarget(anchorName)
+
+    -- Width handling
+    local cdmInset = (anchorFrame == _G.EssentialCooldownViewer
+        or anchorFrame == _G.UtilityCooldownViewer
+        or anchorFrame == _G.BuffIconCooldownViewer) and 2 or 0
+    local effectiveWidth
+    if managedByBS then
+        effectiveWidth = wrapper:GetWidth()
+        if not effectiveWidth or effectiveWidth < 1 then effectiveWidth = db.width or 200 end
+    else
+        effectiveWidth = db.width
+        if db.inheritWidth and anchorFrame then
+            local aw = anchorFrame:GetWidth()
+            if aw and aw > 0 then effectiveWidth = aw + cdmInset + (db.inheritWidthOffset or 0) end
+        end
     end
     local effectiveHeight = db.height
-    if db.inheritHeight and anchorFrame then
+    if db.inheritHeight and anchorFrame and not managedByBS then
         local ah = anchorFrame:GetHeight()
-        if ah and ah > 0 then effectiveHeight = ah + (db.inheritHeightOffset or 0) end
+        if ah and ah > 0 then effectiveHeight = ah + cdmInset + (db.inheritHeightOffset or 0) end
     end
 
     wrapper:SetSize(effectiveWidth, effectiveHeight)
 
-    -- E:CreateMover needs the wrapper to already have a valid anchor before
-    -- it's called. Set one based on the saved offset.
     local moverName = "TUI_SpecialBarMover_" .. barKey
-    local moverExists = _G[moverName] ~= nil
-    if not moverExists then
+    if not _moverCreated[barKey] then
         wrapper:ClearAllPoints()
-        if anchorFrame then
+        if managedByBS then
+
+            local bs = ns.BarSetup
+            local setup = bs and bs.GetActiveSetup and bs.GetActiveSetup()
+            local stackAnchor = setup and _G[setup.anchorFrame or "EssentialCooldownViewer"]
+            if stackAnchor then
+                wrapper:SetPoint("BOTTOM", stackAnchor, "TOP", 0, 0)
+            else
+                wrapper:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+            end
+        elseif anchorFrame then
             wrapper:SetPoint(db.anchorPoint or "CENTER", anchorFrame, db.anchorRelativePoint or "CENTER", db.anchorXOffset or 0, db.anchorYOffset or 0)
         else
             wrapper:SetPoint("CENTER", UIParent, "CENTER", db.anchorXOffset or 0, db.anchorYOffset or 0)
         end
+    elseif not managedByBS then
+        wrapper:ClearAllPoints()
+        if anchorFrame and anchorFrame ~= UIParent then
+            wrapper:SetPoint(db.anchorPoint or "CENTER", anchorFrame, db.anchorRelativePoint or "CENTER", db.anchorXOffset or 0, db.anchorYOffset or 0)
+        else
+            -- Ride the mover (live drag).
+            local mv = _G[moverName]
+            if mv then
+                wrapper:SetPoint("CENTER", mv, "CENTER", 0, 0)
+            else
+                wrapper:SetPoint(db.anchorPoint or "CENTER", UIParent, db.anchorRelativePoint or "CENTER", db.anchorXOffset or 0, db.anchorYOffset or 0)
+            end
+        end
     end
 
     local moverNum = barKey:match("(%d+)$") or ""
-    local label = "Special Bar " .. moverNum
-    if anchorFrame and db.anchorMode and db.anchorMode ~= "UIParent" then
-        label = label .. "\n|cFF888888(Anchored to: " .. (db.anchorMode or "?") .. ")|r"
+    EnsureMover(wrapper, barKey, "SB" .. moverNum)
+
+    if managedByBS and ns.BarSetup and ns.BarSetup.ApplyStack then
+        ns.BarSetup.ApplyStack()
     end
-    EnsureMover(wrapper, barKey, label)
+ 
+    wrapper:Show()
+    if E and E.DisabledMovers and E.DisabledMovers[moverName] and E.EnableMover then
+        E:EnableMover(moverName)
+    end
+    if ns.MoverSync and ns.MoverSync.Queue then ns.MoverSync.Queue() end
+
 
     local mover = _G[moverName]
-    if mover and anchorFrame then
+    if mover and anchorFrame and not managedByBS and not (ns.MoverSync and ns.MoverSync.IsDragging(moverName)) then
         local point = db.anchorPoint or "CENTER"
         local relPoint = db.anchorRelativePoint or "CENTER"
         local x, y = db.anchorXOffset or 0, db.anchorYOffset or 0
-        local cp, _, crp, cx, cy = mover:GetPoint()
+        local cp, crf, crp, cx, cy = mover:GetPoint()
+
         local same = cp == point and crp == relPoint
+            and crf == anchorFrame
             and cx and math.abs(cx - x) < 0.5
             and cy and math.abs(cy - y) < 0.5
         if not same then
             mover:ClearAllPoints()
             mover:SetPoint(point, anchorFrame, relPoint, x, y)
-            if E.SaveMoverPosition then E:SaveMoverPosition(moverName) end
+
+            local anchorHasName = anchorFrame.GetName and anchorFrame:GetName()
+            if E.SaveMoverPosition and anchorHasName then
+                E:SaveMoverPosition(moverName)
+            end
         end
     end
 
@@ -340,11 +369,12 @@ UpdateBarSlot = function(barKey)
             realFrame._cdmOriginalW = realFrame:GetWidth()
             realFrame._cdmOriginalH = realFrame:GetHeight()
         end
+
+        yoinkedBars[realFrame] = true
         realFrame:SetParent(wrapper)
         realFrame:ClearAllPoints()
         realFrame:SetPoint("CENTER", wrapper, "CENTER", 0, 0)
         realFrame:SetSize(effectiveWidth, effectiveHeight)
-        yoinkedBars[realFrame] = true
 
         wrapper.backdrop:Hide()
         StyleSpecialBar(realFrame, db, effectiveHeight)
@@ -360,7 +390,7 @@ UpdateBarSlot = function(barKey)
         state.w          = nil
         state.h          = nil
 
-        if db.showBackdrop then
+        if db.showBackdrop or managedByBS then   -- managed = reserve slot
             local bc = db.backdropColor
             wrapper.backdrop:SetBackdropColor(
                 bc and bc.r or 0.1, bc and bc.g or 0.1, bc and bc.b or 0.1,

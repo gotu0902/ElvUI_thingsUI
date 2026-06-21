@@ -2,18 +2,39 @@ local addon, ns = ...
 local TUI = ns.TUI
 local E = ns.E
 local LSM = ns.LSM
-local SHARED_ANCHOR_VALUES = ns.ANCHORS.SHARED_ANCHOR_VALUES
+
+local function SHARED_ANCHOR_VALUES() return ns.ANCHORS.GetSharedAnchorValues() end
 local STRATA_VALUES = ns.STRATA.VALUES
 local STRATA_ORDER  = ns.STRATA.ORDER
 local POINT_VALUES  = ns.POINTS.VALUES
 local POINT_ORDER   = ns.POINTS.ORDER
+
+local function CDM() return E.db.general.cooldownManager end
+local function PokeCDM()
+    local S = E:GetModule("Skins", true)
+    if S and S.CooldownManager_UpdateViewers then
+        S:CooldownManager_UpdateViewers()
+    end
+end
+
+local function ApplyBuffBarPreset(key)
+    local p = ns.Defaults.BuffBarPresets and ns.Defaults.BuffBarPresets[key]
+    if not p then return end
+    local db = E.db.thingsUI.buffBars
+    for k, v in pairs(p.buffBars) do db[k] = v end
+    local cdm = CDM()
+    for k, v in pairs(p.cdm) do cdm[k] = v end
+    wipe(ns.skinnedBars)
+    TUI:UpdateBuffBars()
+    PokeCDM()
+end
 
 function TUI:BuffBarsOptions()
     return {
         order = 20,
         type = "group",
         name = "Buff Bars",
-        childGroups = "tree",
+        childGroups = "tab",
         args = {
             buffBarsHeader = {
                 order = 1,
@@ -24,7 +45,6 @@ function TUI:BuffBarsOptions()
                 order = 2,
                 type = "toggle",
                 name = "Enable Buff Bar Skinning",
-                desc = "Apply ElvUI styling to the Cooldown Manager buff bars.",
                 width = "full",
                 get = function() return E.db.thingsUI.buffBars.enabled end,
                 set = function(_, value)
@@ -36,94 +56,18 @@ function TUI:BuffBarsOptions()
                 order = 3,
                 type = "execute",
                 name = "Load DPS/Tank Preset",
-                desc = "Load default buff bar settings for DPS and Tank specs (bars grow UP from player frame).",
-               func = function()
-                    local db = E.db.thingsUI.buffBars
-                    db.enabled = true
-                    db.growthDirection = "UP"
-                    db.width = 240
-                    db.inheritWidth = true
-                    db.inheritWidthOffset = 0
-                    db.height = 23
-                    db.spacing = 1
-                    db.statusBarTexture = "ElvUI Blank"
-                    db.useClassColor = true
-                    db.iconEnabled = true
-                    db.iconSpacing = 1
-                    db.iconZoom = 0.1
-                    db.font = "Expressway"
-                    db.fontSize = 14
-                    db.fontOutline = "OUTLINE"
-                    db.namePoint = "LEFT"
-                    db.nameXOffset = 2
-                    db.nameYOffset = 0
-                    db.durationPoint = "RIGHT"
-                    db.durationXOffset = -4
-                    db.durationYOffset = 0
-                    db.stackAnchor = "ICON"
-                    db.stackPoint = "CENTER"
-                    db.stackFontSize = 15
-                    db.stackFontOutline = "OUTLINE"
-                    db.stackXOffset = 0
-                    db.stackYOffset = 0
-                    db.anchorEnabled = true
-                    db.anchorFrame = "ElvUF_Player"
-                    db.anchorPoint = "BOTTOM"
-                    db.anchorRelativePoint = "TOP"
-                    db.anchorXOffset = 0
-                    db.anchorYOffset = 50
-                    wipe(ns.skinnedBars)
-                    TUI:UpdateBuffBars()
-                end,
+                desc = "Load default for NHT (bars grow UP from player frame).",
+                func = function() ApplyBuffBarPreset("dpsTank") end,
             },
             presetHealer = {
                 order = 4,
                 type = "execute",
                 name = "Load Healer Preset",
-                desc = "Load default buff bar settings for Healer specs (bars grow DOWN from class bar).",
-                func = function()
-                    local db = E.db.thingsUI.buffBars
-                    db.enabled = true
-                    db.growthDirection = "DOWN"
-                    db.width = 218
-                    db.inheritWidth = true
-                    db.inheritWidthOffset = 2
-                    db.height = 23
-                    db.spacing = 1
-                    db.statusBarTexture = "ElvUI Blank"
-                    db.useClassColor = true
-                    db.iconEnabled = true
-                    db.iconSpacing = 1
-                    db.iconZoom = 0
-                    db.font = "Expressway"
-                    db.fontSize = 15
-                    db.fontOutline = "OUTLINE"
-                    db.namePoint = "LEFT"
-                    db.nameXOffset = 4
-                    db.nameYOffset = 0
-                    db.durationPoint = "RIGHT"
-                    db.durationXOffset = -4
-                    db.durationYOffset = 0
-                    db.stackAnchor = "ICON"
-                    db.stackPoint = "CENTER"
-                    db.stackFontSize = 15
-                    db.stackFontOutline = "OUTLINE"
-                    db.stackXOffset = 0
-                    db.stackYOffset = 0
-                    db.anchorEnabled = true
-                    db.anchorFrame = "ElvUF_Player_ClassBar"
-                    db.anchorPoint = "TOP"
-                    db.anchorRelativePoint = "BOTTOM"
-                    db.anchorXOffset = 0
-                    db.anchorYOffset = -2
-                    wipe(ns.skinnedBars)
-                    TUI:UpdateBuffBars()
-                end,
+                desc = "Load default for FHT (bars grow DOWN from classbar).",
+                func = function() ApplyBuffBarPreset("healer") end,
             },
 
-            -----------------------------------------
             -- LAYOUT SUB-GROUP
-            -----------------------------------------
             layoutGroup = {
                 order = 10,
                 type = "group",
@@ -139,7 +83,6 @@ function TUI:BuffBarsOptions()
                                 order = 1,
                                 type = "select",
                                 name = "Growth Direction",
-                                desc = "Direction the bars grow.",
                                 values = {
                                     ["UP"] = "Up",
                                     ["DOWN"] = "Down",
@@ -168,7 +111,6 @@ function TUI:BuffBarsOptions()
                                 order = 3,
                                 type = "toggle",
                                 name = "Inherit Width from Anchor",
-                                desc = "Automatically match the width of the anchor frame. Requires anchoring to be enabled.",
                                 get = function() return E.db.thingsUI.buffBars.inheritWidth end,
                                 set = function(_, value)
                                     E.db.thingsUI.buffBars.inheritWidth = value
@@ -180,7 +122,6 @@ function TUI:BuffBarsOptions()
                                 order = 4,
                                 type = "range",
                                 name = "Width Nudge",
-                                desc = "Fine-tune the inherited width. Add or subtract pixels from the anchor's width.",
                                 min = -10, max = 10, step = 0.01, bigStep = 0.5,
                                 get = function() return E.db.thingsUI.buffBars.inheritWidthOffset end,
                                 set = function(_, value)
@@ -239,7 +180,6 @@ function TUI:BuffBarsOptions()
                                 order = 2,
                                 type = "toggle",
                                 name = "Use Class Color",
-                                desc = "Color the bar based on your class.",
                                 get = function() return E.db.thingsUI.buffBars.useClassColor end,
                                 set = function(_, value)
                                     E.db.thingsUI.buffBars.useClassColor = value
@@ -251,7 +191,6 @@ function TUI:BuffBarsOptions()
                                 order = 3,
                                 type = "color",
                                 name = "Custom Bar Color",
-                                desc = "Custom color when not using class color.",
                                 hasAlpha = false,
                                 disabled = function() return E.db.thingsUI.buffBars.useClassColor end,
                                 get = function()
@@ -276,7 +215,6 @@ function TUI:BuffBarsOptions()
                                 order = 1,
                                 type = "toggle",
                                 name = "Show Icon",
-                                desc = "Display the spell icon next to the bar.",
                                 get = function() return E.db.thingsUI.buffBars.iconEnabled end,
                                 set = function(_, value)
                                     E.db.thingsUI.buffBars.iconEnabled = value
@@ -288,7 +226,6 @@ function TUI:BuffBarsOptions()
                                 order = 2,
                                 type = "range",
                                 name = "Icon Spacing",
-                                desc = "Gap between the icon and the bar.",
                                 min = 0, max = 10, step = 0.01, bigStep = 1,
                                 get = function() return E.db.thingsUI.buffBars.iconSpacing end,
                                 set = function(_, value)
@@ -302,7 +239,6 @@ function TUI:BuffBarsOptions()
                                 order = 3,
                                 type = "range",
                                 name = "Icon Zoom",
-                                desc = "How much to crop the icon edges. 0 = no crop (full texture), 0.1 = ElvUI default.",
                                 min = 0, max = 0.45, step = 0.01,
                                 isPercent = true,
                                 get = function() return E.db.thingsUI.buffBars.iconZoom end,
@@ -318,165 +254,133 @@ function TUI:BuffBarsOptions()
                 },
             },
 
-            -----------------------------------------
+            
             -- TEXT SUB-GROUP
-            -----------------------------------------
             textGroup = {
                 order = 20,
                 type = "group",
                 name = "Text",
                 args = {
-                    fontGroup = {
+                    nameGroup = {
                         order = 1,
                         type = "group",
-                        name = "Font",
+                        name = "Name",
                         inline = true,
                         args = {
-                            font = {
+                            nameFont = {
                                 order = 1,
                                 type = "select",
                                 name = "Font",
                                 dialogControl = "LSM30_Font",
                                 values = LSM:HashTable("font"),
-                                get = function() return E.db.thingsUI.buffBars.font end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.font = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
+                                get = function() return CDM().nameFont end,
+                                set = function(_, value) CDM().nameFont = value; PokeCDM() end,
                             },
-                            fontSize = {
+                            nameFontSize = {
                                 order = 2,
                                 type = "range",
                                 name = "Font Size",
                                 min = 8, max = 50, step = 1,
-                                get = function() return E.db.thingsUI.buffBars.fontSize end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.fontSize = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
+                                get = function() return CDM().nameFontSize end,
+                                set = function(_, value) CDM().nameFontSize = value; PokeCDM() end,
                             },
-                            fontOutline = {
+                            nameFontOutline = {
                                 order = 3,
                                 type = "select",
                                 name = "Font Outline",
-                                desc = "Outline for Name and Duration text.",
-                                values = {
-                                    ["NONE"] = "None",
-                                    ["OUTLINE"] = "Outline",
-                                    ["THICKOUTLINE"] = "Thick Outline",
-                                    ["MONOCHROME"] = "Monochrome",
-                                },
-                                get = function() return E.db.thingsUI.buffBars.fontOutline end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.fontOutline = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
+                                values = ns.OUTLINE.VALUES,
+                                sorting = ns.OUTLINE.ORDER,
+                                get = function() return CDM().nameFontOutline end,
+                                set = function(_, value) CDM().nameFontOutline = value; PokeCDM() end,
+                            },
+                            namePosition = {
+                                order = 4,
+                                type = "select",
+                                name = "Anchor Point",
+                                values = POINT_VALUES,
+                                sorting = POINT_ORDER,
+                                get = function() return CDM().namePosition end,
+                                set = function(_, value) CDM().namePosition = value; PokeCDM() end,
+                            },
+                            namexOffset = {
+                                order = 5,
+                                type = "range",
+                                name = "X Offset",
+                                min = -50, max = 50, step = 1,
+                                get = function() return CDM().namexOffset end,
+                                set = function(_, value) CDM().namexOffset = value; PokeCDM() end,
+                            },
+                            nameyOffset = {
+                                order = 6,
+                                type = "range",
+                                name = "Y Offset",
+                                min = -20, max = 20, step = 1,
+                                get = function() return CDM().nameyOffset end,
+                                set = function(_, value) CDM().nameyOffset = value; PokeCDM() end,
                             },
                         },
                     },
-                    nameTextGroup = {
+                    durationGroup = {
                         order = 2,
                         type = "group",
-                        name = "Name Text",
+                        name = "Duration",
                         inline = true,
                         args = {
-                            namePoint = {
+                            durationFont = {
                                 order = 1,
                                 type = "select",
-                                name = "Name Alignment",
-                                desc = "Anchor point for the spell name text.",
-                                values = {
-                                    ["LEFT"] = "Left",
-                                    ["CENTER"] = "Center",
-                                    ["RIGHT"] = "Right",
-                                },
-                                get = function() return E.db.thingsUI.buffBars.namePoint end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.namePoint = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
+                                name = "Font",
+                                dialogControl = "LSM30_Font",
+                                values = LSM:HashTable("font"),
+                                get = function() return CDM().durationFont end,
+                                set = function(_, value) CDM().durationFont = value; PokeCDM() end,
                             },
-                            nameXOffset = {
+                            durationFontSize = {
                                 order = 2,
                                 type = "range",
-                                name = "Name X Offset",
-                                min = -50, max = 50, step = 0.5,
-                                get = function() return E.db.thingsUI.buffBars.nameXOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.nameXOffset = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
+                                name = "Font Size",
+                                min = 8, max = 50, step = 1,
+                                get = function() return CDM().durationFontSize end,
+                                set = function(_, value) CDM().durationFontSize = value; PokeCDM() end,
                             },
-                            nameYOffset = {
+                            durationFontOutline = {
                                 order = 3,
-                                type = "range",
-                                name = "Name Y Offset",
-                                min = -20, max = 20, step = 0.5,
-                                get = function() return E.db.thingsUI.buffBars.nameYOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.nameYOffset = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
-                            },
-                        },
-                    },
-                    durationTextGroup = {
-                        order = 3,
-                        type = "group",
-                        name = "Duration Text",
-                        inline = true,
-                        args = {
-                            durationPoint = {
-                                order = 1,
                                 type = "select",
-                                name = "Duration Alignment",
-                                desc = "Anchor point for the duration text.",
-                                values = {
-                                    ["LEFT"] = "Left",
-                                    ["CENTER"] = "Center",
-                                    ["RIGHT"] = "Right",
-                                },
-                                get = function() return E.db.thingsUI.buffBars.durationPoint end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.durationPoint = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
+                                name = "Font Outline",
+                                values = ns.OUTLINE.VALUES,
+                                sorting = ns.OUTLINE.ORDER,
+                                get = function() return CDM().durationFontOutline end,
+                                set = function(_, value) CDM().durationFontOutline = value; PokeCDM() end,
                             },
-                            durationXOffset = {
-                                order = 2,
-                                type = "range",
-                                name = "Duration X Offset",
-                                min = -50, max = 50, step = 0.5,
-                                get = function() return E.db.thingsUI.buffBars.durationXOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.durationXOffset = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
+                            durationPosition = {
+                                order = 4,
+                                type = "select",
+                                name = "Anchor Point",
+                                values = POINT_VALUES,
+                                sorting = POINT_ORDER,
+                                get = function() return CDM().durationPosition end,
+                                set = function(_, value) CDM().durationPosition = value; PokeCDM() end,
                             },
-                            durationYOffset = {
-                                order = 3,
+                            durationxOffset = {
+                                order = 5,
                                 type = "range",
-                                name = "Duration Y Offset",
-                                min = -20, max = 20, step = 0.5,
-                                get = function() return E.db.thingsUI.buffBars.durationYOffset end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.durationYOffset = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
+                                name = "X Offset",
+                                min = -50, max = 50, step = 1,
+                                get = function() return CDM().durationxOffset end,
+                                set = function(_, value) CDM().durationxOffset = value; PokeCDM() end,
+                            },
+                            durationyOffset = {
+                                order = 6,
+                                type = "range",
+                                name = "Y Offset",
+                                min = -20, max = 20, step = 1,
+                                get = function() return CDM().durationyOffset end,
+                                set = function(_, value) CDM().durationyOffset = value; PokeCDM() end,
                             },
                         },
                     },
                     stackGroup = {
-                        order = 4,
+                        order = 5,
                         type = "group",
                         name = "Stack Count",
                         inline = true,
@@ -485,7 +389,6 @@ function TUI:BuffBarsOptions()
                                 order = 1,
                                 type = "select",
                                 name = "Stack Anchor",
-                                desc = "Anchor the stack count to the Icon or the Bar.",
                                 values = {
                                     ["ICON"] = "Icon",
                                     ["BAR"] = "Bar",
@@ -495,80 +398,112 @@ function TUI:BuffBarsOptions()
                                     E.db.thingsUI.buffBars.stackAnchor = value
                                     wipe(ns.skinnedBars)
                                     TUI:UpdateBuffBars()
+                                    PokeCDM()
                                 end,
                                 disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
                             },
-                            stackPoint = {
+                            -- Font + outline ALWAYS proxy ElvUI's count* fields. The visible
+                            -- text element is the same FontString regardless of which parent
+                            -- it sits on, so styling lives in one place.
+                            stackFont = {
                                 order = 2,
                                 type = "select",
-                                name = "Stack Position",
-                                desc = "Anchor point for the stack count on the icon.",
-                                values = POINT_VALUES,
-                                sorting = POINT_ORDER,
-                                get = function() return E.db.thingsUI.buffBars.stackPoint end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.stackPoint = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
+                                name = "Font",
+                                dialogControl = "LSM30_Font",
+                                values = LSM:HashTable("font"),
+                                get = function() return CDM().countFont end,
+                                set = function(_, value) CDM().countFont = value; PokeCDM() end,
                                 disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
                             },
                             stackFontSize = {
                                 order = 3,
                                 type = "range",
-                                name = "Stack Font Size",
-                                desc = "Font size for the stack count on icons.",
+                                name = "Font Size",
                                 min = 6, max = 50, step = 1,
-                                get = function() return E.db.thingsUI.buffBars.stackFontSize end,
-                                set = function(_, value)
-                                    E.db.thingsUI.buffBars.stackFontSize = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
-                                end,
+                                get = function() return CDM().countFontSize end,
+                                set = function(_, value) CDM().countFontSize = value; PokeCDM() end,
                                 disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
                             },
                             stackFontOutline = {
                                 order = 4,
                                 type = "select",
-                                name = "Stack Font Outline",
-                                values = {
-                                    ["NONE"] = "None",
-                                    ["OUTLINE"] = "Outline",
-                                    ["THICKOUTLINE"] = "Thick Outline",
-                                },
-                                get = function() return E.db.thingsUI.buffBars.stackFontOutline end,
+                                name = "Font Outline",
+                                values = ns.OUTLINE.VALUES,
+                                sorting = ns.OUTLINE.ORDER,
+                                get = function() return CDM().countFontOutline end,
+                                set = function(_, value) CDM().countFontOutline = value; PokeCDM() end,
+                                disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
+                            },
+                            -- Position fields dispatch: ICON anchor -> proxy ElvUI's count*
+                            -- fields. BAR anchor -> use our own thingsUI.buffBars.stack*
+                            -- because ElvUI doesn't know about reparented stack text.
+                            stackPoint = {
+                                order = 5,
+                                type = "select",
+                                name = "Anchor Point",
+                                values = POINT_VALUES,
+                                sorting = POINT_ORDER,
+                                get = function()
+                                    if E.db.thingsUI.buffBars.stackAnchor == "BAR" then
+                                        return E.db.thingsUI.buffBars.stackPoint
+                                    end
+                                    return CDM().countPosition
+                                end,
                                 set = function(_, value)
-                                    E.db.thingsUI.buffBars.stackFontOutline = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
+                                    if E.db.thingsUI.buffBars.stackAnchor == "BAR" then
+                                        E.db.thingsUI.buffBars.stackPoint = value
+                                        wipe(ns.skinnedBars)
+                                        TUI:UpdateBuffBars()
+                                    else
+                                        CDM().countPosition = value
+                                        PokeCDM()
+                                    end
                                 end,
                                 disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
                             },
                             stackXOffset = {
-                                order = 5,
+                                order = 6,
                                 type = "range",
-                                name = "Stack X Offset",
-                                desc = "Horizontal offset for the stack count text.",
-                                min = -20, max = 20, step = 0.5,
-                                get = function() return E.db.thingsUI.buffBars.stackXOffset end,
+                                name = "X Offset",
+                                min = -50, max = 50, step = 1,
+                                get = function()
+                                    if E.db.thingsUI.buffBars.stackAnchor == "BAR" then
+                                        return E.db.thingsUI.buffBars.stackXOffset
+                                    end
+                                    return CDM().countxOffset
+                                end,
                                 set = function(_, value)
-                                    E.db.thingsUI.buffBars.stackXOffset = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
+                                    if E.db.thingsUI.buffBars.stackAnchor == "BAR" then
+                                        E.db.thingsUI.buffBars.stackXOffset = value
+                                        wipe(ns.skinnedBars)
+                                        TUI:UpdateBuffBars()
+                                    else
+                                        CDM().countxOffset = value
+                                        PokeCDM()
+                                    end
                                 end,
                                 disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
                             },
                             stackYOffset = {
-                                order = 6,
+                                order = 7,
                                 type = "range",
-                                name = "Stack Y Offset",
-                                desc = "Vertical offset for the stack count text.",
-                                min = -20, max = 20, step = 0.5,
-                                get = function() return E.db.thingsUI.buffBars.stackYOffset end,
+                                name = "Y Offset",
+                                min = -20, max = 20, step = 1,
+                                get = function()
+                                    if E.db.thingsUI.buffBars.stackAnchor == "BAR" then
+                                        return E.db.thingsUI.buffBars.stackYOffset
+                                    end
+                                    return CDM().countyOffset
+                                end,
                                 set = function(_, value)
-                                    E.db.thingsUI.buffBars.stackYOffset = value
-                                    wipe(ns.skinnedBars)
-                                    TUI:UpdateBuffBars()
+                                    if E.db.thingsUI.buffBars.stackAnchor == "BAR" then
+                                        E.db.thingsUI.buffBars.stackYOffset = value
+                                        wipe(ns.skinnedBars)
+                                        TUI:UpdateBuffBars()
+                                    else
+                                        CDM().countyOffset = value
+                                        PokeCDM()
+                                    end
                                 end,
                                 disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
                             },
@@ -595,7 +530,6 @@ function TUI:BuffBarsOptions()
                                 order = 1,
                                 type = "toggle",
                                 name = "Enable Anchoring",
-                                desc = "Anchor the buff bar container to another frame.",
                                 get = function() return E.db.thingsUI.buffBars.anchorEnabled end,
                                 set = function(_, value)
                                     E.db.thingsUI.buffBars.anchorEnabled = value
@@ -606,7 +540,6 @@ function TUI:BuffBarsOptions()
                                 order = 0.5,
                                 type = "select",
                                 name = "Frame Strata",
-                                desc = "Render layer for the buff bars. Higher strata draws on top of lower ones.",
                                 values = STRATA_VALUES,
                                 sorting = STRATA_ORDER,
                                 get = function() return E.db.thingsUI.buffBars.frameStrata or "MEDIUM" end,
@@ -619,7 +552,6 @@ function TUI:BuffBarsOptions()
                                 order = 2,
                                 type = "select",
                                 name = "Anchor Frame",
-                                desc = "Select a frame to anchor to.",
                                 values = SHARED_ANCHOR_VALUES,
                                 get = function() return E.db.thingsUI.buffBars.anchorFrame end,
                                 set = function(_, value)
@@ -632,7 +564,6 @@ function TUI:BuffBarsOptions()
                                 order = 3,
                                 type = "select",
                                 name = "Anchor From",
-                                desc = "The point on the buff bars to anchor.",
                                 values = POINT_VALUES,
                                 sorting = POINT_ORDER,
                                 get = function() return E.db.thingsUI.buffBars.anchorPoint end,
@@ -646,7 +577,6 @@ function TUI:BuffBarsOptions()
                                 order = 4,
                                 type = "select",
                                 name = "Anchor To",
-                                desc = "The point on the target frame to anchor to.",
                                 values = POINT_VALUES,
                                 sorting = POINT_ORDER,
                                 get = function() return E.db.thingsUI.buffBars.anchorRelativePoint end,

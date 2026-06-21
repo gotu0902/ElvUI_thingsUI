@@ -9,26 +9,82 @@ local tsort = table.sort
 local skinnedBars = ns.skinnedBars
 local yoinkedBars = ns.yoinkedBars
 
-local hookedBuffChildren = {}
+local viewerReadyHooked = false
 local viewerReadyTicker
+local hookedBuffChildren = {}
+local applyingLayout = false
+local anchoringContainer = false
+local AnchorBuffBarContainer
+local HookBuffBarEditMode
 
-local function HookBuffChild(childFrame)
-    if not childFrame or hookedBuffChildren[childFrame] then return end
-    hookedBuffChildren[childFrame] = true
-    childFrame:HookScript("OnShow", function()
-        if ns.MarkBuffBarsDirty then
-            ns.MarkBuffBarsDirty()
-        end
-    end)
+
+local function OnBuffChildPointChanged(child)
+    if applyingLayout then return end
+    if child and yoinkedBars[child] then return end
+    if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
+end
+
+local function HookBuffChild(child)
+    if not child or hookedBuffChildren[child] then return end
+    hookedBuffChildren[child] = true
+    hooksecurefunc(child, "SetPoint", OnBuffChildPointChanged)
+    hooksecurefunc(child, "ClearAllPoints", OnBuffChildPointChanged)
+
+    if type(child.OnAuraInstanceInfoSet) == "function" then
+        hooksecurefunc(child, "OnAuraInstanceInfoSet", function()
+            if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
+        end)
+    end
+    if type(child.OnAuraInstanceInfoCleared) == "function" then
+        hooksecurefunc(child, "OnAuraInstanceInfoCleared", function()
+            if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
+        end)
+    end
 end
 
 local function ScanAndHookBuffChildren()
     if not BuffBarCooldownViewer then return false end
-    local children = { BuffBarCooldownViewer:GetChildren() }
-    for _, childFrame in ipairs(children) do
-        HookBuffChild(childFrame)
+    if not viewerReadyHooked then
+        local hookedAny = false
+        if type(BuffBarCooldownViewer.RefreshLayout) == "function" then
+            hooksecurefunc(BuffBarCooldownViewer, "RefreshLayout", function()
+                if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
+            end)
+            hookedAny = true
+        end
+        if type(BuffBarCooldownViewer.Layout) == "function" then
+            hooksecurefunc(BuffBarCooldownViewer, "Layout", function()
+                if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
+            end)
+            hookedAny = true
+        end
+
+        local function onViewerMoved()
+            if anchoringContainer then return end
+            -- Can't move the protected viewer in combat; its pre-combat anchor holds.
+            if InCombatLockdown() then return end
+            local db = E.db.thingsUI.buffBars
+            if not (db and db.anchorEnabled) then return end
+            if AnchorBuffBarContainer then AnchorBuffBarContainer() end
+        end
+        hooksecurefunc(BuffBarCooldownViewer, "SetPoint", onViewerMoved)
+        hooksecurefunc(BuffBarCooldownViewer, "ClearAllPoints", onViewerMoved)
+
+        if type(BuffBarCooldownViewer.OnAcquireItemFrame) == "function" then
+            hooksecurefunc(BuffBarCooldownViewer, "OnAcquireItemFrame", function(_, itemFrame)
+                HookBuffChild(itemFrame)
+                if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
+            end)
+        end
+        if hookedAny then viewerReadyHooked = true end
     end
-    return #children > 0
+
+    local n = BuffBarCooldownViewer:GetNumChildren()
+    if n > 0 then
+        local kids = { BuffBarCooldownViewer:GetChildren() }
+        for i = 1, n do HookBuffChild(kids[i]) end
+    end
+    return n > 0
 end
 
 local function StartViewerReadyTicker()
@@ -84,7 +140,7 @@ local function SkinBuffBar(childFrame)
             icon.tuiBackdrop:Show()
             icon.tuiBackdrop:SetFrameLevel(icon:GetFrameLevel() - 1)
         else
-            -- SetAlpha instead of Hide — icon is a CDM sub-frame.
+            -- SetAlpha instead of Hide - icon is a CDM sub-frame.
             icon:SetAlpha(0)
         end
     end
@@ -108,15 +164,6 @@ local function SkinBuffBar(childFrame)
 
     if bar.BarBG then bar.BarBG:SetAlpha(0) end
     if bar.Pip then bar.Pip:SetAlpha(0) end
-
-    local font = LSM:Fetch("font", db.font)
-    if bar.Name then bar.Name:SetFont(font, db.fontSize, db.fontOutline) end
-    if bar.Duration then bar.Duration:SetFont(font, db.fontSize, db.fontOutline) end
-
-    if icon and icon.Applications and icon.Applications.SetFont then
-        local stackFont = LSM:Fetch("font", db.font)
-        icon.Applications:SetFont(stackFont, db.stackFontSize or 15, db.stackFontOutline or "OUTLINE")
-    end
 
     skinnedBars[childFrame] = true
 end
@@ -142,7 +189,8 @@ local function LayoutBuffBar(childFrame)
 
     local effectiveWidth = db.width
     if db.inheritWidth and db.anchorEnabled then
-        local anchorFrame = _G[db.anchorFrame]
+        local anchorFrame = (ns.SpecialBars and ns.SpecialBars.ResolveAnchorTarget
+            and ns.SpecialBars.ResolveAnchorTarget(db.anchorFrame)) or _G[db.anchorFrame]
         if anchorFrame then
             local aw = anchorFrame:GetWidth()
             if aw and aw > 0 then effectiveWidth = aw + (db.inheritWidthOffset or 0) end
@@ -176,35 +224,26 @@ local function LayoutBuffBar(childFrame)
         bar:SetPoint("BOTTOMRIGHT", bar.tuiBackdrop, "BOTTOMRIGHT", -1, 1)
     end
 
-    if bar.Name then
-        bar.Name:ClearAllPoints()
-        bar.Name:SetPoint(db.namePoint or "LEFT", bar, db.namePoint or "LEFT", db.nameXOffset or 4, db.nameYOffset or 0)
-    end
-    if bar.Duration then
-        bar.Duration:ClearAllPoints()
-        bar.Duration:SetPoint(db.durationPoint or "RIGHT", bar, db.durationPoint or "RIGHT", db.durationXOffset or -4, db.durationYOffset or 0)
-    end
-
     if icon and icon.Applications then
-        local stackParent = (db.stackAnchor == "BAR") and bar or icon
-        local stackPoint = db.stackPoint or "CENTER"
-        
-        if icon.Applications:GetParent() ~= stackParent then
-            icon.Applications:SetParent(stackParent)
-        end
-        
-        local xOff = db.stackXOffset or 0
         if db.stackAnchor == "BAR" then
+            if icon.Applications:GetParent() ~= bar then
+                icon.Applications:SetParent(bar)
+            end
             local iconSize = db.height or 23
             local spacing = db.iconSpacing or 1
-            xOff = xOff - ((iconSize + spacing) / 2)
+            local xOff = (db.stackXOffset or 0) - ((iconSize + spacing) / 2)
+            local stackPoint = db.stackPoint or "CENTER"
+            icon.Applications:SetWidth(iconSize)
+            icon.Applications:SetJustifyH("CENTER")
+            icon.Applications:ClearAllPoints()
+            icon.Applications:SetPoint(stackPoint, bar, stackPoint, xOff, db.stackYOffset or 0)
+        else
+            -- Make sure Applications is back on icon if user flipped from BAR.
+            if icon.Applications:GetParent() ~= icon then
+                icon.Applications:SetParent(icon)
+                icon.Applications:SetWidth(0)
+            end
         end
-        
-        local appWidth = (db.stackAnchor == "BAR") and (db.height or 23) or 0
-        icon.Applications:SetWidth(appWidth)
-        icon.Applications:SetJustifyH("CENTER")
-        icon.Applications:ClearAllPoints()
-        icon.Applications:SetPoint(stackPoint, stackParent, stackPoint, xOff, db.stackYOffset or 0)
     end
 end
 
@@ -214,15 +253,34 @@ local function ApplyContainerStrata()
     BuffBarCooldownViewer:SetFrameStrata((db and db.frameStrata) or "MEDIUM")
 end
 
-local function AnchorBuffBarContainer()
+function AnchorBuffBarContainer()
     if not BuffBarCooldownViewer then return end
     local db = E.db.thingsUI.buffBars
     ApplyContainerStrata()
+
     if not db.anchorEnabled then return end
-    local anchorFrame = _G[db.anchorFrame]
+    local anchorFrame = (ns.SpecialBars and ns.SpecialBars.ResolveAnchorTarget
+        and ns.SpecialBars.ResolveAnchorTarget(db.anchorFrame)) or _G[db.anchorFrame]
     if not anchorFrame then return end
+    anchoringContainer = true
     BuffBarCooldownViewer:ClearAllPoints()
     BuffBarCooldownViewer:SetPoint(db.anchorPoint, anchorFrame, db.anchorRelativePoint, db.anchorXOffset, db.anchorYOffset)
+    anchoringContainer = false
+end
+
+local hookedAuraBorders = {}
+local function ApplyAuraBorderHide(childFrame)
+    local b = childFrame and childFrame.DebuffBorder
+    if not b then return end
+    if not hookedAuraBorders[b] and type(b.UpdateFromAuraData) == "function" then
+        hookedAuraBorders[b] = true
+        hooksecurefunc(b, "UpdateFromAuraData", function(self)
+            local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+            if cdm and cdm.hideAuraBorder then self:SetAlpha(0) end
+        end)
+    end
+    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    if cdm and cdm.hideAuraBorder then b:SetAlpha(0) end
 end
 
 local function ProcessUpdate()
@@ -230,6 +288,7 @@ local function ProcessUpdate()
     if not E.db.thingsUI then return end
 
     ScanAndHookBuffChildren()
+    if HookBuffBarEditMode then HookBuffBarEditMode() end
 
     local buffBarsEnabled = E.db.thingsUI.buffBars and E.db.thingsUI.buffBars.enabled
     local specialBarsExist = E.db.thingsUI.specialBars
@@ -244,23 +303,28 @@ local function ProcessUpdate()
     wipe(sortedBars)
     local children = { BuffBarCooldownViewer:GetChildren() }
 
+    local SB = ns.SpecialBars
     for _, childFrame in ipairs(children) do
+        if childFrame then ApplyAuraBorderHide(childFrame) end
         if childFrame and childFrame:IsShown() and childFrame.Bar
-           and not yoinkedBars[childFrame] and not childFrame._tui_hidden then
+           and not yoinkedBars[childFrame] and not childFrame._tui_hidden
+           and not (SB and SB.IsChildClaimedBySpecial and SB.IsChildClaimedBySpecial(childFrame)) then
             SkinBuffBar(childFrame)
             LayoutBuffBar(childFrame)
             sortedBars[#sortedBars + 1] = childFrame
         end
     end
 
+    -- Anchor the container every pass.
+    AnchorBuffBarContainer()
     if #sortedBars == 0 then return end
-
     tsort(sortedBars, function(a, b)
         return (a.layoutIndex or 0) < (b.layoutIndex or 0)
     end)
 
     local spacing = db.spacing
     local height = db.height
+    applyingLayout = true
     for index, barFrame in ipairs(sortedBars) do
         barFrame:ClearAllPoints()
         if db.growthDirection == "DOWN" then
@@ -269,8 +333,7 @@ local function ProcessUpdate()
             barFrame:SetPoint("BOTTOM", BuffBarCooldownViewer, "BOTTOM", 0, ((index - 1) * (height + spacing)))
         end
     end
-
-    AnchorBuffBarContainer()
+    applyingLayout = false
 end
 
 local lastProcessTime = 0
@@ -309,6 +372,33 @@ local function MarkDirtyThrottled()
 end
 
 ns.MarkBuffBarsDirty = MarkDirty
+
+local function MarkDirtyStaggered()
+    MarkDirty()
+    C_Timer.After(0.05, MarkDirty)
+    C_Timer.After(0.20, MarkDirty)
+end
+local emmBBHooked, cvsBBHooked = false, false
+HookBuffBarEditMode = function()
+    if not emmBBHooked then
+        local emm = _G.EditModeManagerFrame
+        if emm then
+            emmBBHooked = true
+            if type(emm.EnterEditMode) == "function" then
+                hooksecurefunc(emm, "EnterEditMode", MarkDirtyStaggered)
+            end
+            hooksecurefunc(emm, "ExitEditMode", MarkDirtyStaggered)
+        end
+    end
+    if not cvsBBHooked then
+        local cvs = _G.CooldownViewerSettings
+        if cvs and cvs.HookScript then
+            cvsBBHooked = true
+            cvs:HookScript("OnShow", MarkDirtyStaggered)
+            cvs:HookScript("OnHide", MarkDirtyStaggered)
+        end
+    end
+end
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(self, event, ...)

@@ -8,9 +8,11 @@ local isDirty = false
 local isEnabled = false
 local lastEssentialCount = 0
 local lastUtilityCount = 0
+local lastGeoSig = nil
 local forceClusterUpdate = true
 local combatDeferred = false
 local MarkDirty
+local clusterProxy
 
 -- Count visible icons in a frame
 local function CountVisibleChildren(frame)
@@ -31,20 +33,18 @@ local function ForceClusterUpdate()
     forceClusterUpdate = true
 end
 
--- Hook CDM children so we update only when bars actually appear/disappear.
-local hookedChildren = {}
+-- Update when bars appear/disappear
+local hookedViewers = {}
 
 local function HookViewerChildren(viewer)
-    if not viewer then return end
-
-    for i = 1, viewer:GetNumChildren() do
-        local child = select(i, viewer:GetChildren())
-        if child and not hookedChildren[child] then
-            hookedChildren[child] = true
-            child:HookScript("OnShow", MarkDirty)
-            child:HookScript("OnHide", MarkDirty)
-        end
-    end
+    if not viewer or hookedViewers[viewer] then return end
+    if type(viewer.RefreshLayout) ~= "function" then return end
+    hookedViewers[viewer] = true
+    hooksecurefunc(viewer, "RefreshLayout", function() MarkDirty() end)
+    -- Also re-sync on resize
+    hooksecurefunc(viewer, "SetSize",   function() MarkDirty() end)
+    hooksecurefunc(viewer, "SetWidth",  function() MarkDirty() end)
+    hooksecurefunc(viewer, "SetHeight", function() MarkDirty() end)
 end
 
 local function ScanAndHookViewers()
@@ -64,35 +64,73 @@ function TUI:QueueClusterUpdate()
     end)
 end
 
+-- Read icon size from CDM Icons settings (single source of truth)
+local function GetIconWidth(viewerKey, fallback)
+    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    local v = cdm and cdm[viewerKey]
+    if not v then return fallback end
+    return v.iconWidth or fallback
+end
+
 -- Calculate effective cluster width
 local function CalculateEffectiveWidth()
     local db = E.db.thingsUI.clusterPositioning
-    
+    local essentialIconWidth = GetIconWidth("essential", 40)
+    local utilityIconWidth   = GetIconWidth("utility",   32)
+
     local essentialCount = EssentialCooldownViewer and CountVisibleChildren(EssentialCooldownViewer) or 0
     local utilityCount = UtilityCooldownViewer and CountVisibleChildren(UtilityCooldownViewer) or 0
 
-    -- Add any trinkets that are in the Essential row (from TrinketsCDM module)
+    -- Fold trinkets into whichever row they're embedded in.
     local extraTrinkets = ns.TrinketsCDM and ns.TrinketsCDM.GetExtraEssentialCount and ns.TrinketsCDM.GetExtraEssentialCount() or 0
-    essentialCount = essentialCount + extraTrinkets
-    
-    local essentialWidth = (essentialCount * db.essentialIconWidth) + (math.max(0, essentialCount - 1) * db.essentialIconPadding)
-    
+    if extraTrinkets > 0 then
+        local attachKey = (ns.TrinketsCDM.GetTrinketAttachKey and ns.TrinketsCDM.GetTrinketAttachKey()) or "essential"
+        if attachKey == "utility" then
+            utilityCount = utilityCount + extraTrinkets
+        else
+            essentialCount = essentialCount + extraTrinkets
+        end
+    end
+
+    local essentialWidth = (essentialCount * essentialIconWidth) + (math.max(0, essentialCount - 1) * db.essentialIconPadding)
+
     if not db.accountForUtility or utilityCount == 0 or essentialCount == 0 then
         return essentialWidth, essentialCount, utilityCount, 0
     end
-    
-    local utilityWidth = (utilityCount * db.utilityIconWidth) + (math.max(0, utilityCount - 1) * db.utilityIconPadding)
-    
+
+    local utilityWidth = (utilityCount * utilityIconWidth) + (math.max(0, utilityCount - 1) * db.utilityIconPadding)
+
     local overflow = 0
     local extraUtilityIcons = math.max(0, utilityCount - essentialCount)
     local threshold = db.utilityThreshold or 3
-    
+
     if extraUtilityIcons >= threshold and utilityWidth > essentialWidth then
         local widthDifference = utilityWidth - essentialWidth
         overflow = widthDifference + ((db.utilityOverflowOffset or 25) * 2)
     end
-    
+
     return essentialWidth + overflow, essentialCount, utilityCount, overflow
+end
+
+-- A thingsUI-owned anchor frame that the unit frames attach to INSTEAD of the Essential viewer directly.
+local function EnsureProxy()
+    if clusterProxy then return clusterProxy end
+    clusterProxy = CreateFrame("Frame", "TUI_ClusterAnchor", _G.UIParent)
+    clusterProxy:SetSize(1, 1)
+    return clusterProxy
+end
+
+-- Position the proxy to overlay the viewer's CURRENT screen bounds, decoupled from it (anchored to UIParent, not the viewer).
+local function SyncProxyToViewer(proxy, viewer)
+    local fl, fb = viewer:GetLeft(), viewer:GetBottom()
+    if not fl or not fb then return false end
+    local w, h = viewer:GetSize()
+    if not w or w <= 0 or not h or h <= 0 then return false end
+    local k = (viewer:GetEffectiveScale() or 1) / (_G.UIParent:GetEffectiveScale() or 1)
+    proxy:ClearAllPoints()
+    proxy:SetSize(w * k, h * k)
+    proxy:SetPoint("BOTTOMLEFT", _G.UIParent, "BOTTOMLEFT", fl * k, fb * k)
+    return true
 end
 
 -- Apply positioning
@@ -109,42 +147,53 @@ local function UpdateClusterPositioning()
     end
     
     local effectiveWidth, essentialCount, utilityCount, utilityOverflow = CalculateEffectiveWidth()
-    
-    -- Only update if something actually changed (counts), unless forced
-    if (not forceClusterUpdate) and essentialCount == lastEssentialCount and utilityCount == lastUtilityCount then return end
+
+    local ev = EssentialCooldownViewer
+    local vLeft  = ev:GetLeft()  or 0
+    local vRight = ev:GetRight() or 0
+    local vCY    = ((ev:GetTop() or 0) + (ev:GetBottom() or 0)) * 0.5
+    local geoSig = math.floor(vLeft + 0.5) + math.floor(vRight + 0.5) * 7
+                 + math.floor(vCY + 0.5) * 13 + essentialCount * 101
+                 + utilityCount * 211 + math.floor((utilityOverflow or 0) + 0.5) * 17
+    if (not forceClusterUpdate) and geoSig == lastGeoSig then return end
     forceClusterUpdate = false
+    lastGeoSig = geoSig
     lastEssentialCount = essentialCount
     lastUtilityCount = utilityCount
-    
-    local yOffset = db.yOffset
-    local sideOverflow = utilityOverflow / 2
 
-    local nhtSide      = ns.TrinketsCDM and ns.TrinketsCDM.GetNHTAnchor and ns.TrinketsCDM.GetNHTAnchor()
-    local trinketFrame = nhtSide and _G["BCDM_TrinketBar"]
+    local proxy = EnsureProxy()
+    if not SyncProxyToViewer(proxy, ev) then return end
+
+    local yOffset = 0
+    local sideOverflow = utilityOverflow / 2
+    local viewerW = EssentialCooldownViewer:GetWidth() or 0
+    local parityNudge = (math.floor(viewerW + 0.5) % 2 == 1) and 0.5 or 0
+    local trinketExt, trinketSide = 0, "RIGHT"
+
+    if ns.TrinketsCDM and ns.TrinketsCDM.GetTrinketExtent then
+        local onEssential = (not ns.TrinketsCDM.GetTrinketAttachKey)
+            or ns.TrinketsCDM.GetTrinketAttachKey() == "essential"
+        if onEssential then
+            trinketExt, trinketSide = ns.TrinketsCDM.GetTrinketExtent()
+            trinketExt = trinketExt or 0
+        end
+    end
+    local leftExtra  = (trinketSide == "LEFT")  and trinketExt or 0
+    local rightExtra = (trinketSide == "RIGHT") and trinketExt or 0
 
     if db.playerFrame.enabled then
         local playerFrame = _G["ElvUF_Player"]
         if playerFrame then
             playerFrame:ClearAllPoints()
-            -- NHT LEFT: trinkets are to the LEFT of Essential → anchor to trinket bar's left edge
-            if nhtSide == "LEFT" and trinketFrame then
-                playerFrame:SetPoint("RIGHT", trinketFrame, "LEFT", -(db.frameGap + sideOverflow), yOffset)
-            else
-                playerFrame:SetPoint("RIGHT", EssentialCooldownViewer, "LEFT", -(db.frameGap + sideOverflow), yOffset)
-            end
+            playerFrame:SetPoint("RIGHT", proxy, "LEFT", -(db.frameGap + sideOverflow + leftExtra) - parityNudge, yOffset)
         end
     end
-    
+
     if db.targetFrame.enabled then
         local targetFrame = _G["ElvUF_Target"]
         if targetFrame then
             targetFrame:ClearAllPoints()
-            -- NHT RIGHT: trinkets are to the RIGHT of Essential → anchor to trinket bar's right edge
-            if nhtSide == "RIGHT" and trinketFrame then
-                targetFrame:SetPoint("LEFT", trinketFrame, "RIGHT", db.frameGap + sideOverflow, yOffset)
-            else
-                targetFrame:SetPoint("LEFT", EssentialCooldownViewer, "RIGHT", db.frameGap + sideOverflow, yOffset)
-            end
+            targetFrame:SetPoint("LEFT", proxy, "RIGHT", db.frameGap + sideOverflow + rightExtra + parityNudge, yOffset)
         end
     end
     
@@ -175,10 +224,18 @@ local function UpdateClusterPositioning()
             powerBar:SetPoint("TOP", playerFrame, "BOTTOM", db.additionalPowerBar.xOffset, db.additionalPowerBar.gap)
         end
     end
+
+    -- Cluster moved Player / Target / ToT - keep their movers in sync so
+    -- /emove shows where they actually sit, not the stale saved point.
+    if ns.MoverSync and ns.MoverSync.Queue then
+        ns.MoverSync.Queue()
+    end
 end
 
--- Dirty-flag system: coalesce multiple show/hide events into one update next frame
-local function OnNextFrame(self)
+local SETTLE_TIME = 0.06
+local lastMark = 0
+local function OnSettleTick(self)
+    if (GetTime() - lastMark) < SETTLE_TIME then return end
     self:SetScript("OnUpdate", nil)
     isDirty = false
     UpdateClusterPositioning()
@@ -186,9 +243,10 @@ end
 
 MarkDirty = function()
     if not isEnabled then return end
+    lastMark = GetTime()
     if isDirty then return end
     isDirty = true
-    updateFrame:SetScript("OnUpdate", OnNextFrame)
+    updateFrame:SetScript("OnUpdate", OnSettleTick)
 end
 
 -- Event handler
@@ -252,7 +310,7 @@ function TUI:UpdateClusterPositioning()
         isEnabled = true
         eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
         eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-        
+
         C_Timer.After(0.5, function()
             ScanAndHookViewers()
             lastEssentialCount = -1
@@ -269,8 +327,10 @@ function TUI:UpdateClusterPositioning()
         lastEssentialCount = 0
         lastUtilityCount = 0
         forceClusterUpdate = true
+        -- Profile-switch guard
         C_Timer.After(0.1, RestoreFramesToElvUI)
         C_Timer.After(0.5, RestoreFramesToElvUI)
+        C_Timer.After(1.5, RestoreFramesToElvUI)
     end
 end
 
@@ -290,8 +350,4 @@ function TUI:RecalculateCluster()
     local extraIcons = math.max(0, utilityCount - essentialCount)
     local threshold = db.utilityThreshold or 3
     local triggered = extraIcons >= threshold
-    
-    local essentialWidth = (essentialCount * db.essentialIconWidth) + (math.max(0, essentialCount - 1) * db.essentialIconPadding)
-    local utilityWidth = (utilityCount * db.utilityIconWidth) + (math.max(0, utilityCount - 1) * db.utilityIconPadding)
-    
 end

@@ -1,0 +1,14 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+	<Script file="Core.lua"/>
+	<Script file="Anchors.lua"/>
+	<Script file="Pixel.lua"/>
+	<Script file="Widgets\CascadeWidget.lua"/>
+	<Script file="Widgets\CascadeDropdown.lua"/>
+	<Script file="Widgets\OptionLinkWidget.lua"/>
+	<Script file="ActiveSpecsList.lua"/>
+	<Script file="Share.lua"/>
+	<Script file="Grid2Profiles.lua"/>
+	<Script file="Install.lua"/>
+	<Script file="Spells\SpellData.lua"/>
+	<Script file="Spells\CDMSpells.lua"/>
+</Ui>

@@ -1,0 +1,15 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+	<Script file="Defaults.lua"/>
+	<Script file="CDMIcons.lua"/>
+	<Script file="TrinketsCDM.lua"/>
+	<Script file="BuffBars.lua"/>
+	<Script file="ClusterPositioning.lua"/>
+	<Script file="CustomGroups.lua"/>
+	<Script file="Timers.lua"/>
+	<Script file="RacialsCDM.lua"/>
+	<Script file="BarSetup.lua"/>
+	<Script file="ClassbarMode.lua"/>
+	<Script file="ChargeBar.lua"/>
+	<Script file="SpecialBars.lua"/>
+	<Script file="EssentialMover.lua"/>
+</Ui>

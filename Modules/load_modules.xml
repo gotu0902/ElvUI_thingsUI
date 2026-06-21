@@ -1,0 +1,26 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+	<!-- Order is taint-sensitive and interleaved across subfolders; keep it exactly. -->
+	<Script file="Specials\SpecialDB.lua"/>
+	<Script file="Specials\SpecialCache.lua"/>
+	<Script file="Specials\SpecialShared.lua"/>
+	<Script file="Specials\SpecialBars.lua"/>
+	<Script file="Specials\SpecialIcons.lua"/>
+	<Script file="Specials\SpecialDebug.lua"/>
+	<Script file="Bars\BuffBars.lua"/>
+	<Script file="Movers\ClusterPositioning.lua"/>
+	<Script file="Bars\ClassbarMode.lua"/>
+	<Script file="Bars\ChargeBar.lua"/>
+	<Script file="CDM\EditModeLock.lua"/>
+	<Script file="CDM\CDMIcons.lua"/>
+	<Script file="CDM\CDMText.lua"/>
+	<Script file="CDM\TrinketsCDM.lua"/>
+	<Script file="Bars\BarSetup.lua"/>
+	<Script file="Movers\EssentialMover.lua"/>
+	<Script file="Timers\Timers.lua"/>
+	<Script file="Timers\TimersRender.lua"/>
+	<Script file="Timers\TimersStandalone.lua"/>
+	<Script file="Timers\TimersCDM.lua"/>
+	<Script file="CDM\RacialsCDM.lua"/>
+	<Script file="CustomGroups.lua"/>
+	<Script file="Movers\MoverSync.lua"/>
+</Ui>
