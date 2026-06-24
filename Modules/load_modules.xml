@@ -1,5 +1,4 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
-	<!-- Order is taint-sensitive and interleaved across subfolders; keep it exactly. -->
 	<Script file="Specials\SpecialDB.lua"/>
 	<Script file="Specials\SpecialCache.lua"/>
 	<Script file="Specials\SpecialShared.lua"/>

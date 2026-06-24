@@ -506,9 +506,7 @@ function TUI:BuffBarsOptions()
                 },
             },
 
-            -----------------------------------------
             -- ANCHORING SUB-GROUP
-            -----------------------------------------
             anchoringGroup = {
                 order = 30,
                 type = "group",

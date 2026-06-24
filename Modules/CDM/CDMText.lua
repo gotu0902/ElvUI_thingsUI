@@ -45,7 +45,6 @@ local function ApplyText(fs, font, size, outline, color, point, x, y, show)
     end
 end
 
--- Detach the Cooldown frame from ElvUI's cdmanager so its CooldownUpdate stops re-styling text.
 local function ReleaseFromElvUICooldown(cd)
     if not cd or not E.RegisteredCooldowns then return end
     if E.RegisteredCooldowns[cd] then
@@ -58,7 +57,7 @@ M.ReleaseFromElvUICooldown = ReleaseFromElvUICooldown
 
 local function StyleChild(child, t)
     if not child then return end
-    child._tuiTextConfig = t  -- remember our config so the ElvUI re-assert hook can restore it
+    child._tuiTextConfig = t
 
     local applications = child.Applications and child.Applications.Applications
     ApplyText(applications,
