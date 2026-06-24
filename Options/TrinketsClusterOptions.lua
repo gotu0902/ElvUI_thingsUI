@@ -34,7 +34,6 @@ local function RemoveFromBlacklist(itemID)
     NotifyChange()
 end
 
--- Returns a sorted list of {id, name} for currently blacklisted items.
 local function GetBlacklistEntries()
     local bl = GetBlacklist() or {}
     local out = {}
@@ -236,9 +235,7 @@ function TUI:ClusterPositioningSubTab()
                         },
                     },
 
-                    -----------------------------------------
                     -- ICON SETTINGS
-                    -----------------------------------------
                     iconGroup = {
                         order = 10,
                         type = "group",
@@ -286,9 +283,7 @@ function TUI:ClusterPositioningSubTab()
                         },
                     },
 
-                    -----------------------------------------
                     -- UnitFrame Settings
-                    -----------------------------------------
                     elvuiFramesGroup = {
                         order = 20,
                         type = "group",
@@ -415,7 +410,7 @@ end
 
 function TUI:TrinketsOptions()
     local function tdb() return E.db.thingsUI.trinketsCDM end
-    -- Migrate old NHT/FHT + nhtSide profiles so the selects show the right values.
+
     if ns.TrinketsCDM and ns.TrinketsCDM.MigrateDB then ns.TrinketsCDM.MigrateDB(tdb()) end
     local function set(k, v) tdb()[k] = v; TUI:UpdateTrinketsCDM(); NotifyChange() end
     local function isEmbedded() return (tdb().mode or "EMBEDDED") == "EMBEDDED" end
@@ -423,7 +418,6 @@ function TUI:TrinketsOptions()
     local function isGrouped()  return (tdb().mode or "EMBEDDED") == "GROUP" end
     local SIDES = { TOP = "Top", BOTTOM = "Bottom", LEFT = "Left", RIGHT = "Right" }
 
-    -- Trinket Bar (mode == "BAR") helpers.
     local function bdb() return tdb().bar end
     local function bset(k, v) bdb()[k] = v; TUI:UpdateTrinketsCDM(); NotifyChange() end
     local function tset(k, v) bdb().text[k] = v; TUI:UpdateTrinketsCDM(); NotifyChange() end

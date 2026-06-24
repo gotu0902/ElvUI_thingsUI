@@ -14,10 +14,33 @@ local VIEWERS = {
 
 local hookedViewers = {}
 local hookedChildren = {}
-local applyingChild  = {} 
+local applyingChild  = {}
 local pendingViewers = {}
 local pendingFrame   = CreateFrame("Frame")
 local QueueLayout
+
+local proxies = {}
+local function GetProxy(viewer)
+    if not viewer then return nil end
+    local name = viewer:GetName()
+    local p = proxies[name]
+    if not p then
+        p = CreateFrame("Frame", "TUI_CDMProxy_" .. name, _G.UIParent)
+        p:SetSize(1, 1)
+        p:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
+        proxies[name] = p
+    end
+    return p
+end
+M.GetProxy = GetProxy
+
+function M.ProxyForName(name)
+    if name and VIEWERS[name] then
+        local v = _G[name]
+        if v then return GetProxy(v) end
+    end
+    return nil
+end
 
 local GROWTH = {
     CENTERED_H = { axis = "H", pin = "CENTER", stepX =  1, stepY = -1 },
@@ -154,7 +177,6 @@ local function TrinketAnchorShift(viewer, vdb)
     ext = ext or 0
     if ext <= 0 then return 0 end
     local attachKey = (TR.GetTrinketAttachKey and TR.GetTrinketAttachKey()) or "essential"
-    -- self-centring direction for a frame with trinkets on `side`
     local centre = (side == "LEFT") and (ext / 2) or -(ext / 2)
     local viewerKey = VIEWERS[viewer:GetName()]
     local shift = 0
@@ -188,30 +210,31 @@ local function TrinketAnchorShiftY(viewer, vdb)
 end
 
 local function ReapplyViewerAnchor(viewer)
-    if applyingViewerAnchor[viewer] then return end
+    local proxy = GetProxy(viewer)
+    if applyingViewerAnchor[proxy] then return end
     local viewerName = viewer:GetName()
     local vdb = GetViewerDB(viewerName)
 
     if not AnchorRequired(viewerName, vdb) then return end
 
-    if InCombatLockdown() then return end
-
     local target = ResolveViewerAnchorTarget(viewerName, vdb)
     if not target then return end
+    local tname = target.GetName and target:GetName()
+    if tname and VIEWERS[tname] then target = GetProxy(target) end
 
     local xShift = TrinketAnchorShift(viewer, vdb)
     local yShift = TrinketAnchorShiftY(viewer, vdb)
 
-    applyingViewerAnchor[viewer] = true
-    viewer:ClearAllPoints()
-    viewer:SetPoint(
+    applyingViewerAnchor[proxy] = true
+    proxy:ClearAllPoints()
+    proxy:SetPoint(
         vdb.anchorPoint or "CENTER",
         target,
         vdb.anchorRelativePoint or "CENTER",
         (vdb.anchorXOffset or 0) + xShift,
         (vdb.anchorYOffset or 0) + yShift
     )
-    applyingViewerAnchor[viewer] = nil
+    applyingViewerAnchor[proxy] = nil
 end
 
 local function HookViewerAnchor(viewer)
@@ -262,6 +285,21 @@ local function _cornerXY(point, w, h)
     return dx, dy
 end
 
+local function ProxyOwnedByThingsUI(viewer, vdb)
+    if viewer:GetName() == "EssentialCooldownViewer" then
+        local edb = E.db.thingsUI and E.db.thingsUI.essentialMover
+        return (edb and edb.enabled) and true or false
+    end
+    return AnchorRequired(viewer:GetName(), vdb)
+end
+
+local function MirrorProxyToViewer(proxy, viewer)
+    local fl, fb = viewer:GetLeft(), viewer:GetBottom()
+    if not fl or not fb then return end
+    proxy:ClearAllPoints()
+    proxy:SetPoint("BOTTOMLEFT", _G.UIParent, "BOTTOMLEFT", fl, fb)
+end
+
 local function LayoutViewer(viewer)
 
     if cdmRebuilding then return end
@@ -298,9 +336,6 @@ local function LayoutViewer(viewer)
     if viewer._tuiLayoutSig == sig then return end
     viewer._tuiLayoutSig = sig
 
-    -- Hide Blizzard's coloured aura-type border on tracked buffs when enabled.
-    -- (Toggling the option clears the sig via RefreshAll, so this re-runs; the
-    -- per-child UpdateFromAuraData hook keeps it down on later aura refreshes.)
     local cdmRoot = E.db.thingsUI and E.db.thingsUI.cdmIcons
     if cdmRoot and cdmRoot.hideAuraBorder then
         for i = 1, #visible do
@@ -331,8 +366,8 @@ local function LayoutViewer(viewer)
             local base = 1 - zoom * 2
             local xCrop, yCrop = base, base
             local ratio = frameW / frameH
-            if ratio > 1 then yCrop = xCrop / ratio          -- wider: trim top/bottom
-            elseif ratio < 1 then xCrop = yCrop * ratio end   -- taller: trim left/right
+            if ratio > 1 then yCrop = xCrop / ratio
+            elseif ratio < 1 then xCrop = yCrop * ratio end
             left = (1 - xCrop) / 2; right = 1 - left
             top  = (1 - yCrop) / 2; bottom = 1 - top
         else
@@ -388,6 +423,7 @@ local function LayoutViewer(viewer)
         startY = iconH / 2
     end
 
+    local proxy = GetProxy(viewer)
     local cellW = iconW + spacing
     local cellH = iconH + spacing
     local centered = (growth.pin == "CENTER")
@@ -422,21 +458,25 @@ local function LayoutViewer(viewer)
 
         child._tuiAnchor = child._tuiAnchor or {}
         child._tuiAnchor.point         = "CENTER"
-        child._tuiAnchor.relative      = viewer
+        child._tuiAnchor.relative      = proxy
         child._tuiAnchor.relativePoint = anchorPin
         child._tuiAnchor.x             = ax
         child._tuiAnchor.y             = ay
         applyingChild[child] = true
         child:ClearAllPoints()
-        child:SetPoint("CENTER", viewer, anchorPin, ax, ay)
+        child:SetPoint("CENTER", proxy, anchorPin, ax, ay)
         applyingChild[child] = nil
     end
 
-    if not InCombatLockdown() then
-        if math.abs((viewer:GetWidth() or 0) - totalW) > 0.5
-           or math.abs((viewer:GetHeight() or 0) - totalH) > 0.5 then
-            Pixel.SetSize(viewer, totalW, totalH)
-        end
+    local vscale = (viewer:GetEffectiveScale() or 1) / (_G.UIParent:GetEffectiveScale() or 1)
+    if math.abs((proxy:GetScale() or 1) - vscale) > 0.001 then proxy:SetScale(vscale) end
+    if math.abs((proxy:GetWidth() or 0) - totalW) > 0.5
+       or math.abs((proxy:GetHeight() or 0) - totalH) > 0.5 then
+        Pixel.SetSize(proxy, totalW, totalH)
+    end
+
+    if not ProxyOwnedByThingsUI(viewer, vdb) then
+        MirrorProxyToViewer(proxy, viewer)
     end
 end
 
@@ -521,7 +561,7 @@ local function EnsureUtilityMover()
     local ms = ns.MoverSync
     if not (v and ms and ms.CreateManaged) then return end
     utilityMoverCreated = true
-    ms.CreateManaged(v, "TUI_UtilityMover", "Utility Cooldowns", {
+    ms.CreateManaged(GetProxy(v), "TUI_UtilityMover", "Utility Cooldowns", {
         configString      = "thingsUI,modulesTab,cdm,utilityTab",
         ignoreSizeChanged = true,
         shouldDisable = function()
@@ -535,6 +575,14 @@ local function EnsureUtilityMover()
             vdb.anchorRelativePoint = relPoint
             vdb.anchorXOffset = x
             vdb.anchorYOffset = y
+            QueueLayout(_G.UtilityCooldownViewer)
+            ns.NotifyChange()
+        end,
+        onNudge = function(dx, dy)
+            local vdb = GetViewerDB("UtilityCooldownViewer")
+            if not vdb then return end
+            vdb.anchorXOffset = (vdb.anchorXOffset or 0) + dx
+            vdb.anchorYOffset = (vdb.anchorYOffset or 0) + dy
             QueueLayout(_G.UtilityCooldownViewer)
             ns.NotifyChange()
         end,
@@ -570,9 +618,8 @@ f:SetScript("OnEvent", function(_, event)
         C_Timer.After(2.5, function() cdmRebuilding = false end)
         for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAll) end
     elseif event == "PLAYER_REGEN_ENABLED" then
-        M.RefreshAll()  -- snap back the instant combat ends
+        M.RefreshAll()
     else
-
         M.RefreshAll()
         for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAll) end
     end
@@ -593,6 +640,7 @@ SlashCmdList.TUICDM = function()
             local vdb = GetViewerDB(name) or {}
             local p, relTo, relPoint, x, y = v:GetPoint()
             local cx = v.GetCenter and select(1, v:GetCenter()) or nil
+            local prot, protExpl = v:IsProtected()
             local vis = 0
             for i = 1, v:GetNumChildren() do
                 local c = select(i, v:GetChildren())
@@ -604,12 +652,61 @@ SlashCmdList.TUICDM = function()
                     tostring(vdb.anchorRelativePoint), tostring(vdb.anchorFrame),
                     tostring(vdb.anchorXOffset), tostring(vdb.anchorYOffset),
                     tostring(vdb.growthDirection), tostring(vdb.iconsPerRow)))
-            print(("  live: GetPoint=%s rel=%s/%s ofs=%s,%s | W=%s H=%s L=%s R=%s centerX=%s vis=%d")
+            print(("  live: GetPoint=%s rel=%s/%s ofs=%s,%s | W=%s H=%s L=%s R=%s centerX=%s vis=%d prot=%s/%s combat=%s")
                 :format(tostring(p), relTo and relTo.GetName and (relTo:GetName() or "?") or tostring(relTo),
                     tostring(relPoint), fmt(x), fmt(y),
-                    fmt(v:GetWidth()), fmt(v:GetHeight()), fmt(v:GetLeft()), fmt(v:GetRight()), fmt(cx), vis))
+                    fmt(v:GetWidth()), fmt(v:GetHeight()), fmt(v:GetLeft()), fmt(v:GetRight()), fmt(cx), vis,
+                    tostring(prot), tostring(protExpl), tostring(InCombatLockdown())))
+            local si = v.systemInfo
+            local ai = si and si.anchorInfo
+            local par = v.GetParent and v:GetParent()
+            print(("  editmode: idp=%s ignMgr=%s init=%s parent=%s | ai.point=%s relTo=%s ofs=%s,%s")
+                :format(tostring(si and si.isInDefaultPosition), tostring(v.ignoreFramePositionManager),
+                    tostring(v.IsInitialized and v:IsInitialized()),
+                    (par and par.GetName and (par:GetName() or "?")) or tostring(par),
+                    tostring(ai and ai.point), tostring(ai and ai.relativeTo),
+                    fmt(ai and ai.offsetX), fmt(ai and ai.offsetY)))
         else
             print(("|cFFFFD200%s|r missing"):format(name))
         end
+    end
+    print("|cFF8080FFthingsUI CDM|r --- proxy + cluster ---")
+    for name in pairs(VIEWERS) do
+        local pr = GetProxy(_G[name])
+        if pr then
+            local pp, prelTo, prelP, px, py = pr:GetPoint()
+            print(("  proxy[%s]: pt=%s rel=%s/%s ofs=%s,%s | W=%s H=%s L=%s R=%s scale=%s")
+                :format(name, tostring(pp),
+                    prelTo and prelTo.GetName and (prelTo:GetName() or "?") or tostring(prelTo),
+                    tostring(prelP), fmt(px), fmt(py),
+                    fmt(pr:GetWidth()), fmt(pr:GetHeight()), fmt(pr:GetLeft()), fmt(pr:GetRight()), fmt(pr:GetScale())))
+        end
+    end
+    local ca = _G.TUI_ClusterAnchor
+    if ca then
+        print(("  clusterAnchor: W=%s H=%s L=%s R=%s"):format(fmt(ca:GetWidth()), fmt(ca:GetHeight()), fmt(ca:GetLeft()), fmt(ca:GetRight())))
+    end
+    for _, fn in ipairs({ "ElvUF_Player", "ElvUF_Target" }) do
+        local uf = _G[fn]
+        if uf then
+            local up, urelTo, urelP, ux, uy = uf:GetPoint()
+            print(("  %s: pt=%s rel=%s/%s ofs=%s,%s L=%s")
+                :format(fn, tostring(up),
+                    urelTo and urelTo.GetName and (urelTo:GetName() or "?") or tostring(urelTo),
+                    tostring(urelP), fmt(ux), fmt(uy), fmt(uf:GetLeft())))
+        end
+    end
+    print("|cFF8080FFthingsUI CDM|r --- essential mover ---")
+    local edb = E.db.thingsUI and E.db.thingsUI.essentialMover
+    print(("  essentialMover db: point=%s x=%s y=%s enabled=%s")
+        :format(tostring(edb and edb.point), tostring(edb and edb.x), tostring(edb and edb.y), tostring(edb and edb.enabled)))
+    print(("  E.db.movers.TUI_EssentialMover = %s"):format(tostring(E.db and E.db.movers and E.db.movers.TUI_EssentialMover)))
+    local mv = _G.TUI_EssentialMover
+    if mv then
+        local mp, mrelTo, mrelP, mx, my = mv:GetPoint()
+        print(("  mover: pt=%s rel=%s/%s ofs=%s,%s | W=%s H=%s")
+            :format(tostring(mp),
+                mrelTo and mrelTo.GetName and (mrelTo:GetName() or "?") or tostring(mrelTo),
+                tostring(mrelP), fmt(mx), fmt(my), fmt(mv:GetWidth()), fmt(mv:GetHeight())))
     end
 end

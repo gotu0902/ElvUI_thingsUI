@@ -64,7 +64,6 @@ end
 ns.ApplyClassColored = ApplyClassColored
 ns.ApplyDarkMode = ApplyDarkMode
 
--- "Move That Stuff": minimap/auras/DT panels to top-right (shared with the install wizard).
 function ns.MoveThatStuff()
     E.db["movers"]["MinimapMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-2,-2"
     E.db["movers"]["VehicleLeaveButton"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-152,-2"
@@ -83,7 +82,6 @@ function ns.MoveThatStuff()
     print("|cFF8080FFthingsUI|r - Minimap, Auras and DT panels moved to Top Right.")
 end
 
--- Pixel-perfect UI scale (ElvUI's Installer "Auto Scale"). Shared with the install wizard.
 function ns.SetAutoScale()
     if not E.PixelBestSize then return end
     local best = E:PixelBestSize()
@@ -94,7 +92,6 @@ function ns.SetAutoScale()
     return best
 end
 
--- Friend ActionBars presets: apply their diff, then refresh bars + movers.
 local function ApplyABPreset(name, apply)
     apply()
     local AB = E:GetModule("ActionBars", true)

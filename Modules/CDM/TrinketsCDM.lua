@@ -33,7 +33,6 @@ local function MigrateDB(db)
 end
 M.MigrateDB = MigrateDB
 
--- Usable vs passive
 local USABLE_CLASSIFICATION_BY_ITEMID = setmetatable({}, { __mode = "kv" })
 
 local function IsUsableTrinket(itemID)
@@ -53,7 +52,6 @@ local function IsBlacklisted(itemID)
 end
 M.IsBlacklisted = IsBlacklisted
 
--- Button construction
 local function StyleButton(btn)
     if btn._tuiStyled then return end
     btn._tuiStyled = true
@@ -75,7 +73,6 @@ local function UpdateButtonCooldown(btn)
     else
         btn.cooldown:Clear()
     end
-    -- Match CDM viewer
     if btn.icon and btn.icon.SetDesaturated then
         btn.icon:SetDesaturated(onCooldown or false)
     end
@@ -126,7 +123,6 @@ local function CreateButton(slot)
     return btn
 end
 
--- Slot resolution + attach decision
 local function ResolveAttachViewer()
     local db = GetDB()
     if not (db and db.enabled) then return nil end
@@ -274,7 +270,7 @@ local function ApplyBarLayout()
             btn:SetPoint("TOP", frame, "TOP", 0, -off)
         elseif growth == "UP" then
             btn:SetPoint("BOTTOM", frame, "BOTTOM", 0, off)
-        else -- RIGHT
+        else
             btn:SetPoint("LEFT", frame, "LEFT", off, 0)
         end
         btn:Show()
@@ -360,7 +356,6 @@ local function ApplyLayout()
     end
     M._groupButtons = nil
 
-    -- Trinket Bar
     if db and db.enabled and (db.mode or "EMBEDDED") == "BAR" then
         ApplyBarLayout()
         applying = false
@@ -372,7 +367,6 @@ local function ApplyLayout()
 
     local viewer, side, attachKey = ResolveAttachViewer()
 
-    -- If disabled or no viewer, gtfo.
     if not viewer then
         for _, slot in ipairs(SLOTS) do
             local btn = buttons[slot]
@@ -391,7 +385,7 @@ local function ApplyLayout()
     local includePassive = db.includePassive == true
     side = side or "RIGHT"
     local W, H, spacing = GetAttachIconSize(viewer)
-    local S = (spacing or 1) + 2   -- match CDMIcons' BACKDROP_INSET
+    local S = (spacing or 1) + 2
 
     local shown = {}
     for _, slot in ipairs(SLOTS) do
@@ -412,7 +406,7 @@ local function ApplyLayout()
             btn:SetFrameStrata(viewer:GetFrameStrata() or "MEDIUM")
             btn:SetFrameLevel((viewer:GetFrameLevel() or 1) + 5)
             btn:SetSize(W, H)
-            btn:Show()  -- CDMIcons positions it; we just make it visible + sized.
+            btn:Show()
             shown[#shown + 1] = btn
         else
             local btn = buttons[slot]
@@ -484,6 +478,19 @@ end
 function M.ResetEssentialSavedPoint() end
 function M.IsTrinketBlacklisted() return false end
 
+local hookedRefresh = false
+local function HookViewerRefresh()
+    if hookedRefresh then return end
+    for _, name in ipairs({ "EssentialCooldownViewer", "UtilityCooldownViewer" }) do
+        local v = _G[name]
+        if v and v.RefreshLayout and not v._tuiTrinketRefreshHooked then
+            v._tuiTrinketRefreshHooked = true
+            hooksecurefunc(v, "RefreshLayout", function() QueueLayout() end)
+            hookedRefresh = true
+        end
+    end
+end
+
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")
 ev:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
@@ -500,11 +507,10 @@ ev:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "PLAYER_REGEN_ENABLED" then
         QueueLayout()
     else
-        C_Timer.After(1, QueueLayout)
+        C_Timer.After(1, function() HookViewerRefresh(); QueueLayout() end)
     end
 end)
 
--- Init / reload
 function TUI:UpdateTrinketsCDM()
     QueueLayout()
 end

@@ -8,16 +8,14 @@ local M = ns.EssentialMover
 local MOVER_NAME = "TUI_EssentialMover"
 local DEFAULT_POINT = "CENTER"
 
-local mover           -- our draggable handle (Frame)
-local hookedViewer    = false
-local applying        = false
-local moverShown      = false  -- only visible while user toggles /emove-equivalent
+local mover
+local applying   = false
+local moverShown = false
 
 local function GetDB()
     return E.db.thingsUI and E.db.thingsUI.essentialMover or nil
 end
 
--- An explicit Growth Direction (CDM -> Essential) = the corner to hold stationary.
 local PIN_FOR_GROWTH = {
     CENTERED_H = nil,    CENTERED_V = nil,
     RIGHT      = "LEFT", LEFT       = "RIGHT",
@@ -34,9 +32,10 @@ local function RetargetPoint(targetPoint)
     if not (ev and db and db.point and targetPoint and db.point ~= targetPoint) then
         return
     end
-    local cx, cy = ev:GetCenter()
+    local ref = (ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(ev)) or ev
+    local cx, cy = ref:GetCenter()
     if not cx then return end
-    local w, h = ev:GetSize()
+    local w, h = ref:GetSize()
     if not w or w < 1 then return end
     local uw = _G.UIParent:GetRight() or _G.UIParent:GetWidth() or 1
     local uh = _G.UIParent:GetTop()   or _G.UIParent:GetHeight() or 1
@@ -54,7 +53,6 @@ local function RetargetPoint(targetPoint)
     db.y = math.floor(fy - ry + 0.5)
 end
 
--- Public entry: called from CDMIcons when growth direction changes.
 function M.OnGrowthDirectionChanged()
     local forced = GrowthDirectionPin()
     if forced then RetargetPoint(forced) end
@@ -88,30 +86,13 @@ end
 local function AnchorMover()
     local ev = _G.EssentialCooldownViewer
     if not (mover and ev) then return end
-    -- Expand the handle to also cover the trinkets when they sit on Essential.
-    local onEssential = (not ns.TrinketsCDM)
-        or (not ns.TrinketsCDM.GetTrinketAttachKey)
-        or ns.TrinketsCDM.GetTrinketAttachKey() == "essential"
-    local extX, sideX, extY, sideY = 0, "RIGHT", 0, "TOP"
-    if onEssential and ns.TrinketsCDM then
-        if ns.TrinketsCDM.GetTrinketExtent  then extX, sideX = ns.TrinketsCDM.GetTrinketExtent();  extX = extX or 0 end
-        if ns.TrinketsCDM.GetTrinketExtentY then extY, sideY = ns.TrinketsCDM.GetTrinketExtentY(); extY = extY or 0 end
-    end
-    local left   = (sideX == "LEFT")   and extX or 0
-    local right  = (sideX == "RIGHT")  and extX or 0
-    local top    = (sideY == "TOP")    and extY or 0
-    local bottom = (sideY == "BOTTOM") and extY or 0
+    local proxy = ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(ev)
+    if not proxy then return end
     mover:ClearAllPoints()
-    if (left + right + top + bottom) > 0 then
-        mover:SetPoint("TOPLEFT",     ev, "TOPLEFT",     -left,   top)
-        mover:SetPoint("BOTTOMRIGHT", ev, "BOTTOMRIGHT",  right, -bottom)
-    else
-        mover:SetAllPoints(ev)
-    end
+    mover:SetAllPoints(proxy)
 end
 M.AnchorMover = AnchorMover
 
--- Position Essential
 local function ApplyAnchor()
     if applying then return end
     local ev = _G.EssentialCooldownViewer
@@ -121,13 +102,17 @@ local function ApplyAnchor()
     local db = GetDB()
     if not (db and db.enabled) then return end
 
+    local proxy = ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(ev)
+    if not proxy then return end
+
     applying = true
     local point = db.point or DEFAULT_POINT
     local x = (db.x or 0) + GetTrinketCompX()
     local y = (db.y or 0) + GetTrinketCompY()
 
-    ev:ClearAllPoints()
-    ev:SetPoint(point, _G.UIParent, point, x, y)
+    proxy:SetScale((ev:GetEffectiveScale() or 1) / (_G.UIParent:GetEffectiveScale() or 1))
+    proxy:ClearAllPoints()
+    proxy:SetPoint(point, _G.UIParent, point, x, y)
 
     if mover then AnchorMover() end
 
@@ -144,7 +129,6 @@ local function ResolvePoint(centerX, centerY, width, height)
     local point
     local x, y
 
-    -- Vertical: top half vs bottom half.
     if centerY >= uh / 2 then
         point = "TOP"
         y = (centerY + height / 2) - uh
@@ -153,7 +137,6 @@ local function ResolvePoint(centerX, centerY, width, height)
         y = (centerY - height / 2)
     end
 
-    -- Horizontal: left third / right third / middle.
     if centerX >= (uw * 2 / 3) then
         point = point .. "RIGHT"
         x = (centerX + width / 2) - uw
@@ -167,7 +150,6 @@ local function ResolvePoint(centerX, centerY, width, height)
     return point, math.floor(x + 0.5), math.floor(y + 0.5)
 end
 
--- Drag-stop handler for our custom mover.
 local function OnDragStop(self)
     self:StopMovingOrSizing()
     local db = GetDB()
@@ -176,12 +158,9 @@ local function OnDragStop(self)
     local cx, cy = self:GetCenter()
     if not cx then return end
     local w, h = self:GetSize()
-    -- Always compute quadrant first to get screen-space x/y values
-    -- relative to UIParent corners.
     local point, x, y = ResolvePoint(cx, cy, w, h)
     local forced = GrowthDirectionPin()
     if forced and forced ~= point then
-        -- Translate (cx, cy, w, h) into offsets from `forced` corner.
         local uw = _G.UIParent:GetRight() or _G.UIParent:GetWidth() or 1
         local uh = _G.UIParent:GetTop()   or _G.UIParent:GetHeight() or 1
         local fx, fy = cx, cy
@@ -208,7 +187,6 @@ local function OnDragStop(self)
     ApplyAnchor()
 end
 
--- Build the mover.
 local function EnsureMover()
     if mover then return end
     local ev = _G.EssentialCooldownViewer
@@ -303,16 +281,17 @@ local function EnsureMover()
         end
     end)
 
-    -- Anchor over the viewer (expanded over trinkets); re-runs on every apply.
     AnchorMover()
-    mover:Hide()  -- shown via ElvUI's config-mode toggle
+    mover:Hide()
 
     hooksecurefunc(mover, "SetPoint", function(self)
         if applying then return end
         local db = GetDB()
         if not (db and db.enabled) then return end
+        if (self:GetWidth() or 0) < 4 then return end
         local p, relTo, _, x, y = self:GetPoint()
-        if not p or relTo == ev then return end
+        local proxy = ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(ev)
+        if not p or relTo == ev or (proxy and relTo == proxy) then return end
 
         local nx = math.floor((x or 0) + 0.5)
         local ny = math.floor((y or 0) + 0.5)
@@ -350,7 +329,6 @@ local function EnsureMover()
     end)
 end
 
--- Register with ElvUI's config-mode
 local function HookConfigMode()
     if not E.ConfigModeLayouts then return end
     if not ns.__tuiEssMoverConfigHooked then
@@ -368,41 +346,12 @@ local function HookConfigMode()
     end
 end
 
--- Catch the case where EditMode / Blizzard / TrinketsCDM moves Essential after we anchored it (avoid loops maybe probably).
-local function HookViewerSetPoint()
-    if hookedViewer then return end
-    local ev = _G.EssentialCooldownViewer
-    if not ev then return end
-    hookedViewer = true
-    hooksecurefunc(ev, "SetPoint", function(self)
-        if applying then return end
-        local db = GetDB()
-        if not (db and db.enabled) then return end
-        local p, relTo, _, x, y = self:GetPoint()
-        if not p then return end
-        -- Already where we want it -> Skip.
-        if p == (db.point or DEFAULT_POINT)
-           and (relTo == nil or relTo == _G.UIParent)
-           and math.floor((x or 0) + 0.5) == math.floor((db.x or 0) + GetTrinketCompX() + 0.5)
-           and math.floor((y or 0) + 0.5) == math.floor((db.y or 0) + GetTrinketCompY() + 0.5) then
-            return
-        end
-        if M._reapplyQueued then return end
-        M._reapplyQueued = true
-        C_Timer.After(0, function()
-            M._reapplyQueued = nil
-            ApplyAnchor()
-        end)
-    end)
-end
-
 function M.Apply()
     local db = GetDB()
     if not (db and db.enabled) then return end
     EnsureMover()
     HookConfigMode()
-    HookViewerSetPoint()
-    
+
     local forced = GrowthDirectionPin()
     if forced then RetargetPoint(forced) end
     ApplyAnchor()
@@ -425,6 +374,5 @@ local boot = CreateFrame("Frame")
 boot:RegisterEvent("PLAYER_ENTERING_WORLD")
 boot:SetScript("OnEvent", function(self)
     self:UnregisterEvent("PLAYER_ENTERING_WORLD")
-    -- Defer so EssentialCooldownViewer exists and EditModeLock has run.
     C_Timer.After(1.5, function() M.Apply() end)
 end)

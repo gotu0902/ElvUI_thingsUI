@@ -250,7 +250,6 @@ local function FindIconBySpell(spellID, forKey)
     return nil
 end
 
--- Texcoord crop for the icon art
 local function ComputeIconTexCoord(db)
     local z = db.zoom or 0.1
     local w = db.width or 36
@@ -259,8 +258,8 @@ local function ComputeIconTexCoord(db)
         local base = 1 - z * 2
         local xCrop, yCrop = base, base
         local ratio = w / h
-        if ratio > 1 then yCrop = xCrop / ratio          -- wider: trim top/bottom
-        elseif ratio < 1 then xCrop = yCrop * ratio end   -- taller: trim left/right
+        if ratio > 1 then yCrop = xCrop / ratio
+        elseif ratio < 1 then xCrop = yCrop * ratio end
         local left = (1 - xCrop) / 2
         local top  = (1 - yCrop) / 2
         return left, 1 - left, top, 1 - top
@@ -320,7 +319,6 @@ local function StyleYoinkedIcon(childFrame, db, gtext)
 
     if childFrame.Icon then
         childFrame.Icon:SetScale(1)
-        -- Stash the target crop
         local l, r, t, b = ComputeIconTexCoord(db)
         childFrame._tuiTexCoord = { l, r, t, b }
         childFrame.Icon:SetTexCoord(l, r, t, b)
@@ -329,7 +327,7 @@ local function StyleYoinkedIcon(childFrame, db, gtext)
         childFrame.Cooldown:SetDrawSwipe(db.showCooldown)
         childFrame.Cooldown:SetDrawEdge(false)
         if ns.CDMText and ns.CDMText.ReleaseFromElvUICooldown then
-            ns.CDMText.ReleaseFromElvUICooldown(childFrame.Cooldown)  -- stop ElvUI re-styling (flicker)
+            ns.CDMText.ReleaseFromElvUICooldown(childFrame.Cooldown)
         end
 
         local dFont, dSize, dOut, dColor, dPt, dX, dY, dShow
@@ -356,7 +354,6 @@ local function StyleYoinkedIcon(childFrame, db, gtext)
                 end
             end
         else
-            -- SetAlpha instead of Hide - these FontStrings live inside CDM's Cooldown.
             for i = 1, childFrame.Cooldown:GetNumRegions() do
                 local r = select(i, childFrame.Cooldown:GetRegions())
                 if r and r.GetObjectType and r:GetObjectType() == 'FontString' then r:SetAlpha(0) end
@@ -416,6 +413,7 @@ local function ReapplyHeldSize(child)
         UIParent.SetSize(child, tw, th)
     end
 end
+
 local function ReapplyHeldTex(child)
     local icon = child.Icon
     if not icon or icon._tuiTexing or not yoinkedBars[child] then return end
@@ -427,16 +425,15 @@ local function ReapplyHeldTex(child)
         icon._tuiTexing = nil
     end
 end
+
 local function ReapplyHeldDesat(child, desaturated)
-    -- Undo any Blizzard desaturation
     local icon = child.Icon
     if not desaturated or not icon or icon._tuiDesatGuard or not yoinkedBars[child] then return end
     icon._tuiDesatGuard = true
     icon:SetDesaturated(false)
     icon._tuiDesatGuard = nil
 end
--- Anti-flash: re-apply EVERYTHING the instant Blizzard re-shows the child (a shapeshift
--- refresh hides+shows it). All frame ops via secure refs.
+
 local function ReapplyHeldIcon(child)
     if not yoinkedBars[child] then return end
     local key = child._tuiSpecialIconKey
@@ -466,13 +463,10 @@ UpdateIconSlot = function(iconKey)
     local Pixel     = ns.Pixel
     local moverName = "TUI_SpecialIconMover_" .. iconKey
 
-    -- Group-owned: the group owns size + position, so skip our own anchor + mover.
     local group = db.customGroup and ns.CustomGroups and ns.CustomGroups.GroupByID(db.customGroup)
     if group and not group.enabled then group = nil end
-    -- Border: the icon's own (when enabled) wins; else a grouped icon inherits the group's.
     local borderDB = db
     if group and not db.showBorder then borderDB = group end
-    -- Cooldown text comes from the group unless the icon overrides it.
     local gtext = (group and not db.overrideGroupText) and group.text or nil
 
     local w, h
@@ -481,7 +475,6 @@ UpdateIconSlot = function(iconKey)
         w = iw
         h = (group.squareIcon ~= false) and iw or (group.iconHeight or iw)
         Pixel.SetSize(wrapper, w, h)
-        -- Park our own mover; the group places the wrapper (ApplyGroup SetPoints it).
         if E and E.CreatedMovers and E.CreatedMovers[moverName] and E.DisableMover then
             E:DisableMover(moverName)
         end
@@ -511,7 +504,6 @@ UpdateIconSlot = function(iconKey)
             E:EnableMover(moverName)
         end
 
-        -- Sync slider -> mover only when values actually differ.
         local mover = _G[moverName]
         if mover and anchorFrame then
             local point = db.anchorPoint or "CENTER"
@@ -535,7 +527,6 @@ UpdateIconSlot = function(iconKey)
         end
     end
 
-    -- Track the claimed child directly.
     local st = iconGroupState[iconKey]
     local held = st and st.childFrame
 
@@ -568,12 +559,12 @@ UpdateIconSlot = function(iconKey)
             realFrame._cdmOriginalW = realFrame:GetWidth()
             realFrame._cdmOriginalH = realFrame:GetHeight()
         end
-        -- Capture original strata/level
+
         if not realFrame._cdmOriginalStrata then
             realFrame._cdmOriginalStrata = realFrame:GetFrameStrata()
             realFrame._cdmOriginalLevel  = realFrame:GetFrameLevel()
         end
-        -- Size snap-back
+
         realFrame._tuiSpecialW, realFrame._tuiSpecialH = w, h
         if not realFrame._tuiHooksInstalled then
             realFrame._tuiHooksInstalled = true
@@ -611,7 +602,6 @@ UpdateIconSlot = function(iconKey)
 
         if newlyYoinked and C_Timer and C_Timer.After then
             if ns.CDMIcons and ns.CDMIcons.RefreshAll then C_Timer.After(0, ns.CDMIcons.RefreshAll) end
-            -- A group resizes the wrapper a frame later; the glow sig ignores size, so re-glow once it's sized.
             C_Timer.After(0.1, function()
                 local st = iconGroupState[iconKey]
                 if st and st.wrapper then st.wrapper._tuiGlowSig = nil end
@@ -627,12 +617,11 @@ UpdateIconSlot = function(iconKey)
         if db.desaturateWhenInactive then
             local spellInfo = SB.GetRawSpellList()[db.spellID]
             if spellInfo then wrapper.fallback:SetTexture(spellInfo.icon) end
-            wrapper.fallback:SetTexCoord(ComputeIconTexCoord(db))  -- same crop as the live icon
+            wrapper.fallback:SetTexCoord(ComputeIconTexCoord(db))
             wrapper.fallback:SetDesaturated(true)
             wrapper.fallback:Show()
             wrapper.fallbackBorder:Show()
             ApplyIconBorder(wrapper, borderDB)
-            -- Glow is an "active" indicator - never glow the desaturated fallback.
             StopAllGlows(wrapper)
             if wrapper.tuiBorder then StopAllGlows(wrapper.tuiBorder) end
             wrapper._tuiGlowSig = nil

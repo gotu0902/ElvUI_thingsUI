@@ -28,7 +28,6 @@ local function PotionSorting()
     return s
 end
 
--- Colours match the module sidebar (Options.lua Colorize): CDM gold, Custom Groups pink.
 local CDM_HEX, CG_HEX = "FFD27F", "F20553"
 local function DestinationValues()
     local v = {
@@ -43,7 +42,7 @@ local function DestinationValues()
     end
     return v
 end
--- CDM first, then Custom Groups, then Standalone.
+
 local function DestinationSorting()
     local s = { "essential", "utility" }
     local groups = ns.CustomGroups and ns.CustomGroups.GetGroups and ns.CustomGroups.GetGroups() or {}
@@ -55,8 +54,6 @@ local function DestinationSorting()
     return s
 end
 
--- The destination's options page as (label, pathKeys) for an OptionLink. Custom Group
--- tabs are keyed group<index> (CustomGroupsOptions rebuildGroupEntries).
 local function DestLink(t)
     if not t.destination then return end
     if t.destination == "essential" then return "Open: CDM Essential", { "thingsUI", "modulesTab", "cdm", "essentialTab" } end
@@ -96,7 +93,6 @@ local function RemoveByID(id)
     end
 end
 
--- One tab's worth of settings for a timer.
 local function TimerTab(t, id, order, Rebuild)
     local T = ns.Timers
     local args = {
@@ -113,13 +109,13 @@ local function TimerTab(t, id, order, Rebuild)
             set = function(_, v)
                 t.destination = v
                 if type(v) == "number" and not t.groupScope then t.groupScope = "global" end
-                T.Update(); Rebuild(); NotifyChange()  -- Rebuild refreshes the link + scope picker
+                T.Update(); Rebuild(); NotifyChange()
             end,
         },
         styleHeader = { order = 10, type = "header", name = "Behaviour" },
         showCDTimer = {
             order = 11, type = "toggle", name = "Show Buff Swipe", width = 1.2,
-            hidden = function() return t.kind == "lust" end,  -- lust always shows the buff
+            hidden = function() return t.kind == "lust" end, 
             get = function() return t.showCDTimer end,
             set = function(_, v) t.showCDTimer = v; T.Update() end,
         },
@@ -131,12 +127,11 @@ local function TimerTab(t, id, order, Rebuild)
         },
         showIdle = {
             order = 12, type = "toggle", name = "Show When Idle", width = 1.0,
-            hidden = function() return t.kind == "lust" end,  -- lust is buff-only (never idle)
+            hidden = function() return t.kind == "lust" end,
             get = function() return t.showIdle end,
             set = function(_, v) t.showIdle = v; T.Update() end,
         },
-        -- Glow look is per-timer, independent of destination (rides the icon). Same set
-        -- of controls as Special Icons (Type/Color/Thickness/Length/Particles/Speed/X/Y).
+
         glowGroup = {
             order = 13, type = "group", inline = true, name = "Glow",
             args = {
@@ -149,7 +144,6 @@ local function TimerTab(t, id, order, Rebuild)
                 glowWhen = {
                     order = 2, type = "select", name = "Glow When", width = 1.2,
                     hidden = function() return t.kind == "lust" or not t.glowReadyInCombat end,
-                    -- "Ready in Combat" needs Show When Idle (else the icon isn't up to glow).
                     values = function()
                         local v = { active = "While Active" }
                         if t.showIdle then v.ready = "Ready in Combat" end
@@ -218,7 +212,6 @@ local function TimerTab(t, id, order, Rebuild)
             },
         },
     }
-    -- Built-ins (Hero/Lust) can't be removed.
     if not t.builtin then
         args.remove = {
             order = 3, type = "execute", name = "Remove", width = 0.8,
@@ -226,7 +219,7 @@ local function TimerTab(t, id, order, Rebuild)
             func = function() RemoveByID(id); Rebuild(); NotifyChange() end,
         }
     end
-    -- Timer -> Custom Group: which scope of the group shows it (Global / this Class / this Spec).
+
     if type(t.destination) == "number" and GroupOf(t.destination) then
         args.groupScope = {
             order = 2.5, type = "select", name = "Show On", width = 1.2,
@@ -245,8 +238,7 @@ local function TimerTab(t, id, order, Rebuild)
             end,
         }
     end
-    -- Clickable link to the destination's config page (ns.OptionLink, our underlined
-    -- text-link widget). Refreshes when the destination dropdown changes (set rebuilds).
+
     local lbl, path = DestLink(t)
     if lbl and ns.OptionLink then
         args.gotoDest = ns.OptionLink(4, lbl, unpack(path))
@@ -266,8 +258,7 @@ local function TimerTab(t, id, order, Rebuild)
             set = function(_, v) t.duration = (v > 0) and v or nil; T.Update() end,
         }
     end
-    -- Standalone owns its own size / position (/emove) / cooldown text - CDM & Custom
-    -- Group hosts inherit those from the host, so these only show for Standalone.
+
     if t.destination == "standalone" then
         local function txt() t.text = t.text or { showCooldown = true }; return t.text end
         args.saHeader = { order = 30, type = "header", name = "Standalone" }
@@ -346,7 +337,7 @@ local function TimerTab(t, id, order, Rebuild)
             get = function() local c = (t.text and t.text.cooldownColor) or {}; return c.r or 1, c.g or 1, c.b or 1 end,
             set = function(_, r, g, b) txt().cooldownColor = { r = r, g = g, b = b }; T.Update() end,
         }
-        -- Item count (Custom Groups draws its own; standalone needs its own toggle + text).
+
         if t.kind == "item" then
             local function cntShown() return t.text and t.text.showCount end
             args.saCountHeader = { order = 50, type = "header", name = "Item Count" }
@@ -402,7 +393,7 @@ local function TimerTab(t, id, order, Rebuild)
         end
     end
     return {
-        order = order, type = "group",  -- NOT inline -> rendered as a tab
+        order = order, type = "group",
         name = function() return TimerLabel(t) end,
         args = args,
     }
@@ -410,7 +401,7 @@ end
 
 function TUI:TimersOptions()
     local T = ns.Timers
-    local Rebuild  -- fwd
+    local Rebuild
 
     local opts = {
         order = 9,
@@ -445,13 +436,12 @@ function TUI:TimersOptions()
             if type(k) == "string" and k:match("^tmr") then opts.args[k] = nil end
         end
         for i, t in ipairs(T and T.GetTimers() or {}) do
-            local order = (t.kind == "lust") and 1 or (10 + i)  -- Hero/Lust is always tab #1
+            local order = (t.kind == "lust") and 1 or (10 + i)
             opts.args["tmr" .. t.id] = TimerTab(t, t.id, order, Rebuild)
         end
     end
 
     Rebuild()
-    -- Let M.Update() (e.g. the Custom Groups item "Timer" toggle) refresh the tabs.
     if T then T._rebuildOptions = Rebuild end
     return opts
 end

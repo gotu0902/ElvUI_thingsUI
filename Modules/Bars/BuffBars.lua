@@ -61,7 +61,7 @@ local function ScanAndHookBuffChildren()
 
         local function onViewerMoved()
             if anchoringContainer then return end
-            -- Can't move the protected viewer in combat; its pre-combat anchor holds.
+
             if InCombatLockdown() then return end
             local db = E.db.thingsUI.buffBars
             if not (db and db.anchorEnabled) then return end
@@ -140,7 +140,7 @@ local function SkinBuffBar(childFrame)
             icon.tuiBackdrop:Show()
             icon.tuiBackdrop:SetFrameLevel(icon:GetFrameLevel() - 1)
         else
-            -- SetAlpha instead of Hide - icon is a CDM sub-frame.
+
             icon:SetAlpha(0)
         end
     end
@@ -238,7 +238,7 @@ local function LayoutBuffBar(childFrame)
             icon.Applications:ClearAllPoints()
             icon.Applications:SetPoint(stackPoint, bar, stackPoint, xOff, db.stackYOffset or 0)
         else
-            -- Make sure Applications is back on icon if user flipped from BAR.
+
             if icon.Applications:GetParent() ~= icon then
                 icon.Applications:SetParent(icon)
                 icon.Applications:SetWidth(0)
@@ -315,7 +315,6 @@ local function ProcessUpdate()
         end
     end
 
-    -- Anchor the container every pass.
     AnchorBuffBarContainer()
     if #sortedBars == 0 then return end
     tsort(sortedBars, function(a, b)
@@ -338,7 +337,7 @@ end
 
 local lastProcessTime = 0
 local throttledPending = false
-local THROTTLE_INTERVAL = 0.1  -- 10Hz cap on UNIT_AURA-driven updates
+local THROTTLE_INTERVAL = 0.1
 
 local function OnNextFrame(self)
     self:SetScript("OnUpdate", nil)
@@ -354,8 +353,6 @@ local function MarkDirty()
     updateFrame:SetScript("OnUpdate", OnNextFrame)
 end
 
--- Throttled variant for high-frequency events (UNIT_AURA in raids).
--- Coalesces multiple events into at most one ProcessUpdate per THROTTLE_INTERVAL.
 local function MarkDirtyThrottled()
     if not isEnabled then return end
     if isDirty or throttledPending then return end

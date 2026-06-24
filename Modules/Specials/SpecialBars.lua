@@ -50,7 +50,6 @@ local function EnsureMover(wrapper, barKey, displayName)
     _moverCreated[barKey] = true
 end
 
--- Disable + hide wrapper.
 local function HideBarMover(barKey)
     local wrapper = _G["TUI_SpecialBar_" .. barKey]
     if ns.MoverSync and ns.MoverSync.RemoveManaged then
@@ -133,7 +132,6 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
         icon:SetPoint("LEFT", childFrame, "LEFT", 0, 0)
         barOffset = effectiveHeight + (db.iconSpacing or 1)
     elseif icon then
-        -- SetAlpha instead of Hide - icon is a CDM sub-frame.
         icon:SetAlpha(0)
     end
 
@@ -159,7 +157,6 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
     end
 
     local font = LSM:Fetch("font", db.font)
-    -- Save Name/Duration alpha once (before we touch it) so ReturnFrame can un-hide them.
     if not childFrame._tuiBarTextSaved then
         childFrame._tuiBarTextSaved = {
             nameAlpha = bar.Name and bar.Name:GetAlpha() or 1,
@@ -258,10 +255,9 @@ UpdateBarSlot = function(barKey)
     local anchorName  = (db.anchorMode ~= "CUSTOM") and db.anchorMode or db.anchorFrame
     local anchorFrame = SB.ResolveAnchorTarget(anchorName)
 
-    -- Width handling
-    local cdmInset = (anchorFrame == _G.EssentialCooldownViewer
-        or anchorFrame == _G.UtilityCooldownViewer
-        or anchorFrame == _G.BuffIconCooldownViewer) and 2 or 0
+    local cdmInset = (anchorName == "EssentialCooldownViewer"
+        or anchorName == "UtilityCooldownViewer"
+        or anchorName == "BuffIconCooldownViewer") and 2 or 0
     local effectiveWidth
     if managedByBS then
         effectiveWidth = wrapper:GetWidth()
@@ -288,7 +284,10 @@ UpdateBarSlot = function(barKey)
 
             local bs = ns.BarSetup
             local setup = bs and bs.GetActiveSetup and bs.GetActiveSetup()
-            local stackAnchor = setup and _G[setup.anchorFrame or "EssentialCooldownViewer"]
+            local anchorName = setup and (setup.anchorFrame or "EssentialCooldownViewer")
+            local stackAnchor = anchorName
+                and ((ns.CDMIcons and ns.CDMIcons.ProxyForName and ns.CDMIcons.ProxyForName(anchorName))
+                     or _G[anchorName])
             if stackAnchor then
                 wrapper:SetPoint("BOTTOM", stackAnchor, "TOP", 0, 0)
             else
@@ -304,7 +303,6 @@ UpdateBarSlot = function(barKey)
         if anchorFrame and anchorFrame ~= UIParent then
             wrapper:SetPoint(db.anchorPoint or "CENTER", anchorFrame, db.anchorRelativePoint or "CENTER", db.anchorXOffset or 0, db.anchorYOffset or 0)
         else
-            -- Ride the mover (live drag).
             local mv = _G[moverName]
             if mv then
                 wrapper:SetPoint("CENTER", mv, "CENTER", 0, 0)
@@ -390,7 +388,7 @@ UpdateBarSlot = function(barKey)
         state.w          = nil
         state.h          = nil
 
-        if db.showBackdrop or managedByBS then   -- managed = reserve slot
+        if db.showBackdrop or managedByBS then
             local bc = db.backdropColor
             wrapper.backdrop:SetBackdropColor(
                 bc and bc.r or 0.1, bc and bc.g or 0.1, bc and bc.b or 0.1,

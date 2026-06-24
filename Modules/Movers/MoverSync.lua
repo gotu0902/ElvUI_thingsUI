@@ -87,7 +87,7 @@ local TARGETS = {
             local CB = ns.ChargeBar
             if not CB then return false end
             if CB.IsActiveForCurrentSpec and CB.IsActiveForCurrentSpec() then
-                return false -- bar is rendering -> keep 
+                return false
             end
 
             local mode = CB.GetConfiguredMode and CB.GetConfiguredMode()
@@ -113,7 +113,10 @@ local TARGETS = {
     },
     {
         moverName = "TUI_UtilityMover",
-        frame     = function() return _G.UtilityCooldownViewer end,
+        frame     = function()
+            local v = _G.UtilityCooldownViewer
+            return (v and ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(v)) or v
+        end,
         baseLabel = "Utility Cooldowns",
         alwaysSync = true,
         tag       = function()
@@ -130,7 +133,6 @@ local TARGETS = {
             return not (u and u.anchorEnabled)
         end,
     },
-    -- Bar Setup re-positions the holder when castbar is in the stack - keep the mover in sync.
     {
         moverName = "ElvUF_PlayerCastbarMover",
         frame     = function()
@@ -148,7 +150,6 @@ local TARGETS = {
             end
         end,
     },
-    -- ClassbarMode owns whether the bar is in thestack per spec via IsNHTForCurrentSpec.
     {
         moverName = "ClassBarMover",
         frame     = function()
@@ -163,7 +164,6 @@ local TARGETS = {
                 return "|cFF888888(Bar Setup)|r"
             end
         end,
-        -- ClassBarMover is ElvUI's mover for the DETACHED classbar holder.
         hide = function()
             local bs = ns.BarSetup and ns.BarSetup.GetActiveSetup and ns.BarSetup.GetActiveSetup()
             local b  = bs and bs.bars and bs.bars.classbar
@@ -172,7 +172,6 @@ local TARGETS = {
             end
         end,
     },
-    -- ElvUI's Player PowerBar (detached) mover.
     {
         moverName = "PlayerPowerBarMover",
         frame     = function()
@@ -189,7 +188,6 @@ local TARGETS = {
                 return "|cFF888888(Bar Setup)|r"
             end
         end,
-        -- PowerBar mover is for the DETACHED power bar.
         hide = function()
             local bs = ns.BarSetup and ns.BarSetup.GetActiveSetup and ns.BarSetup.GetActiveSetup()
             local b  = bs and bs.bars and bs.bars.power
@@ -200,7 +198,6 @@ local TARGETS = {
     },
 }
 
--- Move a mover to wherever its live frame currently sits, relabel it.
 local function SyncMoverToFrame(mover, frame)
     if not (mover and frame and frame.GetLeft) then return end
     local fl, fb = frame:GetLeft(), frame:GetBottom()
@@ -226,7 +223,6 @@ local function SyncMoverToFrame(mover, frame)
     mover:SetPoint("BOTTOMLEFT", anchorParent, "BOTTOMLEFT", fl * k, fb * k)
 end
 
--- Lock/unlock a mover's drag handler.
 local function SetMoverLock(mover, locked)
     if not mover then return end
     if not mover._tuiLockHooked then
@@ -240,7 +236,6 @@ local function SetMoverLock(mover, locked)
     mover._tuiLocked = locked and true or nil
 end
 
--- Compact display names so the mover label fits.
 local SHORT_ANCHOR = {
     ElvUF_Player                = "Player",
     ElvUF_Player_CastBar        = "Player Cast",
@@ -260,15 +255,12 @@ function ShortAnchor(name)
     return SHORT_ANCHOR[name] or name
 end
 
--- Register thingsUI as an ElvUI Config Mode category so /emove's dropdown can filter to just our movers. 
 local function EnsureConfigMode()
     if not E then return end
-    -- Official ElvUI API (idempotent: it no-ops if already registered).
     if E.ConfigMode_AddGroup then
         E:ConfigMode_AddGroup("THINGSUI", "thingsUI")
         return
     end
-    -- Fallback for older ElvUI without the public API.
     if not E.ConfigModeLayouts then return end
     for _, v in ipairs(E.ConfigModeLayouts) do
         if v == "THINGSUI" then return end
@@ -284,10 +276,10 @@ local _moverSession = false
 function M.ToggleMover()
     if not (E and E.ToggleMoveMode) or InCombatLockdown() then return end
     if E.ConfigurationMode then
-        E:ToggleMoveMode()            -- lock (the hook below reopens thingsUI config)
+        E:ToggleMoveMode()
     else
         _moverSession = true
-        E:ToggleMoveMode("THINGSUI")  -- unlock, filtered to thingsUI
+        E:ToggleMoveMode("THINGSUI")
     end
 end
 
@@ -309,14 +301,13 @@ function M.RegisterNudge(moverName, fn)
 end
 if E and E.NudgeMover and not M._nudgeHook then
     M._nudgeHook = true
-    hooksecurefunc(E, "NudgeMover", function()
+    hooksecurefunc(E, "NudgeMover", function(_, x, y)
         local mover = E.MoverNudgeFrame and E.MoverNudgeFrame.child
         local fn = mover and mover.name and nudgeHandlers[mover.name]
-        if fn then fn(mover) end
+        if fn then fn(mover, x, y) end
     end)
 end
 
--- Shared mover lifecycle.
 local _managedDragging = {}
 local _managedCreated  = {}
 
@@ -324,7 +315,6 @@ function M.IsDragging(moverName)
     return _managedDragging[moverName] == true
 end
 
--- opts: configString/shouldDisable/onSave/ignoreSizeChanged
 function M.CreateManaged(frame, moverName, label, opts)
     if not (E and E.CreateMover and frame and moverName) then return _G[moverName] end
     if _managedCreated[moverName] then return _G[moverName] end
@@ -352,13 +342,15 @@ function M.CreateManaged(frame, moverName, label, opts)
         mv._tuiDragHooked = true
         mv:HookScript("OnDragStart", function() _managedDragging[moverName] = true end)
     end
-    M.RegisterNudge(moverName, save)
+    -- Anchored movers nudge their anchor offset (onNudge); others save absolute (save).
+    M.RegisterNudge(moverName, function(self, nx, ny)
+        if opts.onNudge then opts.onNudge(nx or 0, ny or 0) else save(self) end
+    end)
 
     _managedCreated[moverName] = true
     return mv
 end
 
--- Disable + hide on delete.
 function M.RemoveManaged(moverName, frame)
     if E and E.CreatedMovers and E.CreatedMovers[moverName] and E.DisableMover then
         E:DisableMover(moverName)
@@ -367,7 +359,6 @@ function M.RemoveManaged(moverName, frame)
     _managedDragging[moverName] = nil
 end
 
--- Live enable/disable.
 function M.SetManagedEnabled(moverName, enabled)
     if not (moverName and E) then return end
     if enabled then
@@ -420,7 +411,6 @@ function M.SyncAll()
         end
     end
 
-    -- Special Bars / Icons have their own movers, labels + lock here.
     local SB = ns.SpecialBars
     local barCount  = (SB and SB.GetBarCount  and SB.GetBarCount())  or 0
     local iconCount = (SB and SB.GetIconCount and SB.GetIconCount()) or 0
@@ -481,7 +471,6 @@ function M.SyncAll()
         end
     end
 
-    -- thingsUI Custom Groups: one mover per group (TUI_CustomGroupMover<id>).
     local CGm = ns.CustomGroups
     local cgGroups = (CGm and CGm.GetGroups and CGm.GetGroups()) or {}
     for _, g in ipairs(cgGroups) do
@@ -507,7 +496,6 @@ function M.SyncAll()
         end
     end
 
-    -- A profile switch leaves movers for groups gone from the new profile; disable the orphans.
     if E.CreatedMovers then
         local live, orphans = {}, {}
         for _, g in ipairs(cgGroups) do live[tostring(g.id)] = true end
@@ -518,7 +506,6 @@ function M.SyncAll()
         for _, o in ipairs(orphans) do M.RemoveManaged(o[1], _G["TUI_CustomGroup" .. o[2]]) end
     end
 
-    -- thingsUI Custom Timers: one mover per STANDALONE timer (TUI_TimerStandaloneMover<id>).
     local Tm = ns.Timers
     local timers = (Tm and Tm.GetTimers and Tm.GetTimers()) or {}
     for _, t in ipairs(timers) do
@@ -544,7 +531,6 @@ function M.SyncAll()
         end
     end
 
-    -- Color mover borders.
     ColorMover("TUI_EssentialMover")
     ColorMover("TUI_UtilityMover")
     ColorMover("TUI_TrinketBarMover")

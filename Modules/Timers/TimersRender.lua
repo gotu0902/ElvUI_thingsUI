@@ -224,7 +224,7 @@ function R.Update(btn, timer)
         if ItemCooldownChanged(btn.cooldown, true, bStart, bDur) then btn.cooldown:SetCooldown(bStart, bDur) end
         SetDesat(btn.icon, 0)
     elseif timer.trackCooldown == false then
-        -- Buff-only timer: no phase-2 cooldown (the show gate hides it once the buff ends).
+
         if ItemCooldownChanged(btn.cooldown, false) then btn.cooldown:Clear() end
         SetDesat(btn.icon, 0)
     elseif timer.kind == "item" and timer.itemID then

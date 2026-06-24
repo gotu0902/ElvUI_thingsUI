@@ -15,6 +15,11 @@ local LOCKED_VIEWERS = {
 local installed = false
 local noticeShown = false
 
+local function IsLockEnabled()
+    local db = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    return (db == nil) or (db.editModeLock ~= false)
+end
+
 local function ShowNotice()
     if noticeShown then return end
     noticeShown = true
@@ -36,6 +41,14 @@ local function LockViewer(viewer)
     if selection then
         selection:SetScript("OnDragStart", nil)
         selection:SetScript("OnDragStop", nil)
+
+        if not selection._tuiHidden then
+            selection._tuiHidden = true
+            hooksecurefunc(selection, "Show", function(s)
+                if IsLockEnabled() then s:Hide() end
+            end)
+        end
+        if IsLockEnabled() then selection:Hide() end
     end
 end
 
@@ -78,9 +91,7 @@ function M.Apply()
 end
 
 function TUI:UpdateEditModeLock()
-    local db = E.db.thingsUI and E.db.thingsUI.cdmIcons
-    local enabled = (db == nil) or (db.editModeLock ~= false)
-    if not enabled then return end
+    if not IsLockEnabled() then return end
     M.Apply()
 end
 

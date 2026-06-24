@@ -24,11 +24,9 @@ local function GetDB()
     return E.db.thingsUI and E.db.thingsUI.customGroups
 end
 
--- Template moved to Defaults/CustomGroups.lua (ns.Defaults.Group).
 local DefaultGroup = ns.Defaults.Group
 M.DefaultGroup = DefaultGroup
 
--- Move the old single-group flat config (pre-multi) into a group table.
 local OLD_FLAT_KEYS = {
     "enabled", "iconSize", "spacing", "growth", "columns",
     "hideZeroCharges", "qualityBorder",
@@ -99,7 +97,6 @@ function M.GetScopeRoot(group, scope, key, create)
     return root
 end
 
--- Cooldown helpers (independent tracking)
 local function SetCooldown(cd, durationObject)
     if not (cd and durationObject) then return end
     if cd.SetCooldownFromDurationObject then
@@ -270,7 +267,6 @@ local function ApplyQualityAtlas(btn, id)
     q:Show()
 end
 
--- Reusable 3-frame stroke border (main edge + optional black inner/outer stroke).
 local _bMain  = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
 local _bInner = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
 local _bOuter = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
@@ -303,7 +299,6 @@ local function DrawStroke3(bd, inner, outer, anchor, size, inset, bc, stroke)
     end
 end
 
--- Fleeting border
 local function ApplyFleetingBorder(btn, id)
     local bd, inner, outer = btn.FleetingBorder, btn.FleetingBorderInner, btn.FleetingBorderOuter
     if not bd then return end
@@ -316,7 +311,6 @@ local function ApplyFleetingBorder(btn, id)
         g.fleetingBorderColor or { r = 0.2, g = 0.8, b = 1, a = 1 }, g.fleetingBorderStroke)
 end
 
--- Group-wide config border
 local function ApplyGroupBorder(btn)
     local bd, inner, outer = btn.tuiBorder, btn.tuiBorderInner, btn.tuiBorderOuter
     if not bd then return end
@@ -329,7 +323,6 @@ local function ApplyGroupBorder(btn)
         g.borderColor or { r = 0, g = 0, b = 0, a = 1 }, g.borderStroke)
 end
 
--- Healthstones
 local USES_ITEMS = { [5512] = true, [224464] = true }  -- Healthstone / Demonic (Gluttony) Healthstone
 
 local function ItemCooldownChanged(cd, active, start, dur)
@@ -338,11 +331,11 @@ local function ItemCooldownChanged(cd, active, start, dur)
     oldStart, oldDur = (tonumber(oldStart) or 0), (tonumber(oldDur) or 0)
     if active then
         if oldStart <= 0 or oldDur <= 0 then return true end
-        local oldEnd = (oldStart + oldDur) / 1000  -- GetCooldownTimes is ms, SetCooldown is s
+        local oldEnd = (oldStart + oldDur) / 1000
         local newEnd = (start or 0) + (dur or 0)
         return math.abs(oldEnd - newEnd) > 0.01
     end
-    return oldStart > 0 and oldDur > 0  -- had a cooldown, now cleared -> needs Clear()
+    return oldStart > 0 and oldDur > 0
 end
 
 local function UpdateItemIcon(btn, force)
@@ -392,13 +385,12 @@ local function UpdateItemIcon(btn, force)
     if ns.TimersRender and ns.TimersRender.UpdateGlow then ns.TimersRender.UpdateGlow(btn, timer) end
 end
 
--- Did the timer fuck off or not?
 local function TimerActive(timer, now)
     if timer.kind == "lust" then
         return (ns.Timers.GetLustState(now)) ~= nil
     end
     if ns.Timers.GetActiveBuff(timer, now) then return true end
-    if timer.trackCooldown == false then return false end  -- buff-only timer: ignore the CD phase
+    if timer.trackCooldown == false then return false end
     if timer.kind == "item" and timer.itemID then
         local _, dur = C_Item.GetItemCooldown(timer.itemID)
         return (dur or 0) > 0
@@ -426,7 +418,7 @@ local function UpdateTimerIcon(btn)
     end
     local now = GetTime()
     if timer.kind == "lust" then
-        -- Buff-only: show the ~40s haste window (the lockout lives on ElvUI's debuff tracker).
+
         local phase, start, dur = ns.Timers.GetLustState(now)
         if phase == "buff" then
             if ItemCooldownChanged(btn.cooldown, true, start, dur) then btn.cooldown:SetCooldown(start, dur) end
@@ -467,13 +459,12 @@ local function UpdateTimerIcon(btn)
 end
 
 local function UpdateIcon(btn)
-    if btn._type == "item" then UpdateItemIcon(btn, true)  -- layout: force static restyle
+    if btn._type == "item" then UpdateItemIcon(btn, true)
     elseif btn._type == "timer" then UpdateTimerIcon(btn)
     else UpdateSpellIcon(btn) end
     ApplyGroupBorder(btn)
 end
 
--- Icon construction (pooled per group)
 local function StyleIcon(btn)
     local S = E.GetModule and E:GetModule("Skins", true)
     if S and S.HandleIcon and btn.icon then S:HandleIcon(btn.icon, true) end
@@ -602,7 +593,6 @@ local function HideGroupIcons(gs)
     if gs.timerIcons then for _, b in pairs(gs.timerIcons) do b:Hide() end end
 end
 
--- Racials
 local function PlayerHasRacial(id)
     if IsPlayerSpell(id) then return true end
     if id == 202719 then local _, race = UnitRace("player"); return race == "BloodElf" end
@@ -616,7 +606,7 @@ local function TimerInScope(t, scope)
     if scope == "global" then return s == "global" end
     if scope == "spec"   then return type(s) == "number" and s == GetCurrentSpecID() end
     local _, cf = UnitClass("player")
-    return s == cf  -- class
+    return s == cf
 end
 
 local function CollectScopeInto(group, scope, root, shown)
@@ -676,7 +666,7 @@ local function CollectScopeInto(group, scope, root, shown)
             end
         end
     end
-    -- Special Icons assigned to THIS group (spec scope - that's where they live).
+
     if scope == "spec" and ns.SpecialBars then
         local SB = ns.SpecialBars
         for i = 1, (SB.GetIconCount and SB.GetIconCount() or 0) do
@@ -705,7 +695,6 @@ local function CollectEntries(group, shown)
     end
 end
 
--- The Custom Group the Trinkets module folds into (Trinkets mode == GROUP).
 function M.GetTrinketOwnerGroup()
     local db = E.db.thingsUI and E.db.thingsUI.trinketsCDM
     if not (db and db.enabled and db.mode == "GROUP" and db.group) then return nil end
@@ -732,14 +721,13 @@ local function ApplyGroup(group)
     HideGroupIcons(gs)
     CollectEntries(group, gs.shown)
 
-    -- Resize grouped Special Icon wrappers + held children to the cell up front.
     if ns.SpecialBars and ns.SpecialBars.SyncGroupedIconSizes then
         ns.SpecialBars.SyncGroupedIconSizes(group.id, iw, ih)
     end
     local btns = {}
     for _, e in ipairs(gs.shown) do
         if e.kind == "specialicon" then
-            -- A Special Icon renders via its yoinked wrapper (folded in at this order slot).
+
             local w = ns.SpecialBars and ns.SpecialBars.GetIconWrapper and ns.SpecialBars.GetIconWrapper(e.id)
             if w and w:IsShown() then
                 ns.Pixel.SetSize(w, iw, ih)
@@ -754,7 +742,7 @@ local function ApplyGroup(group)
             if btn.count then
                 local t = group.text or {}
                 local font = (LSM and LSM:Fetch("font", t.countFont or "Expressway")) or STANDARD_TEXT_FONT
-                -- ElvUI's setter (same as CDM text) so Monochrome + outline combos work.
+
                 E:SetFont(btn.count, font, t.countFontSize or 12, t.countFontOutline or "OUTLINE")
                 local cc = t.countColor or {}
                 btn.count:SetTextColor(cc.r or 1, cc.g or 1, cc.b or 1)
@@ -767,7 +755,6 @@ local function ApplyGroup(group)
         end
     end
 
-    -- Inline equipped trinkets if the Trinkets module folds into THIS group.
     if M.GetTrinketOwnerGroup() == group and ns.TrinketsCDM and ns.TrinketsCDM.GetGroupButtons then
         local tb = ns.TrinketsCDM.GetGroupButtons()
         if tb then
@@ -798,7 +785,7 @@ local function ApplyGroup(group)
         alongSign = (growth == "UP") and 1 or -1
         if wrapDir == "LEFT" then pt, crossSign = v .. "RIGHT", -1 else pt, crossSign = v .. "LEFT", 1 end
     end
-    -- Icon dimension along the flow axis vs across it (so non-square icons grid cleanly).
+
     local alongDim = horizontal and iw or ih
     local crossDim = horizontal and ih or iw
     for i, btn in ipairs(btns) do
@@ -916,7 +903,6 @@ if ns.TimersRender and ns.TimersRender.RegisterGlowHost then
     end)
 end
 
--- Surgical refreshers
 local function RefreshSpell(spellID)
     for _, gs in pairs(groupState) do
         for _, b in pairs(gs.spellIcons) do
@@ -935,7 +921,6 @@ local function RefreshItemsAll()
     end
 end
 
--- Throttle surgical refreshers
 local _pendingCD = {}
 local _cdThrottled = false
 local function _cdThrottleTick()
@@ -959,7 +944,6 @@ local function RefreshSpellThrottled(spellID)
     RefreshSpell(spellID)
 end
 
--- Options API (all operate on a specific group)
 local function NextIndex(root)
     local mx = 0
     for _, d in pairs(root.spells or {}) do if (d.layoutIndex or 0) > mx then mx = d.layoutIndex end end
@@ -1072,7 +1056,6 @@ function M.MoveScope(group, scope, dir)
     QueueLayout()
 end
 
--- Group management (Bar-Setup style).
 function M.AddGroup()
     local db = EnsureDB(); if not db then return end
     local g = DefaultGroup(db.nextID, "Group " .. db.nextID)
@@ -1086,7 +1069,7 @@ function M.RemoveGroup(index)
     local db = EnsureDB(); if not db then return end
     local g = db.groups[index]
     if not g then return end
-    -- release its runtime state
+
     local gs = groupState[g.id]
     if gs then
         HideGroupIcons(gs)

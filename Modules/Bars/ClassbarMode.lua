@@ -33,11 +33,10 @@ function CM.IsActive()
     return isEnabled and GetSpecEntry() ~= nil
 end
 
--- True when the user has enabled Classbar Mode for the CURRENT spec.
 function CM.IsEnabledForCurrentSpec()
     return GetSpecEntry() ~= nil
 end
--- Back-compat alias - old Bar Setup ShouldInclude path called this name.
+
 function CM.IsNHTForCurrentSpec()
     return CM.IsEnabledForCurrentSpec()
 end
@@ -54,6 +53,7 @@ end
 
 local function GetAnchorTarget(slot)
     local essential = _G["EssentialCooldownViewer"]
+    essential = (essential and ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(essential)) or essential
     if slot == "ABOVE_CHARGEBAR" then
         local cb = ns.ChargeBar and ns.ChargeBar.GetActiveAnchorFrame and ns.ChargeBar.GetActiveAnchorFrame()
         if cb then return cb, "TOP" end
@@ -64,10 +64,10 @@ local function GetAnchorTarget(slot)
 end
 
 local function GetClusterBounds()
-    -- Trinkets reparent INTO Essential so the viewer's own bounds cover them.
     local essential = _G["EssentialCooldownViewer"]
-    if not essential then return nil end
-    local left, right = essential:GetLeft(), essential:GetRight()
+    local p = (essential and ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(essential)) or essential
+    if not p then return nil end
+    local left, right = p:GetLeft(), p:GetRight()
     if not left or not right then return nil end
     return left, right
 end
@@ -113,9 +113,7 @@ local function ApplyEnableState(entry)
     return true
 end
 
--- Anchor/width handling moved into BarSetup.
 local function ApplyWidthAndPosition(entry)
-    -- intentionally empty
 end
 
 local function ChargeBarWantsUs()

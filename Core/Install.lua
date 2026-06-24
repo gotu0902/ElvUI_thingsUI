@@ -294,7 +294,6 @@ function ns.OpenInstaller()
     end
 end
 
--- Auto-open once per account for new users.
 local boot = CreateFrame("Frame")
 boot:RegisterEvent("PLAYER_ENTERING_WORLD")
 boot:SetScript("OnEvent", function(self)

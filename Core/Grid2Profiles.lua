@@ -4253,7 +4253,6 @@ function ns.FindGrid2Profile(key)
     for _, p in ipairs(ns.GRID2_PROFILES) do if p.key == key then return p end end
 end
 
--- Apply one profile via Grid2's import (loads Grid2Options on demand; switches live, no reload).
 function ns.ImportGrid2Profile(key)
     if not IsInstalled("Grid2") then print("|cFF8080FFthingsUI|r: Grid2 is not installed."); return end
     local p = ns.FindGrid2Profile(key)
@@ -4273,7 +4272,6 @@ function ns.ImportGrid2Profile(key)
     return ok
 end
 
--- Confirm before switching their Grid2 profile.
 E.PopupDialogs["TUI_IMPORT_GRID2"] = {
     text = "Import + switch to the |cFF8080FFthingsUI|r Grid2 profile\n|cFFFFFFFF%s|r?",
     button1 = YES, button2 = CANCEL,

@@ -14,7 +14,6 @@ local function BuildAnchorValues(includeBars, includeIcons, excludeFrame)
     local t = {}
     for k, v in pairs(ns.ANCHORS.GetSharedAnchorValues()) do
         if k == excludeFrame then
-            -- skip self-anchor
         elseif k:find("^TUI_SpecialBar_") then
             if includeBars then t[k] = v end
         elseif k:find("^TUI_SpecialIcon_") then
@@ -48,7 +47,6 @@ local function FindAnchorsTargetingFrame(targetFrame)
         end
     end
 
-    -- Bar Setup bars in FHT mode that point to us.
     local bs = ns.BarSetup
     if bs and bs.GetActiveSetup then
         local setup = bs.GetActiveSetup()
@@ -73,7 +71,6 @@ local function BuildAnchorSorting(includeBars, includeIcons, excludeFrame)
     local order = {}
     for _, k in ipairs(ns.ANCHORS.GetSharedAnchorOrder()) do
         if k == excludeFrame then
-            -- skip
         elseif k:find("^TUI_SpecialBar_") then
             if includeBars then order[#order+1] = k end
         elseif k:find("^TUI_SpecialIcon_") then
@@ -92,14 +89,13 @@ local function QueueUpdate()
     if ns.BarSetup and ns.BarSetup.ApplyStack then
         C_Timer.After(0.05, ns.BarSetup.ApplyStack)
     end
-    -- Re-fold groups after the deferred yoink shows the wrapper.
+
     if ns.CustomGroups and ns.CustomGroups.QueueLayout then
         C_Timer.After(0.1, ns.CustomGroups.QueueLayout)
     end
     C_Timer.After(0.05, NotifyChange)
 end
 
--- Safe color unpacker - returns fallback values when the DB entry is nil
 local function unpackColor(c, hasAlpha)
     if not c then return 1, 1, 1, hasAlpha and 1 or nil end
     if hasAlpha then return c.r or 1, c.g or 1, c.b or 1, c.a or 1 end
@@ -141,7 +137,6 @@ local function GetChoicesTable(currentKey, isBar)
     local knownBar  = SB.knownBarSpells  or {}
     local knownIcon = SB.knownIconSpells or {}
 
-    -- Count name occurrences so we can suffix #spellID on duplicates only.
     local nameCounts = {}
     for _, data in pairs(rawList) do
         if data.name then nameCounts[data.name] = (nameCounts[data.name] or 0) + 1 end
@@ -326,7 +321,6 @@ function TUI:SpecialBarOptions(barKey)
             local savedSpellName = s.bars and s.bars[barKey] and s.bars[barKey].spellName
             if s.bars then s.bars[barKey] = nil end
             SB.ReleaseBar(barKey)
-            -- Re-create with defaults, then restore spell so user doesn't have to re-pick.
             local fresh = SB.GetBarDB(barKey)
             fresh.spellID   = savedSpellID
             fresh.spellName = savedSpellName
@@ -485,7 +479,6 @@ function TUI:SpecialBarOptions(barKey)
                             name = "|cFFFF4040Active in Bar Setup - position is owned by the Bar Setup tab.|r\n",
                         },
                         anchorMode = { order = 1, type = "select", name = "Anchor Frame", width = "double",
-                            -- Exclude this bar's own frame so users can't anchor it to itself.
                             values  = function() return BuildAnchorValues(true, true, "TUI_SpecialBar_" .. barKey) end,
                             sorting = function() return BuildAnchorSorting(true, true, "TUI_SpecialBar_" .. barKey) end,
                             disabled = function() return IsInBarSetup() end,
@@ -891,7 +884,6 @@ function TUI:SpecialIconOptions(keyArg)
                             end,
                         },
                         anchorMode = { order = 1, type = "select", name = "Anchor Frame", width = "double",
-                            -- Exclude this icon's own frame so users can't anchor it to itself.
                             values  = function() return BuildAnchorValues(true, true, "TUI_SpecialIcon_" .. curKey()) end,
                             sorting = function() return BuildAnchorSorting(true, true, "TUI_SpecialIcon_" .. curKey()) end,
                             get = function() return get("anchorMode") or "UIParent" end,

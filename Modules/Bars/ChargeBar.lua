@@ -26,7 +26,6 @@ local playerEntered = (IsLoggedIn and IsLoggedIn()) or false
 local currentSpellID
 local currentMaxCharges = 0
 
--- Idempotency cache: skip layout/visual rebuilds when nothing changed.
 local lastLayoutW, lastLayoutH, lastLayoutN
 local lastLayoutShowTicks, lastLayoutTickW, lastLayoutTickR, lastLayoutTickG, lastLayoutTickB, lastLayoutTickA
 local lastVisualSpellID, lastVisualR, lastVisualG, lastVisualB
@@ -61,7 +60,6 @@ local function GetSpecEntry()
     return db.specs[tostring(id)]
 end
 
--- "FHT" = not in the Bar Setup stack
 local function IsFHT()
     if E.db.thingsUI.barSetup and E.db.thingsUI.barSetup.enabled == false then return true end
     local bs = ns.BarSetup
@@ -124,14 +122,13 @@ local function EnsureFrame()
 
     local px = ns.Pixel.Size(frame)
 
-    -- Background fill.
     frame.tuiBg = frame:CreateTexture(nil, "BACKGROUND")
     frame.tuiBg:SetAllPoints(frame)
     frame.tuiBg:SetColorTexture(0, 0, 0, 0.7)
-
-    -- 1-physical-pixel border as four separate edge textures.
     frame.tuiBorder = {}
+
     local function mkEdge() return frame:CreateTexture(nil, "BORDER") end
+
     frame.tuiBorder.top    = mkEdge()
     frame.tuiBorder.bottom = mkEdge()
     frame.tuiBorder.left   = mkEdge()
@@ -186,7 +183,6 @@ local function EnsureFrame()
     ticksContainer:SetAllPoints(barFrame)
     ticksContainer:SetFrameLevel(barFrame:GetFrameLevel() + 5)
 
-    -- Temporary anchor so E:CreateMover has a point to read.
     ns.Pixel.SetSize(frame, 200, 18)
     frame:ClearAllPoints()
     frame:SetPoint("CENTER", E.UIParent, "CENTER", 0, 0)
@@ -213,7 +209,6 @@ local function GetTick(i)
     return tickPool[i]
 end
 
--- Size the charge bar; place tick markers between charge slots.
 local function ApplyChargeLayout()
     if not currentSpellID or currentMaxCharges <= 0 then
         if chargeBar then
@@ -268,7 +263,6 @@ local function ApplyChargeLayout()
     end
 end
 
--- Pick global vs per-spec value for an override-able field.
 local function LayoutPick(entry, db, key, fallback)
     if entry.useGlobalLayout == false and entry[key] ~= nil then
         return entry[key]
@@ -277,7 +271,6 @@ local function LayoutPick(entry, db, key, fallback)
     return fallback
 end
 
--- Color + text font. Idempotent.
 local function ApplyVisuals(entry)
     EnsureFrame()
     local db = E.db.thingsUI.chargeBar
@@ -348,7 +341,6 @@ local function ApplyVisuals(entry)
     end
 end
 
--- NHT: only re-stack when frame height actually changes.
 local function ApplyPosition(entry)
     if not frame then return end
     local db = E.db.thingsUI.chargeBar
@@ -362,6 +354,8 @@ local function ApplyPosition(entry)
 end
 
 local function ResolveAnchorTarget(anchorName)
+    local proxy = ns.CDMIcons and ns.CDMIcons.ProxyForName and ns.CDMIcons.ProxyForName(anchorName)
+    if proxy then return proxy, anchorName end
     local f = _G[anchorName]
     if type(f) == "table" and type(f.GetObjectType) == "function" then
         if anchorName == "ElvUF_Player_CastBar" and f.Holder then
@@ -372,7 +366,6 @@ local function ResolveAnchorTarget(anchorName)
     return UIParent, "UIParent"
 end
 
--- FHT: position frame to anchor; idempotent.
 local function ApplyPositionFHT()
     if not frame then return end
     local db = E.db.thingsUI.chargeBar
@@ -406,7 +399,6 @@ local function ApplyPositionFHT()
     ns.Pixel.SetPoint(frame, point, target, relative, xOff, yOff)
 end
 
--- Follow talent overrides so charge data tracks the live effective spell.
 local function FollowOverride(id)
     if not id then return id end
     if FindSpellOverrideByID then
@@ -418,7 +410,6 @@ end
 
 local function ResolveSpellID(entry)
     if not entry then return nil end
-    -- Name preferred when present (talent-stable); fall back to stored ID.
     if entry.spellName and type(entry.spellName) == "string" and entry.spellName ~= "" then
         if C_Spell and C_Spell.GetSpellIDForSpellIdentifier then
             local id = C_Spell.GetSpellIDForSpellIdentifier(entry.spellName)
@@ -436,23 +427,20 @@ local function ResolveSpellID(entry)
     return nil
 end
 
--- Push current charges and recharge timer to the bars.
 local function _UpdateChargeStateInner()
     if not currentSpellID then return end
     local info = C_Spell and C_Spell.GetSpellCharges and C_Spell.GetSpellCharges(currentSpellID) or nil
     if not info then return end
 
     local mx = info.maxCharges
-    -- maxCharges is secret in combat; comparing it throws, so only react when readable.
     if type(mx) == "number" and not issecretvalue(mx) and mx ~= currentMaxCharges then
         currentMaxCharges = mx
         ApplyChargeLayout()
     end
 
-    chargeBar:SetValue(info.currentCharges)   -- StatusBar:SetValue accepts secret values (display sink)
+    chargeBar:SetValue(info.currentCharges)
 
     local durationObj = C_Spell.GetSpellChargeDuration and C_Spell.GetSpellChargeDuration(currentSpellID)
-    -- isActive is secret in combat (branching throws); fall back to "has a duration object".
     local active = info.isActive
     if durationObj and (issecretvalue(active) or active) then
         rechargeBar.isActive = true
@@ -485,7 +473,6 @@ local function UpdateRechargeText()
     rechargeText:SetFormattedText("%.1f", timer:GetRemainingDuration())
 end
 
--- OnUpdate that ticks the countdown text only while recharge is shown.
 local textTicker = CreateFrame("Frame")
 textTicker:Hide()
 local rechargeTextElapsed = 0
@@ -506,7 +493,6 @@ local function HideAll()
     if frame then frame:Hide() end
     if rechargeBar then rechargeBar:Hide() end
     textTicker:Hide()
-    -- Skip downstream pokes when nothing was visible to change.
     if wasShown then
         if TUI.InvalidateDynamicCastBarAnchor then
             TUI:InvalidateDynamicCastBarAnchor()
@@ -631,7 +617,6 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, _, arg3)
     end
 end)
 
--- Coalesce cluster resize / child show-hide spam into one MarkDirty per frame.
 local function MarkDirtyFromCluster()
     if isDirty then return end
     MarkDirty()
@@ -673,7 +658,6 @@ function TUI:UpdateChargeBar()
     end
 end
 
--- BarSetup/ClassbarMode use RequestUpdate (cache-warm) to avoid recursion through ApplyStack.
 function CB.RequestUpdate()
     MarkDirty()
 end

@@ -1,6 +1,7 @@
 local _, ns = ...
 local TUI = ns.TUI
 local E   = ns.E
+local P   = select(4, unpack(ElvUI))
 
 local function AnchorArgs(key, opts)
     opts = opts or {}
@@ -75,6 +76,23 @@ local function AnchorArgs(key, opts)
             set = function(_, v)
                 db().anchorYOffset = v
                 TUI:UpdateCDMIcons()
+            end,
+        },
+        resetAnchor = {
+            order = 27, type = "execute", name = "Reset Anchor",
+            disabled = dis,
+            func = function()
+                local d = P and P.thingsUI and P.thingsUI.cdmIcons and P.thingsUI.cdmIcons[key]
+                local v = db()
+                if d then
+                    v.anchorFrame         = d.anchorFrame
+                    v.anchorPoint         = d.anchorPoint
+                    v.anchorRelativePoint = d.anchorRelativePoint
+                    v.anchorXOffset       = d.anchorXOffset
+                    v.anchorYOffset       = d.anchorYOffset
+                end
+                TUI:UpdateCDMIcons()
+                ns.NotifyChange()
             end,
         },
     }

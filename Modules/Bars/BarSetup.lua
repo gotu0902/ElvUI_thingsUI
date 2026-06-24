@@ -18,7 +18,7 @@ function M.GetBarLabel(key)
     local fixed = M.BAR_LABELS[key]
     if fixed then return fixed end
     if key:sub(1, 8) == "special:" then
-        local slotKey = key:sub(9)              -- "bar1", "bar2", ...
+        local slotKey = key:sub(9)
         local idx = tonumber(slotKey:match("^bar(%d+)$")) or "?"
         local SB = ns.SpecialBars
         local hint
@@ -57,7 +57,7 @@ end
 local function NewBar()
     return {
         enabled = true,
-        mode    = "NHT", -- "NHT" or "FHT"
+        mode    = "NHT",
         widthOffset = 0,
         anchorFrame = "UIParent",
         anchorPoint = "CENTER",
@@ -76,7 +76,6 @@ local DEFAULT_WIDTH_OFFSETS = {
     chargebar = 0,
 }
 
--- Fixed code-level X nudge per bar, added on top of the per-setup X offset.
 local BAR_X_NUDGE = {
     chargebar = -0.1,
 }
@@ -100,7 +99,6 @@ local function NewSetup(name)
         specs       = {},
         order       = DefaultOrder(),
         bars        = DefaultBars(),
-        -- Stack-level anchor (where the bottom of the NHT stack lands).
         anchorFrame = "EssentialCooldownViewer",
         anchorPoint = "BOTTOM",
         anchorTo    = "TOP",
@@ -139,7 +137,6 @@ local function EnsureDB()
                     clean[#clean + 1] = v
                 end
             end
-            -- Make sure every built-in bar is present.
             for _, k in ipairs(M.BAR_KEYS) do
                 if not seen[k] then
                     clean[#clean + 1] = k
@@ -149,7 +146,6 @@ local function EnsureDB()
             s.order = clean
         end
 
-        -- Migrate old `enabled = { key = bool }` to `bars = { key = NewBar() }`.
         local hadBars = type(s.bars) == "table"
         if not hadBars then s.bars = DefaultBars() end
         if type(s.enabled) == "table" then
@@ -161,7 +157,6 @@ local function EnsureDB()
             end
             s.enabled = nil
         end
-        -- Fill missing bars (e.g. user upgraded after we added a new key).
         for _, k in ipairs(M.BAR_KEYS) do
             if type(s.bars[k]) ~= "table" then s.bars[k] = NewBar() end
             local b = s.bars[k]
@@ -211,7 +206,7 @@ end
 function M.RemoveSetup(index)
     EnsureDB()
     local db = E.db.thingsUI.barSetup
-    if index <= 1 then return end -- Global is permanent
+    if index <= 1 then return end
     table.remove(db.setups, index)
     if db.active > #db.setups then db.active = 1 end
 end
@@ -228,7 +223,6 @@ function M.MoveBar(setup, key, delta)
     end
 end
 
--- Resolve the physical positioning frame for a bar key
 local function GetBarFrame(key)
     if key == "power" then
         local p = _G.ElvUF_Player
@@ -255,7 +249,6 @@ local function IsSpecialBarAvailable(key)
     if not SB or not SB.GetBarDB then return false end
     local bdb = SB.GetBarDB(slotKey)
     if type(bdb) ~= "table" then return false end
-    -- A Special Bar is "available" if its slot is enabled on the current spec with a tracked spell. 
     return (bdb.enabled == true) and (bdb.spellID ~= nil)
 end
 M.IsSpecialBarAvailable = IsSpecialBarAvailable
@@ -321,7 +314,6 @@ local function HasAttachedMode(key)
 end
 M.HasAttachedMode = HasAttachedMode
 
--- True when the active setup currently runs `key` in ATTACHED mode.
 local function IsAttachedNow(key)
     if not HasAttachedMode(key) then return false end
     local s = M.GetActiveSetup()
@@ -394,7 +386,6 @@ local function WriteBarHeightToDB(key, value)
     end
 end
 
--- Central height setter - used by the Bar Setup inline slider
 local function SetBarHeight(key, value)
     if type(value) ~= "number" or value < 1 then return end
     local setup = M.GetActiveSetup()
@@ -406,13 +397,13 @@ local function SetBarHeight(key, value)
     end
     WriteBarHeightToDB(key, value)
 end
-M.SetBarHeight = SetBarHeight
 
--- Width source: the CDM cluster (Essential viewer) when inheritWidth is on, else the bar's own width. 
+M.SetBarHeight = SetBarHeight
 local function GetClusterWidth()
     local v = _G.EssentialCooldownViewer
-    if v and v.GetWidth then
-        local w = v:GetWidth() or 0
+    local p = (v and ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(v)) or v
+    if p and p.GetWidth then
+        local w = p:GetWidth() or 0
         if w > 1 then return w + 2 end
     end
     return 0
@@ -459,6 +450,11 @@ function M.RestoreBarsToElvUI()
     if moved and moved.mover.name and E.SetMoverPoints then
         pcall(E.SetMoverPoints, E, moved.mover.name, moved)
     end
+
+    local cbh = _G.ElvUF_Player and _G.ElvUF_Player.ClassBarHolder
+    if cbh and cbh.mover and cbh.mover.name and E.SetMoverPoints then
+        pcall(E.SetMoverPoints, E, cbh.mover.name, cbh)
+    end
     wipe(lastWidth)
 end
 
@@ -496,7 +492,6 @@ local function ApplyBarWidth(key, width)
         if lastWidth.chargebar == width then return end
         local f = _G.ElvUI_thingsUI_ChargeBar
         if f and f.SetWidth then
-            -- Pixel-snap so the 1px border doesn't render asymmetric.
             if ns.Pixel and ns.Pixel.SetSize then
                 ns.Pixel.SetSize(f, width, f:GetHeight() or 18)
             else
@@ -522,8 +517,6 @@ local function ApplyBarWidth(key, width)
         end
         local f = _G["TUI_SpecialBar_" .. slotKey]
         if f and f.SetWidth then f:SetWidth(width) end
-        -- Ask the Special Bars module to re-layout so internal child frames
-        -- (icon, text, status bar) catch the new width.
         if TUI.QueueSpecialBarsUpdate then TUI:QueueSpecialBarsUpdate() end
     end
 end
@@ -544,12 +537,13 @@ local positioning = false
 function M.PositionStack(positionOnly)
     if positioning then return end
     EnsureDB()
-    -- Master toggle
     if E.db.thingsUI.barSetup and E.db.thingsUI.barSetup.enabled == false then return end
     local setup = M.GetActiveSetup()
     if not setup then return end
 
-    local stackAnchor = _G[setup.anchorFrame or "EssentialCooldownViewer"]
+    local anchorName = setup.anchorFrame or "EssentialCooldownViewer"
+    local stackAnchor = (ns.CDMIcons and ns.CDMIcons.ProxyForName and ns.CDMIcons.ProxyForName(anchorName))
+        or _G[anchorName]
     if not stackAnchor then return end
 
     local inCombat = InCombatLockdown()
@@ -569,7 +563,7 @@ function M.PositionStack(positionOnly)
             if not (CM and CM.IsNHTForCurrentSpec and CM.IsNHTForCurrentSpec()) then
                 return false
             end
-            -- Dynamic Classbar (Druid forms)
+            -- Dynamic Classbar (Druid)
             local cdb = E.db.thingsUI and E.db.thingsUI.classbarMode
             if cdb and cdb.dynamicClassbar and E.myclass == "DRUID" then
                 local p = _G.ElvUF_Player
@@ -608,7 +602,6 @@ function M.PositionStack(positionOnly)
         return true
     end
     if udb then
-        -- Power: only touch detachFromFrame when the user has Power in THIS setup with the Enable toggle on. 
         local pBar = setup.bars.power
         if udb.power and pBar and pBar.enabled then
             local want = (pBar.mode == "NHT" or pBar.mode == "FHT")
@@ -618,7 +611,6 @@ function M.PositionStack(positionOnly)
                 needsPlayerUF = true
             end
         end
-        -- ClassBar: same rule.
         local cBar = setup.bars.classbar
         if udb.classbar and cBar and cBar.enabled then
             local want = (cBar.mode == "NHT" or cBar.mode == "FHT")
@@ -651,9 +643,8 @@ function M.PositionStack(positionOnly)
     local gap  = setup.gap or 1
     local xOff = setup.xOffset or 0
     local trinketShift = 0
-    if baseWidth and stackAnchor == _G.EssentialCooldownViewer then
+    if baseWidth and anchorName == "EssentialCooldownViewer" then
         local TR = ns.TrinketsCDM
-        -- Only when trinkets actually sit beside ESSENTIAL (the stack anchor).
         local onEssential = (not TR) or (not TR.GetTrinketAttachKey)
             or TR.GetTrinketAttachKey() == "essential"
         if TR and TR.GetTrinketExtent and onEssential then
@@ -668,7 +659,6 @@ function M.PositionStack(positionOnly)
         local b = setup.bars[key]
         if b and b.enabled and b.mode == "NHT" and ShouldInclude(key) then
             local f = GetBarFrame(key)
-            -- Self-anchor guard
             if f and f ~= stackAnchor and not IsDescendantOf(stackAnchor, f) then
                 local protected = inCombat and f.IsProtected and f:IsProtected()
                 local w = EffectiveWidth(b)

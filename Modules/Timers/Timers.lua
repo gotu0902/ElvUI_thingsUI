@@ -33,7 +33,6 @@ local function DB()
     return E.db and E.db.thingsUI and E.db.thingsUI.timers
 end
 
--- Template moved to Defaults/Timers.lua (ns.Defaults.Timer).
 M.DefaultTimer = ns.Defaults.Timer
 
 function M.GetTimers()
@@ -78,7 +77,6 @@ function M.RemoveTimer(index)
     M.Update()
 end
 
--- Trigger spell + texture resolution
 function M.GetTriggerSpellID(timer)
     if timer.kind == "spell" then return timer.spellID end
     if timer.kind == "item" and timer.itemID then
@@ -122,7 +120,7 @@ local function ParseDurationFromText(text)
         if unit:find("^min") then return tonumber(n) * 60 end
         if unit:find("^sec") then return tonumber(n) end
     end
-    -- Fallback: a bare "X sec/min" but only in the part BEFORE any cooldown clause.
+
     local before = lower:match("^(.-)cooldown") or lower
     n = before:match("(%d+%.?%d*)%s*sec")
     if n then return tonumber(n) end
@@ -167,12 +165,12 @@ end
 
 function M.PlayerLustID()
     local _, cf = UnitClass("player")
-    return LUST_CLASS[cf]   -- nil for non-lust classes (icon falls back to Bloodlust)
+    return LUST_CLASS[cf]
 end
 
 local function PlayerAura(spellID)
     if not (C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID) then return end
-    return C_UnitAuras.GetPlayerAuraBySpellID(spellID)   -- player implicit; returns nil if absent
+    return C_UnitAuras.GetPlayerAuraBySpellID(spellID)
 end
 
 local function FindAura(ids)
@@ -211,7 +209,7 @@ local function UpdateLustState()
     end
     sawSated = present
     if lustState.active and (GetTime() - lustState.start) >= LUST_BUFF_DURATION then
-        lustState.active = false   -- haste window over; we don't show the lockout
+        lustState.active = false
     end
     if M.GetLustState() ~= prevPhase then FireHosts() end
 end
@@ -234,7 +232,6 @@ local function UpdateLustPoller()
     if on then lustPoll:Show() else lustPoll:Hide(); lustState.active = false end
 end
 
--- The Hero/Lust timer always exists (built-in default, tab #1, not removable).
 function M.EnsureLustTimer()
     local db = DB(); if not db then return end
     for _, t in ipairs(db.list) do if t.kind == "lust" then return t end end

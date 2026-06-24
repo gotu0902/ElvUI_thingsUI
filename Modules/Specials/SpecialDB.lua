@@ -22,7 +22,7 @@ end
 
 local function GetSpecRoot()
     local db = E.db.thingsUI and E.db.thingsUI.specialBars
-    if not db then return nil end  -- profile not loaded yet (early call); caller handles nil
+    if not db then return nil end
     if not db.specs then db.specs = {} end
     local specID = GetCurrentSpecID()
     if specID == 0 then specID = 1 end

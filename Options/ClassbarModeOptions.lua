@@ -4,7 +4,6 @@ local E = ns.E
 
 local NotifyChange = ns.NotifyChange
 
--- Build a {specID -> true} map of currently enabled specs for ActiveSpecsList.
 local function GetSelectedSpecIDs()
     local db = E.db.thingsUI.classbarMode
     if not db or not db.specs then return {} end
@@ -16,7 +15,6 @@ local function GetSelectedSpecIDs()
     return out
 end
 
--- Translate "CLASSTOKEN:specID" cascade value -> spec key (string-int).
 local function CascadeKeyToSpecKey(value)
     local _, specID = value:match("^([A-Z_]+):(%d+)$")
     return specID

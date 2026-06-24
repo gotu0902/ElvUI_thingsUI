@@ -31,7 +31,6 @@ local function SortSpecIDs(ids)
     end)
 end
 
--- Build a row-table that re-evaluates per render.
 function ns.ActiveSpecsList.BuildDynamic(opts)
     opts = opts or {}
     local args = {}
@@ -52,7 +51,6 @@ function ns.ActiveSpecsList.BuildDynamic(opts)
         hidden = function() return #GetIDs() > 0 end,
     }
 
-    -- Two slots per spec: label (left) + X button.
     for i = 1, MAX_ROWS do
         local function specAt() return GetIDs()[i] end
         args["row"..i.."_label"] = {
@@ -86,7 +84,6 @@ function ns.ActiveSpecsList.Build(opts)
     opts = opts or {}
     local args = {}
 
-    -- Header row inside the inline group so the columns are explained.
     args._listHeader = {
         order = 1, type = "description", width = "full", fontSize = "small",
         name = "|cFFFFD200Active Specs|r  |cFF888888(click X to remove)|r",
@@ -108,7 +105,6 @@ function ns.ActiveSpecsList.Build(opts)
 
     SortSpecIDs(ids)
 
-    -- Each spec row: [icon + classname - specname] [X].
     local order = 10
     for _, specID in ipairs(ids) do
         local m = GetMeta(specID)

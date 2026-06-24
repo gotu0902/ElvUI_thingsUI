@@ -14,7 +14,6 @@ local combatDeferred = false
 local MarkDirty
 local clusterProxy
 
--- Count visible icons in a frame
 local function CountVisibleChildren(frame)
     if not frame then return 0 end
 
@@ -33,7 +32,6 @@ local function ForceClusterUpdate()
     forceClusterUpdate = true
 end
 
--- Update when bars appear/disappear
 local hookedViewers = {}
 
 local function HookViewerChildren(viewer)
@@ -41,18 +39,32 @@ local function HookViewerChildren(viewer)
     if type(viewer.RefreshLayout) ~= "function" then return end
     hookedViewers[viewer] = true
     hooksecurefunc(viewer, "RefreshLayout", function() MarkDirty() end)
-    -- Also re-sync on resize
     hooksecurefunc(viewer, "SetSize",   function() MarkDirty() end)
     hooksecurefunc(viewer, "SetWidth",  function() MarkDirty() end)
     hooksecurefunc(viewer, "SetHeight", function() MarkDirty() end)
 end
 
+local hookedProxy = false
+local function HookEssentialProxy()
+    if hookedProxy then return end
+    local pr = ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(EssentialCooldownViewer)
+    if not pr then return end
+    hookedProxy = true
+    local mark = function() MarkDirty() end
+    hooksecurefunc(pr, "SetSize",        mark)
+    hooksecurefunc(pr, "SetWidth",       mark)
+    hooksecurefunc(pr, "SetHeight",      mark)
+    hooksecurefunc(pr, "SetPoint",       mark)
+    hooksecurefunc(pr, "ClearAllPoints", mark)
+    hooksecurefunc(pr, "SetScale",       mark)
+end
+
 local function ScanAndHookViewers()
     HookViewerChildren(EssentialCooldownViewer)
     HookViewerChildren(UtilityCooldownViewer)
+    HookEssentialProxy()
 end
 
--- Coalesce rapid config changes into one update per frame
 local clusterUpdateQueued = false
 function TUI:QueueClusterUpdate()
     if clusterUpdateQueued then return end
@@ -64,7 +76,6 @@ function TUI:QueueClusterUpdate()
     end)
 end
 
--- Read icon size from CDM Icons settings (single source of truth)
 local function GetIconWidth(viewerKey, fallback)
     local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
     local v = cdm and cdm[viewerKey]
@@ -72,7 +83,6 @@ local function GetIconWidth(viewerKey, fallback)
     return v.iconWidth or fallback
 end
 
--- Calculate effective cluster width
 local function CalculateEffectiveWidth()
     local db = E.db.thingsUI.clusterPositioning
     local essentialIconWidth = GetIconWidth("essential", 40)
@@ -81,7 +91,6 @@ local function CalculateEffectiveWidth()
     local essentialCount = EssentialCooldownViewer and CountVisibleChildren(EssentialCooldownViewer) or 0
     local utilityCount = UtilityCooldownViewer and CountVisibleChildren(UtilityCooldownViewer) or 0
 
-    -- Fold trinkets into whichever row they're embedded in.
     local extraTrinkets = ns.TrinketsCDM and ns.TrinketsCDM.GetExtraEssentialCount and ns.TrinketsCDM.GetExtraEssentialCount() or 0
     if extraTrinkets > 0 then
         local attachKey = (ns.TrinketsCDM.GetTrinketAttachKey and ns.TrinketsCDM.GetTrinketAttachKey()) or "essential"
@@ -112,7 +121,6 @@ local function CalculateEffectiveWidth()
     return essentialWidth + overflow, essentialCount, utilityCount, overflow
 end
 
--- A thingsUI-owned anchor frame that the unit frames attach to INSTEAD of the Essential viewer directly.
 local function EnsureProxy()
     if clusterProxy then return clusterProxy end
     clusterProxy = CreateFrame("Frame", "TUI_ClusterAnchor", _G.UIParent)
@@ -120,7 +128,6 @@ local function EnsureProxy()
     return clusterProxy
 end
 
--- Position the proxy to overlay the viewer's CURRENT screen bounds, decoupled from it (anchored to UIParent, not the viewer).
 local function SyncProxyToViewer(proxy, viewer)
     local fl, fb = viewer:GetLeft(), viewer:GetBottom()
     if not fl or not fb then return false end
@@ -133,7 +140,6 @@ local function SyncProxyToViewer(proxy, viewer)
     return true
 end
 
--- Apply positioning
 local function UpdateClusterPositioning()
     local db = E.db.thingsUI.clusterPositioning
     if not db.enabled then return end
@@ -148,10 +154,11 @@ local function UpdateClusterPositioning()
     
     local effectiveWidth, essentialCount, utilityCount, utilityOverflow = CalculateEffectiveWidth()
 
-    local ev = EssentialCooldownViewer
-    local vLeft  = ev:GetLeft()  or 0
-    local vRight = ev:GetRight() or 0
-    local vCY    = ((ev:GetTop() or 0) + (ev:GetBottom() or 0)) * 0.5
+    local cdmProxy = ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(EssentialCooldownViewer)
+    local src = cdmProxy or EssentialCooldownViewer
+    local vLeft  = src:GetLeft()  or 0
+    local vRight = src:GetRight() or 0
+    local vCY    = ((src:GetTop() or 0) + (src:GetBottom() or 0)) * 0.5
     local geoSig = math.floor(vLeft + 0.5) + math.floor(vRight + 0.5) * 7
                  + math.floor(vCY + 0.5) * 13 + essentialCount * 101
                  + utilityCount * 211 + math.floor((utilityOverflow or 0) + 0.5) * 17
@@ -162,11 +169,11 @@ local function UpdateClusterPositioning()
     lastUtilityCount = utilityCount
 
     local proxy = EnsureProxy()
-    if not SyncProxyToViewer(proxy, ev) then return end
+    if not SyncProxyToViewer(proxy, src) then return end
 
     local yOffset = 0
     local sideOverflow = utilityOverflow / 2
-    local viewerW = EssentialCooldownViewer:GetWidth() or 0
+    local viewerW = src:GetWidth() or 0
     local parityNudge = (math.floor(viewerW + 0.5) % 2 == 1) and 0.5 or 0
     local trinketExt, trinketSide = 0, "RIGHT"
 
@@ -225,8 +232,6 @@ local function UpdateClusterPositioning()
         end
     end
 
-    -- Cluster moved Player / Target / ToT - keep their movers in sync so
-    -- /emove shows where they actually sit, not the stale saved point.
     if ns.MoverSync and ns.MoverSync.Queue then
         ns.MoverSync.Queue()
     end
@@ -249,7 +254,6 @@ MarkDirty = function()
     updateFrame:SetScript("OnUpdate", OnSettleTick)
 end
 
--- Event handler
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "PLAYER_ENTERING_WORLD" then
         C_Timer.After(0.5, function()
@@ -269,7 +273,6 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     end
 end)
 
--- Restore frames to their ElvUI mover positions
 local function RestoreFramesToElvUI()
     if InCombatLockdown() then return end
     

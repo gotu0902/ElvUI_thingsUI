@@ -7,9 +7,9 @@ local M = ns.RacialsCDM
 
 local ipairs, pairs, wipe, tconcat = ipairs, pairs, wipe, table.concat
 
-local buttons   = {}                               -- [spellID] = our button
-local synthetic = {}                               -- [spellID] = reused synthetic timer
-local listFor   = { essential = {}, utility = {} } -- per-viewer shown buttons (layoutIndex)
+local buttons   = {}
+local synthetic = {}
+local listFor   = { essential = {}, utility = {} }
 local lastSig   = ""
 
 local function DB() return E.db and E.db.thingsUI and E.db.thingsUI.racialsCDM end
@@ -24,7 +24,6 @@ local function EnsureButton(spellID)
     return btn
 end
 
--- A fake "timer" so TimersRender.Update renders the racial's spell cooldown + desat for us.
 local function SyntheticTimer(spellID)
     local t = synthetic[spellID]
     if not t then
@@ -35,7 +34,6 @@ local function SyntheticTimer(spellID)
     return t
 end
 
--- DYNAMIC: Essential if it has room (native icon count < threshold), else Utility.
 local function ResolveDynamic()
     local ev = _G.EssentialCooldownViewer
     local native = 0
@@ -55,7 +53,6 @@ local function HasRacial(spellID)
     return true
 end
 
--- Cheap re-render of the shown buttons (cooldown swirl + desat) - no re-fold.
 function M.RefreshCooldowns()
     if not ns.TimersRender then return end
     for spellID, btn in pairs(buttons) do
@@ -63,7 +60,6 @@ function M.RefreshCooldowns()
     end
 end
 
--- Full layout: which racials show, in which viewer; re-fold only when the SET changes.
 function M.Refresh()
     if not (ns.TimersRender and DB()) then return end
     wipe(listFor.essential)
@@ -78,7 +74,7 @@ function M.Refresh()
             if list then
                 local btn = EnsureButton(spellID)
                 local i = #list + 1
-                btn.layoutIndex = 90000 + i   -- END, after native icons but before Timers (100000)
+                btn.layoutIndex = 90000 + i
                 btn:Show()
                 list[i] = btn
                 ns.TimersRender.Update(btn, SyntheticTimer(spellID))
@@ -94,7 +90,7 @@ function M.Refresh()
         lastSig = s
         if ns.CDMIcons and ns.CDMIcons.RefreshAll then ns.CDMIcons.RefreshAll() end
         if ns.CDMText and ns.CDMText.RefreshAll then ns.CDMText.RefreshAll() end
-        -- A racial joining/leaving resizes the viewer
+
         C_Timer.After(0, function()
             if ns.EssentialMover and ns.EssentialMover.Apply then ns.EssentialMover.Apply() end
             if ns.BarSetup and ns.BarSetup.ApplyStack then ns.BarSetup.ApplyStack() end

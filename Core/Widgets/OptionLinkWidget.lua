@@ -169,7 +169,6 @@ end
 
 AceGUI:RegisterWidgetType("TUI_OptionLink", Constructor, 1)
 
--- Option-table helpers
 function ns.OptionLink(order, label, ...)
     return {
         order = order, type = "description", dialogControl = "TUI_OptionLink",

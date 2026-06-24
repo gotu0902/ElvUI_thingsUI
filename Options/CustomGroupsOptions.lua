@@ -22,7 +22,6 @@ local function GroupSpecialCount(group, specID)
     return n
 end
 
--- How many entries (spells/items + class-scoped timers) this group has for a given class.
 local function GroupClassCount(group, classFile)
     local n = 0
     local CG = ns.CustomGroups
@@ -49,7 +48,6 @@ local function LiveSpecialKeyForSpell(spellID)
     end
 end
 
--- Copy another spec's Special Icon (full style + group) into a new slot on the live spec.
 local function CopySpecialToLive(srcSpec, srcIconKey, groupID)
     local SB = ns.SpecialBars
     local sb = E.db.thingsUI and E.db.thingsUI.specialBars
@@ -69,8 +67,6 @@ end
 
 function TUI:CustomGroupsOptions()
     local CG = ns.CustomGroups
-
-    -- current live keys
     local function curSpecID()
         local idx = GetSpecialization()
         return tostring((idx and GetSpecializationInfo(idx)) or 1)
@@ -163,7 +159,7 @@ function TUI:CustomGroupsOptions()
                     tex  = (C_Item.GetItemIconByID and C_Item.GetItemIconByID(id)) or select(10, C_Item.GetItemInfo(id)) or 134400 }
             end
         end
-        -- Timers pointed at this group + scope (groupScope: "global" | classToken | specID).
+
         if ns.Timers then
             for _, t in ipairs(ns.Timers.GetTimers()) do
                 if t.destination == group.id and t.kind ~= "lust" then
@@ -171,8 +167,8 @@ function TUI:CustomGroupsOptions()
                     local match = (scope == "global" and gs == "global")
                         or (scope == "spec" and tostring(gs) == tostring(key))
                         or (scope == "class" and gs == key)
-                    -- Skip if a legacy plain item already represents this item-timer.
-                    if match and not (t.kind == "item" and t.itemID and itemSeen[t.itemID]) then
+
+                        if match and not (t.kind == "item" and t.itemID and itemSeen[t.itemID]) then
                         local nm = (t.kind == "item")
                             and ((C_Item.GetItemInfo(t.itemID)) or ("Item " .. tostring(t.itemID)))
                             or  ((C_Spell.GetSpellName and C_Spell.GetSpellName(t.spellID)) or ("Spell " .. tostring(t.spellID)))
@@ -208,7 +204,6 @@ function TUI:CustomGroupsOptions()
         return out
     end
     local function entryLabel(e)
-        -- Grey out racials this race doesn't have, and cross-spec specials that already exist live.
         local raceDim = ns.RacialSet and ns.RacialSet[e.id] and CG and CG.PlayerHasRacial and not CG.PlayerHasRacial(e.id)
         local dim = raceDim or (e.kind == "specialicon" and e.existsKey ~= nil)
         local name = dim and ("|cFF777777" .. e.name .. "|r") or e.name
@@ -418,7 +413,7 @@ function TUI:CustomGroupsOptions()
                         local function entry() return entriesFor(group, scope, getKey())[idx] end
                         local base = 10 + i * 10
                         local function gone() return entry() == nil end
-                        -- Special-icon order is per-spec; reordering one from another spec is a no-op, so grey the arrows.
+
                         local function reorderLocked() local e = entry(); return e and e.kind == "specialicon" and not e.live or false end
                         box["r" .. i .. "_up"] = {
                             order = base + 1, type = "execute", name = CG_UP, width = 0.3, hidden = gone, disabled = reorderLocked,
@@ -432,7 +427,7 @@ function TUI:CustomGroupsOptions()
                             order = base + 3, type = "description", width = 2.0, fontSize = "medium", hidden = gone,
                             name = function() local e = entry(); return e and entryLabel(e) or "" end,
                         }
-                        -- Timer / Special Icon entries link to their own config.
+
                         box["r" .. i .. "_link"] = {
                             order = base + 3.5, type = "execute", width = 0.8,
                             name = function()
@@ -497,13 +492,11 @@ function TUI:CustomGroupsOptions()
         local function gset(k, v) group[k] = v; TUI:UpdateCustomGroups(); NotifyChange() end
         local function apply() TUI:UpdateSpecialBars(); TUI:UpdateCustomGroups(); NotifyChange() end
         local function tdb() return group.text end
-        -- UpdateSpecialBars too: folded Special Icons get their cooldown text from the group's text.
         local function tset(k, v) tdb()[k] = v; TUI:UpdateSpecialBars(); TUI:UpdateCustomGroups(); NotifyChange() end
         local function isUIParent() return (group.anchorFrame or "UIParent") == "UIParent" end
         local function noCD() return not tdb().showCooldown end
         local function noCount() return not tdb().showCount end
         local function noStacks() return tdb().showStacks == false end
-        -- The group references at least one item (plain, any scope) or item-kind timer.
         local function hasItems()
             local function rootHasItem(r) return r and r.items and next(r.items) ~= nil end
             if rootHasItem(group.global) then return true end
@@ -511,7 +504,6 @@ function TUI:CustomGroupsOptions()
             for _, r in pairs(group.specs or {}) do if rootHasItem(r) then return true end end
             if ns.Timers then
                 for _, t in ipairs(ns.Timers.GetTimers()) do
-                    -- Only a Show-When-Idle item timer actually draws count/quality.
                     if t.destination == group.id and t.kind == "item" and t.showIdle then return true end
                 end
             end
@@ -543,7 +535,6 @@ function TUI:CustomGroupsOptions()
             end,
             func = function() editSpec = curSpecID(); NotifyChange() end,
         }
-        -- Clickable: each spec with specials jumps Editing Spec to it.
         specArgs.specSummary = ns.OptionLinkRowDynamic(1.7, function()
             local links = { { label = "Special Icons by spec:  ", color = { 1, 0.82, 0 } } }
             for _, r in ipairs(ns.AllSpecs()) do
@@ -582,7 +573,6 @@ function TUI:CustomGroupsOptions()
             end,
             func = function() editClass = select(2, UnitClass("player")); NotifyChange() end,
         }
-        -- Clickable: each class with entries jumps Editing Class to it.
         classArgs.classSummary = ns.OptionLinkRowDynamic(1.7, function()
             local links = { { label = "By class:  ", color = { 1, 0.82, 0 } } }
             for cid = 1, GetNumClasses() do
@@ -609,7 +599,6 @@ function TUI:CustomGroupsOptions()
 
         local globalArgs = scopeArgs(group, "global", function() return nil end)
         globalArgs.gdesc = { order = 1, type = "description", name = "Global entries show on |cFFFFCF40every character and spec|r.\n" }
-        -- Global swaps the known-spell dropdown for a racial picker.
         globalArgs.addSpell = nil
         globalArgs.addRacial = {
             order = 5, type = "select", name = "Add Racial", width = "double",
@@ -887,7 +876,6 @@ function TUI:CustomGroupsOptions()
         }
     end
 
-    -- Top: New button + one tab per group
     local args = {
         intro = {
             order = 0, type = "description",
@@ -909,7 +897,6 @@ function TUI:CustomGroupsOptions()
             if type(k) == "string" and k:match("^group%d+$") then args[k] = nil end
         end
         local groups = CG and CG.GetGroups() or {}
-        -- Alphabetical tab order; keys stay group<i> (DB index) so navigation is unchanged.
         local rank = {}
         for i = 1, #groups do rank[i] = i end
         table.sort(rank, function(a, b) return (groups[a].name or "") < (groups[b].name or "") end)

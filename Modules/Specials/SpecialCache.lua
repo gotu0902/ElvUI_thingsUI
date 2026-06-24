@@ -3,7 +3,7 @@ local addon, ns = ...
 ns.SpecialBars = ns.SpecialBars or {}
 local SB = ns.SpecialBars
 
-local GetCurrentSpecID = SB.GetCurrentSpecID   -- from SpecialDB (loaded first)
+local GetCurrentSpecID = SB.GetCurrentSpecID
 
 local CAT_BUFF = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.TrackedBuff
 local CAT_BAR  = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.TrackedBar
@@ -35,7 +35,6 @@ local function InvalidateSpellCaches()
     wipe(baseSpellCache)
 end
 
---  CDM spell list
 local cachedSpellList     = nil
 local cachedSpellListSpec = nil
 
@@ -46,7 +45,6 @@ local function MergeType(curType, newLabel)
 end
 
 local function BuildCDMSpellList()
-    -- The core scanner (SpecialShared) owns these; read live each call.
     local knownBarSpells  = SB.knownBarSpells  or {}
     local knownIconSpells = SB.knownIconSpells or {}
     local specID = GetCurrentSpecID()

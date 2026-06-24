@@ -50,7 +50,6 @@ function TUI:ReanchorDetailsRightChat()
     end
 end
 
--- Full apply: resizes rcp to fit both Details windows.
 function TUI:ApplyDetailsRightChatAnchor()
     local rcp = _G["RightChatPanel"]
     if not rcp or not _G["Details"] then return end
@@ -60,7 +59,6 @@ function TUI:ApplyDetailsRightChatAnchor()
     local LO = E:GetModule("Layout")
     local CH = E:GetModule("Chat")
 
-    -- Enable right panel backdrop without fucking up left side
     local current = E.db["chat"]["panelBackdrop"] or "HIDEBOTH"
     if current == "HIDEBOTH" then
         E.db["chat"]["panelBackdrop"] = "RIGHT"
@@ -161,7 +159,6 @@ function TUI:Initialize()
         end)
     end)
 
-    -- Re-run plugin scans + Bar Setup / Cluster Positioning on spec change.
     self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED", function(_, unit)
         if unit ~= "player" then return end
         C_Timer.After(1.5, function()

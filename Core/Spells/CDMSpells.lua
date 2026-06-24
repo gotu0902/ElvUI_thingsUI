@@ -32,7 +32,6 @@ local function ChargeStore()
     return g.cdmChargeCache
 end
 
--- Max charges; nil if 1/secret.
 local function ChargesOf(spellID)
     local c = C_Spell and C_Spell.GetSpellCharges and C_Spell.GetSpellCharges(spellID)
     local mx = c and c.maxCharges
@@ -78,7 +77,6 @@ function M.RefreshCurrentSpec()
     local store = Store()
     if store then store[specID] = map end
 
-    -- Out of combat only (secret).
     if not InCombatLockdown() then
         local charges = {}
         for sid in pairs(map) do
@@ -101,7 +99,6 @@ function M.GetForSpec(specID)
     return (store and store[specID]) or liveCache[specID]
 end
 
--- {spellID -> maxCharges}, >1 only.
 function M.GetChargesForSpec(specID)
     if not specID then return nil end
     if specID == CurrentSpecID() then

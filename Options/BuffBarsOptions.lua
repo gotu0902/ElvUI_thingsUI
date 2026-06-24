@@ -402,9 +402,6 @@ function TUI:BuffBarsOptions()
                                 end,
                                 disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
                             },
-                            -- Font + outline ALWAYS proxy ElvUI's count* fields. The visible
-                            -- text element is the same FontString regardless of which parent
-                            -- it sits on, so styling lives in one place.
                             stackFont = {
                                 order = 2,
                                 type = "select",
@@ -434,9 +431,6 @@ function TUI:BuffBarsOptions()
                                 set = function(_, value) CDM().countFontOutline = value; PokeCDM() end,
                                 disabled = function() return not E.db.thingsUI.buffBars.iconEnabled end,
                             },
-                            -- Position fields dispatch: ICON anchor -> proxy ElvUI's count*
-                            -- fields. BAR anchor -> use our own thingsUI.buffBars.stack*
-                            -- because ElvUI doesn't know about reparented stack text.
                             stackPoint = {
                                 order = 5,
                                 type = "select",

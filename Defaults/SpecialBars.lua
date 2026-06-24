@@ -104,6 +104,5 @@ ns.SPECIAL_ICON_DEFAULTS = {
     frameStrata           = "MEDIUM",
 }
 
--- Also exposed under the unified ns.Defaults namespace.
 ns.Defaults.SpecialBar  = ns.SPECIAL_BAR_DEFAULTS
 ns.Defaults.SpecialIcon = ns.SPECIAL_ICON_DEFAULTS

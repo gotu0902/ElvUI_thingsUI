@@ -26,7 +26,6 @@ function Pixel.Size(frame)
     return (E and E.mult) or 1
 end
 
--- Round to the nearest pixel step
 function Pixel.Snap(value, frame)
     if not value or value == 0 then return 0 end
     local step = Pixel.Size(frame)
@@ -36,7 +35,6 @@ function Pixel.Snap(value, frame)
     return math_ceil(value / step - 0.5) * step
 end
 
--- Prefer PixelUtil's own SetPoint/SetSize when available
 function Pixel.SetPoint(frame, point, relativeTo, relativePoint, x, y)
     if not frame then return end
     if PixelUtil and PixelUtil.SetPoint then
