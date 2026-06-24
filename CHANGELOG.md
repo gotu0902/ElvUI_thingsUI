@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.1
+
+- Nudge guard for movers when anchored  
+- Hide editmode viewer frames (ty Dan legend)  
+- Shapeshifting in combat triggered a refresh that moved CDM (ty Dan x2)  
+- Trinket -> Dynamic not watching CDM children (I'm stupid and lazy, Dan was busy, tasked Claude for that, seems to work okay)  
+
 ## 4.0.0
 
 ### Added
