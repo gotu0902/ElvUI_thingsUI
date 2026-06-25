@@ -4,6 +4,11 @@ local E   = ns.E
 
 local NotifyChange = ns.NotifyChange
 
+local function PowerTextOffset(field)
+    local pw = E.db.unitframe and E.db.unitframe.units and E.db.unitframe.units.player and E.db.unitframe.units.player.power
+    return (pw and pw[field]) or 0
+end
+
 local function ActiveSetup()
     return ns.BarSetup and ns.BarSetup.GetActiveSetup and ns.BarSetup.GetActiveSetup()
 end
@@ -11,7 +16,7 @@ end
 local function ActiveSetupIndex()
     local active = ActiveSetup()
     if not active then return nil end
-    local setups = E.db.thingsUI.barSetup.setups   -- ActiveSetup() ensured the DB
+    local setups = E.db.thingsUI.barSetup.setups
     for i = 1, (setups and #setups or 0) do
         if setups[i] == active then return i, active end
     end
@@ -119,12 +124,19 @@ local MODE_VALUES_3 = {
     FHT      = "Anchor (custom)",
     ATTACHED = "Attached (player frame)",
 }
+local MODE_VALUES_POWER = {
+    NHT      = "In stack",
+    FHT      = "Anchor (custom)",
+    ATTACHED = "Attached (player frame)",
+    DISABLED = "Disabled (hidden)",
+}
 local MODE_VALUES_2 = {
     NHT = "In stack",
     FHT = "Anchor (custom)",
 }
 local function ModeValuesFor(key)
-    if key == "power" or key == "classbar" then return MODE_VALUES_3 end
+    if key == "power" then return MODE_VALUES_POWER end
+    if key == "classbar" then return MODE_VALUES_3 end
     return MODE_VALUES_2
 end
 
@@ -155,7 +167,7 @@ local function BarRows(setup)
             local b = bar(); return b and b.mode == "FHT"
         end
         local function isNHT()
-            if isSpecial() then return true end -- always stacked
+            if isSpecial() then return true end
             local b = bar(); return b and b.mode == "NHT"
         end
         local function isAttached()
@@ -343,6 +355,29 @@ local function BarRows(setup)
                     disabled = disabledWhenOff(),
                     get = function() local b = bar(); return b and b.inheritWidthOffset or 0 end,
                     set = function(_, v) local b = bar(); if b then b.inheritWidthOffset = v; ApplyStack() end end,
+                },
+                powerHideText = {
+                    order = 17, type = "toggle", name = "Hide Power Text", width = 1.4,
+                    hidden = function() return not (key() == "power" and isAttached()) end,
+                    disabled = disabledWhenOff(),
+                    get = function() local b = bar(); return b and b.hideText or false end,
+                    set = function(_, v) local b = bar(); if b then b.hideText = v; ApplyStack() end end,
+                },
+                powerTextX = {
+                    order = 18, type = "range", name = "Text X", width = 0.7,
+                    min = -100, max = 100, step = 0.01, bigStep = 1,
+                    hidden = function() return not (key() == "power" and isAttached()) end,
+                    disabled = function() local b = bar(); return isOff() or (b and b.hideText) or false end,
+                    get = function() local b = bar(); if b and b.textX ~= nil then return b.textX end; return PowerTextOffset("xOffset") end,
+                    set = function(_, v) local b = bar(); if b then b.textX = v; ApplyStack() end end,
+                },
+                powerTextY = {
+                    order = 19, type = "range", name = "Text Y", width = 0.7,
+                    min = -100, max = 100, step = 0.01, bigStep = 1,
+                    hidden = function() return not (key() == "power" and isAttached()) end,
+                    disabled = function() local b = bar(); return isOff() or (b and b.hideText) or false end,
+                    get = function() local b = bar(); if b and b.textY ~= nil then return b.textY end; return PowerTextOffset("yOffset") end,
+                    set = function(_, v) local b = bar(); if b then b.textY = v; ApplyStack() end end,
                 },
             },
         }
@@ -582,7 +617,7 @@ local function SetupEditor(idx)
 
     return {
         type = "group",
-        name = function()   -- live rename + active=green
+        name = function()
             local nm = setup.name or ("Setup " .. idx)
             if setup == ActiveSetup() then return "|cFF33FF33" .. nm .. "|r" end
             return nm

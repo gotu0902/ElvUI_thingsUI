@@ -83,9 +83,9 @@ local BAR_X_NUDGE = {
 local function DefaultBars()
     local bars = {
         power     = NewBar(),
-        castbar   = NewBar(),
         classbar  = NewBar(),
         chargebar = NewBar(),
+        castbar   = NewBar(),
     }
     for k, v in pairs(DEFAULT_WIDTH_OFFSETS) do
         bars[k].widthOffset = v
@@ -119,6 +119,10 @@ local function EnsureDB()
     end
     if not db.barSetup.setups or #db.barSetup.setups == 0 then
         db.barSetup.setups = { NewSetup("Global") }
+    end
+    if db.barSetup.powerDetachedHeight == nil then
+        local pw = E.db.unitframe and E.db.unitframe.units and E.db.unitframe.units.player and E.db.unitframe.units.player.power
+        if pw and pw.height then db.barSetup.powerDetachedHeight = pw.height end
     end
     for _, s in ipairs(db.barSetup.setups) do
         if type(s.order) ~= "table" or #s.order == 0 then s.order = DefaultOrder() end
@@ -273,6 +277,8 @@ end
 local function GetBarHeight(key)
     local udb = E.db.unitframe and E.db.unitframe.units and E.db.unitframe.units.player
     if key == "power" then
+        local dh = E.db.thingsUI and E.db.thingsUI.barSetup and E.db.thingsUI.barSetup.powerDetachedHeight
+        if dh then return dh end
         if udb and udb.power and udb.power.height then return udb.power.height end
     elseif key == "castbar" then
         if udb and udb.castbar and udb.castbar.height then return udb.castbar.height end
@@ -394,6 +400,8 @@ local function SetBarHeight(key, value)
 
     if HasAttachedMode(key) and mode == "ATTACHED" then
         SetAttachedHeight(setup, key, value)
+    elseif key == "power" then
+        E.db.thingsUI.barSetup.powerDetachedHeight = value
     end
     WriteBarHeightToDB(key, value)
 end
@@ -441,6 +449,9 @@ function M.RestoreBarsToElvUI()
     if InCombatLockdown() then return end
     local UF = (E and E.GetModule) and E:GetModule("UnitFrames", true) or nil
     if not UF then return end
+    -- Bar Setup may have hidden the power bar (Disabled mode) — bring it back.
+    local pw = E.db.unitframe and E.db.unitframe.units and E.db.unitframe.units.player and E.db.unitframe.units.player.power
+    if pw and pw.enable == false then pw.enable = true end
     SafeConfigureCastbar(UF, _G.ElvUF_Player)
     SafeUpdatePlayerUF(UF)
     local cb = _G.ElvUF_Player and _G.ElvUF_Player.Castbar
@@ -604,11 +615,34 @@ function M.PositionStack(positionOnly)
     if udb then
         local pBar = setup.bars.power
         if udb.power and pBar and pBar.enabled then
-            local want = (pBar.mode == "NHT" or pBar.mode == "FHT")
-            if SetDetached(udb.power, want) then needsPlayerUF = true end
-            if pBar.mode == "ATTACHED"
-               and PushAttachedHeight(udb.power, "power") then
-                needsPlayerUF = true
+            local p = udb.power
+            if pBar.mode == "DISABLED" then
+                if p.enable ~= false then p.enable = false; needsPlayerUF = true end
+            else
+                if p.enable == false then p.enable = true; needsPlayerUF = true end
+                local want = (pBar.mode == "NHT" or pBar.mode == "FHT")
+                if SetDetached(p, want) then needsPlayerUF = true end
+                if pBar.mode == "ATTACHED" then
+                    if PushAttachedHeight(p, "power") then needsPlayerUF = true end
+                    local root = E.db.thingsUI.barSetup
+                    if pBar.hideText then
+                        if p.text_format ~= "" then
+                            root.powerShownFormat = p.text_format
+                            p.text_format = ""
+                            needsPlayerUF = true
+                        end
+                    elseif p.text_format and p.text_format ~= "" then
+                        root.powerShownFormat = p.text_format
+                    elseif root.powerShownFormat and root.powerShownFormat ~= "" then
+                        p.text_format = root.powerShownFormat
+                        needsPlayerUF = true
+                    end
+                    if pBar.textX ~= nil and p.xOffset ~= pBar.textX then p.xOffset = pBar.textX; needsPlayerUF = true end
+                    if pBar.textY ~= nil and p.yOffset ~= pBar.textY then p.yOffset = pBar.textY; needsPlayerUF = true end
+                else
+                    local dh = E.db.thingsUI.barSetup.powerDetachedHeight
+                    if dh and p.height ~= dh then p.height = dh; needsPlayerUF = true end
+                end
             end
         end
         local cBar = setup.bars.classbar

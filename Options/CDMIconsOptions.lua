@@ -420,6 +420,15 @@ function TUI:CDMIconsOptions()
                     if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
                 end,
             },
+            hideAuraOverlay = {
+                order = 3, type = "toggle", width = "full",
+                name = "Hide Aura Overlay",
+                get = function() return E.db.thingsUI.cdmIcons.hideAuraOverlay end,
+                set = function(_, v)
+                    E.db.thingsUI.cdmIcons.hideAuraOverlay = v
+                    TUI:UpdateCDMIcons()
+                end,
+            },
             essentialTab        = ViewerGroup(10, "essential", "Essential"),
             utilityTab          = ViewerGroup(20, "utility",   "Utility",
                                     { includeAnchor = true }),

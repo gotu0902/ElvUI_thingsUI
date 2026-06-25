@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.0.2
+
+- Disabled mode for Power Bar @ Bar Setup, when you don't need to see mana like for dragons etc
+- Fixed Power Bar when in attached mode, causing attached height bleeding into Global height
+- Added Disable Aura Overlay toggle -> in CDM menu
+- Diffuse and Dampen were in the preset list woopsiedaisy
+- Cannibalize added to racials (undeads gotta know when to eat right)
+- Castbar default at the top in bar setup
+- New things strings hehhh
+
 ## 4.0.1
 
 - Nudge guard for movers when anchored  

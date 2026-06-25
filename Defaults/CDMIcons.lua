@@ -4,7 +4,8 @@ P["thingsUI"] = P["thingsUI"] or {}
 
 P["thingsUI"].cdmIcons = {
     editModeLock = true,
-    hideAuraBorder = false,
+    hideAuraBorder = true,
+    hideAuraOverlay = true,
     essential = {
         spacing      = 1,
         overrideSize = true,

@@ -116,6 +116,152 @@ local function OnChildAuraChanged(child)
     if viewer then QueueLayout(viewer) end
 end
 
+local OVERLAY_ATLAS   = "UI-HUD-CoolDownManager-IconOverlay"
+local OVERLAY_TEX_ID  = 6707800
+local applyingOverlay = {}
+
+local function NotSecret(v)
+    return v ~= nil and not (issecretvalue and issecretvalue(v))
+end
+
+local desatCurve, desatTried
+local function GetDesatCurve()
+    if desatTried then return desatCurve end
+    desatTried = true
+    if C_CurveUtil and C_CurveUtil.CreateCurve and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Step then
+        local c = C_CurveUtil.CreateCurve()
+        if c and c.SetType then
+            c:SetType(Enum.LuaCurveType.Step)
+            c:AddPoint(0, 0)
+            c:AddPoint(0.001, 1)
+            desatCurve = c
+        end
+    end
+    return desatCurve
+end
+
+local function OverlayEligible(child)
+    if not child then return false end
+    if ns.yoinkedBars and ns.yoinkedBars[child] then return false end
+    local v = child._tuiViewer
+    local vn = v and v.GetName and v:GetName()
+    if vn ~= "EssentialCooldownViewer" and vn ~= "UtilityCooldownViewer" then return false end
+    if not child.cooldownInfo then return false end
+    return true
+end
+
+local SWIPE_TEX = "Interface\\Buttons\\WHITE8X8"
+
+local function SetDesat(icon, v)
+    if not icon then return end
+    if icon.SetDesaturation then icon:SetDesaturation(v)
+    elseif icon.SetDesaturated then icon:SetDesaturated(v > 0) end
+end
+
+local function SetCDFromDur(cd, durObj)
+    if not (cd and cd.SetCooldownFromDurationObject and durObj) then return false end
+    if pcall(cd.SetCooldownFromDurationObject, cd, durObj, false) then return true end
+    return pcall(cd.SetCooldownFromDurationObject, cd, durObj)
+end
+
+local function StripOverlayTextures(frame)
+    for _, r in ipairs({ frame:GetRegions() }) do
+        if r.IsObjectType and r:IsObjectType("Texture") then
+            local a = r.GetAtlas and r:GetAtlas()
+            local t = r.GetTexture and r:GetTexture()
+            if (NotSecret(a) and a == OVERLAY_ATLAS) or (NotSecret(t) and t == OVERLAY_TEX_ID) then
+                r:SetAlpha(0); r:Hide()
+            end
+        end
+    end
+end
+
+local function ApplyCooldownStyle(cd)
+    if cd.SetDrawSwipe          then cd:SetDrawSwipe(true) end
+    if cd.SetDrawEdge           then cd:SetDrawEdge(false) end
+    if cd.SetDrawBling          then cd:SetDrawBling(true) end
+    if cd.SetReverse            then cd:SetReverse(false) end
+    if cd.SetSwipeColor         then cd:SetSwipeColor(0, 0, 0, 0.8) end
+    if cd.SetSwipeTexture       then cd:SetSwipeTexture(SWIPE_TEX) end
+    if cd.SetUseAuraDisplayTime then cd:SetUseAuraDisplayTime(false) end
+    if cd.SetHideCountdownNumbers then cd:SetHideCountdownNumbers(false) end
+end
+
+local function UpdateIconDesat(icon, cdInfo, durObj, hasCharge)
+    if not icon then return end
+    if cdInfo and cdInfo.isOnGCD then SetDesat(icon, 0); return end
+    if durObj and not hasCharge and type(durObj.EvaluateRemainingDuration) == "function" then
+        local curve = GetDesatCurve()
+        if curve then SetDesat(icon, durObj:EvaluateRemainingDuration(curve, 0) or 0)
+        else SetDesat(icon, 0) end
+        return
+    end
+    SetDesat(icon, 0)
+end
+
+local function ApplyAuraState(child, cd, spellID)
+    local cdInfo    = C_Spell.GetSpellCooldown and C_Spell.GetSpellCooldown(spellID)
+    local durObj    = C_Spell.GetSpellCooldownDuration and C_Spell.GetSpellCooldownDuration(spellID)
+    local hasCharge = type(child.HasVisualDataSource_Charges) == "function" and not not child:HasVisualDataSource_Charges()
+    local chargeDur = hasCharge and C_Spell.GetSpellChargeDuration and C_Spell.GetSpellChargeDuration(spellID)
+
+    UpdateIconDesat(child.Icon, cdInfo, durObj, hasCharge)
+
+    local applied
+    if hasCharge and chargeDur then applied = SetCDFromDur(cd, chargeDur)
+    elseif not hasCharge and durObj then applied = SetCDFromDur(cd, durObj) end
+    if applied then return end
+
+    if cdInfo and cdInfo.isOnGCD then
+        if cd.Clear then cd:Clear() end
+    elseif cdInfo and cdInfo.startTime and cdInfo.duration and C_DurationUtil and C_DurationUtil.CreateDuration then
+        local fb = C_DurationUtil.CreateDuration()
+        if fb and fb.SetTimeFromStart then fb:SetTimeFromStart(cdInfo.startTime, cdInfo.duration); SetCDFromDur(cd, fb) end
+    elseif cd.Clear then cd:Clear() end
+end
+
+local function ProcessCooldownFrame(child)
+    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    if not (cdm and cdm.hideAuraOverlay) then return end
+    if not OverlayEligible(child) then return end
+    local cd = child.Cooldown
+    if not cd or applyingOverlay[cd] then return end
+
+    applyingOverlay[cd] = true
+    StripOverlayTextures(child)
+    ApplyCooldownStyle(cd)
+    local info = child.cooldownInfo
+    local spellID = info and (info.overrideSpellID or info.spellID)
+    if spellID and NotSecret(spellID) and type(spellID) == "number" and spellID > 0 and C_Spell then
+        ApplyAuraState(child, cd, spellID)
+    else
+        if cd.Clear then cd:Clear() end
+        SetDesat(child.Icon, 0)
+    end
+    applyingOverlay[cd] = nil
+end
+
+local function HideAuraOverlay(child)
+    ProcessCooldownFrame(child)
+end
+
+local function EnsureOverlayHooks(child)
+    local cd = child and child.Cooldown
+    if not cd or cd._tuiOverlayHooked then return end
+    if not OverlayEligible(child) then return end
+    cd._tuiOverlayHooked = true
+    local function reapply() ProcessCooldownFrame(child) end
+    hooksecurefunc(cd, "SetCooldown", reapply)
+    if cd.SetCooldownFromDurationObject then hooksecurefunc(cd, "SetCooldownFromDurationObject", reapply) end
+    if cd.SetSwipeColor then hooksecurefunc(cd, "SetSwipeColor", reapply) end
+    local icon = child.Icon
+    if icon and not icon._tuiOverlayHooked then
+        icon._tuiOverlayHooked = true
+        if icon.SetDesaturated  then hooksecurefunc(icon, "SetDesaturated",  reapply) end
+        if icon.SetDesaturation then hooksecurefunc(icon, "SetDesaturation", reapply) end
+    end
+end
+
 local function HookChild(child, viewer)
     if hookedChildren[child] then return end
     hookedChildren[child] = true
@@ -139,6 +285,8 @@ local function HookChild(child, viewer)
             if cdm and cdm.hideAuraBorder then self:SetAlpha(0) end
         end)
     end
+
+    EnsureOverlayHooks(child)
 end
 
 local hookedViewerAnchors = {}
@@ -342,6 +490,9 @@ local function LayoutViewer(viewer)
             local b = visible[i].DebuffBorder
             if b then b:SetAlpha(0) end
         end
+    end
+    if cdmRoot and cdmRoot.hideAuraOverlay then
+        for i = 1, #visible do EnsureOverlayHooks(visible[i]); HideAuraOverlay(visible[i]) end
     end
 
     local sizeW, sizeH = GetIconSize(vdb)
@@ -624,89 +775,3 @@ f:SetScript("OnEvent", function(_, event)
         for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAll) end
     end
 end)
-
-local function fmt(n) return n and string.format("%.1f", n) or "nil" end
-
-SLASH_TUICDM1 = "/tuicdm"
-SlashCmdList.TUICDM = function()
-    print("|cFF8080FFthingsUI CDM|r --- viewer dump ---")
-    print(("Trinkets: extent=%s side=%s count=%s"):format(
-        fmt(ns.TrinketsCDM and ns.TrinketsCDM.GetTrinketExtent and (select(1, ns.TrinketsCDM.GetTrinketExtent()))),
-        tostring(ns.TrinketsCDM and ns.TrinketsCDM.GetTrinketExtent and (select(2, ns.TrinketsCDM.GetTrinketExtent()))),
-        tostring(ns.TrinketsCDM and ns.TrinketsCDM.GetExtraEssentialCount and ns.TrinketsCDM.GetExtraEssentialCount())))
-    for name, key in pairs(VIEWERS) do
-        local v = _G[name]
-        if v then
-            local vdb = GetViewerDB(name) or {}
-            local p, relTo, relPoint, x, y = v:GetPoint()
-            local cx = v.GetCenter and select(1, v:GetCenter()) or nil
-            local prot, protExpl = v:IsProtected()
-            local vis = 0
-            for i = 1, v:GetNumChildren() do
-                local c = select(i, v:GetChildren())
-                if c and c.GetCooldownID and c:IsShown() then vis = vis + 1 end
-            end
-            print(("|cFFFFD200%s|r [%s]"):format(name, key))
-            print(("  cfg: anchorEnabled=%s point=%s relPoint=%s to=%s x=%s y=%s growth=%s perRow=%s")
-                :format(tostring(vdb.anchorEnabled), tostring(vdb.anchorPoint),
-                    tostring(vdb.anchorRelativePoint), tostring(vdb.anchorFrame),
-                    tostring(vdb.anchorXOffset), tostring(vdb.anchorYOffset),
-                    tostring(vdb.growthDirection), tostring(vdb.iconsPerRow)))
-            print(("  live: GetPoint=%s rel=%s/%s ofs=%s,%s | W=%s H=%s L=%s R=%s centerX=%s vis=%d prot=%s/%s combat=%s")
-                :format(tostring(p), relTo and relTo.GetName and (relTo:GetName() or "?") or tostring(relTo),
-                    tostring(relPoint), fmt(x), fmt(y),
-                    fmt(v:GetWidth()), fmt(v:GetHeight()), fmt(v:GetLeft()), fmt(v:GetRight()), fmt(cx), vis,
-                    tostring(prot), tostring(protExpl), tostring(InCombatLockdown())))
-            local si = v.systemInfo
-            local ai = si and si.anchorInfo
-            local par = v.GetParent and v:GetParent()
-            print(("  editmode: idp=%s ignMgr=%s init=%s parent=%s | ai.point=%s relTo=%s ofs=%s,%s")
-                :format(tostring(si and si.isInDefaultPosition), tostring(v.ignoreFramePositionManager),
-                    tostring(v.IsInitialized and v:IsInitialized()),
-                    (par and par.GetName and (par:GetName() or "?")) or tostring(par),
-                    tostring(ai and ai.point), tostring(ai and ai.relativeTo),
-                    fmt(ai and ai.offsetX), fmt(ai and ai.offsetY)))
-        else
-            print(("|cFFFFD200%s|r missing"):format(name))
-        end
-    end
-    print("|cFF8080FFthingsUI CDM|r --- proxy + cluster ---")
-    for name in pairs(VIEWERS) do
-        local pr = GetProxy(_G[name])
-        if pr then
-            local pp, prelTo, prelP, px, py = pr:GetPoint()
-            print(("  proxy[%s]: pt=%s rel=%s/%s ofs=%s,%s | W=%s H=%s L=%s R=%s scale=%s")
-                :format(name, tostring(pp),
-                    prelTo and prelTo.GetName and (prelTo:GetName() or "?") or tostring(prelTo),
-                    tostring(prelP), fmt(px), fmt(py),
-                    fmt(pr:GetWidth()), fmt(pr:GetHeight()), fmt(pr:GetLeft()), fmt(pr:GetRight()), fmt(pr:GetScale())))
-        end
-    end
-    local ca = _G.TUI_ClusterAnchor
-    if ca then
-        print(("  clusterAnchor: W=%s H=%s L=%s R=%s"):format(fmt(ca:GetWidth()), fmt(ca:GetHeight()), fmt(ca:GetLeft()), fmt(ca:GetRight())))
-    end
-    for _, fn in ipairs({ "ElvUF_Player", "ElvUF_Target" }) do
-        local uf = _G[fn]
-        if uf then
-            local up, urelTo, urelP, ux, uy = uf:GetPoint()
-            print(("  %s: pt=%s rel=%s/%s ofs=%s,%s L=%s")
-                :format(fn, tostring(up),
-                    urelTo and urelTo.GetName and (urelTo:GetName() or "?") or tostring(urelTo),
-                    tostring(urelP), fmt(ux), fmt(uy), fmt(uf:GetLeft())))
-        end
-    end
-    print("|cFF8080FFthingsUI CDM|r --- essential mover ---")
-    local edb = E.db.thingsUI and E.db.thingsUI.essentialMover
-    print(("  essentialMover db: point=%s x=%s y=%s enabled=%s")
-        :format(tostring(edb and edb.point), tostring(edb and edb.x), tostring(edb and edb.y), tostring(edb and edb.enabled)))
-    print(("  E.db.movers.TUI_EssentialMover = %s"):format(tostring(E.db and E.db.movers and E.db.movers.TUI_EssentialMover)))
-    local mv = _G.TUI_EssentialMover
-    if mv then
-        local mp, mrelTo, mrelP, mx, my = mv:GetPoint()
-        print(("  mover: pt=%s rel=%s/%s ofs=%s,%s | W=%s H=%s")
-            :format(tostring(mp),
-                mrelTo and mrelTo.GetName and (mrelTo:GetName() or "?") or tostring(mrelTo),
-                tostring(mrelP), fmt(mx), fmt(my), fmt(mv:GetWidth()), fmt(mv:GetHeight())))
-    end
-end

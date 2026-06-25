@@ -160,8 +160,6 @@ ns.ClassSpells = {
     MONK = {
         class = {
             115203, -- Fortifying Brew
-            122783, -- Diffuse Magic
-            122278, -- Dampen Harm
             119381, -- Leg Sweep
             116705, -- Spear Hand Strike
             116844, -- Ring of Peace
@@ -245,31 +243,32 @@ function ns.GetSpecSpellList(specID)
 end
 
 ns.Racials = {
-    59752,   -- Will to Survive
-    20594,   -- Stoneform
-    58984,   -- Shadowmeld
-    20589,   -- Escape Artist
-    28880,   -- Gift of the Naaru
-    68992,   -- Darkflight
-    20572,   -- Blood Fury
-    7744,    -- Will of the Forsaken
-    20549,   -- War Stomp
-    26297,   -- Berserking
-    202719,  -- Arcane Torrent
-    69070,   -- Rocket Jump
-    69041,   -- Rocket Barrage
-    256948,  -- Spatial Rift
-    255647,  -- Light's Judgment
-    287712,  -- Haymaker
-    265221,  -- Fireblood
-    291944,  -- Regeneratin'
-    312411,  -- Bag of Tricks
-    312924,  -- Hyper Organic Light Originator
-    107079,  -- Quaking Palm
-    368970,  -- Tail Swipe
-    357214,  -- Wing Buffet
-    436344,  -- Azerite Surge
-    1237885, -- Thorn Bloom
+    59752,   -- Will to Survive (Human)
+    20594,   -- Stoneform (Dwarf)
+    58984,   -- Shadowmeld (Night Elf)
+    20589,   -- Escape Artist (Gnome)
+    28880,   -- Gift of the Naaru (Draenei)
+    68992,   -- Darkflight (Worgen)
+    20572,   -- Blood Fury (Orc)
+    7744,    -- Will of the Forsaken (Undead)
+    20577.   -- Cannibalize (Undead)
+    20549,   -- War Stomp (Tauren)
+    26297,   -- Berserking (Troll)
+    202719,  -- Arcane Torrent (Blood Elf)
+    69070,   -- Rocket Jump (Goblin)
+    69041,   -- Rocket Barrage (Goblin)
+    256948,  -- Spatial Rift (Void Elf)
+    255647,  -- Light's Judgment (Light Draenei)
+    287712,  -- Haymaker (Kul Tiran)
+    265221,  -- Fireblood (Red Dwarf)
+    291944,  -- Regeneratin' (Zandalari)
+    312411,  -- Bag of Tricks (Furry)
+    312924,  -- Hyper Organic Light Originator (Mechagnome)
+    107079,  -- Quaking Palm (Panda)
+    368970,  -- Tail Swipe (Dragon)
+    357214,  -- Wing Buffet (Dragon)
+    436344,  -- Azerite Surge (Earthen)
+    1237885, -- Thorn Bloom (Haranir)
     274738,  -- Ancestral Call (Mag'har Orc)
     255654,  -- Bull Rush (Highmountain Tauren)
     260364,  -- Arcane Pulse (Nightborne)
