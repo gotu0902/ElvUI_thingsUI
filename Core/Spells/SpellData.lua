@@ -251,7 +251,7 @@ ns.Racials = {
     68992,   -- Darkflight (Worgen)
     20572,   -- Blood Fury (Orc)
     7744,    -- Will of the Forsaken (Undead)
-    20577.   -- Cannibalize (Undead)
+    20577,   -- Cannibalize (Undead)
     20549,   -- War Stomp (Tauren)
     26297,   -- Berserking (Troll)
     202719,  -- Arcane Torrent (Blood Elf)
