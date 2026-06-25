@@ -7,6 +7,12 @@
 	<Script file="Widgets\OptionLinkWidget.lua"/>
 	<Script file="ActiveSpecsList.lua"/>
 	<Script file="Share.lua"/>
+	<Script file="Grid2\Grid2_NHT_CLASS.lua"/>
+	<Script file="Grid2\Grid2_NHT_DARK.lua"/>
+	<Script file="Grid2\Grid2_FHT_ICONS_CLASS.lua"/>
+	<Script file="Grid2\Grid2_FHT_ICONS_DARK.lua"/>
+	<Script file="Grid2\Grid2_FHT_SQUARES_CLASS.lua"/>
+	<Script file="Grid2\Grid2_FHT_SQUARES_DARK.lua"/>
 	<Script file="Grid2Profiles.lua"/>
 	<Script file="Install.lua"/>
 	<Script file="Spells\SpellData.lua"/>

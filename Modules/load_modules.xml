@@ -1,4 +1,5 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
+	<Script file="CDHelpers.lua"/>
 	<Script file="Specials\SpecialDB.lua"/>
 	<Script file="Specials\SpecialCache.lua"/>
 	<Script file="Specials\SpecialShared.lua"/>

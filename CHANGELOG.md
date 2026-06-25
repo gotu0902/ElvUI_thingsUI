@@ -9,6 +9,7 @@
 - Cannibalize added to racials (undeads gotta know when to eat right)
 - Castbar default at the top in bar setup
 - New things strings hehhh
+- Grid2 strings - tried to align opacity with ElvUI UFs
 
 ## 4.0.1
 

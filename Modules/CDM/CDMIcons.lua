@@ -6,6 +6,11 @@ local Pixel = ns.Pixel
 ns.CDMIcons = ns.CDMIcons or {}
 local M = ns.CDMIcons
 
+local H = ns.CDHelpers
+local NotSecret     = H.NotSecret
+local GetDesatCurve = H.GetDesatCurve
+local SetDesat      = H.SetDesat
+
 local VIEWERS = {
     EssentialCooldownViewer = "essential",
     UtilityCooldownViewer   = "utility",
@@ -120,26 +125,6 @@ local OVERLAY_ATLAS   = "UI-HUD-CoolDownManager-IconOverlay"
 local OVERLAY_TEX_ID  = 6707800
 local applyingOverlay = {}
 
-local function NotSecret(v)
-    return v ~= nil and not (issecretvalue and issecretvalue(v))
-end
-
-local desatCurve, desatTried
-local function GetDesatCurve()
-    if desatTried then return desatCurve end
-    desatTried = true
-    if C_CurveUtil and C_CurveUtil.CreateCurve and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Step then
-        local c = C_CurveUtil.CreateCurve()
-        if c and c.SetType then
-            c:SetType(Enum.LuaCurveType.Step)
-            c:AddPoint(0, 0)
-            c:AddPoint(0.001, 1)
-            desatCurve = c
-        end
-    end
-    return desatCurve
-end
-
 local function OverlayEligible(child)
     if not child then return false end
     if ns.yoinkedBars and ns.yoinkedBars[child] then return false end
@@ -151,12 +136,6 @@ local function OverlayEligible(child)
 end
 
 local SWIPE_TEX = "Interface\\Buttons\\WHITE8X8"
-
-local function SetDesat(icon, v)
-    if not icon then return end
-    if icon.SetDesaturation then icon:SetDesaturation(v)
-    elseif icon.SetDesaturated then icon:SetDesaturated(v > 0) end
-end
 
 local function SetCDFromDur(cd, durObj)
     if not (cd and cd.SetCooldownFromDurationObject and durObj) then return false end
