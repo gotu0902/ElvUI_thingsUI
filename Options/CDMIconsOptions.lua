@@ -429,6 +429,15 @@ function TUI:CDMIconsOptions()
                     TUI:UpdateCDMIcons()
                 end,
             },
+            autoEnableCDM = {
+                order = 4, type = "toggle", width = "full",
+                name = "Auto-enable Cooldown Manager",
+                get = function() return E.db.thingsUI.cdmIcons.autoEnableCDM end,
+                set = function(_, v)
+                    E.db.thingsUI.cdmIcons.autoEnableCDM = v
+                    if v and ns.CDMIcons and ns.CDMIcons.MaybeAutoEnableCDM then ns.CDMIcons.MaybeAutoEnableCDM() end
+                end,
+            },
             essentialTab        = ViewerGroup(10, "essential", "Essential"),
             utilityTab          = ViewerGroup(20, "utility",   "Utility",
                                     { includeAnchor = true }),

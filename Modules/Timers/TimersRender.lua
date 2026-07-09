@@ -125,6 +125,9 @@ function R.Update(btn, timer)
         if tex and btn._tex ~= tex then btn.icon:SetTexture(tex); btn._tex = tex end
     end
     local now = GetTime()
+    if btn.cooldown and btn.cooldown.SetReverse then
+        btn.cooldown:SetReverse(timer.kind == "lust")
+    end
 
     if timer.kind == "lust" then
         local phase, start, dur = T.GetLustState(now)

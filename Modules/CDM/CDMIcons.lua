@@ -4,6 +4,7 @@ local E   = ns.E
 local Pixel = ns.Pixel
 
 ns.CDMIcons = ns.CDMIcons or {}
+ns.CDM_SPACING_INSET = ns.CDM_SPACING_INSET or 2
 local M = ns.CDMIcons
 
 local H = ns.CDHelpers
@@ -23,6 +24,7 @@ local applyingChild  = {}
 local pendingViewers = {}
 local pendingFrame   = CreateFrame("Frame")
 local QueueLayout
+local LayoutViewer
 
 local proxies = {}
 local function GetProxy(viewer)
@@ -97,6 +99,7 @@ local function SortByCooldownID(children)
 end
 
 local cdmRebuilding = false
+local lastSpec
 
 local function ReapplyChildAnchor(child)
     if cdmRebuilding then return end
@@ -105,9 +108,8 @@ local function ReapplyChildAnchor(child)
     if ns.yoinkedBars and ns.yoinkedBars[child] then return end
     local a = child._tuiAnchor
     if not a or not a.relative then
-
         local viewer = child._tuiViewer
-        if viewer then viewer._tuiLayoutSig = nil; QueueLayout(viewer) end
+        if viewer then viewer._tuiLayoutSig = nil; LayoutViewer(viewer) end
         return
     end
     applyingChild[child] = true
@@ -427,7 +429,21 @@ local function MirrorProxyToViewer(proxy, viewer)
     proxy:SetPoint("BOTTOMLEFT", _G.UIParent, "BOTTOMLEFT", fl, fb)
 end
 
-local function LayoutViewer(viewer)
+local barRestackPending
+local function NotifyClusterWidthChanged()
+    if barRestackPending then return end
+    barRestackPending = true
+    C_Timer.After(0, function()
+        barRestackPending = nil
+        if InCombatLockdown() then return end
+        if ns.BarSetup and ns.BarSetup.ResetWidthCache and ns.BarSetup.ApplyStack then
+            ns.BarSetup.ResetWidthCache()
+            ns.BarSetup.ApplyStack()
+        end
+    end)
+end
+
+LayoutViewer = function(viewer)
 
     if cdmRebuilding then return end
     if _G.EditModeManagerFrame and _G.EditModeManagerFrame:IsShown() then return end
@@ -514,8 +530,7 @@ local function LayoutViewer(viewer)
 
     local iconW = (sizeW) or visible[1]:GetWidth() or 36
     local iconH = (sizeH) or visible[1]:GetHeight() or 36
-    local BACKDROP_INSET = 2
-    local spacing  = (vdb.spacing or 0) + BACKDROP_INSET
+    local spacing  = (vdb.spacing or 0) + (ns.CDM_SPACING_INSET or 2)
     local growth   = GROWTH[vdb.growthDirection] or GROWTH.CENTERED_H
     local perLine  = math.max(1, vdb.iconsPerRow or 20)
     local anchorPin = vdb.anchorPoint or "CENTER"
@@ -603,6 +618,7 @@ local function LayoutViewer(viewer)
     if math.abs((proxy:GetWidth() or 0) - totalW) > 0.5
        or math.abs((proxy:GetHeight() or 0) - totalH) > 0.5 then
         Pixel.SetSize(proxy, totalW, totalH)
+        if viewer == _G.EssentialCooldownViewer then NotifyClusterWidthChanged() end
     end
 
     if not ProxyOwnedByThingsUI(viewer, vdb) then
@@ -737,18 +753,42 @@ function TUI:UpdateCDMIcons()
     end
 end
 
+function M.MaybeAutoEnableCDM()
+    if InCombatLockdown() then return end
+    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    if not (cdm and cdm.autoEnableCDM) then return end
+    if GetCVarBool and GetCVarBool("cooldownViewerEnabled") then return end
+    if not (C_CooldownViewer and C_CooldownViewer.IsCooldownViewerAvailable
+            and C_CooldownViewer.IsCooldownViewerAvailable()) then return end
+    local gdb = _G.thingsUIGlobalDB
+    local guid = UnitGUID and UnitGUID("player")
+    if not (gdb and guid) then return end
+    gdb.cdmAutoEnabled = gdb.cdmAutoEnabled or {}
+    if gdb.cdmAutoEnabled[guid] then return end
+    gdb.cdmAutoEnabled[guid] = true
+    pcall(SetCVar, "cooldownViewerEnabled", "1")
+    print("|cFF8080FFthingsUI|r enabled the Cooldown Manager (required). Turn off auto-enable in the CDM options.")
+    for _, t in ipairs({ 0.5, 1.0, 2.0 }) do C_Timer.After(t, M.RefreshAll) end
+end
+
 local f = CreateFrame("Frame")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
 f:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 f:RegisterEvent("PLAYER_REGEN_ENABLED")
 f:SetScript("OnEvent", function(_, event)
 
+    M.MaybeAutoEnableCDM()
     if event == "PLAYER_SPECIALIZATION_CHANGED" then
-        cdmRebuilding = true
-        C_Timer.After(2.5, function() cdmRebuilding = false end)
+        local spec = GetSpecialization and GetSpecialization()
+        if lastSpec ~= nil and spec ~= lastSpec then
+            cdmRebuilding = true
+            C_Timer.After(2.5, function() cdmRebuilding = false end)
+        end
+        lastSpec = spec
         for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAll) end
     elseif event == "PLAYER_REGEN_ENABLED" then
         M.RefreshAll()
+        for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAll) end
     else
         M.RefreshAll()
         for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAll) end

@@ -8,7 +8,7 @@ ns.CustomGroups = ns.CustomGroups or {}
 local M = ns.CustomGroups
 
 local groupState = {}
-local QueueLayout  -- fwd
+local QueueLayout
 
 local function GetCurrentSpecID()
     local idx = GetSpecialization()
@@ -83,7 +83,7 @@ function M.GetScopeRoot(group, scope, key, create)
         key = key or GetCurrentClassFile()
         if create then group.classes[key] = group.classes[key] or {} end
         root = group.classes[key]
-    else -- spec
+    else
         group.specs = group.specs or {}
         if not key then local id = GetCurrentSpecID(); key = (id ~= 0) and id or 1 end
         key = tostring(key)
@@ -146,7 +146,7 @@ for gi, grp in ipairs(POTION_GROUPS) do
 end
 M.POTION_OF = POTION_OF
 M.FLEETING  = FLEETING
-M.POTION_GROUPS = POTION_GROUPS   -- exported so Timers can register all rank variants' triggers
+M.POTION_GROUPS = POTION_GROUPS
 
 local function PickBestOwnedPotion(gi)
     local grp = POTION_GROUPS[gi]; if not grp then return nil end
@@ -330,6 +330,9 @@ local function UpdateTimerIcon(btn)
         if tex then btn.icon:SetTexture(tex) end
     end
     local now = GetTime()
+    if btn.cooldown and btn.cooldown.SetReverse then
+        btn.cooldown:SetReverse(timer.kind == "lust")
+    end
     if timer.kind == "lust" then
 
         local phase, start, dur = ns.Timers.GetLustState(now)

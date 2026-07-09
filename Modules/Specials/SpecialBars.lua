@@ -64,31 +64,77 @@ local _bdBar  = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
 local _bdIcon = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
 
 local function FindBarBySpell(spellID, forKey)
-    if not spellID then return nil end
-    local claimed = SB.RebuildClaimedBarFrames()
-    if BuffBarCooldownViewer then
-        local children, childCount = SB.GetChildrenReuseFind(BuffBarCooldownViewer)
-        for i = 1, childCount do
-            local child = children[i]
-            local owner = claimed[child]
-            if (not owner or owner == forKey) and SB.SafeMatch(child, spellID, true) then
-                return child
+    return SB.FindChildBySpell(spellID, forKey, true)
+end
+
+local function BarStyleSig(db, h)
+    local c = db.customColor or {}
+    return table.concat({
+        tostring(h), tostring(db.font), tostring(db.fontSize), tostring(db.fontOutline),
+        tostring(db.showName), tostring(db.namePoint), tostring(db.nameXOffset), tostring(db.nameYOffset),
+        tostring(db.showDuration), tostring(db.durationPoint), tostring(db.durationXOffset), tostring(db.durationYOffset),
+        tostring(db.statusBarTexture), tostring(db.useClassColor), tostring(c.r), tostring(c.g), tostring(c.b),
+        tostring(db.iconEnabled), tostring(db.iconZoom), tostring(db.iconSpacing),
+        tostring(db.showStacks), tostring(db.stackFontSize), tostring(db.stackFontOutline),
+        tostring(db.stackAnchor), tostring(db.stackPoint), tostring(db.stackXOffset), tostring(db.stackYOffset),
+    }, "\a")
+end
+
+local function ReassertBarVisuals(childFrame, db)
+    local bar, icon = childFrame.Bar, childFrame.Icon
+    if not bar then return end
+    if childFrame.tuiBackdrop then
+        childFrame.tuiBackdrop:SetFrameLevel(math.max(childFrame:GetFrameLevel() - 1, 0))
+        childFrame.tuiBackdrop:Show()
+    end
+    if not childFrame._tuiBarBgRegions then childFrame._tuiBarBgRegions = {} end
+    for i = 1, bar:GetNumRegions() do
+        local r = select(i, bar:GetRegions())
+        if r and type(r.GetDrawLayer) == "function" and r:GetDrawLayer() == "BACKGROUND" then
+            if childFrame._tuiBarBgRegions[r] == nil then
+                childFrame._tuiBarBgRegions[r] = r:GetAlpha()
             end
+            r:SetAlpha(0)
         end
     end
-    for child in pairs(yoinkedBars) do
-        local owner = claimed[child]
-        if (not owner or owner == forKey) and SB.SafeMatch(child, spellID, true) then
-            return child
+    if bar.BarBG then bar.BarBG:SetAlpha(0) end
+    if bar.Pip   then bar.Pip:SetAlpha(0)   end
+    if bar.Name     then bar.Name:SetAlpha(db.showName and 1 or 0) end
+    if bar.Duration then bar.Duration:SetAlpha(db.showDuration and 1 or 0) end
+    if icon then
+        if db.iconEnabled then
+            icon:SetAlpha(1)
+            if icon.tuiBackdrop then
+                icon.tuiBackdrop:SetFrameLevel(math.max(icon:GetFrameLevel() - 1, 0))
+                icon.tuiBackdrop:Show()
+            end
+        else
+            icon:SetAlpha(0)
+        end
+        if icon.Applications then
+            icon.Applications:SetAlpha(db.showStacks and 1 or 0)
         end
     end
-    return nil
 end
 
 local function StyleSpecialBar(childFrame, db, effectiveHeight)
     local bar  = childFrame.Bar
     local icon = childFrame.Icon
     if not bar then return end
+
+    if not childFrame._tuiBarTextSaved then
+        childFrame._tuiBarTextSaved = {
+            nameAlpha = bar.Name and bar.Name:GetAlpha() or 1,
+            durAlpha  = bar.Duration and bar.Duration:GetAlpha() or 1,
+        }
+    end
+
+    local sig = BarStyleSig(db, effectiveHeight)
+    if childFrame._tuiBarStyleSig == sig then
+        ReassertBarVisuals(childFrame, db)
+        return
+    end
+    childFrame._tuiBarStyleSig = sig
 
     if not childFrame.tuiBackdrop then
         childFrame.tuiBackdrop = CreateFrame("Frame", nil, childFrame, "BackdropTemplate")
@@ -99,11 +145,9 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
     end
     childFrame.tuiBackdrop:SetBackdropColor(0, 0, 0, 0.6)
     childFrame.tuiBackdrop:SetBackdropBorderColor(0, 0, 0, 1)
-    childFrame.tuiBackdrop:SetFrameLevel(childFrame:GetFrameLevel() - 1)
 
     local barOffset = 0
     if db.iconEnabled and icon then
-        icon:SetAlpha(1)
         icon:SetScale(1)
         icon:SetSize(effectiveHeight, effectiveHeight)
         if icon.Icon then
@@ -125,17 +169,12 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
             icon.tuiBackdrop:SetBackdropColor(0, 0, 0, 1)
             icon.tuiBackdrop:SetBackdropBorderColor(0, 0, 0, 1)
         end
-        icon.tuiBackdrop:Show()
         icon.tuiBackdrop:SetAllPoints(icon)
-        icon.tuiBackdrop:SetFrameLevel(icon:GetFrameLevel() - 1)
         icon:ClearAllPoints()
         icon:SetPoint("LEFT", childFrame, "LEFT", 0, 0)
         barOffset = effectiveHeight + (db.iconSpacing or 1)
-    elseif icon then
-        icon:SetAlpha(0)
     end
 
-    childFrame.tuiBackdrop:Show()
     childFrame.tuiBackdrop:ClearAllPoints()
     childFrame.tuiBackdrop:SetPoint("TOPLEFT",     childFrame, "TOPLEFT",     barOffset, 0)
     childFrame.tuiBackdrop:SetPoint("BOTTOMRIGHT", childFrame, "BOTTOMRIGHT", 0,         0)
@@ -144,41 +183,16 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
     bar:SetPoint("TOPLEFT",     childFrame.tuiBackdrop, "TOPLEFT",     1, -1)
     bar:SetPoint("BOTTOMRIGHT", childFrame.tuiBackdrop, "BOTTOMRIGHT", -1, 1)
 
-    if not childFrame._tuiBarBgRegions then childFrame._tuiBarBgRegions = {} end
-    for i = 1, bar:GetNumRegions() do
-        local r = select(i, bar:GetRegions())
-        if r and type(r.GetDrawLayer) == "function" then
-            local layer = r:GetDrawLayer()
-            if layer == "BACKGROUND" then
-                childFrame._tuiBarBgRegions[r] = r:GetAlpha()
-                r:SetAlpha(0)
-            end
-        end
-    end
-
     local font = LSM:Fetch("font", db.font)
-    if not childFrame._tuiBarTextSaved then
-        childFrame._tuiBarTextSaved = {
-            nameAlpha = bar.Name and bar.Name:GetAlpha() or 1,
-            durAlpha  = bar.Duration and bar.Duration:GetAlpha() or 1,
-        }
+    if bar.Name and db.showName then
+        E:SetFont(bar.Name, font, db.fontSize, db.fontOutline)
+        bar.Name:ClearAllPoints()
+        bar.Name:SetPoint(db.namePoint or "LEFT", bar, db.namePoint or "LEFT", db.nameXOffset or 2, db.nameYOffset or 0)
     end
-    if bar.Name then
-        if db.showName then
-            bar.Name:SetAlpha(1)
-            E:SetFont(bar.Name, font, db.fontSize, db.fontOutline)
-            bar.Name:ClearAllPoints()
-            bar.Name:SetPoint(db.namePoint or "LEFT", bar, db.namePoint or "LEFT", db.nameXOffset or 2, db.nameYOffset or 0)
-        else bar.Name:SetAlpha(0) end
-    end
-
-    if bar.Duration then
-        if db.showDuration then
-            bar.Duration:SetAlpha(1)
-            E:SetFont(bar.Duration, font, db.fontSize, db.fontOutline)
-            bar.Duration:ClearAllPoints()
-            bar.Duration:SetPoint(db.durationPoint or "RIGHT", bar, db.durationPoint or "RIGHT", db.durationXOffset or -4, db.durationYOffset or 0)
-        else bar.Duration:SetAlpha(0) end
+    if bar.Duration and db.showDuration then
+        E:SetFont(bar.Duration, font, db.fontSize, db.fontOutline)
+        bar.Duration:ClearAllPoints()
+        bar.Duration:SetPoint(db.durationPoint or "RIGHT", bar, db.durationPoint or "RIGHT", db.durationXOffset or -4, db.durationYOffset or 0)
     end
 
     bar:SetStatusBarTexture(LSM:Fetch("statusbar", db.statusBarTexture))
@@ -188,13 +202,10 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
     else
         bar:SetStatusBarColor(db.customColor.r, db.customColor.g, db.customColor.b)
     end
-    if bar.BarBG then bar.BarBG:SetAlpha(0) end
-    if bar.Pip   then bar.Pip:SetAlpha(0)   end
 
     if icon and icon.Applications then
-        local stackFont = LSM:Fetch("font", db.font)
         if icon.Applications.SetFont then
-            E:SetFont(icon.Applications, stackFont, db.stackFontSize or 14, db.stackFontOutline or "OUTLINE")
+            E:SetFont(icon.Applications, font, db.stackFontSize or 14, db.stackFontOutline or "OUTLINE")
         end
         local stackParent = (db.stackAnchor == "BAR") and bar or icon
         if icon.Applications:GetParent() ~= stackParent then
@@ -209,8 +220,9 @@ local function StyleSpecialBar(childFrame, db, effectiveHeight)
         icon.Applications:SetJustifyH("CENTER")
         icon.Applications:ClearAllPoints()
         icon.Applications:SetPoint(db.stackPoint or "CENTER", stackParent, db.stackPoint or "CENTER", xOff, db.stackYOffset or 0)
-        if not db.showStacks then icon.Applications:SetAlpha(0) else icon.Applications:SetAlpha(1) end
     end
+
+    ReassertBarVisuals(childFrame, db)
 end
 
 local function ReleaseBar(barKey)
@@ -348,6 +360,14 @@ UpdateBarSlot = function(barKey)
         end
     end
 
+    local stHeld = specialBarState[barKey]
+    local heldBar = stHeld and stHeld.childFrame
+    if heldBar and not InCombatLockdown() and not SB.SafeMatch(heldBar, db.spellID, true) then
+        ReturnFrame(heldBar, true)
+        stHeld.childFrame = nil
+        stHeld.w, stHeld.h = nil, nil
+    end
+
     local realFrame = FindBarBySpell(db.spellID, barKey)
     local isActive  = realFrame and realFrame:IsShown()
 
@@ -367,26 +387,33 @@ UpdateBarSlot = function(barKey)
             realFrame._cdmOriginalW = realFrame:GetWidth()
             realFrame._cdmOriginalH = realFrame:GetHeight()
         end
+        if not realFrame._cdmOriginalStrata then
+            realFrame._cdmOriginalStrata = realFrame:GetFrameStrata()
+            realFrame._cdmOriginalLevel  = realFrame:GetFrameLevel()
+        end
 
+        realFrame._tuiSpecialBarKey = barKey
+        realFrame._tuiSpecialW, realFrame._tuiSpecialH = effectiveWidth, effectiveHeight
         yoinkedBars[realFrame] = true
-        realFrame:SetParent(wrapper)
-        realFrame:ClearAllPoints()
-        realFrame:SetPoint("CENTER", wrapper, "CENTER", 0, 0)
-        realFrame:SetSize(effectiveWidth, effectiveHeight)
+        UIParent.SetFrameStrata(realFrame, wrapper:GetFrameStrata())
+        UIParent.SetFrameLevel(realFrame, wrapper:GetFrameLevel() + 1)
+        UIParent.ClearAllPoints(realFrame)
+        UIParent.SetPoint(realFrame, "CENTER", wrapper, "CENTER", 0, 0)
+        UIParent.SetSize(realFrame, effectiveWidth, effectiveHeight)
 
         wrapper.backdrop:Hide()
         StyleSpecialBar(realFrame, db, effectiveHeight)
         wrapper:Show()
     else
-        if specialBarState[barKey] and specialBarState[barKey].childFrame then
-            ReturnFrame(specialBarState[barKey].childFrame)
-        end
         local state = specialBarState[barKey]
         if not state then state = {}; specialBarState[barKey] = state end
-        state.wrapper    = wrapper
-        state.childFrame = nil
-        state.w          = nil
-        state.h          = nil
+        local held = state.childFrame
+        if held and held._tuiSpecialBarKey ~= barKey then
+            ReturnFrame(held, true)
+            state.childFrame = nil
+            state.w, state.h = nil, nil
+        end
+        state.wrapper = wrapper
 
         if db.showBackdrop or managedByBS then
             local bc = db.backdropColor
@@ -403,5 +430,6 @@ UpdateBarSlot = function(barKey)
     end
 end
 
-SB.UpdateBarSlot = UpdateBarSlot
-SB.ReleaseBar    = ReleaseBar
+SB.UpdateBarSlot   = UpdateBarSlot
+SB.ReleaseBar      = ReleaseBar
+SB.StyleSpecialBar = StyleSpecialBar

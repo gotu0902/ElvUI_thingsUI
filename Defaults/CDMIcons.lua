@@ -6,6 +6,7 @@ P["thingsUI"].cdmIcons = {
     editModeLock = true,
     hideAuraBorder = true,
     hideAuraOverlay = true,
+    autoEnableCDM = true,
     essential = {
         spacing      = 1,
         overrideSize = true,

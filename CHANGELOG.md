@@ -1,12 +1,18 @@
 # Changelog
 
+## 4.0.3
+- Fixed Special Bars flicker caused when casting f.ex Mind Flay Insanity
+- Tried integrating ElvUI's CDM skin border into the spacing\gap math (If it doesn't work, Claude did it)
+- Fixed levelup refresh (DannyG the legend)
+- Auto-enable Cooldown Manager on new characters (toggle in CDM menu)
+
 ## 4.0.2
 
 - Disabled mode for Power Bar @ Bar Setup, when you don't need to see mana like for dragons etc
 - Fixed Power Bar when in attached mode, causing attached height bleeding into Global height
 - Added Disable Aura Overlay toggle -> in CDM menu
 - Diffuse and Dampen were in the preset list woopsiedaisy
-- Cannibalize added to racials (undeads gotta know when to eat right)
+- Cannibalize added to racials (undeads gotta know when to eat)
 - Castbar default at the top in bar setup
 - New things strings hehhh
 - Grid2 strings - tried to align opacity with ElvUI UFs
@@ -39,29 +45,3 @@
 - Special bars/icons apply immediately on enable/disable.
 - Custom group movers no longer linger after a profile switch.
 - Grouped Special Icons fold in correctly on spell pick.
-
-## 3.0.3
-
-### Added
-- **Charge Bar** - per-spec spell charge tracker, toggle NHT for anchor mode into the BCDM cluster, or FHT if you want it to be able to move it freely\anchor to w\e you want. It saves the option globally on the Elv profile.
-- **Classbar Mode** - per-spec ElvUI classbar, placing itself where you anchor it. May be useful for non-BCDM users. Mostly made for NHT profile.
-- **Trinket Blacklist** - hide specific trinkets from Trinkets to CDM layout
-- Frame Strata dropdowns on Buff Bars, Charge Bar, Classbar Mode, Special Bars/Icons
-- Charge Bar / Classbar Mode can stack on each other (Above Classbar / Above Charge Bar slots)
-- BCDM Secondary Power Bar, Buff Icons, BCDM CastBar, Grid2 added as anchor presets
-- Special Bars/Icons: Restore Defaults button, registered with `/emove`
-
-### Changed
-- Options split into per-feature files
-- BCDM + ElvUI tab restructured with Trinkets sub-tab
-- Inline groups instead of headers in most tabs
-- Anchor points unified to Title Case ("Top Left" not "TOPLEFT")
-- Charge Bar Spec Options auto-selects current spec
-- 0.01 step on most sliders
-- Buff bar dropdown sorting and coloring rework
-
-### Fixed
-- Anchor From/To resetting on world enter / CDM viewer toggle
-- Trinkets to CDM no longer breaks cluster width calculation
-- Charge Bar predicts charge state to survive combat taint
-- Classbar/Charge Bar width correct when trinkets are blacklisted

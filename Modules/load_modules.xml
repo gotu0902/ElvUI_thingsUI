@@ -5,7 +5,6 @@
 	<Script file="Specials\SpecialShared.lua"/>
 	<Script file="Specials\SpecialBars.lua"/>
 	<Script file="Specials\SpecialIcons.lua"/>
-	<Script file="Specials\SpecialDebug.lua"/>
 	<Script file="Bars\BuffBars.lua"/>
 	<Script file="Movers\ClusterPositioning.lua"/>
 	<Script file="Bars\ClassbarMode.lua"/>

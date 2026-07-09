@@ -3,7 +3,7 @@ ns.ANCHORS = ns.ANCHORS or {}
 
 local C_ELV, C_CDM, C_TUI = "FF7AC0FF", "FFFFD27F", "FF8080FF"
 local function col(hex, s) return "|c" .. hex .. s .. "|r" end
-ns.ANCHORS.TUI_COLOR = C_TUI  -- exported so dynamic labels (Special slots) match
+ns.ANCHORS.TUI_COLOR = C_TUI
 
 local STATIC_VALUES = {
     ["BARSETUP_TOP"]              = col(C_TUI, "Top of Bar Setup Stack"),
@@ -41,7 +41,7 @@ end
 
 local function GetSlotSpellHint(getDB, idx)
     if not getDB then return nil end
-    local db = getDB(idx)   -- SB.GetBarDB/GetIconDB are nil-safe (return nil if not ready)
+    local db = getDB(idx)
     if type(db) ~= "table" then return nil end
     return ResolveSpellName(db.spellID or db.spellId)
 end

@@ -30,7 +30,7 @@ local function Cell_OnLeave(btn)
     btn.underline:SetVertexColor(c[1], c[2], c[3])
 end
 local function Cell_OnClick(btn)
-    if btn.onClick then btn.onClick(); return end  -- action link (e.g. set editClass), no navigation
+    if btn.onClick then btn.onClick(); return end
     local ACD = GetACD()
     if not ACD or not btn.path then return end
     ACD:SelectGroup(btn.appName, unpack(btn.path))
@@ -66,7 +66,6 @@ local function AcquireSep(self, i)
     return sep
 end
 
--- Lay the links out left-to-right, wrapping to a new line when a cell would overflow the width.
 local function Layout(self)
     local links = self._links
     if type(links) == "function" then links = links() end   -- dynamic: re-resolved each render

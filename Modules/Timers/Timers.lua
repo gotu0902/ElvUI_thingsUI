@@ -155,33 +155,18 @@ function M.GetDuration(timer)
     return durationCache[id] or timer.duration  -- still nil -> manual fallback
 end
 
-local LOCKOUT_IDS = { 57724, 57723, 80354, 264689, 390435 } -- Sated/Exhaustion/Temporal Displacement/Fatigued/Exhaustion
+local SATED_DEBUFFS = { [57723]=true, [57724]=true, [80354]=true, [95809]=true, [160455]=true, [264689]=true, [390435]=true }
 local LUST_CLASS  = { SHAMAN = 2825, MAGE = 80353, EVOKER = 390386, HUNTER = 272678 }
 local LUST_BUFF_DURATION = 40
 
-local function IsSecret(v)
-    return v ~= nil and type(issecretvalue) == "function" and issecretvalue(v)
-end
+local IsSecret = ns.CDHelpers.IsSecret
 
 function M.PlayerLustID()
     local _, cf = UnitClass("player")
     return LUST_CLASS[cf]
 end
 
-local function PlayerAura(spellID)
-    if not (C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID) then return end
-    return C_UnitAuras.GetPlayerAuraBySpellID(spellID)
-end
-
-local function FindAura(ids)
-    for _, sid in ipairs(ids) do
-        local a = PlayerAura(sid)
-        if a then return sid, a end
-    end
-end
-
 local lustState = { active = false, start = 0 }
-local sawSated = false
 
 function M.GetLustState(now)
     if not lustState.active then return nil end
@@ -190,46 +175,70 @@ function M.GetLustState(now)
     if elapsed >= 0 and elapsed < LUST_BUFF_DURATION then
         return "buff", lustState.start, LUST_BUFF_DURATION
     end
+    lustState.active = false
     return nil
 end
 
-local function UpdateLustState()
-    local prevPhase = M.GetLustState()
-    local _, aura = FindAura(LOCKOUT_IDS)
-    local present = aura ~= nil
-    if present and not lustState.active then
-
-        local exp, dur = aura.expirationTime, aura.duration
-        if exp and dur and not IsSecret(exp) and not IsSecret(dur) and dur > 0 then
-            local s = exp - dur
-            if GetTime() - s < LUST_BUFF_DURATION then lustState.start, lustState.active = s, true end
-        elseif not sawSated then
-            lustState.start, lustState.active = GetTime(), true
-        end
+local lustExpireScheduled = false
+local function TriggerLust()
+    lustState.start  = GetTime()
+    lustState.active = true
+    FireHosts()
+    if not lustExpireScheduled then
+        lustExpireScheduled = true
+        C_Timer.After(LUST_BUFF_DURATION + 0.1, function()
+            lustExpireScheduled = false
+            if lustState.active and (GetTime() - lustState.start) >= LUST_BUFF_DURATION then
+                lustState.active = false
+                FireHosts()
+            end
+        end)
     end
-    sawSated = present
-    if lustState.active and (GetTime() - lustState.start) >= LUST_BUFF_DURATION then
-        lustState.active = false
-    end
-    if M.GetLustState() ~= prevPhase then FireHosts() end
 end
 
-local lustPoll = CreateFrame("Frame")
-local lustAcc = 0
-lustPoll:Hide()
-lustPoll:SetScript("OnUpdate", function(_, e)
-    lustAcc = lustAcc + e
-    if lustAcc < 0.3 then return end
-    lustAcc = 0
-    UpdateLustState()
+local lustEvents = CreateFrame("Frame")
+lustEvents:SetScript("OnEvent", function(_, _, unit, updateInfo)
+    if unit ~= "player" or not updateInfo or updateInfo.isFullUpdate or not updateInfo.addedAuras then return end
+    if not (C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID) then return end
+    for _, ai in pairs(updateInfo.addedAuras) do
+        local instID = ai and ai.auraInstanceID
+        local data = instID and C_UnitAuras.GetAuraDataByAuraInstanceID("player", instID)
+        local sid = data and data.spellId
+        if sid and not IsSecret(sid) and SATED_DEBUFFS[sid] then
+            TriggerLust()
+            return
+        end
+    end
 end)
+
+local function ScanExistingLust()
+    if not (C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID) then return end
+    for sid in pairs(SATED_DEBUFFS) do
+        local a = C_UnitAuras.GetPlayerAuraBySpellID(sid)
+        if a and a.expirationTime and a.duration and a.duration > 0
+           and not IsSecret(a.expirationTime) and not IsSecret(a.duration) then
+            local start = a.expirationTime - a.duration
+            if (GetTime() - start) < LUST_BUFF_DURATION then
+                lustState.start, lustState.active = start, true
+                FireHosts()
+            end
+            return
+        end
+    end
+end
 
 local function UpdateLustPoller()
     local on = false
     for _, t in ipairs(M.GetTimers()) do
         if t.kind == "lust" and t.enabled then on = true; break end
     end
-    if on then lustPoll:Show() else lustPoll:Hide(); lustState.active = false end
+    if on then
+        lustEvents:RegisterUnitEvent("UNIT_AURA", "player")
+        ScanExistingLust()
+    else
+        lustEvents:UnregisterEvent("UNIT_AURA")
+        lustState.active = false
+    end
 end
 
 function M.EnsureLustTimer()

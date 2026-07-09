@@ -229,25 +229,7 @@ local function ApplyIconGlow(wrapper, db, borderDB)
 end
 
 local function FindIconBySpell(spellID, forKey)
-    if not spellID then return nil end
-    local claimed = SB.RebuildClaimedIconFrames()
-    if BuffIconCooldownViewer then
-        local children, childCount = SB.GetChildrenReuseFind(BuffIconCooldownViewer)
-        for i = 1, childCount do
-            local child = children[i]
-            local owner = claimed[child]
-            if (not owner or owner == forKey) and SB.SafeMatch(child, spellID, false) then
-                return child
-            end
-        end
-    end
-    for child in pairs(yoinkedBars) do
-        local owner = claimed[child]
-        if (not owner or owner == forKey) and SB.SafeMatch(child, spellID, false) then
-            return child
-        end
-    end
-    return nil
+    return SB.FindChildBySpell(spellID, forKey, false)
 end
 
 local function ComputeIconTexCoord(db)
@@ -434,20 +416,6 @@ local function ReapplyHeldDesat(child, desaturated)
     icon._tuiDesatGuard = nil
 end
 
-local function ReapplyHeldIcon(child)
-    if not yoinkedBars[child] then return end
-    local key = child._tuiSpecialIconKey
-    local wrapper = key and _G['TUI_SpecialIcon_' .. key]
-    if not wrapper then return end
-
-    UIParent.SetFrameStrata(child, wrapper:GetFrameStrata())
-    UIParent.SetFrameLevel(child, wrapper:GetFrameLevel() + 1)
-    UIParent.ClearAllPoints(child)
-    UIParent.SetPoint(child, 'CENTER', wrapper, 'CENTER', 0, 0)
-    if child._tuiSpecialW then UIParent.SetSize(child, child._tuiSpecialW, child._tuiSpecialH) end
-    ReapplyHeldTex(child)
-end
-
 local UpdateIconSlot
 UpdateIconSlot = function(iconKey)
     local db = SB.GetIconDB(iconKey)
@@ -580,12 +548,11 @@ UpdateIconSlot = function(iconKey)
                     hooksecurefunc(icon, 'SetDesaturated', function(_, d) ReapplyHeldDesat(realFrame, d) end)
                 end
             end
-
-            realFrame:HookScript('OnShow', ReapplyHeldIcon)
         end
 
         local newlyYoinked = not realFrame._tuiYoinkActive
         realFrame._tuiYoinkActive = true
+        realFrame._tuiSpecialIconKey = iconKey
         yoinkedBars[realFrame] = true
         UIParent.SetFrameStrata(realFrame, wrapper:GetFrameStrata())
         UIParent.SetFrameLevel(realFrame, wrapper:GetFrameLevel() + 1)

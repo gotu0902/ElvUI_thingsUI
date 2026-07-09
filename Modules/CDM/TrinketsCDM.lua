@@ -385,7 +385,7 @@ local function ApplyLayout()
     local includePassive = db.includePassive == true
     side = side or "RIGHT"
     local W, H, spacing = GetAttachIconSize(viewer)
-    local S = (spacing or 1) + 2
+    local S = (spacing or 1) + (ns.CDM_SPACING_INSET or 2)
 
     local shown = {}
     for _, slot in ipairs(SLOTS) do
