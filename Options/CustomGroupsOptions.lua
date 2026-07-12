@@ -22,6 +22,22 @@ local function GroupSpecialCount(group, specID)
     return n
 end
 
+local function SpecEntryCount(group, specID)
+    local n = GroupSpecialCount(group, specID)
+    local CG = ns.CustomGroups
+    local root = CG and CG.GetScopeRoot and CG.GetScopeRoot(group, "spec", specID, false)
+    if root then
+        for _, d in pairs(root.spells or {}) do if d and d.enabled ~= false then n = n + 1 end end
+        for _, d in pairs(root.items  or {}) do if d and d.enabled ~= false then n = n + 1 end end
+    end
+    if ns.Timers and ns.Timers.GetTimers then
+        for _, t in ipairs(ns.Timers.GetTimers()) do
+            if t.enabled and t.destination == group.id and t.groupScope == specID then n = n + 1 end
+        end
+    end
+    return n
+end
+
 local function GroupClassCount(group, classFile)
     local n = 0
     local CG = ns.CustomGroups
@@ -74,19 +90,6 @@ function TUI:CustomGroupsOptions()
     local function curClassFile() local _, cf = UnitClass("player"); return cf end
     local function getEditSpec()  return editSpec  or curSpecID()  end
     local function getEditClass() return editClass or curClassFile() end
-    local function ReFeedScope(group, scope)
-        C_Timer.After(0, function()
-            local ACD = E.Libs and E.Libs.AceConfigDialog
-            local groups = CG and CG.GetGroups and CG.GetGroups()
-            if not (ACD and groups) then return end
-            for i = 1, #groups do
-                if groups[i] == group then
-                    ACD:SelectGroup("ElvUI", "thingsUI", "modulesTab", "customGroups", "group" .. i, scope .. "Tab")
-                    return
-                end
-            end
-        end)
-    end
 
     local function racialValues()
         local out = {}
@@ -514,7 +517,11 @@ function TUI:CustomGroupsOptions()
         specArgs.picker = {
             order = 1, type = "select", name = "Editing Spec", width = "double",
             dialogControl = "TUI_CascadeDropdown",
-            values = function() return ns.CascadeDropdown.AllSpecs() end,
+            values = function()
+                local counts = {}
+                for _, r in ipairs(ns.AllSpecs()) do counts[r.id] = SpecEntryCount(group, r.id) end
+                return ns.CascadeDropdown.AllSpecsWithCounts(counts)
+            end,
             get = function()
                 local sid = tonumber(getEditSpec())
                 local m = sid and ns.SpecMeta(sid)
@@ -535,30 +542,20 @@ function TUI:CustomGroupsOptions()
             end,
             func = function() editSpec = curSpecID(); NotifyChange() end,
         }
-        specArgs.specSummary = ns.OptionLinkRowDynamic(1.7, function()
-            local links = { { label = "Special Icons by spec:  ", color = { 1, 0.82, 0 } } }
-            for _, r in ipairs(ns.AllSpecs()) do
-                local n = GroupSpecialCount(group, r.id)
-                if n > 0 then
-                    local cc = (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)[r.classToken]
-                    local icon = r.icon and ("|T" .. r.icon .. ":14:14|t ") or ""
-                    local sid = tostring(r.id)
-                    links[#links + 1] = {
-                        label   = icon .. (r.name or r.id) .. " (" .. n .. ")",
-                        color   = cc and { cc.r, cc.g, cc.b } or { 0.7, 0.7, 0.7 },
-                        onClick = function() editSpec = sid; ReFeedScope(group, "spec") end,
-                    }
-                end
-            end
-            if #links == 1 then links[1] = { label = "No Special Icons assigned to this group on any spec yet.", color = { 0.5, 0.5, 0.5 } } end
-            return links
-        end)
         specArgs.pickerGap = { order = 2, type = "description", name = " " }
 
         local classArgs = scopeArgs(group, "class", getEditClass)
         classArgs.picker = {
             order = 1, type = "select", name = "Editing Class", width = "double",
-            values = allClassValues, sorting = allClassSorting,
+            values = function()
+                local out = allClassValues()
+                for cf in pairs(out) do
+                    local n = GroupClassCount(group, cf)
+                    if n > 0 then out[cf] = out[cf] .. " |cFFFFD200(" .. n .. ")|r" end
+                end
+                return out
+            end,
+            sorting = allClassSorting,
             get = function() return getEditClass() end,
             set = function(_, v) editClass = v; NotifyChange() end,
         }
@@ -573,28 +570,6 @@ function TUI:CustomGroupsOptions()
             end,
             func = function() editClass = select(2, UnitClass("player")); NotifyChange() end,
         }
-        classArgs.classSummary = ns.OptionLinkRowDynamic(1.7, function()
-            local links = { { label = "By class:  ", color = { 1, 0.82, 0 } } }
-            for cid = 1, GetNumClasses() do
-                local className, classFile = GetClassInfo(cid)
-                if classFile then
-                    local n = GroupClassCount(group, classFile)
-                    if n > 0 then
-                        local cc = (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)[classFile]
-                        local ic = CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[classFile]
-                        local icon = ic and ("|TInterface\\TargetingFrame\\UI-Classes-Circles:14:14:0:0:256:256:%d:%d:%d:%d|t "):format(ic[1] * 256, ic[2] * 256, ic[3] * 256, ic[4] * 256) or ""
-                        local cf = classFile
-                        links[#links + 1] = {
-                            label   = icon .. (className or classFile) .. " (" .. n .. ")",
-                            color   = cc and { cc.r, cc.g, cc.b } or { 0.7, 0.7, 0.7 },
-                            onClick = function() editClass = cf; ReFeedScope(group, "class") end,
-                        }
-                    end
-                end
-            end
-            if #links == 1 then links[1] = { label = "Nothing added to this group on any class yet.", color = { 0.5, 0.5, 0.5 } } end
-            return links
-        end)
         classArgs.pickerGap = { order = 2, type = "description", name = " " }
 
         local globalArgs = scopeArgs(group, "global", function() return nil end)

@@ -49,9 +49,7 @@ end
 M.GetCurrentSpecID = GetCurrentSpecID
 
 local function DefaultOrder()
-    local t = {}
-    for i, k in ipairs(M.BAR_KEYS) do t[i] = k end
-    return t
+    return { "power", "classbar", "chargebar", "castbar" }
 end
 
 local function NewBar()
@@ -103,7 +101,7 @@ local function NewSetup(name)
         anchorPoint = "BOTTOM",
         anchorTo    = "TOP",
         xOffset     = 0,
-        yOffset     = 2,
+        yOffset     = 1,
         gap         = 1,
         inheritWidth = true,
         widthOffset  = 0,
@@ -274,7 +272,10 @@ function M.GetTopmostBarFrame()
     return nil
 end
 
-local function GetBarHeight(key)
+local function GetBarHeight(key, setup)
+    setup = setup or M.GetActiveSetup()
+    local bh = setup and setup.barHeights
+    if bh and type(bh[key]) == "number" and bh[key] > 0 then return bh[key] end
     local udb = E.db.unitframe and E.db.unitframe.units and E.db.unitframe.units.player
     if key == "power" then
         local dh = E.db.thingsUI and E.db.thingsUI.barSetup and E.db.thingsUI.barSetup.powerDetachedHeight
@@ -392,18 +393,26 @@ local function WriteBarHeightToDB(key, value)
     end
 end
 
-local function SetBarHeight(key, value)
+local function SetBarHeight(key, value, setup)
     if type(value) ~= "number" or value < 1 then return end
-    local setup = M.GetActiveSetup()
+    setup = setup or M.GetActiveSetup()
     local b = setup and setup.bars and setup.bars[key]
     local mode = b and b.mode
+    local isSpecial = type(key) == "string" and key:sub(1, 8) == "special:"
+    local isActive = setup == M.GetActiveSetup()
 
     if HasAttachedMode(key) and mode == "ATTACHED" then
         SetAttachedHeight(setup, key, value)
-    elseif key == "power" then
-        E.db.thingsUI.barSetup.powerDetachedHeight = value
+    elseif not isSpecial then
+        setup.barHeights = setup.barHeights or {}
+        setup.barHeights[key] = value
+        if isActive and key == "power" then
+            E.db.thingsUI.barSetup.powerDetachedHeight = value
+        end
     end
-    WriteBarHeightToDB(key, value)
+    if isActive or isSpecial then
+        WriteBarHeightToDB(key, value)
+    end
 end
 
 M.SetBarHeight = SetBarHeight
@@ -640,7 +649,8 @@ function M.PositionStack(positionOnly)
                     if pBar.textX ~= nil and p.xOffset ~= pBar.textX then p.xOffset = pBar.textX; needsPlayerUF = true end
                     if pBar.textY ~= nil and p.yOffset ~= pBar.textY then p.yOffset = pBar.textY; needsPlayerUF = true end
                 else
-                    local dh = E.db.thingsUI.barSetup.powerDetachedHeight
+                    local dh = (setup.barHeights and setup.barHeights.power)
+                        or E.db.thingsUI.barSetup.powerDetachedHeight
                     if dh and p.height ~= dh then p.height = dh; needsPlayerUF = true end
                 end
             end
@@ -662,6 +672,17 @@ function M.PositionStack(positionOnly)
     end
     if needsPlayerUF and not positionOnly then
         SafeUpdatePlayerUF(UF)
+    end
+
+    if setup.barHeights and not positionOnly then
+        for _, key in ipairs(setup.order) do
+            local b = setup.bars[key]
+            local h = setup.barHeights[key]
+            if h and b and b.enabled and key ~= "power"
+               and b.mode ~= "ATTACHED" and b.mode ~= "DISABLED" then
+                WriteBarHeightToDB(key, h)
+            end
+        end
     end
 
     if baseWidth and not positionOnly then
@@ -707,7 +728,7 @@ function M.PositionStack(positionOnly)
                     f:ClearAllPoints()
                     f:SetPoint(setup.anchorPoint or "BOTTOM", stackAnchor, setup.anchorTo or "TOP", localXOff, accY)
                 end
-                accY = accY + GetBarHeight(key)
+                accY = accY + GetBarHeight(key, setup)
             end
         end
     end

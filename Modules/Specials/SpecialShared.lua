@@ -270,6 +270,7 @@ local function ReturnFrame(child, keepPosition)
     child._tuiSpecialIconKey = nil
     child._tuiSpecialBarKey  = nil
     child._tuiBarStyleSig    = nil
+    child._tuiTextConfig     = nil
 end
 
 local function _registerShownSpell(childFrame)
@@ -896,23 +897,23 @@ local function ResolveAnchorTarget(anchorName)
     return target
 end
 
-local function RemoveBarSlot(index)
-    local s = GetSpecRoot()
+local function RemoveBarSlot(index, specID)
+    local s = GetSpecRoot(specID)
     local count = s.barCount or 3
     if not index or index < 1 or index > count then return end
     local release = ns.SpecialBars.ReleaseBar
-    if release then for i = 1, count do release("bar" .. i) end end
+    if release and not specID then for i = 1, count do release("bar" .. i) end end
     s.bars = s.bars or {}
     for i = index, count - 1 do s.bars["bar" .. i] = s.bars["bar" .. (i + 1)] end
     s.bars["bar" .. count] = nil
     s.barCount = math.max(1, count - 1)
 end
-local function RemoveIconSlot(index)
-    local s = GetSpecRoot()
+local function RemoveIconSlot(index, specID)
+    local s = GetSpecRoot(specID)
     local count = s.iconCount or 3
     if not index or index < 1 or index > count then return end
     local release = ns.SpecialBars.ReleaseIcon
-    if release then for i = 1, count do release("icon" .. i) end end
+    if release and not specID then for i = 1, count do release("icon" .. i) end end
     s.icons = s.icons or {}
     for i = index, count - 1 do s.icons["icon" .. i] = s.icons["icon" .. (i + 1)] end
     s.icons["icon" .. count] = nil
@@ -960,9 +961,9 @@ function SB.SyncGroupedIconSizes(groupID, w, h)
     end
 end
 
-local function GetSpellUsageInfo(spellID, excludeBarKey, excludeIconKey)
+local function GetSpellUsageInfo(spellID, excludeBarKey, excludeIconKey, specID)
     if not spellID then return nil end
-    local s = GetSpecRoot()
+    local s = GetSpecRoot(specID)
     for i = 1, (s.barCount or 3) do
         local key = "bar" .. i
         if key ~= excludeBarKey then

@@ -150,7 +150,7 @@ local function ApplyToViewer(viewerName)
     local n = viewer:GetNumChildren()
     for i = 1, n do
         local c = select(i, viewer:GetChildren())
-        if c then
+        if c and not (ns.yoinkedBars and ns.yoinkedBars[c]) then
             StyleChild(c, t)
         end
     end

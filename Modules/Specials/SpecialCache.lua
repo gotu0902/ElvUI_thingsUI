@@ -139,6 +139,12 @@ local function BuildCDMSpellList()
 
     cachedSpellList     = list
     cachedSpellListSpec = specID
+    if specID and specID ~= 0 and next(list) then
+        _G.thingsUIGlobalDB = _G.thingsUIGlobalDB or {}
+        local g = _G.thingsUIGlobalDB
+        g.specialSpecCache = g.specialSpecCache or {}
+        g.specialSpecCache[specID] = list
+    end
     return list
 end
 
@@ -147,7 +153,13 @@ local function InvalidateSpellListCache()
     cachedSpellListSpec = nil
 end
 
-local function GetRawSpellList() return BuildCDMSpellList() end
+local function GetRawSpellList(specID)
+    if specID and specID ~= GetCurrentSpecID() then
+        local g = _G.thingsUIGlobalDB
+        return (g and g.specialSpecCache and g.specialSpecCache[specID]) or {}
+    end
+    return BuildCDMSpellList()
+end
 
 SB.GetCachedSpellInfo       = GetCachedSpellInfo
 SB.GetBaseSpellID           = GetBaseSpellID

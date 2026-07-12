@@ -15,4 +15,16 @@ P["thingsUI"].clusterPositioning = {
     targetTargetFrame = { enabled = true, gap = 1 },
     targetCastBar   = { enabled = true, gap = 1, xOffset = 0 },
     additionalPowerBar = { enabled = false, gap = 4, xOffset = 0 },
+    focusFrame = {
+        enabled = false,
+        anchorFrame = "ElvUF_Target",
+        anchorPoint = "TOP", anchorRelativePoint = "BOTTOM",
+        xOffset = 0, yOffset = -10,
+        matchWidth = true,
+    },
+    focusCastBar = {
+        enabled = false,
+        anchorPoint = "TOP", anchorRelativePoint = "BOTTOM",
+        xOffset = 0, yOffset = -1,
+    },
 }

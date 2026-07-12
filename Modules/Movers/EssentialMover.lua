@@ -187,6 +187,13 @@ local function OnDragStop(self)
     ApplyAnchor()
 end
 
+function M.RefreshLabel()
+    if not (mover and mover.text) then return end
+    local cp = E.db.thingsUI and E.db.thingsUI.clusterPositioning
+    local suffix = (cp and cp.enabled) and "  |cFF40FF40(Master - Move This)|r" or ""
+    mover.text:SetText((mover.textString or "Essential Cooldowns") .. suffix)
+end
+
 local function EnsureMover()
     if mover then return end
     local ev = _G.EssentialCooldownViewer
@@ -216,6 +223,7 @@ local function EnsureMover()
     fs:SetJustifyH("CENTER")
     mover:SetFontString(fs)
     mover.text = fs
+    M.RefreshLabel()
 
     local coordTicker = CreateFrame("Frame")
     coordTicker:Hide()

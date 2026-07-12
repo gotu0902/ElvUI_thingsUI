@@ -516,6 +516,12 @@ local function PlayerHasRacial(id)
 end
 M.PlayerHasRacial = PlayerHasRacial
 
+local function PlayerKnowsSpell(id)
+    if IsPlayerSpell(id) then return true end
+    local base = C_Spell.GetBaseSpell and C_Spell.GetBaseSpell(id)
+    return (base and base ~= 0 and base ~= id and IsPlayerSpell(base)) or false
+end
+
 local _seen = {}
 local function TimerInScope(t, scope)
     local s = t.groupScope or "global"
@@ -530,8 +536,9 @@ local function CollectScopeInto(group, scope, root, shown)
     local list = {}
     if root then
         for id, d in pairs(root.spells or {}) do
-            local hideRacial = ns.RacialSet and ns.RacialSet[id] and not PlayerHasRacial(id)
-            if d and d.enabled ~= false and not _seen["s" .. id] and not hideRacial and C_Spell.GetSpellInfo(id) then
+            local isRacial = ns.RacialSet and ns.RacialSet[id]
+            local known = isRacial and PlayerHasRacial(id) or (not isRacial and PlayerKnowsSpell(id))
+            if d and d.enabled ~= false and not _seen["s" .. id] and known and C_Spell.GetSpellInfo(id) then
                 _seen["s" .. id] = true
                 list[#list + 1] = { kind = "spell", id = id, li = d.layoutIndex or 999 }
             end
@@ -1001,13 +1008,14 @@ end
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")
 ev:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+ev:RegisterEvent("SPELLS_CHANGED")
 ev:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 ev:RegisterEvent("SPELL_UPDATE_CHARGES")
 ev:RegisterEvent("BAG_UPDATE_COOLDOWN")
 ev:RegisterEvent("BAG_UPDATE_DELAYED")
 ev:SetScript("OnEvent", function(_, event, arg1)
     if event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED"
-       or event == "BAG_UPDATE_DELAYED" then
+       or event == "BAG_UPDATE_DELAYED" or event == "SPELLS_CHANGED" then
         QueueLayout()
     elseif event == "SPELL_UPDATE_COOLDOWN" then
         if arg1 then RefreshSpellThrottled(arg1) end

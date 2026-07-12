@@ -57,7 +57,9 @@ local function GetSpecEntry()
     if not db or not db.enabled or not db.specs then return nil end
     local id = GetCurrentSpecID()
     if id == 0 then return nil end
-    return db.specs[tostring(id)]
+    local entry = db.specs[tostring(id)]
+    if entry and entry.enabled == false then return nil end
+    return entry
 end
 
 local function IsFHT()

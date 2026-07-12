@@ -360,6 +360,21 @@ local function StyleYoinkedIcon(childFrame, db, gtext)
         app:ClearAllPoints()
         app:SetPoint(pt, childFrame, pt, sX or 0, sY or 0)
         app:SetAlpha(sShow and 1 or 0)
+
+        local tc = childFrame._tuiSpecialText
+        if not tc then tc = {}; childFrame._tuiSpecialText = tc end
+        local prev = childFrame._tuiTextConfig
+        if prev and prev ~= tc then
+            tc.showCount, tc.countFont, tc.countFontSize, tc.countFontOutline = prev.showCount, prev.countFont, prev.countFontSize, prev.countFontOutline
+            tc.countColor, tc.countPoint, tc.countXOffset, tc.countYOffset = prev.countColor, prev.countPoint, prev.countXOffset, prev.countYOffset
+        end
+        tc.showStacks       = sShow
+        tc.stacksFont       = sFont or 'Expressway'
+        tc.stacksFontSize   = sSize or 14
+        tc.stacksFontOutline = sOut or 'OUTLINE'
+        tc.stacksColor      = sColor
+        tc.stacksPoint      = nil
+        childFrame._tuiTextConfig = tc
     end
 end
 

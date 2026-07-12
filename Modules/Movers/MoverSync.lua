@@ -57,6 +57,32 @@ local TARGETS = {
         end,
     },
     {
+        moverName = "ElvUF_FocusMover",
+        frame     = function() return _G.ElvUF_Focus end,
+        baseLabel = "Focus Frame",
+        tag       = function()
+            local cp = E.db.thingsUI and E.db.thingsUI.clusterPositioning
+            if cp and cp.enabled and cp.focusFrame and cp.focusFrame.enabled then
+                return "|cFF888888(Cluster)|r"
+            end
+        end,
+    },
+    {
+        moverName = "ElvUF_FocusCastbarMover",
+        frame     = function()
+            local f = _G.ElvUF_Focus
+            local cb = f and f.Castbar
+            return cb and (cb.Holder or cb)
+        end,
+        baseLabel = "Focus Castbar",
+        tag       = function()
+            local cp = E.db.thingsUI and E.db.thingsUI.clusterPositioning
+            if cp and cp.enabled and cp.focusCastBar and cp.focusCastBar.enabled then
+                return "|cFF888888(Cluster)|r"
+            end
+        end,
+    },
+    {
         moverName = "ElvUI_thingsUI_ChargeBarMover",
         frame     = function() return _G.ElvUI_thingsUI_ChargeBar end,
         baseLabel = "thingsUI Charge Bar",
@@ -528,6 +554,18 @@ function M.SyncAll()
                 end
                 ColorMover(mname)
             end
+        end
+    end
+
+    if ns.EssentialMover and ns.EssentialMover.RefreshLabel then ns.EssentialMover.RefreshLabel() end
+
+    local rc = _G.RightChatMover
+    if rc and rc.text and rc.text.SetText then
+        local base = rc.textString or "Right Chat"
+        if E.db.thingsUI and E.db.thingsUI.rightChatAsBackground then
+            rc.text:SetText(base .. " |cFF8080FF(Details! Anchor)|r")
+        else
+            rc.text:SetText(base)
         end
     end
 

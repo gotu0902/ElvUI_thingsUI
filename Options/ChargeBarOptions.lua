@@ -182,7 +182,19 @@ function TUI:ChargeBarOptions()
                 desc = "",
                 dialogControl = "TUI_CascadeDropdown",
                 disabled = function() return not E.db.thingsUI.chargeBar.enabled end,
-                values = function() return ns.CascadeDropdown.AllSpecs() end,
+                values = function()
+                    local out = {}
+                    local specs = E.db.thingsUI.chargeBar and E.db.thingsUI.chargeBar.specs or {}
+                    for _, r in ipairs(ns.AllSpecs()) do
+                        if r.name then
+                            local e = specs[tostring(r.id)]
+                            local label = r.name
+                            if e then label = label .. "\a" .. (e.enabled ~= false and "active" or "off") end
+                            out[r.classToken .. ":" .. r.id] = label
+                        end
+                    end
+                    return out
+                end,
                 get = function(_, value)
                     local specKey = CascadeKeyToSpecKey(value)
                     if not specKey then return false end
@@ -288,6 +300,19 @@ function TUI:ChargeBarOptions()
                 set = function(_, v) selectedEditSpec = v end,
             },
 
+            specEnabled = {
+                order = 14, type = "toggle", name = "Enable This Spec's Charge Bar", width = "full",
+                hidden = function() return #GetEnabledSpecsList() == 0 end,
+                disabled = function() return not E.db.thingsUI.chargeBar.enabled end,
+                get = function() local e = GetEditSpec(); return e and (e.enabled ~= false) end,
+                set = function(_, v)
+                    local e = GetEditSpec(); if not e then return end
+                    e.enabled = v
+                    Update()
+                    if ns.BarSetup and ns.BarSetup.ApplyStack then ns.BarSetup.ApplyStack() end
+                    NotifyChange()
+                end,
+            },
             useGlobalLayout = {
                 order = 15, type = "toggle", name = "Use Global Layout", width = "full",
                 hidden = function() return #GetEnabledSpecsList() == 0 end,

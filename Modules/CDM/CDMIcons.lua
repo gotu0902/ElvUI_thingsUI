@@ -757,12 +757,24 @@ function M.MaybeAutoEnableCDM()
     if InCombatLockdown() then return end
     local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
     if not (cdm and cdm.autoEnableCDM) then return end
-    if GetCVarBool and GetCVarBool("cooldownViewerEnabled") then return end
-    if not (C_CooldownViewer and C_CooldownViewer.IsCooldownViewerAvailable
-            and C_CooldownViewer.IsCooldownViewerAvailable()) then return end
     local gdb = _G.thingsUIGlobalDB
     local guid = UnitGUID and UnitGUID("player")
     if not (gdb and guid) then return end
+
+    local skins = E.private and E.private.skins and E.private.skins.blizzard
+    if skins and not skins.cooldownManager then
+        gdb.cdmSkinEnabled = gdb.cdmSkinEnabled or {}
+        if not gdb.cdmSkinEnabled[guid] then
+            gdb.cdmSkinEnabled[guid] = true
+            skins.cooldownManager = true
+            print("|cFF8080FFthingsUI|r enabled the ElvUI Cooldown Manager skin (required). |cFFFFFF00Reload to apply.|r")
+            if E.StaticPopup_Show then E:StaticPopup_Show("PRIVATE_RL") end
+        end
+    end
+
+    if GetCVarBool and GetCVarBool("cooldownViewerEnabled") then return end
+    if not (C_CooldownViewer and C_CooldownViewer.IsCooldownViewerAvailable
+            and C_CooldownViewer.IsCooldownViewerAvailable()) then return end
     gdb.cdmAutoEnabled = gdb.cdmAutoEnabled or {}
     if gdb.cdmAutoEnabled[guid] then return end
     gdb.cdmAutoEnabled[guid] = true

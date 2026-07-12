@@ -40,18 +40,32 @@ local function ParseKey(key)
     return nil
 end
 
+local function SplitCount(label)
+    if type(label) ~= "string" then return label end
+    local base, c = label:match("^(.-)\a(.+)$")
+    if base then return base, tonumber(c) or c end
+    return label
+end
+
+local function CountOf(c)
+    if type(c) == "number" then return c end
+    if c ~= nil then return 1 end
+    return 0
+end
+
 local function GroupValues(values)
     local grouped = {}
     local other = {}
     for value, label in pairs(values) do
+        local base, count = SplitCount(label)
         local classToken, specID, _ = ParseKey(value)
         if classToken and specID then
             grouped[classToken] = grouped[classToken] or {}
             grouped[classToken][specID] = grouped[classToken][specID] or {}
             local bucket = grouped[classToken][specID]
-            bucket[#bucket + 1] = { value = value, label = label }
+            bucket[#bucket + 1] = { value = value, label = base, count = count }
         else
-            other[#other + 1] = { value = value, label = label }
+            other[#other + 1] = { value = value, label = base, count = count }
         end
     end
     return grouped, other
@@ -234,15 +248,31 @@ do
         for _, classToken in ipairs(classTokens) do
             local specMap = grouped[classToken]
             local specIDs = {}
-            for sid in pairs(specMap) do specIDs[#specIDs + 1] = sid end
+            local classSum = 0
+            for sid, leaves in pairs(specMap) do
+                specIDs[#specIDs + 1] = sid
+                for _, l in ipairs(leaves) do classSum = classSum + CountOf(l.count) end
+            end
             table.sort(specIDs)
 
-            local classItem = MakeMenuItem(self, ClassLabel(classToken))
+            local classLabel = ClassLabel(classToken)
+            if classSum > 0 then classLabel = classLabel .. " |cFFFFD200(" .. classSum .. ")|r" end
+            local classItem = MakeMenuItem(self, classLabel)
             local classSub = MakeSubPullout(self)
 
             for _, specID in ipairs(specIDs) do
                 local leaves = specMap[specID]
                 local specLabel = SpecLabel(specID)
+                do
+                    local c = leaves[1] and leaves[1].count
+                    if #leaves == 1 and type(c) == "string" then
+                        specLabel = specLabel .. " |cFFFFD200(" .. c .. ")|r"
+                    else
+                        local sum = 0
+                        for _, l in ipairs(leaves) do sum = sum + CountOf(l.count) end
+                        if sum > 0 then specLabel = specLabel .. " |cFFFFD200(" .. sum .. ")|r" end
+                    end
+                end
 
                 if #leaves == 1 and not leaves[1].label:find(":") then
                     classSub:AddItem(MakeLeafItem(self, leaves[1], specLabel))
@@ -509,6 +539,17 @@ function ns.CascadeDropdown.AllSpecs()
     local out = {}
     for _, r in ipairs(ns.AllSpecs()) do
         if r.name then out[r.classToken .. ":" .. r.id] = r.name end
+    end
+    return out
+end
+
+function ns.CascadeDropdown.AllSpecsWithCounts(counts)
+    local out = {}
+    for _, r in ipairs(ns.AllSpecs()) do
+        if r.name then
+            local n = counts and counts[r.id]
+            out[r.classToken .. ":" .. r.id] = (n and n > 0) and (r.name .. "\a" .. n) or r.name
+        end
     end
     return out
 end

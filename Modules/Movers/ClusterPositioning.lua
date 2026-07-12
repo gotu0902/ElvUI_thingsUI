@@ -59,10 +59,23 @@ local function HookEssentialProxy()
     hooksecurefunc(pr, "SetScale",       mark)
 end
 
+local hookedUF = false
+local function HookUFUpdates()
+    if hookedUF then return end
+    local UF = E.GetModule and E:GetModule("UnitFrames", true)
+    if not UF then return end
+    hookedUF = true
+    hooksecurefunc(UF, "CreateAndUpdateUF", function(_, unit)
+        if unit == "player" or unit == "target" or unit == "focus" then TUI:QueueClusterUpdate() end
+    end)
+    hooksecurefunc(UF, "Update_AllFrames", function() TUI:QueueClusterUpdate() end)
+end
+
 local function ScanAndHookViewers()
     HookViewerChildren(EssentialCooldownViewer)
     HookViewerChildren(UtilityCooldownViewer)
     HookEssentialProxy()
+    HookUFUpdates()
 end
 
 local clusterUpdateQueued = false
@@ -232,6 +245,43 @@ local function UpdateClusterPositioning()
         end
     end
 
+    if db.focusFrame and db.focusFrame.enabled then
+        local fdb = db.focusFrame
+        local focus = _G["ElvUF_Focus"]
+        local anchor = ns.ANCHORS.ResolveAnchorTarget(fdb.anchorFrame or "ElvUF_Target") or _G["ElvUF_Target"]
+        if focus and anchor then
+            focus:ClearAllPoints()
+            focus:SetPoint(fdb.anchorPoint or "TOP", anchor, fdb.anchorRelativePoint or "BOTTOM", fdb.xOffset or 0, fdb.yOffset or 0)
+            if fdb.matchWidth then
+                local w = anchor.GetWidth and anchor:GetWidth()
+                if w and w > 0 then focus:SetWidth(w) end
+            end
+        end
+    end
+
+    if db.focusCastBar and db.focusCastBar.enabled then
+        local cdb = db.focusCastBar
+        local focus = _G["ElvUF_Focus"]
+        local castBar = _G["ElvUF_Focus_CastBar"]
+        if focus and castBar then
+            local fcb = E.db.unitframe and E.db.unitframe.units and E.db.unitframe.units.focus
+                and E.db.unitframe.units.focus.castbar
+            local w = focus:GetWidth()
+            if fcb and w and w > 0 then
+                w = ((ns.Pixel and ns.Pixel.Snap(w)) or math.floor(w + 0.5)) + 1
+                if cdb.savedWidth == nil then cdb.savedWidth = fcb.width end
+                if fcb.width ~= w then
+                    fcb.width = w
+                    local UF = E.GetModule and E:GetModule("UnitFrames", true)
+                    if UF and UF.Configure_Castbar then pcall(UF.Configure_Castbar, UF, focus) end
+                end
+            end
+            local holder = castBar.Holder or castBar
+            holder:ClearAllPoints()
+            holder:SetPoint(cdb.anchorPoint or "TOP", focus, cdb.anchorRelativePoint or "BOTTOM", cdb.xOffset or 0, cdb.yOffset or 0)
+        end
+    end
+
     if ns.MoverSync and ns.MoverSync.Queue then
         ns.MoverSync.Queue()
     end
@@ -306,11 +356,58 @@ local function RestoreFramesToElvUI()
         powerBar:ClearAllPoints()
         powerBar:SetPoint("CENTER", powerBarMover, "CENTER", 0, 0)
     end
+
+    local focusFrame, focusMover = _G["ElvUF_Focus"], _G["ElvUF_FocusMover"]
+    if focusFrame and focusMover then
+        focusFrame:ClearAllPoints()
+        focusFrame:SetPoint("CENTER", focusMover, "CENTER", 0, 0)
+        local uf = E.db.unitframe and E.db.unitframe.units and E.db.unitframe.units.focus
+        if uf and uf.width then focusFrame:SetWidth(uf.width) end
+    end
+
+    local fCastBar, fCastBarMover = _G["ElvUF_Focus_CastBar"], _G["ElvUF_FocusCastbarMover"]
+    if fCastBar and fCastBarMover then
+        local holder = fCastBar.Holder or fCastBar
+        holder:ClearAllPoints()
+        holder:SetPoint("CENTER", fCastBarMover, "CENTER", 0, 0)
+    end
+
+    local cdb = E.db.thingsUI.clusterPositioning.focusCastBar
+    if cdb and cdb.savedWidth then
+        local fcb = E.db.unitframe and E.db.unitframe.units and E.db.unitframe.units.focus
+            and E.db.unitframe.units.focus.castbar
+        if fcb then
+            fcb.width = cdb.savedWidth
+            local UF = E.GetModule and E:GetModule("UnitFrames", true)
+            if UF and UF.Configure_Castbar and _G["ElvUF_Focus"] then
+                pcall(UF.Configure_Castbar, UF, _G["ElvUF_Focus"])
+            end
+        end
+        cdb.savedWidth = nil
+    end
+end
+
+local function ApplyIconInsideDefault()
+    local db = E.db.thingsUI.clusterPositioning
+    if db.iconInsideApplied then return end
+    db.iconInsideApplied = true
+    local UF = E.GetModule and E:GetModule("UnitFrames", true)
+    for _, unit in ipairs({ "player", "target", "focus" }) do
+        local u = E.db.unitframe and E.db.unitframe.units and E.db.unitframe.units[unit]
+        local cb = u and u.castbar
+        if cb then cb.icon = true; cb.iconAttached = true end
+        local f = _G["ElvUF_" .. unit:gsub("^%l", string.upper)]
+        if UF and UF.Configure_Castbar and f and f.Castbar then
+            pcall(UF.Configure_Castbar, UF, f)
+        end
+    end
 end
 
 function TUI:UpdateClusterPositioning()
+    if ns.EssentialMover and ns.EssentialMover.RefreshLabel then ns.EssentialMover.RefreshLabel() end
     if E.db.thingsUI.clusterPositioning.enabled then
         isEnabled = true
+        ApplyIconInsideDefault()
         eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
         eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 

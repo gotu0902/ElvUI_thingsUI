@@ -4,9 +4,7 @@ local E = ns.E
 
 local NotifyChange = ns.NotifyChange
 
-local exportCache  = ""
-local importBuffer = ""
-local selected     = {}   -- [sectionIndex] = false to exclude; default include
+local selected = {}   -- [sectionIndex] = true to include; default exclude
 
 local function SectionValues()
     local v = {}
@@ -18,7 +16,7 @@ function TUI:ShareOptions()
     local args = {
             desc = {
                 order = 1, type = "description", fontSize = "medium", width = "full",
-                name = "Currently no merge feature or module copy, need to learn how that works first.\n",
+                name = "Export any sections to a string, or paste one below to import - the importer picks exactly what to bring in (whole sections, only new items, or individual bar setups / custom groups / specials, with per-part overwrite when something already exists).\n",
             },
             runInstaller = {
                 order = 2, type = "execute", name = "|cFF40FF40Run Installer|r", width = "double",
@@ -27,59 +25,55 @@ function TUI:ShareOptions()
             },
             installerBreak = { order = 3, type = "description", width = "full", name = "\n" },
 
-            defaultsHeader = { order = 4, type = "header", name = "thingsUI Defaults" },
+            defaultsHeader = { order = 4, type = "header", name = "Import default presets" },
             defaultsDesc = { order = 5, type = "description",
-                name = "Import a |cFF8080FFthingsUI|r layout for a raid tier. |cFFFF6060Overwrites your current thingsUI sections.|r\n" },
+                name = "Import all |cFF8080FFthingsUI|r stuff, if you want to start with and edit my stuff. |cFFFF6060Overwrites everythings hah.|r\n" },
             defaultsBreak = { order = 7, type = "description", width = "full", name = "\n" },
 
             exportHeader = { order = 10, type = "header", name = "Export" },
+            exportSelectAll = {
+                order = 10.1, type = "execute", name = "Select All", width = 0.8,
+                func = function()
+                    for i in ipairs(ns.Share.SECTIONS) do selected[i] = true end
+                    NotifyChange()
+                end,
+            },
+            exportClearAll = {
+                order = 10.2, type = "execute", name = "Clear All", width = 0.8,
+                func = function()
+                    wipe(selected)
+                    NotifyChange()
+                end,
+            },
             exportSections = {
                 order = 11, type = "multiselect", name = "Sections to include",
                 values = SectionValues,
-                get = function(_, i) return selected[i] ~= false end,
-                set = function(_, i, val) selected[i] = val; exportCache = ""; NotifyChange() end,
+                get = function(_, i) return selected[i] == true end,
+                set = function(_, i, val) selected[i] = val and true or nil; NotifyChange() end,
             },
             exportButton = {
                 order = 12, type = "execute", name = "Generate Export String",
                 func = function()
-                    exportCache = (ns.Share and ns.Share.Export(selected)) or ""
-                    if exportCache == "" then
+                    local sel = {}
+                    for i in ipairs(ns.Share.SECTIONS) do sel[i] = selected[i] == true end
+                    local s = (ns.Share and ns.Share.Export(sel)) or ""
+                    if s == "" then
                         print("|cFF8080FFthingsUI|r: nothing to export - pick at least one section.")
+                    elseif ns.ShareWizard and ns.ShareWizard.ShowExport then
+                        ns.ShareWizard.ShowExport(s)
                     end
-                    NotifyChange()
                 end,
-            },
-            exportBox = {
-                order = 13, type = "input", multiline = 10, width = "full",
-                name = "Select all (Ctrl+A) + copy (Ctrl+C):",
-                hidden = function() return exportCache == "" end,
-                get = function() return exportCache end,
-                set = function() end,
             },
 
             importHeader = { order = 20, type = "header", name = "Import" },
-            importBox = {
-                order = 21, type = "input", multiline = 10, width = "full",
-                name = "Paste an export string here:",
-                get = function() return importBuffer end,
-                set = function(_, v) importBuffer = v or "" end,
+            importDesc = {
+                order = 21, type = "description", fontSize = "medium", width = "full",
+                name = "Opens the importer - paste the string there and pick what to bring in.\n",
             },
             importButton = {
-                order = 22, type = "execute", name = "Import & Reload",
-                disabled = function() return (importBuffer or ""):gsub("%s", "") == "" end,
-                confirm = function()
-                    local secs = ns.Share and ns.Share.SectionsInString(importBuffer)
-                    local list = (secs and #secs > 0) and table.concat(secs, ", ") or "?"
-                    return "Replace these sections: " .. list .. "\n(Other settings stay.) Reloads after. Continue?"
-                end,
+                order = 22, type = "execute", name = "Import...", width = "double",
                 func = function()
-                    local ok, err = ns.Share and ns.Share.Import(importBuffer)
-                    if ok then
-                        importBuffer = ""
-                        ReloadUI()
-                    else
-                        print("|cFF8080FFthingsUI|r: import failed - " .. (err or "unknown error"))
-                    end
+                    if ns.ShareWizard then ns.ShareWizard.Open() end
                 end,
             },
     }
@@ -87,7 +81,14 @@ function TUI:ShareOptions()
     for i, p in ipairs(ns.PRESET_LIST or {}) do
         args["preset" .. p.key] = {
             order = 5 + i * 0.1, type = "execute", name = "Import " .. p.label,
-            func = function() if ns.ImportPresetConfirm then ns.ImportPresetConfirm(p.key, p.label) end end,
+            func = function()
+                local s = ns.PresetString and ns.PresetString(p.key)
+                if s and s ~= "" and ns.ShareWizard then
+                    ns.ShareWizard.Open(s)
+                elseif ns.ImportPresetConfirm then
+                    ns.ImportPresetConfirm(p.key, p.label)
+                end
+            end,
         }
     end
 

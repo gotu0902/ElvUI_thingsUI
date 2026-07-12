@@ -161,7 +161,6 @@ function TUI:ClusterPositioningSubTab()
                 order = 1,
                 type = "group",
                 name = "Cluster Positioning",
-                childGroups = "tree",
                 args = {
                     header = {
                         order = 1,
@@ -171,7 +170,7 @@ function TUI:ClusterPositioningSubTab()
                     description = {
                         order = 2,
                         type = "description",
-                        name = "Anchor ElvUI unit frames to the Essential Cooldown Viewer.\n\nWhen enabled:\n• ElvUF_Player anchors to the left\n• ElvUF_Target anchors to the right\n• ElvUF_TargetTarget anchors to Target\n• ElvUF_Target_CastBar anchors below Target\n\n|cFFFF4040Warning:|r This overrides ElvUI's unit frame positioning, it will look weird in /emove.\n\n",
+                        name = "Anchor ElvUI unit frames to the Essential Cooldown Viewer.\n\nWhen enabled:\n• ElvUF_Player anchors to the left\n• ElvUF_Target anchors to the right\n• ElvUF_TargetTarget anchors to Target\n• ElvUF_Target_CastBar anchors below Target\n• Focus frame + castbar anchor wherever you choose (default: below Target)\n\n|cFFFF4040Warning:|r This overrides ElvUI's unit frame positioning, it will look weird in /emove.\n\n",
                     },
                     enabled = {
                         order = 3,
@@ -240,6 +239,7 @@ function TUI:ClusterPositioningSubTab()
                         order = 10,
                         type = "group",
                         name = "Icon Settings",
+                        inline = true,
                         disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                         args = {
                             iconSizeInfo = {
@@ -283,18 +283,12 @@ function TUI:ClusterPositioningSubTab()
                         },
                     },
 
-                    -- UnitFrame Settings
-                    elvuiFramesGroup = {
-                        order = 20,
-                        type = "group",
-                        name = "UnitFrame Settings",
-                        disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
-                        args = {
-                            playerTargetGroup = {
-                                order = 1,
+                    playerTargetGroup = {
+                                order = 20,
                                 type = "group",
                                 name = "Player / Target Frame",
                                 inline = true,
+                                disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                                 args = {
                                     playerEnabled = {
                                         order = 1,
@@ -329,11 +323,12 @@ function TUI:ClusterPositioningSubTab()
                                     },
                                 },
                             },
-                            totGroup = {
-                                order = 2,
+                    totGroup = {
+                                order = 21,
                                 type = "group",
                                 name = "Target of Target Frame",
                                 inline = true,
+                                disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                                 args = {
                                     totEnabled = {
                                         order = 1,
@@ -359,11 +354,12 @@ function TUI:ClusterPositioningSubTab()
                                     },
                                 },
                             },
-                            castBarGroup = {
-                                order = 3,
+                    castBarGroup = {
+                                order = 22,
                                 type = "group",
                                 name = "Target Cast Bar",
                                 inline = true,
+                                disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                                 args = {
                                     castBarEnabled = {
                                         order = 1,
@@ -401,8 +397,109 @@ function TUI:ClusterPositioningSubTab()
                                     },
                                 },
                             },
-                        },
-                    },
+                    focusGroup = (function()
+                                local function fdb() return E.db.thingsUI.clusterPositioning.focusFrame end
+                                local function fset(k, v) fdb()[k] = v; TUI:QueueClusterUpdate() end
+                                local function off() return not E.db.thingsUI.clusterPositioning.enabled or not fdb().enabled end
+                                return {
+                                    order = 23, type = "group", name = "Focus Frame", inline = true,
+                                    disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
+                                    args = {
+                                        enabled = {
+                                            order = 1, type = "toggle", name = "Position Focus Frame",
+                                            get = function() return fdb().enabled end,
+                                            set = function(_, v) fset("enabled", v) end,
+                                        },
+                                        matchWidth = {
+                                            order = 2, type = "toggle", name = "Match Anchor Width",
+                                            disabled = off,
+                                            get = function() return fdb().matchWidth end,
+                                            set = function(_, v) fset("matchWidth", v) end,
+                                        },
+                                        anchorFrame = {
+                                            order = 3, type = "select", name = "Anchor Frame", width = "double",
+                                            values = function() return ns.ANCHORS.FilteredValues() end,
+                                            sorting = function() return ns.ANCHORS.FilteredOrder() end,
+                                            disabled = off,
+                                            get = function() return fdb().anchorFrame or "ElvUF_Target" end,
+                                            set = function(_, v) fset("anchorFrame", v) end,
+                                        },
+                                        anchorPoint = {
+                                            order = 4, type = "select", name = "Anchor From",
+                                            values = ns.POINTS.VALUES, sorting = ns.POINTS.ORDER,
+                                            disabled = off,
+                                            get = function() return fdb().anchorPoint or "TOP" end,
+                                            set = function(_, v) fset("anchorPoint", v) end,
+                                        },
+                                        anchorRelativePoint = {
+                                            order = 5, type = "select", name = "Anchor To",
+                                            values = ns.POINTS.VALUES, sorting = ns.POINTS.ORDER,
+                                            disabled = off,
+                                            get = function() return fdb().anchorRelativePoint or "BOTTOM" end,
+                                            set = function(_, v) fset("anchorRelativePoint", v) end,
+                                        },
+                                        xOffset = {
+                                            order = 6, type = "range", name = "X Offset",
+                                            min = -500, max = 500, step = 0.5, bigStep = 1,
+                                            disabled = off,
+                                            get = function() return fdb().xOffset or 0 end,
+                                            set = function(_, v) fset("xOffset", v) end,
+                                        },
+                                        yOffset = {
+                                            order = 7, type = "range", name = "Y Offset",
+                                            min = -500, max = 500, step = 0.5, bigStep = 1,
+                                            disabled = off,
+                                            get = function() return fdb().yOffset or 0 end,
+                                            set = function(_, v) fset("yOffset", v) end,
+                                        },
+                                    },
+                                }
+                            end)(),
+                    focusCastBarGroup = (function()
+                                local function cdb() return E.db.thingsUI.clusterPositioning.focusCastBar end
+                                local function cset(k, v) cdb()[k] = v; TUI:QueueClusterUpdate() end
+                                local function off() return not E.db.thingsUI.clusterPositioning.enabled or not cdb().enabled end
+                                return {
+                                    order = 24, type = "group", name = "Focus Cast Bar", inline = true,
+                                    disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
+                                    args = {
+                                        enabled = {
+                                            order = 1, type = "toggle", name = "Position Focus CastBar",
+                                            desc = "Anchors the focus castbar to the Focus frame. Width follows the Focus frame automatically.",
+                                            get = function() return cdb().enabled end,
+                                            set = function(_, v) cset("enabled", v) end,
+                                        },
+                                        anchorPoint = {
+                                            order = 2, type = "select", name = "Anchor From",
+                                            values = ns.POINTS.VALUES, sorting = ns.POINTS.ORDER,
+                                            disabled = off,
+                                            get = function() return cdb().anchorPoint or "TOP" end,
+                                            set = function(_, v) cset("anchorPoint", v) end,
+                                        },
+                                        anchorRelativePoint = {
+                                            order = 3, type = "select", name = "Anchor To",
+                                            values = ns.POINTS.VALUES, sorting = ns.POINTS.ORDER,
+                                            disabled = off,
+                                            get = function() return cdb().anchorRelativePoint or "BOTTOM" end,
+                                            set = function(_, v) cset("anchorRelativePoint", v) end,
+                                        },
+                                        xOffset = {
+                                            order = 4, type = "range", name = "X Offset",
+                                            min = -200, max = 200, step = 0.5, bigStep = 1,
+                                            disabled = off,
+                                            get = function() return cdb().xOffset or 0 end,
+                                            set = function(_, v) cset("xOffset", v) end,
+                                        },
+                                        yOffset = {
+                                            order = 5, type = "range", name = "Y Offset",
+                                            min = -200, max = 200, step = 0.5, bigStep = 1,
+                                            disabled = off,
+                                            get = function() return cdb().yOffset or 0 end,
+                                            set = function(_, v) cset("yOffset", v) end,
+                                        },
+                                    },
+                                }
+                            end)(),
 
                 },
             }

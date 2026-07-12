@@ -10,6 +10,7 @@ local STATIC_VALUES = {
     ["ElvUF_Player"]              = col(C_ELV, "ElvUI Player Frame"),
     ["ElvUF_Target"]              = col(C_ELV, "ElvUI Target Frame"),
     ["ElvUF_TargetTarget"]        = col(C_ELV, "ElvUI Target of Target"),
+    ["ElvUF_Focus"]               = col(C_ELV, "ElvUI Focus Frame"),
     ["ElvUF_Player_ClassBar"]     = col(C_ELV, "ElvUI Class Bar"),
     ["ElvUF_Player_CastBar"]      = col(C_ELV, "ElvUI Player Castbar"),
     ["EssentialCooldownViewer"]   = col(C_CDM, "CDM: Essential Cooldowns"),
@@ -22,7 +23,7 @@ local STATIC_VALUES = {
 
 local STATIC_ORDER = {
     "BARSETUP_TOP",
-    "ElvUF_Player", "ElvUF_Target", "ElvUF_TargetTarget", "ElvUF_Player_ClassBar", "ElvUF_Player_CastBar",
+    "ElvUF_Player", "ElvUF_Target", "ElvUF_TargetTarget", "ElvUF_Focus", "ElvUF_Player_ClassBar", "ElvUF_Player_CastBar",
     "EssentialCooldownViewer", "UtilityCooldownViewer", "ElvUI_thingsUI_ChargeBar", "Grid2LayoutFrame", "UIParent", "CUSTOM",
 }
 
@@ -81,6 +82,30 @@ local GetSpecialBarKeys = GetSpecialSlots
 function ns.ANCHORS.MigrateAnchorName(name)
     if name == "ElvUF_Player_CastBar.Holder" then return "ElvUF_Player_CastBar" end
     return name
+end
+
+function ns.ANCHORS.ResolveAnchorTarget(anchorName)
+    if not anchorName or anchorName == "" then return nil end
+    if anchorName == "BARSETUP_TOP" then
+        local bs = ns.BarSetup
+        if bs and bs.GetTopmostBarFrame then
+            local top = bs.GetTopmostBarFrame()
+            if top then return top end
+        end
+        local setup = bs and bs.GetActiveSetup and bs.GetActiveSetup()
+        return setup and _G[setup.anchorFrame or ""] or nil
+    end
+    if anchorName == "ElvUF_Player_ClassBar" then
+        local p = _G.ElvUF_Player
+        return p and (p.ClassBarHolder or p.ClassBar) or nil
+    end
+    local proxy = ns.CDMIcons and ns.CDMIcons.ProxyForName and ns.CDMIcons.ProxyForName(anchorName)
+    if proxy then return proxy end
+    local target = _G[anchorName]
+    if anchorName == "ElvUF_Player_CastBar" and target and target.Holder then
+        return target.Holder
+    end
+    return target
 end
 
 function ns.ANCHORS.GetSharedAnchorValues()

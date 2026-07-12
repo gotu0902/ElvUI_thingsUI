@@ -96,7 +96,7 @@ local function GetSpecInfo(specID)
     if cached then return cached end
     local m = ns.SpecMeta(specID)
     if not m then return nil end
-    local info = { className = m.className, classFile = m.classToken, specName = m.name }
+    local info = { className = m.className, classFile = m.classToken, specName = m.name, icon = m.icon }
     SPEC_INFO_CACHE[specID] = info
     return info
 end
@@ -107,10 +107,11 @@ local function GetActiveSpecLabels(setup)
     for specID in pairs(setup.specs) do
         local info = GetSpecInfo(specID)
         if info then
+            local iconStr = info.icon and ("|T" .. info.icon .. ":14:14|t ") or ""
             out[#out + 1] = {
                 id = specID,
-                label = string.format("|cFF%s%s|r - %s",
-                    ClassColorHex(info.classFile), info.className, info.specName),
+                label = string.format("%s|cFF%s%s|r - %s",
+                    iconStr, ClassColorHex(info.classFile), info.className, info.specName),
                 sortKey = info.className .. info.specName,
             }
         end
@@ -289,12 +290,12 @@ local function BarRows(setup)
                         if isAttached() and ns.BarSetup.GetAttachedHeight then
                             return ns.BarSetup.GetAttachedHeight(setup, k)
                         end
-                        return ns.BarSetup.GetBarHeight and ns.BarSetup.GetBarHeight(k) or 0
+                        return ns.BarSetup.GetBarHeight and ns.BarSetup.GetBarHeight(k, setup) or 0
                     end,
                     set = function(_, v)
                         local k = key()
                         if k and ns.BarSetup.SetBarHeight then
-                            ns.BarSetup.SetBarHeight(k, v)
+                            ns.BarSetup.SetBarHeight(k, v, setup)
                             ApplyStack()
                         end
                     end,
@@ -388,6 +389,7 @@ end
 local function SetupEditor(idx)
     local setup = GetSetup(idx)
     if not setup then return { type = "group", name = "-", args = {} } end
+    if idx == 1 and setup.name ~= "Global" then setup.name = "Global" end
 
     local classValues, classOrder = GetClassChoices()
 
@@ -405,6 +407,7 @@ local function SetupEditor(idx)
     -- Specs
     local specsTab = {
         type = "group", order = 1, name = "Specs",
+        hidden = function() return idx == 1 end,
         args = {
             nameInput = {
                 order = 1, type = "input", name = "Setup Name", width = "double",
@@ -431,24 +434,17 @@ local function SetupEditor(idx)
             pickHeader = { order = 10, type = "header", name = "Pick Specs by Class" },
             pickHint = {
                 order = 11, type = "description",
-                name = function()
-                    if idx == 1 then
-                        return "Global is the fallback used when no other setup matches the current spec. Spec list below has no effect on Global.\n"
-                    end
-                    return "Tick specs below to apply this setup when you're in them. Setups override Global; if multiple match, the lower-index one wins.\n"
-                end,
+                name = "Tick specs below to apply this setup when you're in them. Setups override Global; if multiple match, the lower-index one wins.\n",
             },
             classPick = {
                 order = 12, type = "select", name = "Class", width = "double",
                 values  = classValues,
                 sorting = classOrder,
-                hidden = function() return idx == 1 end,
                 get = function() return selectedClassID end,
                 set = function(_, v) selectedClassID = v; NotifyChange() end,
             },
             specPick = {
                 order = 13, type = "multiselect", name = "Specs",
-                hidden = function() return idx == 1 end,
                 values = function() return (GetSpecChoicesForClass(selectedClassID)) end,
                 get = function(_, k) return setup.specs[k] and true or false end,
                 set = function(_, k, v)
@@ -460,7 +456,6 @@ local function SetupEditor(idx)
             activeHeader = { order = 20, type = "header", name = "Active on Specs" },
             activeList = {
                 order = 21, type = "group", inline = true, name = "Currently Active",
-                hidden = function() return idx == 1 end,
                 args = (function()
                     local out = {
                         emptyDesc = {
@@ -502,6 +497,11 @@ local function SetupEditor(idx)
     local barOrderTab = {
         type = "group", order = 2, name = "Bar Order",
         args = {
+            globalHint = {
+                order = 0, type = "description",
+                hidden = function() return idx ~= 1 end,
+                name = "|cFF888888Global is the fallback setup, used when no other setup matches the current spec.|r\n",
+            },
             addSpecialBars = {
                 order = 1, type = "multiselect",
                 name = "Include Special Bars",

@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.0.4
+- Added copy special buttons more places
+- Added style presets to specials
+- Added text to the Essential mover (when cluster is enabled) pointing out it's the master of the movers. Hope that won't be a movie title.
+- Added focus frame to cluster and anchor list.
+- Swaped links out for a counter in the dropdowns for custom groups etc, got kind of messy.
+- Filter added to copy specials popup. Sort list by style toggle.
+- New preset string: added some prot pala and shadow specials, more preset stuff coming, prob before 12.1
+- Import wizard popup when importing strings. Choose to nuke and overwrite everything exported, or just the modules and the stuff you want from them. Swap from input to popup for export as well. 
+- Removed "Accept" button validation from import field.
+- French referees apparently really really like englishmen, especially in quarter-finals.
+- Bar Setup default Y-offset was wrong, set the default order to Power -> Class -> Charge -> Cast
+- Bar Order height weren't stored per setup, woopsie.
+- CG spells in Class didn't check if you actually knew it woopsie x2
+- Merged cluster settings.
+- Hide spec tab for global bar setup.
+
 ## 4.0.3
 - Fixed Special Bars flicker caused when casting f.ex Mind Flay Insanity
 - Tried integrating ElvUI's CDM skin border into the spacing\gap math (If it doesn't work, Claude did it)

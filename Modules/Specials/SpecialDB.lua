@@ -20,11 +20,11 @@ local function FillDefaults(tbl, defaults)
     end
 end
 
-local function GetSpecRoot()
+local function GetSpecRoot(specID)
     local db = E.db.thingsUI and E.db.thingsUI.specialBars
     if not db then return nil end
     if not db.specs then db.specs = {} end
-    local specID = GetCurrentSpecID()
+    specID = specID or GetCurrentSpecID()
     if specID == 0 then specID = 1 end
     local key = tostring(specID)
     if not db.specs[key] then db.specs[key] = { bars = {}, icons = {}, barCount = 3, iconCount = 3 } end
@@ -36,8 +36,8 @@ local function GetSpecRoot()
     return s
 end
 
-local function GetBarDB(barKey)
-    local s = GetSpecRoot()
+local function GetBarDB(barKey, specID)
+    local s = GetSpecRoot(specID)
     if not s then return nil end
     if not s.bars[barKey] then
         s.bars[barKey] = {}
@@ -46,8 +46,8 @@ local function GetBarDB(barKey)
     return s.bars[barKey]
 end
 
-local function GetIconDB(iconKey)
-    local s = GetSpecRoot()
+local function GetIconDB(iconKey, specID)
+    local s = GetSpecRoot(specID)
     if not s then return nil end
     if not s.icons[iconKey] then
         s.icons[iconKey] = {}
@@ -56,8 +56,15 @@ local function GetIconDB(iconKey)
     return s.icons[iconKey]
 end
 
-local function GetBarCount()  local s = GetSpecRoot(); return (s and s.barCount)  or 3 end
-local function GetIconCount() local s = GetSpecRoot(); return (s and s.iconCount) or 3 end
+local function GetBarCount(specID)  local s = GetSpecRoot(specID); return (s and s.barCount)  or 3 end
+local function GetIconCount(specID) local s = GetSpecRoot(specID); return (s and s.iconCount) or 3 end
+
+SB.editingSpec = nil
+function SB.EditingSpec()
+    local es = SB.editingSpec
+    if es and es ~= GetCurrentSpecID() then return es end
+    return nil
+end
 
 SB.GetCurrentSpecID = GetCurrentSpecID
 SB.GetSpecRoot      = GetSpecRoot
