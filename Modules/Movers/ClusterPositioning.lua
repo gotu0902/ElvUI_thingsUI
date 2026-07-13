@@ -17,10 +17,11 @@ local clusterProxy
 local function CountVisibleChildren(frame)
     if not frame then return 0 end
 
+    local hiddenCheck = ns.CDMIcons and ns.CDMIcons.IsPassiveHidden
     local count = 0
     for i = 1, frame:GetNumChildren() do
         local child = select(i, frame:GetChildren())
-        if child and child:IsShown() then
+        if child and child:IsShown() and not (hiddenCheck and hiddenCheck(child)) then
             count = count + 1
         end
     end

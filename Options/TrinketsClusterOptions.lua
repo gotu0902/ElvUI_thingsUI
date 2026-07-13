@@ -200,18 +200,16 @@ function TUI:ClusterPositioningSubTab()
                                 order = 1,
                                 type = "description",
                                 name = function()
-                                    local essentialCount = 0
-                                    if EssentialCooldownViewer then
-                                        for _, child in ipairs({ EssentialCooldownViewer:GetChildren() }) do
-                                            if child and child:IsShown() then essentialCount = essentialCount + 1 end
+                                    local hiddenCheck = ns.CDMIcons and ns.CDMIcons.IsPassiveHidden
+                                    local function countShown(viewer)
+                                        local n = 0
+                                        for _, child in ipairs({ viewer:GetChildren() }) do
+                                            if child and child:IsShown() and not (hiddenCheck and hiddenCheck(child)) then n = n + 1 end
                                         end
+                                        return n
                                     end
-                                    local utilityCount = 0
-                                    if UtilityCooldownViewer then
-                                        for _, child in ipairs({ UtilityCooldownViewer:GetChildren() }) do
-                                            if child and child:IsShown() then utilityCount = utilityCount + 1 end
-                                        end
-                                    end
+                                    local essentialCount = EssentialCooldownViewer and countShown(EssentialCooldownViewer) or 0
+                                    local utilityCount = UtilityCooldownViewer and countShown(UtilityCooldownViewer) or 0
 
                                     local TR = ns.TrinketsCDM
                                     local trinketCount = (TR and TR.GetExtraEssentialCount and TR.GetExtraEssentialCount()) or 0

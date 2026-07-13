@@ -22,6 +22,8 @@ local hookedViewers = {}
 local hookedChildren = {}
 local applyingChild  = {}
 local pendingViewers = {}
+local passiveHidden  = {}
+local passiveDirty   = false
 local pendingFrame   = CreateFrame("Frame")
 local QueueLayout
 local LayoutViewer
@@ -82,13 +84,70 @@ local function CollectAndHook(viewer, out, hookFn)
         if c and c.GetCooldownID then
             if hookFn then hookFn(c, viewer) end
 
-            if c:IsShown() and not (ns.yoinkedBars and ns.yoinkedBars[c]) then
+            if c:IsShown() and not (ns.yoinkedBars and ns.yoinkedBars[c]) and not passiveHidden[c] then
                 out[#out + 1] = c
             end
         end
     end
     return out
 end
+
+local function ApplyPassiveState(child, hide)
+    if hide then
+        if not passiveHidden[child] then
+            passiveHidden[child] = true
+            child:SetAlpha(0)
+            child:EnableMouse(false)
+        end
+    elseif passiveHidden[child] then
+        passiveHidden[child] = nil
+        child:SetAlpha(1)
+        child:EnableMouse(true)
+    end
+end
+
+local function RebuildPassiveCache()
+    if InCombatLockdown() then passiveDirty = true return end
+    passiveDirty = false
+    local changed = false
+    for name in pairs(VIEWERS) do
+        local viewer = _G[name]
+        local vdb = GetViewerDB(name)
+        if viewer and vdb then
+            local wantHide = vdb.hidePassive and C_Spell and C_Spell.IsSpellPassive
+            for i = 1, viewer:GetNumChildren() do
+                local c = select(i, viewer:GetChildren())
+                if c and c.GetCooldownID
+                    and not (ns.yoinkedBars and ns.yoinkedBars[c])
+                    and not c._tuiSpecialBarKey and not c._tuiSpecialIconKey then
+                    local hide = false
+                    if wantHide then
+                        local sid = c.GetSpellID and c:GetSpellID()
+                        hide = (sid and C_Spell.IsSpellPassive(sid)) or false
+                    end
+                    if (passiveHidden[c] and true or false) ~= hide then changed = true end
+                    ApplyPassiveState(c, hide)
+                end
+            end
+        end
+    end
+    if changed then
+        M.Invalidate()
+        for name in pairs(VIEWERS) do QueueLayout(_G[name]) end
+    end
+end
+
+local passiveQueued = false
+local function QueuePassiveRebuild()
+    if passiveQueued then return end
+    passiveQueued = true
+    C_Timer.After(0.1, function()
+        passiveQueued = false
+        RebuildPassiveCache()
+    end)
+end
+
+function M.IsPassiveHidden(child) return passiveHidden[child] == true end
 
 local function SortByCooldownID(children)
     table.sort(children, function(a, b)
@@ -652,6 +711,7 @@ local function HookViewer(name)
             HookChild(itemFrame, self)
             self._tuiLayoutSig = nil
             QueueLayout(self)
+            QueuePassiveRebuild()
         end)
     end
     QueueLayout(viewer)
@@ -743,6 +803,7 @@ function M.RefreshAll()
         HookViewer(name)
         QueueLayout(_G[name])
     end
+    QueuePassiveRebuild()
     if ns.MoverSync and ns.MoverSync.Queue then ns.MoverSync.Queue() end
 end
 
@@ -787,7 +848,13 @@ local f = CreateFrame("Frame")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
 f:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 f:RegisterEvent("PLAYER_REGEN_ENABLED")
+f:RegisterEvent("SPELLS_CHANGED")
+f:RegisterEvent("TRAIT_CONFIG_UPDATED")
 f:SetScript("OnEvent", function(_, event)
+    if event == "SPELLS_CHANGED" or event == "TRAIT_CONFIG_UPDATED" then
+        QueuePassiveRebuild()
+        return
+    end
 
     M.MaybeAutoEnableCDM()
     if event == "PLAYER_SPECIALIZATION_CHANGED" then
@@ -799,6 +866,7 @@ f:SetScript("OnEvent", function(_, event)
         lastSpec = spec
         for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAll) end
     elseif event == "PLAYER_REGEN_ENABLED" then
+        if passiveDirty then QueuePassiveRebuild() end
         M.RefreshAll()
         for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAll) end
     else

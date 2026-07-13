@@ -265,6 +265,18 @@ local function ViewerGroup(order, key, label, opts)
             },
     }
 
+    if key ~= "buffIcon" then
+        layoutArgs.hidePassive = {
+            order = 14, type = "toggle", name = "Hide Passive Cooldowns", width = 1.4,
+            desc = "Hide cooldowns that a talent has turned into a passive (e.g. a talent that replaces an active ability).",
+            get = function() return E.db.thingsUI.cdmIcons[key].hidePassive end,
+            set = function(_, v)
+                E.db.thingsUI.cdmIcons[key].hidePassive = v
+                TUI:UpdateCDMIcons()
+            end,
+        }
+    end
+
     if opts.includeAnchor then
         local anchorOpts = { alwaysOn = opts.alwaysOnAnchor }
         for k, v in pairs(AnchorArgs(key, anchorOpts)) do
