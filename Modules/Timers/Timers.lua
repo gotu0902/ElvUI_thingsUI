@@ -323,8 +323,10 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, spellID)
         end
     elseif event == "GET_ITEM_INFO_RECEIVED" then
         if a1 and trackedItems[a1] then FireHosts() end
-    elseif event == "BAG_UPDATE_COOLDOWN" or event == "SPELL_UPDATE_COOLDOWN" then
-        QueueCDRepaint()
+    elseif event == "SPELL_UPDATE_COOLDOWN" then
+        if not a1 or triggerMap[a1] then QueueCDRepaint() end
+    elseif event == "BAG_UPDATE_COOLDOWN" then
+        if next(trackedItems) then QueueCDRepaint() end
     else
         if event == "PLAYER_ENTERING_WORLD" then M.EnsureLustTimer() end
         M.Rebuild()

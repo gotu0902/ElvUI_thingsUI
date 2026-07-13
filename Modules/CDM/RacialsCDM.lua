@@ -121,6 +121,10 @@ local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")
 ev:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 ev:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-ev:SetScript("OnEvent", function(_, event)
-    if event == "SPELL_UPDATE_COOLDOWN" then ThrottledCooldowns() else M.Refresh() end
+ev:SetScript("OnEvent", function(_, event, arg1)
+    if event == "SPELL_UPDATE_COOLDOWN" then
+        if not arg1 or buttons[arg1] then ThrottledCooldowns() end
+    else
+        M.Refresh()
+    end
 end)

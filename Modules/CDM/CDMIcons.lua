@@ -8,6 +8,7 @@ ns.CDM_SPACING_INSET = ns.CDM_SPACING_INSET or 2
 local M = ns.CDMIcons
 
 local H = ns.CDHelpers
+local IsSecret      = H.IsSecret
 local NotSecret     = H.NotSecret
 local GetDesatCurve = H.GetDesatCurve
 local SetDesat      = H.SetDesat
@@ -106,6 +107,11 @@ local function ApplyPassiveState(child, hide)
     end
 end
 
+local function PlainID(v)
+    if v == nil or IsSecret(v) then return nil end
+    return v
+end
+
 local function RebuildPassiveCache()
     if InCombatLockdown() then passiveDirty = true return end
     passiveDirty = false
@@ -120,13 +126,20 @@ local function RebuildPassiveCache()
                 if c and c.GetCooldownID
                     and not (ns.yoinkedBars and ns.yoinkedBars[c])
                     and not c._tuiSpecialBarKey and not c._tuiSpecialIconKey then
-                    local hide = false
-                    if wantHide then
-                        local sid = c.GetSpellID and c:GetSpellID()
-                        hide = (sid and C_Spell.IsSpellPassive(sid)) or false
+                    local info = c.cooldownInfo
+                    local sid = info and (PlainID(info.overrideTooltipSpellID)
+                        or PlainID(info.overrideSpellID) or PlainID(info.spellID)) or nil
+                    local hide
+                    if not wantHide then
+                        hide = false
+                    elseif sid then
+                        local p = C_Spell.IsSpellPassive(sid)
+                        hide = (NotSecret(p) and p == true) or false
                     end
-                    if (passiveHidden[c] and true or false) ~= hide then changed = true end
-                    ApplyPassiveState(c, hide)
+                    if hide ~= nil then
+                        if (passiveHidden[c] and true or false) ~= hide then changed = true end
+                        ApplyPassiveState(c, hide)
+                    end
                 end
             end
         end
@@ -795,10 +808,22 @@ local function EnsureUtilityMover()
     })
 end
 
+local HEAL_VIEWERS = { "EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer", "BuffBarCooldownViewer" }
+local function HealViewerVisibility()
+    if InCombatLockdown() then return end
+    for _, name in ipairs(HEAL_VIEWERS) do
+        local v = _G[name]
+        if v and not v:IsShown() and type(v.UpdateShownState) == "function" then
+            v:UpdateShownState()
+        end
+    end
+end
+
 function M.RefreshAll()
     M.Invalidate()
     HookEditModeExit()
     EnsureUtilityMover()
+    HealViewerVisibility()
     for name in pairs(VIEWERS) do
         HookViewer(name)
         QueueLayout(_G[name])

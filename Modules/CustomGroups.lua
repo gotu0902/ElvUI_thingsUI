@@ -857,7 +857,14 @@ local function _cdThrottleTick()
     end
     wipe(_pendingCD)
 end
+local function TracksSpell(spellID)
+    for _, gs in pairs(groupState) do
+        if gs.spellIcons[spellID] then return true end
+    end
+    return false
+end
 local function RefreshSpellThrottled(spellID)
+    if not TracksSpell(spellID) then return end
     if _cdThrottled then
         _pendingCD[spellID] = true
         return
@@ -866,6 +873,7 @@ local function RefreshSpellThrottled(spellID)
     C_Timer.After(0.1, _cdThrottleTick)
     RefreshSpell(spellID)
 end
+
 
 local function NextIndex(root)
     local mx = 0
