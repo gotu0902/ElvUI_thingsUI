@@ -11,6 +11,11 @@ local CAT_BAR  = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.Tra
 local spellInfoCache = {}
 local baseSpellCache = {}
 
+local function PlainID(v)
+    if issecretvalue and issecretvalue(v) then return nil end
+    return v
+end
+
 local function GetCachedSpellInfo(spellID)
     if not spellID then return nil end
     local cached = spellInfoCache[spellID]
@@ -75,7 +80,7 @@ local function BuildCDMSpellList()
         for _, cdID in ipairs(ids) do
             local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
             if info then
-                local sid = info.overrideSpellID or info.spellID
+                local sid = PlainID(info.overrideSpellID) or PlainID(info.spellID)
                 if sid then rowSpellCount[sid] = (rowSpellCount[sid] or 0) + 1 end
             end
         end
@@ -90,7 +95,7 @@ local function BuildCDMSpellList()
             for _, cdID in ipairs(ids) do
                 local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
                 if info then
-                    local parentID = info.overrideSpellID or info.spellID
+                    local parentID = PlainID(info.overrideSpellID) or PlainID(info.spellID)
                     local key = parentID
                     if parentID and rowSpellCount[parentID] and rowSpellCount[parentID] > 1
                         and info.linkedSpellIDs and info.linkedSpellIDs[1] then

@@ -271,7 +271,7 @@ local function StyleYoinkedIcon(childFrame, db, gtext)
 
                     if r.GetNumPoints and r:GetNumPoints() > 0 then
                         local pt, rel, rp, px, py = r:GetPoint()
-                        if pt and not (issecretvalue(pt) or issecretvalue(rp) or issecretvalue(px) or issecretvalue(py)) then
+                        if not (issecretvalue(pt) or issecretvalue(rp) or issecretvalue(px) or issecretvalue(py)) and pt then
                             orig.cdPoint = { p = pt, rel = rel, rp = rp, x = px or 0, y = py or 0 }
                         end
                     end
@@ -291,7 +291,7 @@ local function StyleYoinkedIcon(childFrame, db, gtext)
             orig.appAlpha = app:GetAlpha()
             if app.GetNumPoints and app:GetNumPoints() > 0 then
                 local pt, rel, rp, px, py = app:GetPoint()
-                if pt and not (issecretvalue(pt) or issecretvalue(rp) or issecretvalue(px) or issecretvalue(py)) then
+                if not (issecretvalue(pt) or issecretvalue(rp) or issecretvalue(px) or issecretvalue(py)) and pt then
                     orig.appPoint = { p = pt, rel = rel, rp = rp, x = px or 0, y = py or 0 }
                 end
             end

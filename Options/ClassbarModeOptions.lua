@@ -30,7 +30,6 @@ function TUI:ClassbarModeOptions()
         order = 52,
         type = "group",
         name = "Classbar",
-        childGroups = "tab",
         args = {
             enabled = {
                 order = 1, type = "toggle", name = "Enable Classbar Mode",

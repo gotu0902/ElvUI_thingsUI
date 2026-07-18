@@ -198,15 +198,19 @@ end
 
 local lustEvents = CreateFrame("Frame")
 lustEvents:SetScript("OnEvent", function(_, _, unit, updateInfo)
-    if unit ~= "player" or not updateInfo or updateInfo.isFullUpdate or not updateInfo.addedAuras then return end
-    if not (C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID) then return end
-    for _, ai in pairs(updateInfo.addedAuras) do
-        local instID = ai and ai.auraInstanceID
-        local data = instID and C_UnitAuras.GetAuraDataByAuraInstanceID("player", instID)
-        local sid = data and data.spellId
-        if sid and not IsSecret(sid) and SATED_DEBUFFS[sid] then
-            TriggerLust()
-            return
+    if unit ~= "player" then return end
+    if IsSecret(updateInfo) or not updateInfo then return end
+    local full = updateInfo.isFullUpdate
+    if IsSecret(full) or full then return end
+    local added = updateInfo.addedAuras
+    if IsSecret(added) or not added then return end
+    for _, ai in pairs(added) do
+        if not IsSecret(ai) and ai then
+            local sid = ai.spellId
+            if not IsSecret(sid) and sid and SATED_DEBUFFS[sid] then
+                TriggerLust()
+                return
+            end
         end
     end
 end)
@@ -214,9 +218,10 @@ end)
 local function ScanExistingLust()
     if not (C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID) then return end
     for sid in pairs(SATED_DEBUFFS) do
-        local a = C_UnitAuras.GetPlayerAuraBySpellID(sid)
-        if a and a.expirationTime and a.duration and a.duration > 0
-           and not IsSecret(a.expirationTime) and not IsSecret(a.duration) then
+        -- 12.1: aura reads throw from addon context when the aura is secret
+        local ok, a = pcall(C_UnitAuras.GetPlayerAuraBySpellID, sid)
+        if ok and a and not IsSecret(a.expirationTime) and not IsSecret(a.duration)
+           and a.expirationTime and a.duration and a.duration > 0 then
             local start = a.expirationTime - a.duration
             if (GetTime() - start) < LUST_BUFF_DURATION then
                 lustState.start, lustState.active = start, true

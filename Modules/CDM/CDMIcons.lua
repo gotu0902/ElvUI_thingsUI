@@ -108,7 +108,7 @@ local function ApplyPassiveState(child, hide)
 end
 
 local function PlainID(v)
-    if v == nil or IsSecret(v) then return nil end
+    if IsSecret(v) then return nil end
     return v
 end
 
@@ -243,7 +243,7 @@ end
 
 local function UpdateIconDesat(icon, cdInfo, durObj, hasCharge)
     if not icon then return end
-    if cdInfo and cdInfo.isOnGCD then SetDesat(icon, 0); return end
+    if cdInfo and NotSecret(cdInfo.isOnGCD) and cdInfo.isOnGCD then SetDesat(icon, 0); return end
     if durObj and not hasCharge and type(durObj.EvaluateRemainingDuration) == "function" then
         local curve = GetDesatCurve()
         if curve then SetDesat(icon, durObj:EvaluateRemainingDuration(curve, 0) or 0)
@@ -266,9 +266,9 @@ local function ApplyAuraState(child, cd, spellID)
     elseif not hasCharge and durObj then applied = SetCDFromDur(cd, durObj) end
     if applied then return end
 
-    if cdInfo and cdInfo.isOnGCD then
+    if cdInfo and NotSecret(cdInfo.isOnGCD) and cdInfo.isOnGCD then
         if cd.Clear then cd:Clear() end
-    elseif cdInfo and cdInfo.startTime and cdInfo.duration and C_DurationUtil and C_DurationUtil.CreateDuration then
+    elseif cdInfo and NotSecret(cdInfo.startTime) and NotSecret(cdInfo.duration) and C_DurationUtil and C_DurationUtil.CreateDuration then
         local fb = C_DurationUtil.CreateDuration()
         if fb and fb.SetTimeFromStart then fb:SetTimeFromStart(cdInfo.startTime, cdInfo.duration); SetCDFromDur(cd, fb) end
     elseif cd.Clear then cd:Clear() end
@@ -285,8 +285,8 @@ local function ProcessCooldownFrame(child)
     StripOverlayTextures(child)
     ApplyCooldownStyle(cd)
     local info = child.cooldownInfo
-    local spellID = info and (info.overrideSpellID or info.spellID)
-    if spellID and NotSecret(spellID) and type(spellID) == "number" and spellID > 0 and C_Spell then
+    local spellID = info and (PlainID(info.overrideSpellID) or PlainID(info.spellID)) or nil
+    if spellID and type(spellID) == "number" and spellID > 0 and C_Spell then
         ApplyAuraState(child, cd, spellID)
     else
         if cd.Clear then cd:Clear() end

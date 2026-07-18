@@ -6,12 +6,14 @@ local H = ns.CDHelpers
 local C_Spell, C_Item = C_Spell, C_Item
 
 local function IsSecret(v)
-    return v ~= nil and type(issecretvalue) == "function" and issecretvalue(v)
+    if issecretvalue and issecretvalue(v) then return true end
+    return false
 end
 H.IsSecret = IsSecret
 
 local function NotSecret(v)
-    return v ~= nil and not (issecretvalue and issecretvalue(v))
+    if issecretvalue and issecretvalue(v) then return false end
+    return v ~= nil
 end
 H.NotSecret = NotSecret
 

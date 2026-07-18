@@ -699,6 +699,18 @@ function TUI:BarSetupOptions()
         end,
     }
 
+    -- 12.1 VM errors on div-by-zero; a tab group must never render with zero visible tabs
+    args.disabledTab = {
+        order = 5, type = "group", name = "Disabled",
+        hidden = function() return E.db.thingsUI.barSetup.enabled ~= false end,
+        args = {
+            info = {
+                order = 1, type = "description", fontSize = "medium",
+                name = "Bar Setup is disabled. Enable it above to configure setups.",
+            },
+        },
+    }
+
     ns.BarSetup._rebuildSetupOptions = rebuildSetupEntries
     rebuildSetupEntries()
 

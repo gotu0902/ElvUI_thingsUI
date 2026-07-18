@@ -39,9 +39,15 @@ local function ChargesOf(spellID)
     return mx
 end
 
+local function PlainID(v)
+    if issecretvalue and issecretvalue(v) then return nil end
+    return v
+end
+
 local function SpellIDOf(cdID)
     local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
-    return info and (info.overrideSpellID or info.spellID) or nil
+    if not info then return nil end
+    return PlainID(info.overrideSpellID) or PlainID(info.spellID)
 end
 
 local function CollectCategory(cat, into)

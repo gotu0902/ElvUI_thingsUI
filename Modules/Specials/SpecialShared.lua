@@ -32,9 +32,8 @@ local InvalidateSpellListCache = SB.InvalidateSpellListCache
 local InvalidateSpellCaches    = SB.InvalidateSpellCaches
 
 local function IsSafeID(value)
-    return value ~= nil
-        and type(value) == "number"
-        and not issecretvalue(value)
+    if issecretvalue(value) then return false end
+    return type(value) == "number"
 end
 
 local _barKeys  = {}
@@ -72,7 +71,7 @@ local function RebuildClaimedBarFrames()  return RebuildClaimed(specialBarState,
 local function RebuildClaimedIconFrames() return RebuildClaimed(iconGroupState,  _claimedIconFrames) end
 
 local function CleanString(str)
-    if not str or issecretvalue(str) then return "" end
+    if issecretvalue(str) or not str then return "" end
     return tostring(str):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):match("^%s*(.-)%s*$")
 end
 
@@ -89,6 +88,16 @@ local function GetCooldownInfoForFrame(child)
     return nil
 end
 
+local function PlainID(v)
+    local isSecret = ns.CDHelpers and ns.CDHelpers.IsSecret
+    if isSecret and isSecret(v) then return nil end
+    return v
+end
+
+local function InfoSpellID(info)
+    return PlainID(info.overrideSpellID) or PlainID(info.spellID)
+end
+
 local function SafeMatch(child, spellID, wantsBar)
     if not child then return false end
     if wantsBar and not child.Bar then return false end
@@ -98,7 +107,7 @@ local function SafeMatch(child, spellID, wantsBar)
 
     local info = GetCooldownInfoForFrame(child)
     if info then
-        local sid = info.overrideSpellID or info.spellID
+        local sid = InfoSpellID(info)
         if IsSafeID(sid) then
             local bsid = GetBaseSpellID(sid)
             if sid == spellID or sid == baseTarget or bsid == spellID or bsid == baseTarget then
@@ -138,7 +147,7 @@ local function SafeMatch(child, spellID, wantsBar)
         local targetName = CleanString(spellInfo.name)
         if child.Bar and child.Bar.Name then
             local raw = child.Bar.Name:GetText()
-            if raw and not issecretvalue(raw) then
+            if not issecretvalue(raw) and raw then
                 local barText = CleanString(raw)
                 if barText == targetName then return true end
             end
@@ -279,7 +288,8 @@ local function _registerShownSpell(childFrame)
     if not (cid and C_CooldownViewer) then return end
     local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cid)
     if not info then return end
-    local si = C_Spell.GetSpellInfo(info.overrideSpellID or info.spellID)
+    local sid = InfoSpellID(info)
+    local si = sid and C_Spell.GetSpellInfo(sid)
     if not (si and si.spellID) then return end
     local set = childFrame.Bar and knownBarSpells or (childFrame.Icon and knownIconSpells)
     if not set then return end
@@ -406,7 +416,7 @@ local function RefreshSpecialCIDMaps(force)
                     if cidToKey[cid] == nil then
                         local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cid)
                         if info then
-                            local sid = info.overrideSpellID or info.spellID
+                            local sid = InfoSpellID(info)
                             local key = sid and (spellToKey[sid] or spellToKey[GetBaseSpellID(sid)])
                             if not key and info.linkedSpellIDs and info.linkedSpellIDs[1] then
                                 key = spellToKey[info.linkedSpellIDs[1]]
@@ -563,7 +573,8 @@ local function HookCDMMixins()
         if C_CooldownViewer then
             local info = GetCooldownInfoForFrame(frame)
             if info then
-                local si = C_Spell.GetSpellInfo(info.overrideSpellID or info.spellID)
+                local sid = InfoSpellID(info)
+                local si = sid and C_Spell.GetSpellInfo(sid)
                 if si and si.spellID and not set[si.spellID] then
                     set[si.spellID] = true
                     InvalidateSpellListCache()
