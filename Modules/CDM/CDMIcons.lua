@@ -121,8 +121,9 @@ local function RebuildPassiveCache()
         local vdb = GetViewerDB(name)
         if viewer and vdb then
             local wantHide = vdb.hidePassive and C_Spell and C_Spell.IsSpellPassive
-            for i = 1, viewer:GetNumChildren() do
-                local c = select(i, viewer:GetChildren())
+            local kids = { viewer:GetChildren() }
+            for i = 1, #kids do
+                local c = kids[i]
                 if c and c.GetCooldownID
                     and not (ns.yoinkedBars and ns.yoinkedBars[c])
                     and not c._tuiSpecialBarKey and not c._tuiSpecialIconKey then
@@ -548,7 +549,15 @@ LayoutViewer = function(viewer)
     SortByCooldownID(visible)
 
     local sig = ComputeLayoutSig(visible, vdb)
-    if viewer._tuiLayoutSig == sig then return end
+    if viewer._tuiLayoutSig == sig then
+        local proxy = GetProxy(viewer)
+        local vscale = (viewer:GetEffectiveScale() or 1) / (_G.UIParent:GetEffectiveScale() or 1)
+        if math.abs((proxy:GetScale() or 1) - vscale) > 0.001 then proxy:SetScale(vscale) end
+        if not ProxyOwnedByThingsUI(viewer, vdb) then
+            MirrorProxyToViewer(proxy, viewer)
+        end
+        return
+    end
     viewer._tuiLayoutSig = sig
 
     local cdmRoot = E.db.thingsUI and E.db.thingsUI.cdmIcons
@@ -819,8 +828,7 @@ local function HealViewerVisibility()
     end
 end
 
-function M.RefreshAll()
-    M.Invalidate()
+function M.RefreshAllSoft()
     HookEditModeExit()
     EnsureUtilityMover()
     HealViewerVisibility()
@@ -830,6 +838,11 @@ function M.RefreshAll()
     end
     QueuePassiveRebuild()
     if ns.MoverSync and ns.MoverSync.Queue then ns.MoverSync.Queue() end
+end
+
+function M.RefreshAll()
+    M.Invalidate()
+    M.RefreshAllSoft()
 end
 
 function TUI:UpdateCDMIcons()
@@ -889,13 +902,14 @@ f:SetScript("OnEvent", function(_, event)
             C_Timer.After(2.5, function() cdmRebuilding = false end)
         end
         lastSpec = spec
-        for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAll) end
+        C_Timer.After(0.5, M.RefreshAll)
+        for _, t in ipairs({ 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAllSoft) end
     elseif event == "PLAYER_REGEN_ENABLED" then
         if passiveDirty then QueuePassiveRebuild() end
         M.RefreshAll()
-        for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAll) end
+        for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAllSoft) end
     else
         M.RefreshAll()
-        for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAll) end
+        for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAllSoft) end
     end
 end)

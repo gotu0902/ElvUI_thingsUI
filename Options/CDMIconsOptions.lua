@@ -303,106 +303,135 @@ local function ViewerGroup(order, key, label, opts)
 end
 
 -- Racials -> CDM
-local RACIAL_DEST = {
-    essential = "|cFFFFD27FEssential|r",
-    utility   = "|cFFFFD27FUtility|r",
-    dynamic   = "|cFF8AC8FFDynamic|r",
+local RACIAL_DEST_TAG = {
+    essential = "|cFFFFD27F(Essential)|r",
+    utility   = "|cFFFFD27F(Utility)|r",
+    dynamic   = "|cFF8AC8FF(Dynamic)|r",
 }
-local RACIAL_DEST_ORDER = { "essential", "utility", "dynamic" }
 local function RacialsToCDMTab(order)
     local function rdb() return E.db.thingsUI.racialsCDM end
     local function dest() local db = rdb(); db.dest = db.dest or {}; return db.dest end
     local CG = ns.CustomGroups
 
-    local function addList()
-        local list, d = {}, dest()
-        for _, id in ipairs(ns.Racials or {}) do
-            if not d[id] then
-                list[#list + 1] = { id = id, nm = (C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or ("Spell " .. id) }
+    local function Update()
+        if TUI.UpdateRacialsCDM then TUI:UpdateRacialsCDM() end
+        if ns.NotifyChange then ns.NotifyChange() end
+    end
+
+    local function RacialGroupName(id)
+        local cg = E.db.thingsUI and E.db.thingsUI.customGroups
+        for _, g in ipairs(cg and cg.groups or {}) do
+            if g.global and g.global.spells and g.global.spells[id] then return g.name end
+            for _, r in pairs(g.classes or {}) do
+                if r.spells and r.spells[id] then return g.name end
+            end
+            for _, r in pairs(g.specs or {}) do
+                if r.spells and r.spells[id] then return g.name end
             end
         end
-        table.sort(list, function(a, b) return a.nm < b.nm end)
+    end
+
+    local function SortedRacials()
+        local list = {}
+        for _, id in ipairs(ns.Racials or {}) do
+            local owned = (not (CG and CG.PlayerHasRacial)) or CG.PlayerHasRacial(id)
+            list[#list + 1] = { id = id, owned = owned,
+                nm = (C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or ("Spell " .. id) }
+        end
+        table.sort(list, function(a, b)
+            if a.owned ~= b.owned then return a.owned end
+            return a.nm < b.nm
+        end)
         return list
     end
-    local function addValues()
-        local out = {}
-        for _, e in ipairs(addList()) do
-            local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(e.id)) or 0
-            out[tostring(e.id)] = ("|T%d:14:14|t %s"):format(tex, e.nm)
+
+    local function RacialLabel(id, owned, tabKey)
+        local nm  = (C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or ("Spell " .. id)
+        local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)) or 0
+        local label
+        if owned then
+            label = ("|T%d:14:14|t %s"):format(tex, nm)
+        else
+            label = ("|T%d:14:14|t |cFF777777%s (other race)|r"):format(tex, nm)
         end
-        return out
-    end
-    local function addSorting()
-        local out = {}
-        for _, e in ipairs(addList()) do out[#out + 1] = tostring(e.id) end
-        return out
+        local d = dest()[id]
+        if d and d ~= tabKey then label = label .. "  " .. (RACIAL_DEST_TAG[d] or "") end
+        local gname = RacialGroupName(id)
+        if gname then label = label .. ("  |cFFF20553(CG: %s)|r"):format(gname) end
+        return label
     end
 
-    local args = {
-        desc = { order = 1, type = "description",
-            name = " " },
-        threshold = {
-            order = 2, type = "range", name = "Dynamic Threshold", min = 1, max = 20, step = 1,
-            hidden = function()
-                local d = rdb() and rdb().dest
-                if d then for _, v in pairs(d) do if v == "dynamic" then return false end end end
-                return true
-            end,
-            get = function() return (rdb() and rdb().dynamicThreshold) or 8 end,
-            set = function(_, v) rdb().dynamicThreshold = v; if TUI.UpdateRacialsCDM then TUI:UpdateRacialsCDM() end end,
-        },
-        addRacial = {
-            order = 3, type = "select", name = "|cFF59D759Add Racial|r", width = "double",
-            values = addValues, sorting = addSorting,
-            get = function() return "" end,
-            set = function(_, v)
-                local id = tonumber(v)
-                if id then
-                    dest()[id] = "essential"
-                    if TUI.UpdateRacialsCDM then TUI:UpdateRacialsCDM() end
-                    if ns.NotifyChange then ns.NotifyChange() end
-                end
-            end,
-        },
-        listHeader = { order = 9, type = "header", name = "Added Racials" },
-        empty = { order = 10, type = "description",
-            name = "|cFF888888Nothing added yet - pick one from Add Racial above.|r",
-            hidden = function() return next(dest()) ~= nil end },
-    }
-
-    local idx = 0
-    for _, id in ipairs(ns.Racials or {}) do
-        idx = idx + 1
-        args["entry" .. id] = {
-            order = 11 + idx, type = "group", inline = true, name = "",
-            hidden = function() return not dest()[id] end,
-            args = {
-                destSel = {
-                    order = 1, type = "select", width = "double",
-                    name = function()
-                        local nm  = (C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or ("Spell " .. id)
-                        local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)) or 0
-                        local owned = (not (CG and CG.PlayerHasRacial)) or CG.PlayerHasRacial(id)
-                        if owned then return ("|T%d:16:16|t %s"):format(tex, nm) end
-                        return ("|T%d:16:16|t |cFF777777%s (other race)|r"):format(tex, nm)
-                    end,
-                    values = RACIAL_DEST, sorting = RACIAL_DEST_ORDER,
-                    get = function() return dest()[id] or "essential" end,
-                    set = function(_, v) dest()[id] = v; if TUI.UpdateRacialsCDM then TUI:UpdateRacialsCDM() end end,
-                },
-                remove = {
-                    order = 2, type = "execute", name = "Remove", width = 0.7,
-                    func = function()
-                        dest()[id] = nil
-                        if TUI.UpdateRacialsCDM then TUI:UpdateRacialsCDM() end
-                        if ns.NotifyChange then ns.NotifyChange() end
-                    end,
-                },
+    local function DestTab(tabOrder, key, label)
+        local args = {
+            addUnassigned = {
+                order = 1, type = "execute", name = "|cFF59D759Add All Unassigned|r", width = 1.2,
+                func = function()
+                    for _, id in ipairs(ns.Racials or {}) do
+                        if not dest()[id] then dest()[id] = key end
+                    end
+                    Update()
+                end,
             },
+            addAll = {
+                order = 2, type = "execute", name = "Add ALL Racials", width = 1.2,
+                confirm = function()
+                    return ("Move every racial (including ones assigned elsewhere) to %s?"):format(label)
+                end,
+                func = function()
+                    for _, id in ipairs(ns.Racials or {}) do dest()[id] = key end
+                    Update()
+                end,
+            },
+            hint = {
+                order = 3, type = "description", fontSize = "medium", width = "full",
+                name = "|cFF888888Tick to add here - ticking a racial assigned elsewhere moves it here. Untick to remove.|r\n",
+            },
+        }
+        for i, e in ipairs(SortedRacials()) do
+            local id, owned = e.id, e.owned
+            args["r" .. id] = {
+                order = 10 + i, type = "toggle", width = 1.7,
+                name = function() return RacialLabel(id, owned, key) end,
+                get = function() return dest()[id] == key end,
+                set = function(_, v)
+                    if v then
+                        dest()[id] = key
+                    elseif dest()[id] == key then
+                        dest()[id] = nil
+                    end
+                    Update()
+                end,
+            }
+        end
+        return {
+            order = tabOrder, type = "group",
+            name = function()
+                local n = 0
+                for _, v in pairs(dest()) do if v == key then n = n + 1 end end
+                return n > 0 and ("%s (%d)"):format(label, n) or label
+            end,
+            args = args,
         }
     end
 
-    return { order = order, type = "group", name = "Racials", args = args }
+    return {
+        order = order, type = "group", name = "Racials", childGroups = "tab",
+        args = {
+            threshold = {
+                order = 1, type = "range", name = "Dynamic Threshold", min = 1, max = 20, step = 1,
+                hidden = function()
+                    local d = rdb() and rdb().dest
+                    if d then for _, v in pairs(d) do if v == "dynamic" then return false end end end
+                    return true
+                end,
+                get = function() return (rdb() and rdb().dynamicThreshold) or 8 end,
+                set = function(_, v) rdb().dynamicThreshold = v; if TUI.UpdateRacialsCDM then TUI:UpdateRacialsCDM() end end,
+            },
+            essentialTab = DestTab(10, "essential", "Essential"),
+            utilityTab   = DestTab(11, "utility", "Utility"),
+            dynamicTab   = DestTab(12, "dynamic", "Dynamic"),
+        },
+    }
 end
 
 function TUI:CDMIconsOptions()
