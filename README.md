@@ -1,6 +1,6 @@
 # ElvUI_thingsUI
 
-![Version](https://img.shields.io/badge/version-4.0.4-purple)
+![Version](https://img.shields.io/badge/version-4.1.0-pink)
 
 
 ## Installer
