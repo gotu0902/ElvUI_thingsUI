@@ -2,7 +2,7 @@
 ## Title: |cFF8080FFElvUI_thingsUI|r
 ## Notes: ElvUI plugin for doing things
 ## Author: geir, Dan G, pat_skr, Claude
-## Version: 4.0.4
+## Version: 0.0.0.0.0.0.1
 ## RequiredDeps: ElvUI
 ## OptionalDeps:
 ## DefaultState: Enabled

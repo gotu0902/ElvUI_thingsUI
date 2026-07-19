@@ -1,5 +1,8 @@
 # Changelog
 
+## PTR 0.0.0.0.0.0.1
+- Racial reworked to fit with blizzard new cdm stuff
+
 ## 4.0.4
 - Added copy special buttons more places
 - Added style presets to specials
