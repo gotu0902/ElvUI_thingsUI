@@ -1,4 +1,4 @@
-## Interface: 120000, 120001, 120005, 120007
+## Interface: 120000, 120001, 120005, 120007, 120010
 ## Title: |cFF8080FFElvUI_thingsUI|r
 ## Notes: ElvUI plugin for doing things
 ## Author: geir, Dan G, pat_skr, Claude
