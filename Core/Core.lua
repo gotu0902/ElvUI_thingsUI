@@ -10,8 +10,8 @@ ns.EP = EP
 ns.TUI = TUI
 ns.LSM = E.Libs.LSM
 
-TUI.version = "0.0.0.0.0.0.1"
-TUI.name = "thingsUI PTR"
+TUI.version = "4.1.0-beta"
+TUI.name = "thingsUI"
 
 ns.skinnedBars = ns.skinnedBars or {}
 ns.yoinkedBars = ns.yoinkedBars or {}
