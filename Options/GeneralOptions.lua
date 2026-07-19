@@ -152,11 +152,43 @@ function TUI:PositioningTweaksOptions()
                             },
                         },
                     },
+                    damageMeterGroup = {
+                        order = 1.5,
+                        type = "group",
+                        name = "Damage Meter",
+                        inline = true,
+                        args = {
+                            provider = {
+                                order = 1, type = "select", name = "Damage Meter", width = 1.2,
+                                values = {
+                                    DETAILS  = "Details!",
+                                    BLIZZARD = "Ingame Damage Meter",
+                                },
+                                sorting = { "DETAILS", "BLIZZARD" },
+                                confirm = function(_, v)
+                                    if v == "BLIZZARD" then
+                                        return "Switch to the Ingame Damage Meter? Details! (if installed) is disabled. Reload afterwards."
+                                    end
+                                    return "Switch to Details!? The addon is re-enabled. Reload afterwards."
+                                end,
+                                get = function() return ns.GetDamageMeterProvider() end,
+                                set = function(_, v)
+                                    if ns.SetDamageMeterProvider then ns.SetDamageMeterProvider(v) end
+                                    ns.NotifyChange()
+                                end,
+                            },
+                            reload = {
+                                order = 2, type = "execute", name = "Reload UI",
+                                func = function() ReloadUI() end,
+                            },
+                        },
+                    },
                     detailsChatGroup = {
                         order = 2,
                         type = "group",
                         name = "Details! Chat Backdrop",
                         inline = true,
+                        hidden = function() return ns.GetDamageMeterProvider() == "BLIZZARD" end,
                         args = {
                             rightChatBackdropDescription = {
                                 order = 1,

@@ -10,6 +10,7 @@
 	<Script file="BarSetupOptions.lua"/>
 	<Script file="CustomGroupsOptions.lua"/>
 	<Script file="TimersOptions.lua"/>
+	<Script file="DamageMeterOptions.lua"/>
 	<Script file="ShareOptions.lua"/>
 	<Script file="Grid2Options.lua"/>
 	<Script file="Options.lua"/>

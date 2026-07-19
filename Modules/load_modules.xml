@@ -22,5 +22,6 @@
 	<Script file="Timers\TimersCDM.lua"/>
 	<Script file="CDM\RacialsCDM.lua"/>
 	<Script file="CustomGroups.lua"/>
+	<Script file="DamageMeter.lua"/>
 	<Script file="Movers\MoverSync.lua"/>
 </Ui>

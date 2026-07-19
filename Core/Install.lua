@@ -132,6 +132,25 @@ function ns.DisableBCM()
     C_AddOns.DisableAddOn("BetterCooldownManager", E.myguid)
     print("|cFF8080FFthingsUI|r - BetterCooldownManager disabled. |cFFFFFF00Reload required.|r")
 end
+
+function ns.SetDamageMeterProvider(provider)
+    E.db.thingsUI.damageMeter = E.db.thingsUI.damageMeter or {}
+    E.db.thingsUI.damageMeter.provider = provider
+    local hasDetails = IsInstalled("Details")
+    if provider == "BLIZZARD" then
+        if hasDetails then C_AddOns.DisableAddOn("Details", E.myguid) end
+        print("|cFF8080FFthingsUI|r - Ingame Damage Meter selected" .. (hasDetails and ", Details! disabled." or ".") .. " |cFFFFFF00Reload required.|r")
+    else
+        if hasDetails then C_AddOns.EnableAddOn("Details", E.myguid) end
+        print("|cFF8080FFthingsUI|r - Details! selected" .. (hasDetails and "." or " |cFFFF6060(not installed)|r.") .. " |cFFFFFF00Reload required.|r")
+    end
+    if ns.MoverSync and ns.MoverSync.Queue then ns.MoverSync.Queue() end
+end
+
+function ns.GetDamageMeterProvider()
+    local dm = E.db.thingsUI and E.db.thingsUI.damageMeter
+    return (dm and dm.provider) or "DETAILS"
+end
 E.PopupDialogs["TUI_BCM_WARNING"] = {
     text = "|cFF8080FFthingsUI|r: |cFFFFFFFFBetterCooldownManager|r is enabled and conflicts with the Cooldown Manager styling.\nDisable it? (Applies on the reload at the end.)",
     button1 = YES, button2 = NO,
@@ -234,18 +253,31 @@ ns.installTable = {
                 f.Desc3:SetText("")
             end
         end,
-        -- 6: Details! to right chat
+        -- 6: Damage meter choice
         function()
             local f = PIF()
-            f.SubTitle:SetText("Details! in Right Chat")
-            f.Desc1:SetText("Anchor Details! windows 1 & 2 inside ElvUI's right chat panel as a backdrop?")
-            f.Desc2:SetText("")
+            local hasDetails = IsInstalled("Details")
+            f.SubTitle:SetText("Damage Meter")
+            f.Desc1:SetText("Pick your damage meter. Details! gets anchored inside ElvUI's right chat panel; the Ingame meter is Blizzard's new built-in one.")
+            f.Desc2:SetText(hasDetails and "Picking the Ingame meter disables the Details! addon." or "|cFFFF6060Details! is not installed - the Ingame meter is your option.|r")
             f.Desc3:SetText("")
-            f.Option1:Show(); f.Option1:SetText("Anchor Details!")
-            f.Option1:SetScript("OnClick", function()
-                E.db.thingsUI.rightChatAsBackground = true
-                if TUI.ApplyDetailsRightChatAnchor then TUI:ApplyDetailsRightChatAnchor() end
-                StepDone("Details! anchored to right chat")
+            f.Option1:Show(); f.Option1:SetText("Details! + Right Chat")
+            if hasDetails then
+                f.Option1:Enable()
+                f.Option1:SetScript("OnClick", function()
+                    ns.SetDamageMeterProvider("DETAILS")
+                    E.db.thingsUI.rightChatAsBackground = true
+                    if TUI.ApplyDetailsRightChatAnchor then TUI:ApplyDetailsRightChatAnchor() end
+                    StepDone("Details! anchored to right chat")
+                end)
+            else
+                f.Option1:Disable()
+                f.Option1:SetScript("OnClick", nil)
+            end
+            f.Option2:Show(); f.Option2:Enable(); f.Option2:SetText("Ingame Damage Meter")
+            f.Option2:SetScript("OnClick", function()
+                ns.SetDamageMeterProvider("BLIZZARD")
+                StepDone("Ingame meter - reload after finishing")
             end)
         end,
         -- 7: ActionBars style
@@ -305,7 +337,7 @@ ns.installTable = {
         end,
     },
     StepTitles = {
-        "Welcome", "Scale", "Coloring", "Positions", "CDM Skins", "Details!", "ActionBars", "Unit Frames", "Finished",
+        "Welcome", "Scale", "Coloring", "Positions", "CDM Skins", "Damage Meter", "ActionBars", "Unit Frames", "Finished",
     },
     StepTitlesColorSelected = { 0.5, 0.5, 1 },
 }
