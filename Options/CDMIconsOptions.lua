@@ -319,16 +319,7 @@ local function RacialsToCDMTab(order)
     end
 
     local function RacialGroupName(id)
-        local cg = E.db.thingsUI and E.db.thingsUI.customGroups
-        for _, g in ipairs(cg and cg.groups or {}) do
-            if g.global and g.global.spells and g.global.spells[id] then return g.name end
-            for _, r in pairs(g.classes or {}) do
-                if r.spells and r.spells[id] then return g.name end
-            end
-            for _, r in pairs(g.specs or {}) do
-                if r.spells and r.spells[id] then return g.name end
-            end
-        end
+        return ns.RacialsCDM and ns.RacialsCDM.FindRacialGroup and ns.RacialsCDM.FindRacialGroup(id)
     end
 
     local function SortedRacials()
@@ -414,12 +405,32 @@ local function RacialsToCDMTab(order)
         }
     end
 
+    local function cgOnly() return rdb() and rdb().customGroupsOnly end
+
+    local essentialTab = DestTab(10, "essential", "Essential")
+    local utilityTab   = DestTab(11, "utility", "Utility")
+    local dynamicTab   = DestTab(12, "dynamic", "Dynamic")
+    essentialTab.disabled = cgOnly
+    utilityTab.disabled   = cgOnly
+    dynamicTab.disabled   = cgOnly
+
     return {
         order = order, type = "group", name = "Racials", childGroups = "tab",
         args = {
+            customGroupsOnly = {
+                order = 0.5, type = "toggle", name = "Custom Groups Only", width = 1.4,
+                desc = "Kick racials out of the CDM viewers entirely (native entries are parked under Not Displayed). For ppl that don't want racials in their essential or utility.",
+                get = cgOnly,
+                set = function(_, v)
+                    rdb().customGroupsOnly = v
+                    if TUI.UpdateRacialsCDM then TUI:UpdateRacialsCDM() end
+                    if ns.NotifyChange then ns.NotifyChange() end
+                end,
+            },
             threshold = {
                 order = 1, type = "range", name = "Dynamic Threshold", min = 1, max = 20, step = 1,
                 hidden = function()
+                    if cgOnly() then return true end
                     local d = rdb() and rdb().dest
                     if d then for _, v in pairs(d) do if v == "dynamic" then return false end end end
                     return true
@@ -427,9 +438,9 @@ local function RacialsToCDMTab(order)
                 get = function() return (rdb() and rdb().dynamicThreshold) or 8 end,
                 set = function(_, v) rdb().dynamicThreshold = v; if TUI.UpdateRacialsCDM then TUI:UpdateRacialsCDM() end end,
             },
-            essentialTab = DestTab(10, "essential", "Essential"),
-            utilityTab   = DestTab(11, "utility", "Utility"),
-            dynamicTab   = DestTab(12, "dynamic", "Dynamic"),
+            essentialTab = essentialTab,
+            utilityTab   = utilityTab,
+            dynamicTab   = dynamicTab,
         },
     }
 end

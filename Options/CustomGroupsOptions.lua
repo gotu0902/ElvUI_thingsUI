@@ -589,6 +589,21 @@ function TUI:CustomGroupsOptions()
                 NotifyChange()
             end,
         }
+        globalArgs.addUnassignedRacials = {
+            order = 5.6, type = "execute", name = "|cFF59D759Add All Unassigned Racials|r", width = "double",
+            hidden = function()
+                local r = E.db.thingsUI and E.db.thingsUI.racialsCDM
+                return not (r and r.customGroupsOnly)
+            end,
+            func = function()
+                if not (CG and ns.Racials) then return end
+                local find = ns.RacialsCDM and ns.RacialsCDM.FindRacialGroup
+                for _, id in ipairs(ns.Racials) do
+                    if not (find and find(id)) then CG.AddSpell(group, "global", nil, id) end
+                end
+                NotifyChange()
+            end,
+        }
 
         local orderArgs = {
             desc = { order = 0, type = "description", name = "Order of the entry blocks (^/v). Each block keeps its own internal order.\n" },

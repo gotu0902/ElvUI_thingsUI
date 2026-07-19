@@ -137,6 +137,10 @@ local function RebuildPassiveCache()
                         local p = C_Spell.IsSpellPassive(sid)
                         hide = (NotSecret(p) and p == true) or false
                     end
+                    if sid and not hide and ns.RacialsCDM and ns.RacialsCDM.ShouldHideNativeSpell
+                        and ns.RacialsCDM.ShouldHideNativeSpell(sid) then
+                        hide = true
+                    end
                     if hide ~= nil then
                         if (passiveHidden[c] and true or false) ~= hide then changed = true end
                         ApplyPassiveState(c, hide)
@@ -817,8 +821,10 @@ local function EnsureUtilityMover()
     })
 end
 
-local HEAL_VIEWERS = { "EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer", "BuffBarCooldownViewer" }
+local HEAL_VIEWERS = { "EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer" }
 local function HealViewerVisibility()
+    -- 12.1 secures viewer state: UpdateShownState from addon context sticks taint on the event path
+    if Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.SpecAgnosticEssential then return end
     if InCombatLockdown() then return end
     for _, name in ipairs(HEAL_VIEWERS) do
         local v = _G[name]
@@ -913,3 +919,53 @@ f:SetScript("OnEvent", function(_, event)
         for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAllSoft) end
     end
 end)
+
+local function DumpVal(v)
+    if issecretvalue and issecretvalue(v) then return "secret" end
+    return tostring(v)
+end
+
+SLASH_TUICDM1 = "/tuicdm"
+SlashCmdList.TUICDM = function()
+    local emm = _G.EditModeManagerFrame
+    local cvs = _G.CooldownViewerSettings
+    print(("|cFF8080FFtuicdm|r editmode=%s cvs=%s rebuilding=%s"):format(
+        tostring(emm and emm:IsShown()), tostring(cvs and cvs:IsShown()), tostring(M.IsRebuilding())))
+    for name in pairs(VIEWERS) do
+        local v = _G[name]
+        if v then
+            local vdb = GetViewerDB(name)
+            local proxy = GetProxy(v)
+            local kids = { v:GetChildren() }
+            local shown, withCID = 0, 0
+            for i = 1, #kids do
+                local c = kids[i]
+                if c:IsShown() then shown = shown + 1 end
+                if c.GetCooldownID then withCID = withCID + 1 end
+            end
+            local buf = {}
+            local vis = CollectAndHook(v, buf, HookChild)
+            print(("  |cFFFFD27F%s|r shown=%s kids=%d shownKids=%d cid=%d visible=%d"):format(
+                name, tostring(v:IsShown()), #kids, shown, withCID, #vis))
+            print(("    viewer %dx%d @(%d,%d)  proxy %dx%d @(%s,%s) scale=%.2f"):format(
+                math.floor(v:GetWidth() or 0), math.floor(v:GetHeight() or 0),
+                math.floor(v:GetLeft() or 0), math.floor(v:GetBottom() or 0),
+                math.floor(proxy:GetWidth() or 0), math.floor(proxy:GetHeight() or 0),
+                tostring(proxy:GetLeft() and math.floor(proxy:GetLeft())),
+                tostring(proxy:GetBottom() and math.floor(proxy:GetBottom())),
+                proxy:GetScale() or 1))
+            print(("    vdb grow=%s perRow=%s icon=%sx%s sig=%s"):format(
+                tostring(vdb and vdb.growthDirection), tostring(vdb and vdb.iconsPerRow),
+                tostring(vdb and vdb.iconWidth), tostring(vdb and vdb.iconHeight),
+                tostring(v._tuiLayoutSig)))
+            local c1 = vis[1]
+            if c1 then
+                local pt, rel, rp, x, y = c1:GetPoint()
+                print(("    child1 cid=%s %dx%d pt=%s rel=%s(%s) x=%s y=%s"):format(
+                    DumpVal(c1.cooldownID), math.floor(c1:GetWidth() or 0), math.floor(c1:GetHeight() or 0),
+                    tostring(pt), tostring(rel and rel.GetName and rel:GetName() or rel), tostring(rp),
+                    DumpVal(x), DumpVal(y)))
+            end
+        end
+    end
+end

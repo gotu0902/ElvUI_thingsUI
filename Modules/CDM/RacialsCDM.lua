@@ -36,21 +36,55 @@ end
 
 local function ResolveDynamic()
     local ev = _G.EssentialCooldownViewer
-    local native = 0
+    local hidden = ns.CDMIcons and ns.CDMIcons.IsPassiveHidden
+    local count = 0
     if ev then
         for i = 1, ev:GetNumChildren() do
             local c = select(i, ev:GetChildren())
-            if c and c:IsShown() and c.GetCooldownID then native = native + 1 end
+            if c and c:IsShown() and c.GetCooldownID and not (hidden and hidden(c)) then
+                count = count + 1
+            end
         end
     end
     local threshold = (DB() and DB().dynamicThreshold) or 8
-    return (native >= threshold) and "utility" or "essential"
+    return (count >= threshold) and "utility" or "essential"
 end
 
 local function HasRacial(spellID)
     local CG = ns.CustomGroups
     if CG and CG.PlayerHasRacial then return CG.PlayerHasRacial(spellID) end
     return true
+end
+
+function M.FindRacialGroup(spellID)
+    local cg = E.db and E.db.thingsUI and E.db.thingsUI.customGroups
+    for _, g in ipairs(cg and cg.groups or {}) do
+        if g.global and g.global.spells and g.global.spells[spellID] then return g.name end
+        for _, r in pairs(g.classes or {}) do
+            if r.spells and r.spells[spellID] then return g.name end
+        end
+        for _, r in pairs(g.specs or {}) do
+            if r.spells and r.spells[spellID] then return g.name end
+        end
+    end
+end
+
+local racialSet
+local function IsRacialSpell(sid)
+    if not racialSet then
+        racialSet = {}
+        for _, id in ipairs(ns.Racials or {}) do racialSet[id] = true end
+    end
+    return sid and racialSet[sid] or false
+end
+
+function M.ShouldHideNativeSpell(sid)
+    if not IsRacialSpell(sid) then return false end
+    local db = DB()
+    if not db then return false end
+    if db.customGroupsOnly then return true end
+    local d = db.dest and db.dest[sid]
+    return (d and d ~= "off") and true or false
 end
 
 function M.RefreshCooldowns()
@@ -64,11 +98,13 @@ function M.Refresh()
     if not (ns.TimersRender and DB()) then return end
     wipe(listFor.essential)
     wipe(listFor.utility)
-    local dest = DB().dest or {}
+    local db = DB()
+    local dest = db.dest or {}
     local sig = {}
+
     for _, spellID in ipairs(ns.Racials or {}) do
         local d = dest[spellID]
-        if d and d ~= "off" and HasRacial(spellID) then
+        if not db.customGroupsOnly and d and d ~= "off" and HasRacial(spellID) then
             local key = (d == "dynamic") and ResolveDynamic() or d
             local list = listFor[key]
             if list then
@@ -85,6 +121,7 @@ function M.Refresh()
             if btn then btn:Hide(); btn.layoutIndex = nil end
         end
     end
+    if db.customGroupsOnly then sig[#sig + 1] = "cgonly" end
     local s = tconcat(sig, ",")
     if s ~= lastSig then
         lastSig = s

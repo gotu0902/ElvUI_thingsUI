@@ -5,4 +5,5 @@ P["thingsUI"] = P["thingsUI"] or {}
 P["thingsUI"].racialsCDM = {
     dest = {},
     dynamicThreshold = 8,
+    customGroupsOnly = false,
 }
