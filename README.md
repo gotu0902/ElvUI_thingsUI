@@ -1,6 +1,7 @@
 # ElvUI_thingsUI
 
-![Version](https://img.shields.io/badge/version-4.1.0-pink)
+![Version](https://img.shields.io/badge/version-4.0.4-purple)
+
 
 ## Installer
 One-time setup: import a preset (NHT/FHT), set UI scale, pick unitframe coloring, move the minimap/auras, anchor Details!, pick an action bar layout, and choose ElvUI UnitFrames or Grid2. Auto-opens once, re-run it from the Share tab.
