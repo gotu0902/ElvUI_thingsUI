@@ -24,5 +24,6 @@
 	<Script file="CustomGroups.lua"/>
 	<Script file="TUIMeter.lua"/>
 	<Script file="MBB.lua"/>
+	<Script file="MinimapDifficulty.lua"/>
 	<Script file="Movers\MoverSync.lua"/>
 </Ui>

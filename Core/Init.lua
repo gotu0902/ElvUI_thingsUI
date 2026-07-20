@@ -141,6 +141,7 @@ function TUI:Initialize()
     self:UpdateCustomGroups()
     if self.UpdateTUIMeter then self:UpdateTUIMeter() end
     if self.UpdateMBB then self:UpdateMBB() end
+    if self.UpdateInstanceDifficulty then self:UpdateInstanceDifficulty() end
     self:UpdateMoverSync()
 
     self:RegisterEvent("PLAYER_ENTERING_WORLD", function()
@@ -241,6 +242,7 @@ function TUI:ProfileUpdate()
     self:UpdateCustomGroups()
     if self.UpdateTUIMeter then self:UpdateTUIMeter() end
     if self.UpdateMBB then self:UpdateMBB() end
+    if self.UpdateInstanceDifficulty then self:UpdateInstanceDifficulty() end
     if ns.CustomGroups and ns.CustomGroups._rebuildOptions then ns.CustomGroups._rebuildOptions() end
     if ns.BarSetup and ns.BarSetup._rebuildSetupOptions then ns.BarSetup._rebuildSetupOptions() end
     if ns.Timers then

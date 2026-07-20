@@ -10,10 +10,23 @@ p.rightChatAsBackground = false
 p.rightChatWidthOffset  = 0
 p.rightChatHeightOffset = 0
 p.mbb = {
-    manage = false,
+    manage = true,
     anchor = "Minimap",
     point = "TOPRIGHT",
+    x = 1,
+    y = 39,
+    skin = true,
+    scale = 1.02,
+    mouseover = true,
+    hideMain = true,
+    seeded = false,
+}
+p.instanceDifficulty = {
+    enable = false,
+    point = "TOPLEFT",
     x = 0,
     y = 0,
-    skin = true,
+    font = "Expressway",
+    fontSize = 12,
+    fontOutline = "OUTLINE",
 }

@@ -80,7 +80,7 @@ local function Clock(d)
 end
 
 local windows = {}
-local ApplyLayout, RefreshWindow, EnterDrill
+local ApplyLayout, RefreshWindow, EnterDrill, RenderPopout
 local function Panel() return _G.RightChatPanel end
 
 local function FetchSession(win)
@@ -99,34 +99,139 @@ local function FetchSession(win)
     return nil
 end
 
-local function FetchDrill(win)
-    local cfg = win.cfg
-    local t = cfg.type or 0
-    local d = win.drill
+local function FetchSource(session, t, d)
     if not d then return nil end
     -- new PTR API; errors while no session data exists / on secret args in combat
     local ok, src
-    if type(cfg.session) == "number" then
-        ok, src = pcall(C_DamageMeter.GetCombatSessionSourceFromID, cfg.session, t, d.guid, d.creatureID)
+    if type(session) == "number" then
+        ok, src = pcall(C_DamageMeter.GetCombatSessionSourceFromID, session, t, d.guid, d.creatureID)
     else
-        local sType = (cfg.session == "overall") and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
+        local sType = (session == "overall") and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
         ok, src = pcall(C_DamageMeter.GetCombatSessionSourceFromType, sType, t, d.guid, d.creatureID)
     end
     if ok then return src end
     return nil
 end
 
+local function FetchDrill(win)
+    return FetchSource(win.cfg.session, win.cfg.type or 0, win.drill)
+end
+
+local function DrillInfo(src)
+    if not src then return nil end
+    if not (src.sourceGUID or src.sourceCreatureID) then return nil end
+    return {
+        guid = src.sourceGUID,
+        creatureID = src.sourceCreatureID,
+        name = src.name,
+        classFile = (not Secret(src.classFilename)) and src.classFilename or nil,
+    }
+end
+
+local function PlainStr(v)
+    if v and not Secret(v) and v ~= "" then return v end
+    return nil
+end
+
+local function SpellDisplay(spell, drill)
+    local det = spell.combatSpellDetails
+    local sid = spell.spellID
+    if Secret(sid) or sid == 0 then sid = nil end
+    local spellName = sid and C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(sid) or nil
+    local unitName = PlainStr(det and det.unitName)
+    local unitClass = PlainStr(det and det.unitClassFilename)
+    local creature = PlainStr(spell.creatureName)
+    local db = TDB()
+    local colorNames = db and db.classColor == false
+
+    local name
+    if spellName then
+        if creature then
+            name = spellName .. " (" .. creature .. ")"
+        elseif unitName then
+            local un = unitName
+            if colorNames and unitClass and RAID_CLASS_COLORS[unitClass] then
+                un = RAID_CLASS_COLORS[unitClass]:WrapTextInColorCode(un)
+            end
+            name = spellName .. " - " .. un
+        else
+            name = spellName
+        end
+    elseif unitName then
+        name = unitName
+        if colorNames and unitClass and RAID_CLASS_COLORS[unitClass] then
+            name = RAID_CLASS_COLORS[unitClass]:WrapTextInColorCode(name)
+        end
+    else
+        name = det and det.unitName or nil
+    end
+
+    local classFile = unitClass or (drill and drill.classFile) or nil
+    local icon = det and det.specIconID
+    if Secret(icon) or icon == 0 then icon = nil end
+    if not icon and sid then
+        icon = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)) or 134400
+    end
+    return name, icon or 0, classFile
+end
+
+local function PlayerTargets(ctx)
+    local playerName = ctx.drill and ctx.drill.name
+    if not playerName or Secret(playerName) then return nil end
+    local T = Enum.DamageMeterType
+    local edt = T and T.EnemyDamageTaken
+    if not edt then return nil end
+    local session
+    -- new PTR API; errors while no session data exists
+    if type(ctx.session) == "number" then
+        local ok, s = pcall(C_DamageMeter.GetCombatSessionFromID, ctx.session, edt)
+        session = ok and s or nil
+    else
+        local sType = (ctx.session == "overall") and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
+        local ok, s = pcall(C_DamageMeter.GetCombatSessionFromType, sType, edt)
+        session = ok and s or nil
+    end
+    local enemies = session and session.combatSources
+    if not enemies then return nil end
+    local out, byName = {}, {}
+    for i = 1, math.min(#enemies, 40) do
+        local en = enemies[i]
+        local src = FetchSource(ctx.session, edt, { guid = en.sourceGUID, creatureID = en.sourceCreatureID })
+        local spells = src and src.combatSpells
+        if spells then
+            local sum = 0
+            for _, sp in ipairs(spells) do
+                local det = sp.combatSpellDetails
+                local un = det and det.unitName
+                if un and not Secret(un) and un == playerName then
+                    local amt = sp.totalAmount
+                    if type(amt) == "number" and not Secret(amt) then sum = sum + amt end
+                end
+            end
+            if sum > 0 then
+                local nm = PlainStr(en.name) or "?"
+                local idx = byName[nm]
+                if idx then
+                    out[idx].amount = out[idx].amount + sum
+                else
+                    out[#out + 1] = { name = nm, amount = sum }
+                    byName[nm] = #out
+                end
+            end
+        end
+    end
+    table.sort(out, function(a, b) return a.amount > b.amount end)
+    return out
+end
+
 local function SpellRowSrc(win, i, spell, drill)
     win._scratch = win._scratch or {}
     local t = win._scratch[i] or {}
     win._scratch[i] = t
-    local sid = spell.spellID
-    t.name, t.specIconID = nil, 134400
-    if sid and not Secret(sid) then
-        t.name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(sid) or nil
-        t.specIconID = (C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)) or 134400
-    end
-    t.classFilename = drill.classFile
+    local name, icon, classFile = SpellDisplay(spell, drill)
+    t.name = name
+    t.specIconID = icon
+    t.classFilename = classFile
     t.totalAmount = spell.totalAmount
     t.amountPerSecond = spell.amountPerSecond
     return t
@@ -226,7 +331,7 @@ local function CreateRow(win, i)
     row.label:SetJustifyH("LEFT")
     row.label:SetWordWrap(false)
 
-    row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row:RegisterForClicks("LeftButtonUp", "RightButtonUp", "MiddleButtonUp")
     row:SetScript("OnClick", function(self, btn)
         if btn == "RightButton" then
             if win.drill then
@@ -234,8 +339,14 @@ local function CreateRow(win, i)
             else
                 M.ShowModeMenu(win)
             end
-        elseif btn == "LeftButton" and not win.drill and not M.testMode then
-            EnterDrill(win, self._src)
+        elseif btn == "MiddleButton" and not win.drill and not M.testMode then
+            M.OpenPopout(win, DrillInfo(self._src))
+        elseif btn == "LeftButton" and not M.testMode then
+            if win.drill then
+                M.OpenPopout(win, win.drill)
+            else
+                EnterDrill(win, self._src)
+            end
         end
     end)
 
@@ -306,7 +417,11 @@ local function UpdateRow(win, i, rank, src, maxAmt, db)
     row.pos:SetText(db.showRank ~= false and (rank .. ".") or "")
     local name = src.name
     if name then
-        row.label:SetText(Ambiguate and Ambiguate(name, "short") or name)
+        if win.drill then
+            row.label:SetText(name)
+        else
+            row.label:SetText(Ambiguate and Ambiguate(name, "short") or name)
+        end
     else
         row.label:SetText("")
     end
@@ -434,19 +549,247 @@ end
 
 function M.RefreshAll()
     for _, win in ipairs(windows) do RefreshWindow(win) end
+    if RenderPopout then RenderPopout() end
 end
 
 EnterDrill = function(win, src)
-    if not src then return end
-    if not (src.sourceGUID or src.sourceCreatureID) then return end
-    win.drill = {
-        guid = src.sourceGUID,
-        creatureID = src.sourceCreatureID,
-        name = src.name,
-        classFile = (not Secret(src.classFilename)) and src.classFilename or nil,
-    }
+    local d = DrillInfo(src)
+    if not d then return end
+    win.drill = d
     win.scroll = 0
     RefreshWindow(win)
+end
+
+local popout
+
+local function EnsurePopout()
+    if popout then return popout end
+    popout = CreateFrame("Frame", "TUI_MeterPopout", E.UIParent, "BackdropTemplate")
+    popout:SetFrameStrata("DIALOG")
+    popout:SetSize(460, 200)
+    popout:SetPoint("CENTER", E.UIParent, "CENTER", 0, 60)
+    popout:SetBackdrop({ bgFile = [[Interface\Buttons\WHITE8x8]], edgeFile = [[Interface\Buttons\WHITE8x8]], edgeSize = 1 })
+    popout:SetBackdropColor(0.04, 0.04, 0.04, 0.97)
+    popout:SetBackdropBorderColor(0, 0, 0, 1)
+    popout:SetMovable(true)
+    popout:SetClampedToScreen(true)
+    popout:EnableMouse(true)
+    popout:EnableMouseWheel(true)
+    popout:SetScript("OnMouseUp", function(_, btn)
+        if btn == "RightButton" then popout:Hide() end
+    end)
+    popout:SetScript("OnMouseWheel", function(_, d)
+        if d > 0 then popout.offset = math.max(0, (popout.offset or 0) - 1)
+        else popout.offset = (popout.offset or 0) + 1 end
+        RenderPopout()
+    end)
+    popout.rows = {}
+
+    local header = CreateFrame("Button", nil, popout)
+    header:SetPoint("TOPLEFT", popout, "TOPLEFT", 1, -1)
+    header:SetPoint("TOPRIGHT", popout, "TOPRIGHT", -1, -1)
+    header:SetHeight(26)
+    header.bg = header:CreateTexture(nil, "BACKGROUND")
+    header.bg:SetAllPoints(header)
+    header.bg:SetColorTexture(0.08, 0.08, 0.08, 1)
+    header:RegisterForDrag("LeftButton")
+    header:SetScript("OnDragStart", function() popout:StartMoving() end)
+    header:SetScript("OnDragStop", function() popout:StopMovingOrSizing() end)
+    header:RegisterForClicks("RightButtonUp")
+    header:SetScript("OnClick", function() popout:Hide() end)
+    popout.header = header
+    popout.title = header:CreateFontString(nil, "OVERLAY")
+    popout.title:SetPoint("LEFT", header, "LEFT", 8, 0)
+    popout.tag = header:CreateFontString(nil, "OVERLAY")
+    popout.tag:SetPoint("RIGHT", header, "RIGHT", -8, 0)
+    tinsert(UISpecialFrames, "TUI_MeterPopout")
+    return popout
+end
+
+local function PopoutRow(i)
+    local p = popout
+    if p.rows[i] then return p.rows[i] end
+    local row = CreateFrame("Frame", nil, p)
+    row.bg = row:CreateTexture(nil, "BACKGROUND")
+    row.bg:SetAllPoints(row)
+    row.fill = CreateFrame("StatusBar", nil, row)
+    row.fill:SetMinMaxValues(0, 1)
+    row.fill:SetValue(0)
+    row.icon = row:CreateTexture(nil, "ARTWORK")
+    row.icon:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+    row.icon:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+    local tf = CreateFrame("Frame", nil, row.fill)
+    tf:SetAllPoints(row.fill)
+    tf:SetFrameLevel(row.fill:GetFrameLevel() + 2)
+    row.pos = tf:CreateFontString(nil, "OVERLAY")
+    row.label = tf:CreateFontString(nil, "OVERLAY")
+    row.amount = tf:CreateFontString(nil, "OVERLAY")
+    row.pos:SetPoint("LEFT", tf, "LEFT", 4, 0)
+    row.amount:SetPoint("RIGHT", tf, "RIGHT", -6, 0)
+    row.amount:SetJustifyH("RIGHT")
+    row.label:SetPoint("LEFT", row.pos, "RIGHT", 4, 0)
+    row.label:SetPoint("RIGHT", row.amount, "LEFT", -6, 0)
+    row.label:SetJustifyH("LEFT")
+    row.label:SetWordWrap(false)
+    p.rows[i] = row
+    return row
+end
+
+RenderPopout = function()
+    local p = popout
+    if not (p and p:IsShown() and p.ctx and Active()) then return end
+    local db = TDB()
+    local ctx = p.ctx
+    local src = FetchSource(ctx.session, ctx.type or 0, ctx.drill)
+    local spells = src and src.combatSpells or {}
+    local total = #spells
+    local rowH = math.max(20, math.floor((db.barHeight or 20) + 0.5))
+    local maxRows = math.max(4, math.floor(((E.UIParent:GetHeight() or 800) * 0.6) / (rowH + 1)))
+    local offMax = math.max(0, total - maxRows)
+    if (p.offset or 0) > offMax then p.offset = offMax end
+    local first = 1 + (p.offset or 0)
+    local font = (LSM and LSM:Fetch("font", db.font or "Expressway")) or STANDARD_TEXT_FONT
+    local flag = (db.fontOutline ~= "NONE") and (db.fontOutline or "OUTLINE") or ""
+    local tex = (db.barTexture and db.barTexture ~= "" and LSM) and LSM:Fetch("statusbar", db.barTexture) or [[Interface\Buttons\WHITE8x8]]
+    local cc = ctx.drill.classFile and RAID_CLASS_COLORS[ctx.drill.classFile]
+    local maxAmt = (spells[1] and spells[1].totalAmount) or 1
+    local pTotal = src and src.totalAmount
+    local z = db.iconZoom or 0.05
+    local y = 28
+    local shown = 0
+    for rank = first, math.min(total, first + maxRows - 1) do
+        shown = shown + 1
+        local sp = spells[rank]
+        local row = PopoutRow(shown)
+        row:Show()
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", p, "TOPLEFT", 1, -y)
+        row:SetPoint("TOPRIGHT", p, "TOPRIGHT", -1, -y)
+        row:SetHeight(rowH)
+        y = y + rowH + 1
+        row.bg:SetColorTexture(0, 0, 0, math.max(db.barBgAlpha or 0, 0.25))
+        row.fill:SetStatusBarTexture(tex)
+        row.pos:SetFont(font, db.fontSize or 12, flag)
+        row.label:SetFont(font, db.fontSize or 12, flag)
+        row.amount:SetFont(font, db.valueFontSize or 12, flag)
+        local nm, icon, cf = SpellDisplay(sp, ctx.drill)
+        row.icon:SetWidth(rowH)
+        if icon and icon ~= 0 then
+            row.icon:SetTexture(icon)
+            row.icon:SetTexCoord(z, 1 - z, z, 1 - z)
+        elseif cf and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[cf] then
+            local tc = CLASS_ICON_TCOORDS[cf]
+            local w, h = tc[2] - tc[1], tc[4] - tc[3]
+            row.icon:SetTexture([[Interface\Glues\CharacterCreate\UI-CharacterCreate-Classes]])
+            row.icon:SetTexCoord(tc[1] + w * z, tc[2] - w * z, tc[3] + h * z, tc[4] - h * z)
+        else
+            row.icon:SetTexture(134400)
+            row.icon:SetTexCoord(z, 1 - z, z, 1 - z)
+        end
+        row.fill:ClearAllPoints()
+        row.fill:SetPoint("TOPLEFT", row, "TOPLEFT", rowH + 1, 0)
+        row.fill:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0, 0)
+        local rc = (db.classColor ~= false) and cf and RAID_CLASS_COLORS[cf] or cc
+        if rc then
+            row.fill:SetStatusBarColor(rc.r, rc.g, rc.b)
+        else
+            local c = db.barColor or {}
+            row.fill:SetStatusBarColor(c.r or 0.35, c.g or 0.55, c.b or 0.8)
+        end
+        row.fill:SetMinMaxValues(0, maxAmt)
+        row.fill:SetValue(sp.totalAmount or 0)
+        row.pos:SetText(rank .. ".")
+        if nm then row.label:SetText(nm) else row.label:SetText("") end
+        local vt = ValueText(sp.totalAmount, sp.amountPerSecond, db.numberFormat)
+        local ta = sp.totalAmount
+        if type(ta) == "number" and not Secret(ta) and type(pTotal) == "number" and not Secret(pTotal) and pTotal > 0 then
+            vt = vt .. ("  |cFF808080%.1f%%|r"):format(ta / pTotal * 100)
+        end
+        row.amount:SetText(vt)
+    end
+
+    local T = Enum.DamageMeterType
+    local isDamage = T and (ctx.type == T.DamageDone or ctx.type == T.Dps) or (ctx.type or 0) == 0
+    if isDamage and not InCombatLockdown() then
+        local targets = PlayerTargets(ctx)
+        if targets and #targets > 0 then
+            shown = shown + 1
+            local hr = PopoutRow(shown)
+            hr:Show()
+            hr:ClearAllPoints()
+            hr:SetPoint("TOPLEFT", p, "TOPLEFT", 1, -y)
+            hr:SetPoint("TOPRIGHT", p, "TOPRIGHT", -1, -y)
+            hr:SetHeight(18)
+            y = y + 19
+            hr.bg:SetColorTexture(0, 0, 0, 0)
+            hr.fill:SetMinMaxValues(0, 1)
+            hr.fill:SetValue(0)
+            hr.icon:SetTexture(nil)
+            hr.icon:SetWidth(1)
+            hr.pos:SetFont(font, db.fontSize or 12, flag)
+            hr.label:SetFont(font, db.fontSize or 12, flag)
+            hr.amount:SetFont(font, db.valueFontSize or 12, flag)
+            hr.pos:SetText("")
+            hr.label:SetText("|cFF808080Targets|r")
+            hr.amount:SetText("")
+            local tMax = targets[1].amount
+            for ti = 1, #targets do
+                local tg = targets[ti]
+                shown = shown + 1
+                local row = PopoutRow(shown)
+                row:Show()
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", p, "TOPLEFT", 1, -y)
+                row:SetPoint("TOPRIGHT", p, "TOPRIGHT", -1, -y)
+                row:SetHeight(rowH)
+                y = y + rowH + 1
+                row.bg:SetColorTexture(0, 0, 0, math.max(db.barBgAlpha or 0, 0.25))
+                row.fill:SetStatusBarTexture(tex)
+                row.fill:ClearAllPoints()
+                row.fill:SetPoint("TOPLEFT", row, "TOPLEFT", 1, 0)
+                row.fill:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0, 0)
+                row.fill:SetStatusBarColor(0.6, 0.22, 0.22)
+                row.fill:SetMinMaxValues(0, tMax > 0 and tMax or 1)
+                row.fill:SetValue(tg.amount)
+                row.icon:SetTexture(nil)
+                row.icon:SetWidth(1)
+                row.pos:SetFont(font, db.fontSize or 12, flag)
+                row.label:SetFont(font, db.fontSize or 12, flag)
+                row.amount:SetFont(font, db.valueFontSize or 12, flag)
+                row.pos:SetText(ti .. ".")
+                row.label:SetText(tg.name)
+                local vt = Abbrev(tg.amount)
+                if type(pTotal) == "number" and not Secret(pTotal) and pTotal > 0 then
+                    vt = vt .. ("  |cFF808080%.1f%%|r"):format(tg.amount / pTotal * 100)
+                end
+                row.amount:SetText(vt)
+            end
+        end
+    end
+
+    for i = shown + 1, #p.rows do p.rows[i]:Hide() end
+    p:SetHeight(y + 2)
+    p.title:SetFont(font, db.headerFontSize or 13, flag)
+    p.tag:SetFont(font, math.max(8, (db.headerFontSize or 13) - 2), flag)
+    local nm = ctx.drill.name
+    local typeName = TYPE_NAMES[ctx.type or 0] or ""
+    if nm and not Secret(nm) then
+        p.title:SetText("|cFF808080" .. typeName .. ":|r " .. nm)
+    else
+        p.title:SetText(nm or "")
+    end
+    local s = ctx.session
+    local tag = (type(s) == "number") and ("#" .. s) or (s == "overall" and "Overall" or "Current")
+    p.tag:SetText("|cFF808080" .. tag .. "|r")
+end
+
+function M.OpenPopout(win, drill)
+    if not drill then return end
+    local p = EnsurePopout()
+    p.ctx = { session = win.cfg.session, type = win.cfg.type, drill = drill }
+    p.offset = 0
+    p:Show()
+    RenderPopout()
 end
 
 local function StopExpand(win)
@@ -557,6 +900,72 @@ local function MenuRow(i)
     return row
 end
 
+local function DoResetData()
+    if C_DamageMeter.ResetAllCombatSessions then C_DamageMeter.ResetAllCombatSessions() end
+    frozenCur, frozenOverall = 0, 0
+    for _, w in ipairs(windows) do
+        if w.cfg and type(w.cfg.session) == "number" then w.cfg.session = "current" end
+    end
+    M.RefreshAll()
+end
+
+local confirm
+local function EnsureConfirm()
+    if confirm then return confirm end
+    confirm = CreateFrame("Frame", "TUI_MeterConfirmFrame", E.UIParent, "BackdropTemplate")
+    confirm:SetFrameStrata("FULLSCREEN_DIALOG")
+    confirm:SetFrameLevel(130)
+    confirm:SetSize(260, 84)
+    confirm:SetBackdrop({ bgFile = [[Interface\Buttons\WHITE8x8]], edgeFile = [[Interface\Buttons\WHITE8x8]], edgeSize = 1 })
+    confirm:SetBackdropColor(0.04, 0.04, 0.04, 0.97)
+    confirm:SetBackdropBorderColor(0, 0, 0, 1)
+    confirm:EnableMouse(true)
+    confirm:Hide()
+    confirm.text = confirm:CreateFontString(nil, "OVERLAY")
+    confirm.text:SetPoint("TOP", confirm, "TOP", 0, -16)
+    local function MkBtn(x)
+        local b = CreateFrame("Button", nil, confirm, "BackdropTemplate")
+        b:SetSize(105, 26)
+        b:SetBackdrop({ bgFile = [[Interface\Buttons\WHITE8x8]], edgeFile = [[Interface\Buttons\WHITE8x8]], edgeSize = 1 })
+        b:SetBackdropColor(0.12, 0.12, 0.12, 1)
+        b:SetBackdropBorderColor(0, 0, 0, 1)
+        b:SetPoint("BOTTOM", confirm, "BOTTOM", x, 12)
+        b.text = b:CreateFontString(nil, "OVERLAY")
+        b.text:SetPoint("CENTER")
+        b:SetHighlightTexture([[Interface\Buttons\WHITE8x8]])
+        b:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.08)
+        return b
+    end
+    confirm.yes = MkBtn(-57)
+    confirm.no = MkBtn(57)
+    confirm.yes:SetScript("OnClick", function() confirm:Hide(); DoResetData() end)
+    confirm.no:SetScript("OnClick", function() confirm:Hide() end)
+    tinsert(UISpecialFrames, "TUI_MeterConfirmFrame")
+    return confirm
+end
+
+local function ShowResetConfirm()
+    local db = TDB()
+    if not db then return end
+    local c = EnsureConfirm()
+    local font = (LSM and LSM:Fetch("font", db.font or "Expressway")) or STANDARD_TEXT_FONT
+    local flag = (db.fontOutline ~= "NONE") and (db.fontOutline or "OUTLINE") or ""
+    c.text:SetFont(font, (db.fontSize or 12) + 1, flag)
+    c.yes.text:SetFont(font, db.fontSize or 12, flag)
+    c.no.text:SetFont(font, db.fontSize or 12, flag)
+    c.text:SetText("Reset all damage meter data?")
+    c.yes.text:SetText("|cFFFF5C5CReset|r")
+    c.no.text:SetText("Cancel")
+    c:ClearAllPoints()
+    local p = Panel()
+    if E.db.thingsUI.rightChatAsBackground and p then
+        c:SetPoint("CENTER", p, "CENTER", 0, 30)
+    else
+        c:SetPoint("CENTER", E.UIParent, "CENTER", 0, -100)
+    end
+    c:Show()
+end
+
 local function BuildTypeEntries(win)
     local e = {}
     for _, t in ipairs(TYPE_ORDER) do
@@ -567,14 +976,38 @@ local function BuildTypeEntries(win)
     return e
 end
 
+local function AllOnSameSegment()
+    local id
+    for _, w in ipairs(windows) do
+        if w.cfg then
+            if type(w.cfg.session) ~= "number" then return false end
+            id = id or w.cfg.session
+            if w.cfg.session ~= id then return false end
+        end
+    end
+    return id ~= nil
+end
+
+local function SetSession(win, session)
+    if AllOnSameSegment() then
+        for _, w in ipairs(windows) do
+            if w.cfg then w.cfg.session = session; w.scroll = 0; w.drill = nil end
+        end
+    else
+        win.cfg.session = session
+        win.scroll = 0
+        win.drill = nil
+    end
+end
+
 local function BuildSessionEntries(win)
     local db = TDB()
     local e = {}
     e[#e + 1] = { label = "Current", selected = win.cfg.session ~= "overall" and type(win.cfg.session) ~= "number", func = function()
-        win.cfg.session = "current"; win.scroll = 0; win.drill = nil
+        SetSession(win, "current")
     end }
     e[#e + 1] = { label = "Overall", selected = win.cfg.session == "overall", func = function()
-        win.cfg.session = "overall"; win.scroll = 0; win.drill = nil
+        SetSession(win, "overall")
     end }
     local avail = C_DamageMeter.GetAvailableCombatSessions and C_DamageMeter.GetAvailableCombatSessions()
     if avail and #avail > 0 then
@@ -603,13 +1036,7 @@ local function BuildSessionEntries(win)
     e[#e + 1] = { label = "Test Mode", selected = M.testMode and true or false, func = function()
         M.testMode = not M.testMode
     end }
-    e[#e + 1] = { label = "Reset Data", func = function()
-        if C_DamageMeter.ResetAllCombatSessions then C_DamageMeter.ResetAllCombatSessions() end
-        frozenCur, frozenOverall = 0, 0
-        for _, w in ipairs(windows) do
-            if w.cfg and type(w.cfg.session) == "number" then w.cfg.session = "current" end
-        end
-    end }
+    e[#e + 1] = { label = "Reset Data", func = ShowResetConfirm }
     return e
 end
 

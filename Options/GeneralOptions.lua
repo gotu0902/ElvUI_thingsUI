@@ -64,19 +64,41 @@ end
 ns.ApplyClassColored = ApplyClassColored
 ns.ApplyDarkMode = ApplyDarkMode
 
+local function ApplyMBBPreset(point, y, direction)
+    local mbb = E.db.thingsUI and E.db.thingsUI.mbb
+    if mbb then
+        mbb.manage = true
+        mbb.anchor = "Minimap"
+        mbb.point = point
+        mbb.x = 1
+        mbb.y = y
+        mbb.skin = true
+        mbb.scale = 1.02
+        mbb.mouseover = true
+        mbb.hideMain = true
+    end
+    if ns.MBB then
+        ns.MBB.SetDirection(direction)
+        ns.MBB.SetWrap(6)
+    end
+    if TUI.UpdateMBB then TUI:UpdateMBB() end
+end
+ns.ApplyMBBPreset = ApplyMBBPreset
+
 function ns.MoveThatStuff()
-    E.db["movers"]["MinimapMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-2,-2"
+    E.db["movers"]["MinimapMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-1,-1"
     E.db["movers"]["VehicleLeaveButton"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-152,-2"
     E.db["movers"]["QueueStatusMover"] = "TOPRIGHT,UIParent,TOPRIGHT,-10,-14"
-    E.db["movers"]["DTPanelFriends and GuildMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-4,-170"
-    E.db["movers"]["DTPanelSystemMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-139,-174"
-    E.db["movers"]["DTPanelTimeMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-76,-185"
-    E.db["movers"]["BuffsMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-217,-2"
+    E.db["movers"]["DTPanelFriends and GuildMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,0,-170"
+    E.db["movers"]["DTPanelSystemMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-142,-174"
+    E.db["movers"]["DTPanelTimeMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-74,-185"
+    E.db["movers"]["BuffsMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-217,-1"
     E.db["auras"]["buffs"]["growthDirection"] = "LEFT_DOWN"
     E.db["movers"]["DebuffsMover"] = "TOPRIGHT,UIParent,TOPRIGHT,-216,-120"
     E.db["auras"]["debuffs"]["growthDirection"] = "LEFT_DOWN"
     E.db["movers"]["GMMover"] = "TOPLEFT,ElvUIParent,TOPLEFT,635,-2"
-    E.db["movers"]["RightChatMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,-2,2"
+    E.db["movers"]["RightChatMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,-1,1"
+    ApplyMBBPreset("BOTTOMRIGHT", -39, "leftdown")
     E:UpdateMoverPositions()
     E:UpdateAuras()
     print("|cFF8080FFthingsUI|r - Minimap, Auras and DT panels moved to Top Right.")
@@ -133,21 +155,102 @@ function TUI:PositioningTweaksOptions()
                                 type = "execute",
                                 name = "Reset to default",
                                 func = function()
-                                    E.db["movers"]["MinimapMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,-2,2"
+                                    E.db["movers"]["MinimapMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,-1,1"
                                     E.db["movers"]["VehicleLeaveButton"] = "BOTTOMRIGHT,UIParent,BOTTOMRIGHT,-151,152"
                                     E.db["movers"]["QueueStatusMover"] = "BOTTOMRIGHT,UIParent,BOTTOMRIGHT,-9,176"
                                     E.db["movers"]["DTPanelFriends and GuildMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,0,5"
                                     E.db["movers"]["DTPanelSystemMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,-142,1"
-                                    E.db["movers"]["DTPanelTimeMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,-68,1"
-                                    E.db["movers"]["BuffsMover"] = "TOPLEFT,ElvUIParent,TOPLEFT,2,-2"
+                                    E.db["movers"]["DTPanelTimeMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,-74,1"
+                                    E.db["movers"]["BuffsMover"] = "TOPLEFT,ElvUIParent,TOPLEFT,1,-1"
                                     E.db["auras"]["buffs"]["growthDirection"] = "RIGHT_DOWN"
                                     E.db["movers"]["DebuffsMover"] = "TOPLEFT,ElvUIParent,TOPLEFT,2,-120"
                                     E.db["auras"]["debuffs"]["growthDirection"] = "RIGHT_DOWN"
                                     E.db["movers"]["GMMover"] = "TOPRIGHT,ElvUIParent,TOPRIGHT,-377,-2"
-                                    E.db["movers"]["RightChatMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,-205,2"
+                                    E.db["movers"]["RightChatMover"] = "BOTTOMRIGHT,ElvUIParent,BOTTOMRIGHT,-204,1"
+                                    ApplyMBBPreset("TOPRIGHT", 39, "leftup")
                                     E:UpdateMoverPositions()
                                     E:UpdateAuras()
                                     print("|cFF8080FFthingsUI|r - Minimap, Auras and Details! reset to default positions.")
+                                end,
+                            },
+                        },
+                    },
+                    instanceDifficultyGroup = {
+                        order = 1.7,
+                        type = "group",
+                        name = "Minimap Instance Difficulty",
+                        inline = true,
+                        args = {
+                            idEnable = {
+                                order = 1, type = "toggle", name = "Text Mode", width = 1.2,
+                                get = function() return E.db.thingsUI.instanceDifficulty and E.db.thingsUI.instanceDifficulty.enable end,
+                                set = function(_, v)
+                                    E.db.thingsUI.instanceDifficulty.enable = v
+                                    TUI:UpdateInstanceDifficulty()
+                                    ns.NotifyChange()
+                                end,
+                            },
+                            idPoint = {
+                                order = 2, type = "select", name = "Position",
+                                disabled = function() return not (E.db.thingsUI.instanceDifficulty and E.db.thingsUI.instanceDifficulty.enable) end,
+                                values = ns.POINTS.VALUES, sorting = ns.POINTS.ORDER,
+                                get = function() return E.db.thingsUI.instanceDifficulty.point or "TOPLEFT" end,
+                                set = function(_, v)
+                                    E.db.thingsUI.instanceDifficulty.point = v
+                                    TUI:UpdateInstanceDifficulty()
+                                    ns.NotifyChange()
+                                end,
+                            },
+                            idX = {
+                                order = 3, type = "range", name = "X Offset", min = -100, max = 100, step = 1,
+                                disabled = function() return not (E.db.thingsUI.instanceDifficulty and E.db.thingsUI.instanceDifficulty.enable) end,
+                                get = function() return E.db.thingsUI.instanceDifficulty.x or 0 end,
+                                set = function(_, v)
+                                    E.db.thingsUI.instanceDifficulty.x = v
+                                    TUI:UpdateInstanceDifficulty()
+                                    ns.NotifyChange()
+                                end,
+                            },
+                            idY = {
+                                order = 4, type = "range", name = "Y Offset", min = -100, max = 100, step = 1,
+                                disabled = function() return not (E.db.thingsUI.instanceDifficulty and E.db.thingsUI.instanceDifficulty.enable) end,
+                                get = function() return E.db.thingsUI.instanceDifficulty.y or 0 end,
+                                set = function(_, v)
+                                    E.db.thingsUI.instanceDifficulty.y = v
+                                    TUI:UpdateInstanceDifficulty()
+                                    ns.NotifyChange()
+                                end,
+                            },
+                            idFont = {
+                                order = 5, type = "select", name = "Font", dialogControl = "LSM30_Font",
+                                disabled = function() return not (E.db.thingsUI.instanceDifficulty and E.db.thingsUI.instanceDifficulty.enable) end,
+                                values = ns.FontValues,
+                                get = function() return E.db.thingsUI.instanceDifficulty.font or "Expressway" end,
+                                set = function(_, v)
+                                    E.db.thingsUI.instanceDifficulty.font = v
+                                    TUI:UpdateInstanceDifficulty()
+                                    ns.NotifyChange()
+                                end,
+                            },
+                            idFontSize = {
+                                order = 6, type = "range", name = "Font Size", min = 6, max = 24, step = 1,
+                                disabled = function() return not (E.db.thingsUI.instanceDifficulty and E.db.thingsUI.instanceDifficulty.enable) end,
+                                get = function() return E.db.thingsUI.instanceDifficulty.fontSize or 12 end,
+                                set = function(_, v)
+                                    E.db.thingsUI.instanceDifficulty.fontSize = v
+                                    TUI:UpdateInstanceDifficulty()
+                                    ns.NotifyChange()
+                                end,
+                            },
+                            idOutline = {
+                                order = 7, type = "select", name = "Outline",
+                                disabled = function() return not (E.db.thingsUI.instanceDifficulty and E.db.thingsUI.instanceDifficulty.enable) end,
+                                values = ns.OUTLINE.VALUES, sorting = ns.OUTLINE.ORDER,
+                                get = function() return E.db.thingsUI.instanceDifficulty.fontOutline or "OUTLINE" end,
+                                set = function(_, v)
+                                    E.db.thingsUI.instanceDifficulty.fontOutline = v
+                                    TUI:UpdateInstanceDifficulty()
+                                    ns.NotifyChange()
                                 end,
                             },
                         },
@@ -312,9 +415,44 @@ function TUI:FixesAndQoLOptions()
                             },
                             skin = {
                                 order = 2, type = "toggle", name = "Skin Buttons",
-                                desc = "Strips the round Blizzard ring from collected minimap buttons.",
                                 get = function() return E.db.thingsUI.mbb and E.db.thingsUI.mbb.skin ~= false end,
                                 set = function(_, v) E.db.thingsUI.mbb.skin = v; TUI:UpdateMBB(); ns.NotifyChange() end,
+                            },
+                            mbbScale = {
+                                order = 2.5, type = "range", name = "Scale", min = 0.5, max = 2, step = 0.01,
+                                get = function() return E.db.thingsUI.mbb and E.db.thingsUI.mbb.scale or 1 end,
+                                set = function(_, v) E.db.thingsUI.mbb.scale = v; TUI:UpdateMBB(); ns.NotifyChange() end,
+                            },
+                            mbbMouseover = {
+                                order = 2.7, type = "toggle", name = "Show Only On Mouseover", width = 1.4,
+                                get = function() return E.db.thingsUI.mbb and E.db.thingsUI.mbb.mouseover end,
+                                set = function(_, v) E.db.thingsUI.mbb.mouseover = v; TUI:UpdateMBB(); ns.NotifyChange() end,
+                            },
+                            mbbHideMain = {
+                                order = 2.8, type = "toggle", name = "Hide M Button", width = 1.2,
+                                get = function() return E.db.thingsUI.mbb and E.db.thingsUI.mbb.hideMain end,
+                                set = function(_, v) E.db.thingsUI.mbb.hideMain = v; TUI:UpdateMBB(); ns.NotifyChange() end,
+                            },
+                            mbbDirection = {
+                                order = 2.9, type = "select", name = "Grow Direction", width = 1.1,
+                                values = {
+                                    leftdown  = "Left, wrap down",
+                                    leftup    = "Left, wrap up",
+                                    rightdown = "Right, wrap down",
+                                    rightup   = "Right, wrap up",
+                                    upleft    = "Up, wrap left",
+                                    upright   = "Up, wrap right",
+                                    downleft  = "Down, wrap left",
+                                    downright = "Down, wrap right",
+                                },
+                                sorting = { "leftdown", "leftup", "rightdown", "rightup", "upleft", "upright", "downleft", "downright" },
+                                get = function() return (ns.MBB and ns.MBB.GetOption("direction")) or "leftdown" end,
+                                set = function(_, v) if ns.MBB then ns.MBB.SetDirection(v) end; ns.NotifyChange() end,
+                            },
+                            mbbWrap = {
+                                order = 2.95, type = "range", name = "Wrap After", min = 1, max = 20, step = 1,
+                                get = function() return (ns.MBB and ns.MBB.GetOption("buttonsPerRow")) or 5 end,
+                                set = function(_, v) if ns.MBB then ns.MBB.SetWrap(v) end; ns.NotifyChange() end,
                             },
                             anchor = {
                                 order = 3, type = "select", name = "Anchor", width = 1.2,
@@ -342,6 +480,16 @@ function TUI:FixesAndQoLOptions()
                                 disabled = function() return not (E.db.thingsUI.mbb and E.db.thingsUI.mbb.manage) end,
                                 get = function() return E.db.thingsUI.mbb.y or 0 end,
                                 set = function(_, v) E.db.thingsUI.mbb.y = v; TUI:UpdateMBB(); ns.NotifyChange() end,
+                            },
+                            collectQueue = {
+                                order = 7, type = "toggle", name = "Add Queue Status", width = 1.2,
+                                get = function() return ns.MBB and ns.MBB.IsCollected("queueStatus") end,
+                                set = function(_, v) if ns.MBB then ns.MBB.SetCollected("queueStatus", v) end; ns.NotifyChange() end,
+                            },
+                            collectFolio = {
+                                order = 8, type = "toggle", name = "Add Omnium Folio", width = 1.2,
+                                get = function() return ns.MBB and ns.MBB.IsCollected("omniumFolio") end,
+                                set = function(_, v) if ns.MBB then ns.MBB.SetCollected("omniumFolio", v) end; ns.NotifyChange() end,
                             },
                         },
                     },

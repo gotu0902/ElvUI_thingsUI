@@ -1,6 +1,10 @@
 # Changelog
 
-## PTR 0.0.0.0.0.0.1
+## 4.1.0-beta2
+- Skinned minimal dmg meter thing
+- Anchor support and extra layout options for MinimapButtonButton addon
+
+## 4.1.0-beta1
 - Racial reworked to fit with blizzard new cdm stuff
 
 ## 4.0.4

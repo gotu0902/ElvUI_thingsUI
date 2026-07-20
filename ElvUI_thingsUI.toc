@@ -4,7 +4,7 @@
 ## Author: geir, Dan G, pat_skr, Claude
 ## Version: @project-version@
 ## RequiredDeps: ElvUI
-## OptionalDeps:
+## OptionalDeps: MinimapButtonButton, Details! Damage Meter, Grid2
 ## DefaultState: Enabled
 ## X-Wago-ID: mKODDZGx
 ## X-Curse-Project-ID: 1528585
