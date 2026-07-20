@@ -6,140 +6,318 @@ local NotifyChange = ns.NotifyChange
 local LSM = E.Libs and E.Libs.LSM
 
 local function db() return E.db.thingsUI.damageMeter end
-local function set(k, v) db()[k] = v; TUI:UpdateDamageMeter(); NotifyChange() end
-local function isDetails() return (db().provider or "DETAILS") ~= "BLIZZARD" end
+local function tdb() local d = db(); d.tui = d.tui or {}; return d.tui end
+local function tset(k, v) tdb()[k] = v; if TUI.UpdateTUIMeter then TUI:UpdateTUIMeter() end; NotifyChange() end
+local function notTUI() return (db().provider or "DETAILS") ~= "TUI" end
+
+local function wcfg(i)
+    local t = tdb()
+    t.windows = t.windows or {}
+    t.windows[i] = t.windows[i] or {}
+    return t.windows[i]
+end
+local function noBorders()
+    local t = tdb()
+    return not t.windowBorder and t.headerBorder == false and t.windowDivider == false
+end
+
+local LAYOUT_COUNT = { ["1"] = 1, ["2"] = 2, ["1L2R"] = 3, ["2L1R"] = 3, ["4"] = 4 }
+local function winCount() return LAYOUT_COUNT[tdb().layout or "2"] or 2 end
+
+local function TimerToggle(i)
+    return {
+        order = 10 + i, type = "toggle", name = "Timer: Window " .. i,
+        hidden = function() return winCount() < i end,
+        get = function() return wcfg(i).showTimer end,
+        set = function(_, v) wcfg(i).showTimer = v; if TUI.UpdateTUIMeter then TUI:UpdateTUIMeter() end; NotifyChange() end,
+    }
+end
 
 function TUI:DamageMeterOptions()
     return {
-        order = 60, type = "group", name = "Damage Meter",
+        order = 60, type = "group", name = "Damage Meter", childGroups = "tab",
         args = {
             desc = {
                 order = 1, type = "description", fontSize = "medium", width = "full",
-                name = "Styles Blizzard's built-in Damage Meter (12.1+). Pick the meter under |cFFFFFFFFElvUI QoL -> Damage Meter|r; with the Ingame meter + Right Chat Backdrop enabled, window 1 & 2 dock side by side inside the right chat panel.\n",
+                name = "If you want to use Ingame Meter instead of Details.\n",
             },
-            detailsHint = {
-                order = 2, type = "description", fontSize = "medium", width = "full",
-                name = "|cFFFFD200Details! is the selected damage meter - these options apply when the Ingame Damage Meter is selected.|r\n",
-                hidden = function() return not isDetails() end,
-            },
-            blizzHint = {
-                order = 3, type = "description", fontSize = "medium", width = "full",
-                name = "|cFF888888Frame size, bar height, padding, style and numbers live in Blizzard's Edit Mode settings for the meter (writing those from an addon taints the meter).|r\n",
-                hidden = isDetails,
-            },
-            styleBars = {
-                order = 5, type = "toggle", name = "Style Bars & Text", width = 1.4,
-                disabled = isDetails,
-                get = function() return db().styleBars end,
-                set = function(_, v) set("styleBars", v) end,
-            },
-            fontGroup = {
-                order = 10, type = "group", name = "Text", inline = true,
-                disabled = function() return isDetails() or not db().styleBars end,
+            providerGroup = {
+                order = 2, type = "group", name = "Provider", inline = true,
                 args = {
-                    font = {
-                        order = 1, type = "select", name = "Font", dialogControl = "LSM30_Font",
-                        values = ns.FontValues,
-                        get = function() return db().font end,
-                        set = function(_, v) set("font", v) end,
+                    provider = {
+                        order = 1, type = "select", name = "Damage Meter", width = 1.2,
+                        values = {
+                            DETAILS = "Details!",
+                            TUI     = "|cFF8080FFSkin Ingame Meter|r",
+                        },
+                        sorting = { "DETAILS", "TUI" },
+                        confirm = function(_, v)
+                            if v == "TUI" then
+                                return "Skin the Ingame Damage Meter? Details! (if installed) is disabled. Reload afterwards."
+                            end
+                            return "Switch to Details!? The addon is re-enabled. Reload afterwards."
+                        end,
+                        get = function() return ns.GetDamageMeterProvider() end,
+                        set = function(_, v)
+                            if ns.SetDamageMeterProvider then ns.SetDamageMeterProvider(v) end
+                            ns.NotifyChange()
+                        end,
                     },
-                    fontSize = {
-                        order = 2, type = "range", name = "Name Size", min = 6, max = 30, step = 1,
-                        get = function() return db().fontSize end,
-                        set = function(_, v) set("fontSize", v) end,
-                    },
-                    valueFontSize = {
-                        order = 3, type = "range", name = "Value Size", min = 6, max = 30, step = 1,
-                        get = function() return db().valueFontSize end,
-                        set = function(_, v) set("valueFontSize", v) end,
-                    },
-                    fontOutline = {
-                        order = 4, type = "select", name = "Outline",
-                        values = ns.OUTLINE.VALUES, sorting = ns.OUTLINE.ORDER,
-                        get = function() return db().fontOutline end,
-                        set = function(_, v) set("fontOutline", v) end,
-                    },
-                    fontShadow = {
-                        order = 5, type = "toggle", name = "Shadow",
-                        get = function() return db().fontShadow end,
-                        set = function(_, v) set("fontShadow", v) end,
-                    },
-                    headerFontSize = {
-                        order = 6, type = "range", name = "Title Bar Text Size", min = 6, max = 30, step = 1,
-                        get = function() return db().headerFontSize end,
-                        set = function(_, v) set("headerFontSize", v) end,
+                    reload = {
+                        order = 2, type = "execute", name = "Reload UI",
+                        func = function() ReloadUI() end,
                     },
                 },
             },
-            barGroup = {
-                order = 20, type = "group", name = "Bars", inline = true,
-                disabled = function() return isDetails() or not db().styleBars end,
+            detailsTab = {
+                order = 5, type = "group", name = "Details!",
+                hidden = function() return not notTUI() end,
                 args = {
-                    barTexture = {
-                        order = 1, type = "select", name = "Bar Texture", dialogControl = "LSM30_Statusbar",
-                        values = LSM and LSM:HashTable("statusbar") or {},
-                        get = function() return db().barTexture ~= "" and db().barTexture or nil end,
-                        set = function(_, v) set("barTexture", v) end,
-                    },
-                    barTextureReset = {
-                        order = 2, type = "execute", name = "Default Texture", width = 0.8,
-                        func = function() set("barTexture", "") end,
-                    },
-                    barLayout = {
-                        order = 3, type = "toggle", name = "Manage Icon Gap", width = 1.2,
-                        desc = "Re-anchors the bar next to the spec icon with your gap. Off = Blizzard's layout.",
-                        get = function() return db().barLayout end,
-                        set = function(_, v) set("barLayout", v) end,
-                    },
-                    iconGap = {
-                        order = 4, type = "range", name = "Icon Gap", min = -4, max = 20, step = 0.5,
-                        disabled = function() return isDetails() or not db().styleBars or not db().barLayout end,
-                        get = function() return db().iconGap end,
-                        set = function(_, v) set("iconGap", v) end,
+                    d = {
+                        order = 1, type = "description", fontSize = "medium", width = "full",
+                        name = "\n|cFFFFD200Details! is the selected damage meter - switch the provider above to configure the skinned Ingame meter.|r",
                     },
                 },
             },
-            iconGroup = {
-                order = 30, type = "group", name = "Spec Icon Border", inline = true,
-                disabled = function() return isDetails() or not db().styleBars end,
+            windowsTab = {
+                order = 10, type = "group", name = "Windows",
+                hidden = notTUI,
                 args = {
-                    iconBorder = {
-                        order = 1, type = "toggle", name = "Show Border",
-                        get = function() return db().iconBorder end,
-                        set = function(_, v) set("iconBorder", v) end,
+                    layout = {
+                        order = 1, type = "select", name = "Window Layout", width = 1.4,
+                        values = {
+                            ["1"]    = "1 Window",
+                            ["2"]    = "2 - Left & Right",
+                            ["1L2R"] = "3 - 1 Left, 2 Right",
+                            ["2L1R"] = "3 - 2 Left, 1 Right",
+                            ["4"]    = "4 - 2x2 Grid",
+                        },
+                        sorting = { "1", "2", "1L2R", "2L1R", "4" },
+                        get = function() return tdb().layout or "2" end,
+                        set = function(_, v) tset("layout", v) end,
                     },
-                    iconBorderSize = {
-                        order = 2, type = "range", name = "Size", min = 1, max = 6, step = 1,
-                        disabled = function() return isDetails() or not db().iconBorder end,
-                        get = function() return db().iconBorderSize end,
-                        set = function(_, v) set("iconBorderSize", v) end,
+                    splitH = {
+                        order = 1.1, type = "range", name = "Left Width", min = 0.15, max = 0.85, step = 0.01, isPercent = true,
+                        hidden = function() return (tdb().layout or "2") == "1" end,
+                        get = function() return tdb().splitH or 0.5 end,
+                        set = function(_, v) tset("splitH", v) end,
                     },
-                    iconBorderColor = {
-                        order = 3, type = "color", name = "Color", hasAlpha = true,
-                        disabled = function() return isDetails() or not db().iconBorder end,
+                    splitV = {
+                        order = 1.2, type = "range", name = "Top Height", min = 0.15, max = 0.85, step = 0.01, isPercent = true,
+                        hidden = function()
+                            local l = tdb().layout or "2"
+                            return l == "1" or l == "2"
+                        end,
+                        get = function() return tdb().splitV or 0.5 end,
+                        set = function(_, v) tset("splitV", v) end,
+                    },
+                    bgAlpha = {
+                        order = 2, type = "range", name = "Background Opacity", min = 0, max = 1, step = 0.01, isPercent = true,
+                        get = function() return tdb().bgAlpha or 0 end,
+                        set = function(_, v) tset("bgAlpha", v) end,
+                    },
+                    windowBorder = {
+                        order = 3, type = "toggle", name = "Window Border",
+                        get = function() return tdb().windowBorder end,
+                        set = function(_, v) tset("windowBorder", v) end,
+                    },
+                    windowDivider = {
+                        order = 4, type = "toggle", name = "Window Divider",
+                        get = function() return tdb().windowDivider ~= false end,
+                        set = function(_, v) tset("windowDivider", v) end,
+                    },
+                    windowBorderSize = {
+                        order = 5, type = "range", name = "Border Size", min = 1, max = 4, step = 1,
+                        disabled = noBorders,
+                        get = function() return tdb().windowBorderSize or 1 end,
+                        set = function(_, v) tset("windowBorderSize", v) end,
+                    },
+                    windowBorderColor = {
+                        order = 6, type = "color", name = "Border Color", hasAlpha = true,
+                        disabled = noBorders,
                         get = function()
-                            local c = db().iconBorderColor or {}
+                            local c = tdb().windowBorderColor or {}
                             return c.r or 0, c.g or 0, c.b or 0, c.a or 1
                         end,
-                        set = function(_, r, g, b, a) set("iconBorderColor", { r = r, g = g, b = b, a = a }) end,
+                        set = function(_, r, g, b, a) tset("windowBorderColor", { r = r, g = g, b = b, a = a }) end,
+                    },
+                    windowGap = {
+                        order = 7, type = "range", name = "Window Gap", min = -40, max = 40, step = 0.01, bigStep = 1,
+                        get = function() return tdb().windowGap or -1 end,
+                        set = function(_, v) tset("windowGap", v) end,
+                    },
+                    panelInset = {
+                        order = 8, type = "range", name = "Panel Inset", min = -10, max = 20, step = 0.01, bigStep = 1,
+                        disabled = function() return not E.db.thingsUI.rightChatAsBackground end,
+                        get = function() return tdb().panelInset or 0 end,
+                        set = function(_, v) tset("panelInset", v) end,
+                    },
+                    refreshRate = {
+                        order = 9, type = "range", name = "Refresh Rate (s)", min = 0.1, max = 5, step = 0.1,
+                        get = function() return tdb().refreshRate or 5 end,
+                        set = function(_, v) tset("refreshRate", v) end,
+                    },
+                    hint = {
+                        order = 30, type = "description", fontSize = "medium", width = "full",
+                        name = "\n|cFF888888Right-click a window for mode/segments/reset. Scroll to see everyone. Drag the title bar upwards to temporarily expand a docked window.|r",
                     },
                 },
             },
-            windowGroup = {
-                order = 40, type = "group", name = "Windows", inline = true,
-                disabled = isDetails,
+            barsTab = {
+                order = 20, type = "group", name = "Bars",
+                hidden = notTUI,
                 args = {
-                    windowGap = {
-                        order = 1, type = "range", name = "Window Gap", min = 0, max = 40, step = 1,
-                        desc = "Gap between window 1 and 2 when docked in the right chat panel.",
-                        get = function() return db().windowGap end,
-                        set = function(_, v) set("windowGap", v) end,
+                    barsGroup = {
+                        order = 1, type = "group", name = "Bars", inline = true,
+                        args = {
+                            barHeight = {
+                                order = 1, type = "range", name = "Bar Height", min = 6, max = 40, step = 0.01, bigStep = 1,
+                                get = function() return tdb().barHeight or 23.4 end,
+                                set = function(_, v) tset("barHeight", v) end,
+                            },
+                            barSpacing = {
+                                order = 2, type = "range", name = "Bar Spacing", min = -4, max = 10, step = 0.01, bigStep = 1,
+                                get = function() return tdb().barSpacing or -1 end,
+                                set = function(_, v) tset("barSpacing", v) end,
+                            },
+                            barTexture = {
+                                order = 3, type = "select", name = "Bar Texture", dialogControl = "LSM30_Statusbar",
+                                values = LSM and LSM:HashTable("statusbar") or {},
+                                get = function() return tdb().barTexture ~= "" and tdb().barTexture or nil end,
+                                set = function(_, v) tset("barTexture", v) end,
+                            },
+                            classColor = {
+                                order = 4, type = "toggle", name = "Class Colors",
+                                get = function() return tdb().classColor ~= false end,
+                                set = function(_, v) tset("classColor", v) end,
+                            },
+                            barBgAlpha = {
+                                order = 5, type = "range", name = "Bar Background", min = 0, max = 1, step = 0.01, isPercent = true,
+                                get = function() return tdb().barBgAlpha or 0 end,
+                                set = function(_, v) tset("barBgAlpha", v) end,
+                            },
+                            barBorder = {
+                                order = 6, type = "toggle", name = "Bar Border",
+                                desc = "Uses the Icon border size and color.",
+                                get = function() return tdb().barBorder ~= false end,
+                                set = function(_, v) tset("barBorder", v) end,
+                            },
+                        },
                     },
-                    hideGearMenu = {
-                        order = 2, type = "toggle", name = "Hide Gear Menu", width = 1.2,
-                        get = function() return db().hideGearMenu end,
-                        set = function(_, v) set("hideGearMenu", v) end,
+                    textGroup = {
+                        order = 10, type = "group", name = "Text", inline = true,
+                        args = {
+                            font = {
+                                order = 1, type = "select", name = "Font", dialogControl = "LSM30_Font",
+                                values = ns.FontValues,
+                                get = function() return tdb().font end,
+                                set = function(_, v) tset("font", v) end,
+                            },
+                            fontSize = {
+                                order = 2, type = "range", name = "Name Size", min = 6, max = 30, step = 1,
+                                get = function() return tdb().fontSize or 12 end,
+                                set = function(_, v) tset("fontSize", v) end,
+                            },
+                            valueFontSize = {
+                                order = 3, type = "range", name = "Value Size", min = 6, max = 30, step = 1,
+                                get = function() return tdb().valueFontSize or 12 end,
+                                set = function(_, v) tset("valueFontSize", v) end,
+                            },
+                            fontOutline = {
+                                order = 4, type = "select", name = "Outline",
+                                values = ns.OUTLINE.VALUES, sorting = ns.OUTLINE.ORDER,
+                                get = function() return tdb().fontOutline or "OUTLINE" end,
+                                set = function(_, v) tset("fontOutline", v) end,
+                            },
+                            fontShadow = {
+                                order = 5, type = "toggle", name = "Shadow",
+                                get = function() return tdb().fontShadow end,
+                                set = function(_, v) tset("fontShadow", v) end,
+                            },
+                            numberFormat = {
+                                order = 6, type = "select", name = "Numbers",
+                                values = { both = "Damage (DPS)", total = "Damage", persec = "DPS" },
+                                sorting = { "both", "total", "persec" },
+                                get = function() return tdb().numberFormat or "both" end,
+                                set = function(_, v) tset("numberFormat", v) end,
+                            },
+                            showRank = {
+                                order = 7, type = "toggle", name = "Rank Numbers",
+                                get = function() return tdb().showRank ~= false end,
+                                set = function(_, v) tset("showRank", v) end,
+                            },
+                        },
                     },
+                    iconGroup = {
+                        order = 20, type = "group", name = "Icon", inline = true,
+                        args = {
+                            iconStyle = {
+                                order = 1, type = "select", name = "Icon",
+                                values = { spec = "Spec Icon", class = "Class Icon", none = "None" },
+                                sorting = { "spec", "class", "none" },
+                                get = function() return tdb().iconStyle or "spec" end,
+                                set = function(_, v) tset("iconStyle", v) end,
+                            },
+                            iconZoom = {
+                                order = 2, type = "range", name = "Icon Zoom", min = 0, max = 0.3, step = 0.01,
+                                get = function() return tdb().iconZoom or 0.05 end,
+                                set = function(_, v) tset("iconZoom", v) end,
+                            },
+                            iconGap = {
+                                order = 3, type = "range", name = "Icon Gap", min = -2, max = 12, step = 0.5,
+                                get = function() return tdb().iconGap or -1 end,
+                                set = function(_, v) tset("iconGap", v) end,
+                            },
+                            iconBorder = {
+                                order = 4, type = "toggle", name = "Icon Border",
+                                get = function() return tdb().iconBorder end,
+                                set = function(_, v) tset("iconBorder", v) end,
+                            },
+                            iconBorderSize = {
+                                order = 5, type = "range", name = "Border Size", min = 1, max = 4, step = 1,
+                                get = function() return tdb().iconBorderSize or 1 end,
+                                set = function(_, v) tset("iconBorderSize", v) end,
+                            },
+                            iconBorderColor = {
+                                order = 6, type = "color", name = "Border Color", hasAlpha = true,
+                                get = function()
+                                    local c = tdb().iconBorderColor or {}
+                                    return c.r or 0, c.g or 0, c.b or 0, c.a or 1
+                                end,
+                                set = function(_, r, g, b, a) tset("iconBorderColor", { r = r, g = g, b = b, a = a }) end,
+                            },
+                        },
+                    },
+                },
+            },
+            titleTab = {
+                order = 30, type = "group", name = "Title Bar",
+                hidden = notTUI,
+                args = {
+                    headerHeight = {
+                        order = 1, type = "range", name = "Height", min = 12, max = 32, step = 0.01, bigStep = 1,
+                        get = function() return tdb().headerHeight or 25 end,
+                        set = function(_, v) tset("headerHeight", v) end,
+                    },
+                    headerFontSize = {
+                        order = 2, type = "range", name = "Text Size", min = 6, max = 24, step = 1,
+                        get = function() return tdb().headerFontSize or 13 end,
+                        set = function(_, v) tset("headerFontSize", v) end,
+                    },
+                    contentPad = {
+                        order = 3, type = "range", name = "Bar Gap", min = -4, max = 10, step = 0.01, bigStep = 1,
+                        get = function() return tdb().contentPad or -1 end,
+                        set = function(_, v) tset("contentPad", v) end,
+                    },
+                    headerBorder = {
+                        order = 4, type = "toggle", name = "Title Bar Border",
+                        get = function() return tdb().headerBorder ~= false end,
+                        set = function(_, v) tset("headerBorder", v) end,
+                    },
+                    timer1 = TimerToggle(1),
+                    timer2 = TimerToggle(2),
+                    timer3 = TimerToggle(3),
+                    timer4 = TimerToggle(4),
                 },
             },
         },

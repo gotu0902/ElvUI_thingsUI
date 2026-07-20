@@ -563,8 +563,8 @@ function M.SyncAll()
     if rc and rc.text and rc.text.SetText then
         local base = rc.textString or "Right Chat"
         if E.db.thingsUI and E.db.thingsUI.rightChatAsBackground then
-            local meter = (ns.GetDamageMeterProvider and ns.GetDamageMeterProvider() == "BLIZZARD")
-                and "Damage Meter" or "Details!"
+            local p = ns.GetDamageMeterProvider and ns.GetDamageMeterProvider() or "DETAILS"
+            local meter = (p == "TUI") and "Damage Meter" or "Details!"
             rc.text:SetText(base .. " |cFF8080FF(" .. meter .. " Anchor)|r")
         else
             rc.text:SetText(base)

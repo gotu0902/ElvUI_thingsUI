@@ -1,0 +1,704 @@
+local _, ns = ...
+local TUI = ns.TUI
+local E   = ns.E
+
+ns.TUIMeter = ns.TUIMeter or {}
+local M = ns.TUIMeter
+
+local LSM = E.Libs and E.Libs.LSM
+local MAX_ROWS = 60
+
+local function Secret(v) return issecretvalue and issecretvalue(v) end
+
+local function DB() return E.db.thingsUI and E.db.thingsUI.damageMeter end
+local function TDB()
+    local db = DB()
+    if not db then return nil end
+    db.tui = db.tui or {}
+    return db.tui
+end
+local function Active()
+    return DB() and DB().provider == "TUI" and C_DamageMeter and C_DamageMeter.GetCombatSessionFromType
+end
+
+local function Cells(db)
+    local h = db.splitH or 0.5
+    local v = db.splitV or 0.5
+    local l = db.layout or "2"
+    if l == "1" then return { { 0, 0, 1, 1 } } end
+    if l == "1L2R" then return { { 0, 0, h, 1 }, { h, 0, 1 - h, v }, { h, v, 1 - h, 1 - v } } end
+    if l == "2L1R" then return { { 0, 0, h, v }, { 0, v, h, 1 - v }, { h, 0, 1 - h, 1 } } end
+    if l == "4" then return { { 0, 0, h, v }, { h, 0, 1 - h, v }, { 0, v, h, 1 - v }, { h, v, 1 - h, 1 - v } } end
+    return { { 0, 0, h, 1 }, { h, 0, 1 - h, 1 } }
+end
+
+local TYPE_NAMES = {}
+local TYPE_ORDER = {}
+do
+    local T = Enum.DamageMeterType
+    if T then
+        local defs = {
+            { T.DamageDone,   "Damage Done" },
+            { T.Dps,          "DPS" },
+            { T.HealingDone,  "Healing Done" },
+            { T.Hps,          "HPS" },
+            { T.DamageTaken,  "Damage Taken" },
+            { T.Interrupts,   "Interrupts" },
+            { T.Dispels,      "Dispels" },
+            { T.Deaths,       "Deaths" },
+        }
+        for _, d in ipairs(defs) do
+            if d[1] then TYPE_NAMES[d[1]] = d[2]; TYPE_ORDER[#TYPE_ORDER + 1] = d[1] end
+        end
+    end
+end
+
+local function Abbrev(v)
+    if Secret(v) then return AbbreviateNumbers and AbbreviateNumbers(v) or "" end
+    if v == nil then return "" end
+    if AbbreviateNumbers then return AbbreviateNumbers(v) end
+    if type(v) ~= "number" then return tostring(v) end
+    if v >= 1e6 then return ("%.1fM"):format(v / 1e6) end
+    if v >= 1e3 then return ("%.0fK"):format(v / 1e3) end
+    return ("%.0f"):format(v)
+end
+
+local function ValueText(total, perSec, mode)
+    if mode == "total" then return ("%s"):format(Abbrev(total)) end
+    if mode == "persec" then return ("%s"):format(Abbrev(perSec)) end
+    return ("%s (%s)"):format(Abbrev(total), Abbrev(perSec))
+end
+
+local function Clock(d)
+    return ("%d:%02d"):format(math.floor(d / 60), math.floor(d % 60))
+end
+
+local windows = {}
+local ApplyLayout
+local function Panel() return _G.RightChatPanel end
+
+local function FetchSession(win)
+    local cfg = win.cfg
+    local t = cfg.type or 0
+    if type(cfg.session) == "number" then
+        -- new PTR API; errors while no session data exists
+        local ok, session = pcall(C_DamageMeter.GetCombatSessionFromID, cfg.session, t)
+        if ok then return session end
+        return nil
+    end
+    local sType = (cfg.session == "overall") and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
+    -- new PTR API; errors while no session data exists
+    local ok, session = pcall(C_DamageMeter.GetCombatSessionFromType, sType, t)
+    if ok then return session end
+    return nil
+end
+
+local function StyleRowStatics(win, bar, db)
+    local font = LSM and LSM:Fetch("font", db.font or "Expressway")
+    local flag = (db.fontOutline ~= "NONE") and (db.fontOutline or "OUTLINE") or ""
+    local nameSize = db.fontSize or 12
+    local valSize  = db.valueFontSize or nameSize
+    if font then
+        bar.pos:SetFont(font, nameSize, flag)
+        bar.label:SetFont(font, nameSize, flag)
+        bar.amount:SetFont(font, valSize, flag)
+    end
+    local shadow = db.fontShadow
+    for _, fs in ipairs({ bar.pos, bar.label, bar.amount }) do
+        if shadow then fs:SetShadowColor(0, 0, 0, 1); fs:SetShadowOffset(1, -1)
+        else fs:SetShadowColor(0, 0, 0, 0) end
+    end
+    local tex = (db.barTexture and db.barTexture ~= "" and LSM) and LSM:Fetch("statusbar", db.barTexture)
+    bar.fill:SetStatusBarTexture(tex or [[Interface\Buttons\WHITE8x8]])
+    bar.bg:SetColorTexture(0, 0, 0, db.barBgAlpha or 0)
+    local s = db.iconBorderSize or 1
+    local c = db.iconBorderColor or {}
+    if db.iconBorder then
+        bar.iconBorder:SetBackdrop({ edgeFile = [[Interface\Buttons\WHITE8x8]], edgeSize = s })
+        bar.iconBorder:SetBackdropBorderColor(c.r or 0, c.g or 0, c.b or 0, c.a or 1)
+    end
+    if db.barBorder ~= false then
+        bar.barBorder:SetBackdrop({ edgeFile = [[Interface\Buttons\WHITE8x8]], edgeSize = s })
+        bar.barBorder:SetBackdropBorderColor(c.r or 0, c.g or 0, c.b or 0, c.a or 1)
+        bar.barBorder:Show()
+    else
+        bar.barBorder:Hide()
+    end
+    bar._staticSig = win._staticSig
+end
+
+local function PositionRow(win, row, i, db)
+    local barH = db.barHeight or 18
+    local sp   = db.barSpacing or 1
+    row:SetHeight(barH)
+    row:ClearAllPoints()
+    row:SetPoint("TOPLEFT", win.content, "TOPLEFT", 0, -((i - 1) * (barH + sp)))
+    row:SetPoint("TOPRIGHT", win.content, "TOPRIGHT", 0, -((i - 1) * (barH + sp)))
+end
+
+local function CreateRow(win, i)
+    local db = TDB()
+    local row = CreateFrame("Button", nil, win.content)
+    row:Hide()
+
+    row.bg = row:CreateTexture(nil, "BACKGROUND")
+    row.bg:SetAllPoints(row)
+
+    row.fill = CreateFrame("StatusBar", nil, row)
+    row.fill:SetMinMaxValues(0, 1)
+    row.fill:SetValue(0)
+
+    row.barBorder = CreateFrame("Frame", nil, row, "BackdropTemplate")
+    row.barBorder:SetAllPoints(row.fill)
+    row.barBorder:SetFrameLevel(row.fill:GetFrameLevel() + 1)
+    row.barBorder:Hide()
+
+    row.icon = row:CreateTexture(nil, "ARTWORK")
+    row.icon:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+    row.icon:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+
+    row.iconBorder = CreateFrame("Frame", nil, row, "BackdropTemplate")
+    row.iconBorder:SetFrameLevel(row:GetFrameLevel() + 3)
+
+    local tf = CreateFrame("Frame", nil, row.fill)
+    tf:SetAllPoints(row.fill)
+    tf:SetFrameLevel(row.fill:GetFrameLevel() + 2)
+    row.pos    = tf:CreateFontString(nil, "OVERLAY")
+    row.label  = tf:CreateFontString(nil, "OVERLAY")
+    row.amount = tf:CreateFontString(nil, "OVERLAY")
+    row.pos:SetPoint("LEFT", tf, "LEFT", 2, 0)
+    row.amount:SetPoint("RIGHT", tf, "RIGHT", -2, 0)
+    row.amount:SetJustifyH("RIGHT")
+    row.label:SetPoint("LEFT", row.pos, "RIGHT", 2, 0)
+    row.label:SetPoint("RIGHT", row.amount, "LEFT", -3, 0)
+    row.label:SetJustifyH("LEFT")
+    row.label:SetWordWrap(false)
+
+    row:RegisterForClicks("RightButtonUp")
+    row:SetScript("OnClick", function() M.ShowModeMenu(win) end)
+
+    PositionRow(win, row, i, db)
+    win.rows[i] = row
+    return row
+end
+
+local function LayoutRows(win)
+    local db = TDB()
+    for i, row in ipairs(win.rows) do
+        PositionRow(win, row, i, db)
+    end
+end
+
+local function UpdateRow(win, i, rank, src, maxAmt, db)
+    local row = win.rows[i] or CreateRow(win, i)
+    if row._staticSig ~= win._staticSig then StyleRowStatics(win, row, db) end
+
+    local barH = db.barHeight or 18
+    local showIcon = (db.iconStyle or "spec") ~= "none"
+    local classFile = src.classFilename
+    if Secret(classFile) then classFile = nil end
+
+    local iconW = 0
+    if showIcon then
+        local z = db.iconZoom or 0.05
+        local specIcon = src.specIconID
+        if Secret(specIcon) then specIcon = nil end
+        if db.iconStyle == "spec" and specIcon and specIcon ~= 0 then
+            row.icon:SetTexture(specIcon)
+            row.icon:SetTexCoord(z, 1 - z, z, 1 - z)
+            row.icon:Show(); iconW = barH
+        elseif classFile and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[classFile] then
+            local tc = CLASS_ICON_TCOORDS[classFile]
+            local w, h = tc[2] - tc[1], tc[4] - tc[3]
+            row.icon:SetTexture([[Interface\Glues\CharacterCreate\UI-CharacterCreate-Classes]])
+            row.icon:SetTexCoord(tc[1] + w * z, tc[2] - w * z, tc[3] + h * z, tc[4] - h * z)
+            row.icon:Show(); iconW = barH
+        else
+            row.icon:Hide()
+        end
+    else
+        row.icon:Hide()
+    end
+    row.icon:SetWidth(barH)
+    row.iconBorder:ClearAllPoints()
+    row.iconBorder:SetPoint("TOPLEFT", row.icon, "TOPLEFT", 0, 0)
+    row.iconBorder:SetPoint("BOTTOMRIGHT", row.icon, "BOTTOMRIGHT", 0, 0)
+    row.iconBorder:SetShown(db.iconBorder and row.icon:IsShown() or false)
+
+    row.fill:ClearAllPoints()
+    row.fill:SetPoint("TOPLEFT", row, "TOPLEFT", iconW + (iconW > 0 and (db.iconGap or 0) or 0), 0)
+    row.fill:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0, 0)
+
+    if db.classColor ~= false and classFile and RAID_CLASS_COLORS[classFile] then
+        local c = RAID_CLASS_COLORS[classFile]
+        row.fill:SetStatusBarColor(c.r, c.g, c.b)
+    else
+        local c = db.barColor or {}
+        row.fill:SetStatusBarColor(c.r or 0.35, c.g or 0.55, c.b or 0.8)
+    end
+
+    row.fill:SetMinMaxValues(0, maxAmt)
+    row.fill:SetValue(src.totalAmount or 0)
+
+    row.pos:SetText(db.showRank ~= false and (rank .. ".") or "")
+    local name = src.name
+    if name then
+        row.label:SetText(Ambiguate and Ambiguate(name, "short") or name)
+    else
+        row.label:SetText("")
+    end
+    row.amount:SetText(ValueText(src.totalAmount, src.amountPerSecond, db.numberFormat))
+    row:Show()
+end
+
+local frozenCur, frozenOverall = 0, 0
+local combatStart
+local lastCombatEnd = 0
+
+local function SessionTimerText(win, session)
+    local s = win.cfg.session
+    if type(s) == "number" then
+        local d = session and session.durationSeconds
+        if Secret(d) then return "" end
+        if type(d) == "number" then return Clock(d) end
+        return ""
+    end
+    local overall = s == "overall"
+    if not InCombatLockdown() and C_DamageMeter.GetSessionDurationSeconds then
+        local sType = overall and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
+        -- new PTR API; errors while no session data exists
+        local ok, d = pcall(C_DamageMeter.GetSessionDurationSeconds, sType)
+        if ok and type(d) == "number" and not Secret(d) then
+            if overall then frozenOverall = d else frozenCur = d end
+        end
+    end
+    local shown
+    if overall then
+        shown = (frozenOverall or 0) + (combatStart and (GetTime() - combatStart) or 0)
+    else
+        shown = combatStart and (GetTime() - combatStart) or frozenCur or 0
+    end
+    return Clock(shown)
+end
+
+local function VisibleRows(win, db)
+    local h = win.content:GetHeight() or 0
+    local sp = db.barSpacing or 1
+    local step = (db.barHeight or 18) + sp
+    if step <= 0.5 then return 1 end
+    return math.min(MAX_ROWS, math.max(1, math.floor((h + sp + 0.001) / step)))
+end
+
+local function RefreshWindow(win)
+    if not (win.frame:IsShown() and Active()) then return end
+    local db = TDB()
+    local session = FetchSession(win)
+    local sources = session and session.combatSources
+    local total = sources and #sources or 0
+    win._lastTotal = total
+    local vis = VisibleRows(win, db)
+    local maxScroll = math.max(0, total - vis)
+    if (win.scroll or 0) > maxScroll then win.scroll = maxScroll end
+    local first = 1 + (win.scroll or 0)
+    local maxAmt = (sources and sources[1] and sources[1].totalAmount) or 1
+    local shown = 0
+    for rank = first, math.min(total, first + vis - 1) do
+        shown = shown + 1
+        UpdateRow(win, shown, rank, sources[rank], maxAmt, db)
+    end
+    for i = shown + 1, #win.rows do win.rows[i]:Hide() end
+    win.title:SetText(TYPE_NAMES[win.cfg.type or 0] or "Damage Done")
+    if win.cfg.showTimer then
+        win.timer:Show()
+        win.timer:SetText(SessionTimerText(win, session))
+    else
+        win.timer:Hide()
+    end
+end
+
+function M.RefreshAll()
+    for _, win in ipairs(windows) do RefreshWindow(win) end
+end
+
+local function StopExpand(win)
+    if not win._expanding then return end
+    win._expanding = nil
+    win.header:SetScript("OnUpdate", nil)
+    if win._prevStrata then win.frame:SetFrameStrata(win._prevStrata); win._prevStrata = nil end
+    if ApplyLayout then ApplyLayout() end
+    M.RefreshAll()
+end
+
+local function ExpandMaxHeight(win, db)
+    local total = win._lastTotal or 0
+    local step = (db.barHeight or 18) + (db.barSpacing or 1)
+    local needed = (db.headerHeight or 20) + (db.contentPad or 1) + total * step + 8
+    local screen = (E.UIParent:GetTop() or 1000) - (win.frame:GetBottom() or 0) - 10
+    return math.max(win._expandBaseH or 0, math.min(needed, screen))
+end
+
+local function ExpandTick(win)
+    if not IsMouseButtonDown("LeftButton") then StopExpand(win); return end
+    local db = TDB()
+    if not db then return end
+    local _, cy = GetCursorPosition()
+    cy = cy / win.frame:GetEffectiveScale()
+    local dh = cy - (win._expandStartY or cy)
+    local newH = math.max(win._expandBaseH or 0, math.min((win._expandBaseH or 0) + dh, ExpandMaxHeight(win, db)))
+    win.frame:SetHeight(newH)
+    RefreshWindow(win)
+end
+
+function M.ShowModeMenu(win)
+    if not MenuUtil or not MenuUtil.CreateContextMenu then return end
+    MenuUtil.CreateContextMenu(win.frame, function(_, root)
+        root:CreateTitle("thingsUI Meter")
+        for _, t in ipairs(TYPE_ORDER) do
+            root:CreateRadio(TYPE_NAMES[t], function() return win.cfg.type == t end, function()
+                win.cfg.type = t
+                win.scroll = 0
+                RefreshWindow(win)
+            end)
+        end
+        root:CreateDivider()
+        root:CreateRadio("Current", function()
+            return win.cfg.session ~= "overall" and type(win.cfg.session) ~= "number"
+        end, function()
+            win.cfg.session = "current"; win.scroll = 0; RefreshWindow(win)
+        end)
+        root:CreateRadio("Overall", function() return win.cfg.session == "overall" end, function()
+            win.cfg.session = "overall"; win.scroll = 0; RefreshWindow(win)
+        end)
+        local avail = C_DamageMeter.GetAvailableCombatSessions and C_DamageMeter.GetAvailableCombatSessions()
+        if avail and #avail > 0 then
+            local seg = root:CreateButton("Segments")
+            for _, s in ipairs(avail) do
+                local nm = (s.name and s.name ~= "") and s.name or ("Combat " .. s.sessionID)
+                if type(s.durationSeconds) == "number" and not Secret(s.durationSeconds) then
+                    nm = ("%s [%s]"):format(nm, Clock(s.durationSeconds))
+                end
+                local id = s.sessionID
+                seg:CreateRadio(nm, function() return win.cfg.session == id end, function()
+                    win.cfg.session = id; win.scroll = 0; RefreshWindow(win)
+                end)
+            end
+        end
+        root:CreateDivider()
+        root:CreateButton("Reset Data", function()
+            if C_DamageMeter.ResetAllCombatSessions then C_DamageMeter.ResetAllCombatSessions() end
+            frozenCur, frozenOverall = 0, 0
+            for _, w in ipairs(windows) do
+                if type(w.cfg.session) == "number" then w.cfg.session = "current" end
+            end
+            M.RefreshAll()
+        end)
+    end)
+end
+
+local function CreateWindow(i)
+    local db = TDB()
+    local f = CreateFrame("Frame", "TUI_MeterWindow" .. i, E.UIParent, "BackdropTemplate")
+    f:SetSize(db.windowWidth or 260, db.windowHeight or 180)
+    f:SetPoint("CENTER", E.UIParent, "CENTER", (i - 1) * 280 - 400, -200)
+
+    local header = CreateFrame("Button", nil, f)
+    header:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    header:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
+    header:SetHeight(db.headerHeight or 20)
+    header.bg = header:CreateTexture(nil, "BACKGROUND")
+    header.bg:SetAllPoints(header)
+    header.bg:SetColorTexture(0.08, 0.08, 0.08, 0.9)
+    header:RegisterForClicks("RightButtonUp")
+    header:RegisterForDrag("LeftButton")
+
+    header.borderFrame = CreateFrame("Frame", nil, header, "BackdropTemplate")
+    header.borderFrame:SetAllPoints(header)
+    header.borderFrame:SetFrameLevel(header:GetFrameLevel() + 5)
+    header.borderFrame:Hide()
+
+    local title = header:CreateFontString(nil, "OVERLAY")
+    title:SetPoint("LEFT", header, "LEFT", 4, 0)
+    local timer = header:CreateFontString(nil, "OVERLAY")
+    timer:SetPoint("RIGHT", header, "RIGHT", -4, 0)
+
+    local content = CreateFrame("Frame", nil, f)
+    content:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -(db.contentPad or 1))
+    content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
+    content:SetClipsChildren(true)
+
+    f.divider = CreateFrame("Frame", nil, f)
+    f.divider:SetFrameLevel(f:GetFrameLevel() + 10)
+    f.divider.tex = f.divider:CreateTexture(nil, "OVERLAY")
+    f.divider.tex:SetAllPoints(f.divider)
+    f.divider:Hide()
+
+    f.dividerTop = CreateFrame("Frame", nil, f)
+    f.dividerTop:SetFrameLevel(f:GetFrameLevel() + 10)
+    f.dividerTop.tex = f.dividerTop:CreateTexture(nil, "OVERLAY")
+    f.dividerTop.tex:SetAllPoints(f.dividerTop)
+    f.dividerTop:Hide()
+
+    local win = { frame = f, header = header, title = title, timer = timer, content = content, rows = {}, cfg = db.windows[i], index = i, scroll = 0 }
+    header:SetScript("OnClick", function() M.ShowModeMenu(win) end)
+    header:SetScript("OnDragStart", function()
+        if not (Active() and E.db.thingsUI.rightChatAsBackground and Panel()) then return end
+        local left, bottom = f:GetLeft(), f:GetBottom()
+        if not (left and bottom) then return end
+        win._expandBaseH = f:GetHeight()
+        local _, cy = GetCursorPosition()
+        win._expandStartY = cy / f:GetEffectiveScale()
+        win._prevStrata = f:GetFrameStrata()
+        f:SetFrameStrata("DIALOG")
+        f:ClearAllPoints()
+        f:SetPoint("BOTTOMLEFT", E.UIParent, "BOTTOMLEFT", left, bottom)
+        win._expanding = true
+        header:SetScript("OnUpdate", function() ExpandTick(win) end)
+    end)
+    header:SetScript("OnDragStop", function() StopExpand(win) end)
+
+    f:EnableMouseWheel(true)
+    f:SetScript("OnMouseWheel", function(_, delta)
+        win.scroll = math.max(0, (win.scroll or 0) - delta)
+        RefreshWindow(win)
+    end)
+
+    if ns.MoverSync and ns.MoverSync.CreateManaged then
+        ns.MoverSync.CreateManaged(f, "TUI_MeterMover" .. i, "thingsUI Meter " .. i, {
+            configString = "thingsUI,modulesTab,damageMeter",
+            shouldDisable = function()
+                return not Active() or (E.db.thingsUI.rightChatAsBackground and true or false)
+            end,
+            onSave = function(point, relPoint, x, y)
+                local c = win.cfg
+                if c then c.point, c.relPoint, c.x, c.y = point, relPoint, x, y end
+            end,
+        })
+    end
+
+    windows[i] = win
+    return win
+end
+
+local function ApplyWindowChrome(win)
+    local db = TDB()
+    local font = LSM and LSM:Fetch("font", db.font or "Expressway")
+    local flag = (db.fontOutline ~= "NONE") and (db.fontOutline or "OUTLINE") or ""
+    if font then
+        win.title:SetFont(font, db.headerFontSize or 11, flag)
+        win.timer:SetFont(font, db.headerFontSize or 11, flag)
+    end
+    win.header:SetHeight(db.headerHeight or 20)
+
+    local wb, hb = db.windowBorder == true, db.headerBorder ~= false
+    local bs = db.windowBorderSize or 1
+    local c = db.windowBorderColor or {}
+    local br, bg2, bb, ba = c.r or 0, c.g or 0, c.b or 0, c.a or 1
+    if wb then
+        win.frame:SetBackdrop({ bgFile = [[Interface\Buttons\WHITE8x8]], edgeFile = [[Interface\Buttons\WHITE8x8]], edgeSize = bs })
+        win.frame:SetBackdropBorderColor(br, bg2, bb, ba)
+    else
+        win.frame:SetBackdrop({ bgFile = [[Interface\Buttons\WHITE8x8]] })
+    end
+    win.frame:SetBackdropColor(0, 0, 0, db.bgAlpha or 0)
+
+    local header = win.header
+    if hb then
+        header.borderFrame:SetBackdrop({ edgeFile = [[Interface\Buttons\WHITE8x8]], edgeSize = bs })
+        header.borderFrame:SetBackdropBorderColor(br, bg2, bb, ba)
+        header.borderFrame:Show()
+    else
+        header.borderFrame:Hide()
+    end
+
+    local gap = db.windowGap or -1
+    local off = -(gap + bs) / 2
+    local divider = win.frame.divider
+    if win._dividerOn and db.windowDivider ~= false then
+        divider:ClearAllPoints()
+        divider:SetPoint("TOPLEFT", win.frame, "TOPLEFT", off, 0)
+        divider:SetPoint("BOTTOMLEFT", win.frame, "BOTTOMLEFT", off, 0)
+        divider:SetWidth(bs)
+        divider.tex:SetColorTexture(br, bg2, bb, ba)
+        divider:Show()
+    else
+        divider:Hide()
+    end
+    local dividerTop = win.frame.dividerTop
+    if win._dividerTopOn and db.windowDivider ~= false then
+        dividerTop:ClearAllPoints()
+        dividerTop:SetPoint("TOPLEFT", win.frame, "TOPLEFT", 0, -off)
+        dividerTop:SetPoint("TOPRIGHT", win.frame, "TOPRIGHT", 0, -off)
+        dividerTop:SetHeight(bs)
+        dividerTop.tex:SetColorTexture(br, bg2, bb, ba)
+        dividerTop:Show()
+    else
+        dividerTop:Hide()
+    end
+
+    local inset = wb and bs or 0
+    win.content:ClearAllPoints()
+    win.content:SetPoint("TOPLEFT", header, "BOTTOMLEFT", inset, -(db.contentPad or 1))
+    win.content:SetPoint("BOTTOMRIGHT", win.frame, "BOTTOMRIGHT", -inset, inset)
+end
+
+ApplyLayout = function()
+    if not Active() then return end
+    local db = TDB()
+    local cells = Cells(db)
+    local docked = E.db.thingsUI.rightChatAsBackground and Panel()
+    local pad = db.panelInset or 0
+    local gap = db.windowGap or -1
+    for i, win in ipairs(windows) do
+        if win._expanding then StopExpand(win) end
+        local cell = cells[i]
+        local shown = cell and win.cfg and win.cfg.shown ~= false
+        win._dividerOn, win._dividerTopOn = false, false
+        win.frame:SetShown(shown and true or false)
+        if shown then
+            if docked then
+                local p = Panel()
+                local pw = (p:GetWidth() or 0) - pad * 2
+                local ph = (p:GetHeight() or 0) - pad * 2
+                if pw > 50 and ph > 50 then
+                    local x0 = cell[1] * pw + (cell[1] > 0.001 and gap / 2 or 0)
+                    local x1 = (cell[1] + cell[3]) * pw - ((cell[1] + cell[3]) < 0.999 and gap / 2 or 0)
+                    local y0 = cell[2] * ph + (cell[2] > 0.001 and gap / 2 or 0)
+                    local y1 = (cell[2] + cell[4]) * ph - ((cell[2] + cell[4]) < 0.999 and gap / 2 or 0)
+                    win.frame:ClearAllPoints()
+                    win.frame:SetPoint("TOPLEFT", p, "TOPLEFT", pad + x0, -(pad + y0))
+                    win.frame:SetSize(math.max(20, x1 - x0), math.max(20, y1 - y0))
+                    win._dividerOn = cell[1] > 0.001
+                    win._dividerTopOn = cell[2] > 0.001
+                end
+                if ns.MoverSync then ns.MoverSync.SetManagedEnabled("TUI_MeterMover" .. i, false) end
+            else
+                win.frame:SetSize(db.windowWidth or 260, db.windowHeight or 180)
+                local mv = _G["TUI_MeterMover" .. i]
+                win.frame:ClearAllPoints()
+                if mv then
+                    win.frame:SetPoint("CENTER", mv, "CENTER", 0, 0)
+                else
+                    local cfg = win.cfg
+                    if cfg.point then
+                        win.frame:SetPoint(cfg.point, E.UIParent, cfg.relPoint or cfg.point, cfg.x or 0, cfg.y or 0)
+                    else
+                        win.frame:SetPoint("CENTER", E.UIParent, "CENTER", (i - 1) * 280 - 400, -200)
+                    end
+                end
+                if ns.MoverSync then ns.MoverSync.SetManagedEnabled("TUI_MeterMover" .. i, true) end
+            end
+        elseif windows[i] and ns.MoverSync then
+            ns.MoverSync.SetManagedEnabled("TUI_MeterMover" .. i, false)
+        end
+    end
+    for _, win in ipairs(windows) do
+        win._staticSig = (win._staticSig or 0) + 1
+        ApplyWindowChrome(win)
+        LayoutRows(win)
+    end
+end
+
+local ticker
+local function StopTicker()
+    if ticker then ticker:Cancel(); ticker = nil end
+end
+local function StartTicker()
+    if ticker or not Active() then return end
+    local rate = TDB().refreshRate or 0.5
+    ticker = C_Timer.NewTicker(rate, M.RefreshAll)
+end
+
+local pendingRefresh = false
+local function QueueRefresh()
+    if pendingRefresh then return end
+    pendingRefresh = true
+    C_Timer.After(0.1, function() pendingRefresh = false; M.RefreshAll() end)
+end
+
+local ev = CreateFrame("Frame")
+ev:RegisterEvent("PLAYER_ENTERING_WORLD")
+ev:RegisterEvent("PLAYER_REGEN_DISABLED")
+ev:RegisterEvent("PLAYER_REGEN_ENABLED")
+if C_DamageMeter then
+    ev:RegisterEvent("DAMAGE_METER_RESET")
+    ev:RegisterEvent("DAMAGE_METER_COMBAT_SESSION_UPDATED")
+    ev:RegisterEvent("DAMAGE_METER_CURRENT_SESSION_UPDATED")
+end
+ev:SetScript("OnEvent", function(_, event)
+    if not Active() then return end
+    if event == "PLAYER_REGEN_DISABLED" then
+        combatStart = GetTime()
+        frozenCur = 0
+        StartTicker()
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        lastCombatEnd = GetTime()
+        if combatStart then
+            frozenOverall = (frozenOverall or 0) + (GetTime() - combatStart)
+            frozenCur = GetTime() - combatStart
+        end
+        combatStart = nil
+        StopTicker()
+        M.RefreshAll()
+        C_Timer.After(0.5, M.RefreshAll)
+    elseif event == "DAMAGE_METER_CURRENT_SESSION_UPDATED" then
+        if InCombatLockdown() then
+            frozenCur = 0
+            if not combatStart then combatStart = GetTime() end
+            QueueRefresh()
+            StartTicker()
+        elseif GetTime() - lastCombatEnd < 3 then
+            QueueRefresh()
+        end
+    elseif event == "DAMAGE_METER_RESET" then
+        frozenCur, frozenOverall = 0, 0
+        QueueRefresh()
+    elseif event == "DAMAGE_METER_COMBAT_SESSION_UPDATED" then
+        if not InCombatLockdown() and (GetTime() - lastCombatEnd) < 3 then QueueRefresh() end
+    else
+        C_Timer.After(1, function() TUI:UpdateTUIMeter() end)
+    end
+end)
+
+local panelHooked = false
+function TUI:UpdateTUIMeter()
+    local dm = DB()
+    if dm and dm.provider == "BLIZZARD" then dm.provider = "TUI" end
+    if not Active() then
+        for _, win in ipairs(windows) do win.frame:Hide() end
+        StopTicker()
+        return
+    end
+    local db = TDB()
+    db.windows = db.windows or {}
+    local n = #Cells(db)
+    local T = Enum.DamageMeterType or {}
+    local typeDefaults = { 0, T.HealingDone or 2, T.DamageTaken or 7, T.Interrupts or 5 }
+    for i = 1, n do
+        local w = db.windows[i] or {}
+        db.windows[i] = w
+        if w.type == nil then w.type = typeDefaults[i] or 0 end
+        if w.session == nil then w.session = "current" end
+        if w.shown == nil then w.shown = true end
+        if w.showTimer == nil then w.showTimer = (i == 1) end
+    end
+    if GetCVar and GetCVar("damageMeterEnabled") ~= "0" then
+        SetCVar("damageMeterEnabled", "0")
+    end
+    for i = 1, n do
+        if not windows[i] then CreateWindow(i) end
+        windows[i].cfg = db.windows[i]
+    end
+    for i = n + 1, #windows do
+        windows[i].cfg = nil
+        windows[i].frame:Hide()
+    end
+    if not panelHooked and Panel() then
+        panelHooked = true
+        hooksecurefunc(Panel(), "SetWidth",  function() C_Timer.After(0, ApplyLayout) end)
+        hooksecurefunc(Panel(), "SetHeight", function() C_Timer.After(0, ApplyLayout) end)
+    end
+    ApplyLayout()
+    M.RefreshAll()
+    if InCombatLockdown() then StartTicker() end
+    if ns.MoverSync and ns.MoverSync.Queue then ns.MoverSync.Queue() end
+end

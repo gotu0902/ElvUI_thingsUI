@@ -137,13 +137,15 @@ function ns.SetDamageMeterProvider(provider)
     E.db.thingsUI.damageMeter = E.db.thingsUI.damageMeter or {}
     E.db.thingsUI.damageMeter.provider = provider
     local hasDetails = IsInstalled("Details")
-    if provider == "BLIZZARD" then
+    if provider == "TUI" then
         if hasDetails then C_AddOns.DisableAddOn("Details", E.myguid) end
-        print("|cFF8080FFthingsUI|r - Ingame Damage Meter selected" .. (hasDetails and ", Details! disabled." or ".") .. " |cFFFFFF00Reload required.|r")
+        pcall(SetCVar, "damageMeterEnabled", "0")
+        print("|cFF8080FFthingsUI|r - Skinned Ingame Meter selected" .. (hasDetails and ", Details! disabled." or ".") .. " |cFFFFFF00Reload required.|r")
     else
         if hasDetails then C_AddOns.EnableAddOn("Details", E.myguid) end
         print("|cFF8080FFthingsUI|r - Details! selected" .. (hasDetails and "." or " |cFFFF6060(not installed)|r.") .. " |cFFFFFF00Reload required.|r")
     end
+    if TUI.UpdateTUIMeter then TUI:UpdateTUIMeter() end
     if ns.MoverSync and ns.MoverSync.Queue then ns.MoverSync.Queue() end
 end
 
@@ -258,8 +260,8 @@ ns.installTable = {
             local f = PIF()
             local hasDetails = IsInstalled("Details")
             f.SubTitle:SetText("Damage Meter")
-            f.Desc1:SetText("Pick your damage meter. Details! gets anchored inside ElvUI's right chat panel; the Ingame meter is Blizzard's new built-in one.")
-            f.Desc2:SetText(hasDetails and "Picking the Ingame meter disables the Details! addon." or "|cFFFF6060Details! is not installed - the Ingame meter is your option.|r")
+            f.Desc1:SetText("Pick your damage meter. Details! gets anchored inside ElvUI's right chat panel; |cFF8080FFSkin Ingame Meter|r uses Blizzard's built-in meter data with thingsUI's look, filling the same panel.")
+            f.Desc2:SetText(hasDetails and "Picking the Ingame meter disables the Details! addon." or "|cFFFF6060Details! is not installed - Skin Ingame Meter is your option.|r")
             f.Desc3:SetText("")
             f.Option1:Show(); f.Option1:SetText("Details! + Right Chat")
             if hasDetails then
@@ -274,10 +276,11 @@ ns.installTable = {
                 f.Option1:Disable()
                 f.Option1:SetScript("OnClick", nil)
             end
-            f.Option2:Show(); f.Option2:Enable(); f.Option2:SetText("Ingame Damage Meter")
+            f.Option2:Show(); f.Option2:Enable(); f.Option2:SetText("|cFF8080FFSkin Ingame Meter|r")
             f.Option2:SetScript("OnClick", function()
-                ns.SetDamageMeterProvider("BLIZZARD")
-                StepDone("Ingame meter - reload after finishing")
+                ns.SetDamageMeterProvider("TUI")
+                E.db.thingsUI.rightChatAsBackground = true
+                StepDone("Ingame meter skinned - reload after finishing")
             end)
         end,
         -- 7: ActionBars style

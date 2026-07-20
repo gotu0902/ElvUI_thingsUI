@@ -139,7 +139,7 @@ function TUI:Initialize()
     if self.UpdateRacialsCDM then self:UpdateRacialsCDM() end
     self:UpdateEssentialMover()
     self:UpdateCustomGroups()
-    if self.UpdateDamageMeter then self:UpdateDamageMeter() end
+    if self.UpdateTUIMeter then self:UpdateTUIMeter() end
     self:UpdateMoverSync()
 
     self:RegisterEvent("PLAYER_ENTERING_WORLD", function()
@@ -238,7 +238,7 @@ function TUI:ProfileUpdate()
     if self.UpdateRacialsCDM then self:UpdateRacialsCDM() end
     self:UpdateEssentialMover()
     self:UpdateCustomGroups()
-    if self.UpdateDamageMeter then self:UpdateDamageMeter() end
+    if self.UpdateTUIMeter then self:UpdateTUIMeter() end
     if ns.CustomGroups and ns.CustomGroups._rebuildOptions then ns.CustomGroups._rebuildOptions() end
     if ns.BarSetup and ns.BarSetup._rebuildSetupOptions then ns.BarSetup._rebuildSetupOptions() end
     if ns.Timers then
