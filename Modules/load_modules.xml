@@ -23,5 +23,6 @@
 	<Script file="CDM\RacialsCDM.lua"/>
 	<Script file="CustomGroups.lua"/>
 	<Script file="TUIMeter.lua"/>
+	<Script file="MBB.lua"/>
 	<Script file="Movers\MoverSync.lua"/>
 </Ui>

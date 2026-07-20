@@ -13,6 +13,7 @@ local STATIC_VALUES = {
     ["ElvUF_Focus"]               = col(C_ELV, "ElvUI Focus Frame"),
     ["ElvUF_Player_ClassBar"]     = col(C_ELV, "ElvUI Class Bar"),
     ["ElvUF_Player_CastBar"]      = col(C_ELV, "ElvUI Player Castbar"),
+    ["Minimap"]                   = col(C_ELV, "ElvUI Minimap"),
     ["EssentialCooldownViewer"]   = col(C_CDM, "CDM: Essential Cooldowns"),
     ["UtilityCooldownViewer"]     = col(C_CDM, "CDM: Utility Cooldowns"),
     ["ElvUI_thingsUI_ChargeBar"]  = col(C_TUI, "TUI Charge Bar"),
@@ -23,7 +24,7 @@ local STATIC_VALUES = {
 
 local STATIC_ORDER = {
     "BARSETUP_TOP",
-    "ElvUF_Player", "ElvUF_Target", "ElvUF_TargetTarget", "ElvUF_Focus", "ElvUF_Player_ClassBar", "ElvUF_Player_CastBar",
+    "ElvUF_Player", "ElvUF_Target", "ElvUF_TargetTarget", "ElvUF_Focus", "ElvUF_Player_ClassBar", "ElvUF_Player_CastBar", "Minimap",
     "EssentialCooldownViewer", "UtilityCooldownViewer", "ElvUI_thingsUI_ChargeBar", "Grid2LayoutFrame", "UIParent", "CUSTOM",
 }
 

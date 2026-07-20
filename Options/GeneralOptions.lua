@@ -296,6 +296,55 @@ function TUI:FixesAndQoLOptions()
         type = "group",
         name = "Fixes and QoL",
         args = {
+                    mbbGroup = {
+                        order = 0.5,
+                        type = "group",
+                        name = "Minimap Button Button",
+                        inline = true,
+                        hidden = function()
+                            return not (C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("MinimapButtonButton"))
+                        end,
+                        args = {
+                            manage = {
+                                order = 1, type = "toggle", name = "Manage Position",
+                                get = function() return E.db.thingsUI.mbb and E.db.thingsUI.mbb.manage end,
+                                set = function(_, v) E.db.thingsUI.mbb.manage = v; TUI:UpdateMBB(); ns.NotifyChange() end,
+                            },
+                            skin = {
+                                order = 2, type = "toggle", name = "Skin Buttons",
+                                desc = "Strips the round Blizzard ring from collected minimap buttons.",
+                                get = function() return E.db.thingsUI.mbb and E.db.thingsUI.mbb.skin ~= false end,
+                                set = function(_, v) E.db.thingsUI.mbb.skin = v; TUI:UpdateMBB(); ns.NotifyChange() end,
+                            },
+                            anchor = {
+                                order = 3, type = "select", name = "Anchor", width = 1.2,
+                                disabled = function() return not (E.db.thingsUI.mbb and E.db.thingsUI.mbb.manage) end,
+                                values = function() return ns.ANCHORS.FilteredValues() end,
+                                sorting = function() return ns.ANCHORS.FilteredOrder() end,
+                                get = function() return E.db.thingsUI.mbb.anchor or "Minimap" end,
+                                set = function(_, v) E.db.thingsUI.mbb.anchor = v; TUI:UpdateMBB(); ns.NotifyChange() end,
+                            },
+                            point = {
+                                order = 4, type = "select", name = "Point",
+                                disabled = function() return not (E.db.thingsUI.mbb and E.db.thingsUI.mbb.manage) end,
+                                values = ns.POINTS.VALUES, sorting = ns.POINTS.ORDER,
+                                get = function() return E.db.thingsUI.mbb.point or "TOPRIGHT" end,
+                                set = function(_, v) E.db.thingsUI.mbb.point = v; TUI:UpdateMBB(); ns.NotifyChange() end,
+                            },
+                            x = {
+                                order = 5, type = "range", name = "X Offset", min = -500, max = 500, step = 1,
+                                disabled = function() return not (E.db.thingsUI.mbb and E.db.thingsUI.mbb.manage) end,
+                                get = function() return E.db.thingsUI.mbb.x or 0 end,
+                                set = function(_, v) E.db.thingsUI.mbb.x = v; TUI:UpdateMBB(); ns.NotifyChange() end,
+                            },
+                            y = {
+                                order = 6, type = "range", name = "Y Offset", min = -500, max = 500, step = 1,
+                                disabled = function() return not (E.db.thingsUI.mbb and E.db.thingsUI.mbb.manage) end,
+                                get = function() return E.db.thingsUI.mbb.y or 0 end,
+                                set = function(_, v) E.db.thingsUI.mbb.y = v; TUI:UpdateMBB(); ns.NotifyChange() end,
+                            },
+                        },
+                    },
                     psettingsGroup = {
                         order = 1,
                         type = "group",

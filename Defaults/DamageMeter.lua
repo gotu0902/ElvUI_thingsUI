@@ -39,6 +39,8 @@ P["thingsUI"].damageMeter = {
         iconBorderSize = 1,
         iconBorderColor = { r = 0, g = 0, b = 0, a = 1 },
         showRank = false,
+        sessionTag = true,
+        menuSegments = 20,
         numberFormat = "both",
         refreshRate = 5,
         windowGap = -1,

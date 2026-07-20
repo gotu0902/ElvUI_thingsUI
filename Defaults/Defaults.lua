@@ -9,3 +9,11 @@ p.autoSetAudioChannels  = false
 p.rightChatAsBackground = false
 p.rightChatWidthOffset  = 0
 p.rightChatHeightOffset = 0
+p.mbb = {
+    manage = false,
+    anchor = "Minimap",
+    point = "TOPRIGHT",
+    x = 0,
+    y = 0,
+    skin = true,
+}

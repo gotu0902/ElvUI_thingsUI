@@ -164,6 +164,11 @@ function TUI:DamageMeterOptions()
                         get = function() return tdb().refreshRate or 5 end,
                         set = function(_, v) tset("refreshRate", v) end,
                     },
+                    menuSegments = {
+                        order = 9.5, type = "range", name = "Menu Segments", min = 1, max = 50, step = 1,
+                        get = function() return tdb().menuSegments or 20 end,
+                        set = function(_, v) tset("menuSegments", v) end,
+                    },
                     hint = {
                         order = 30, type = "description", fontSize = "medium", width = "full",
                         name = "\n|cFF888888Right-click a window for mode/segments/reset. Scroll to see everyone. Drag the title bar upwards to temporarily expand a docked window.|r",
@@ -326,6 +331,11 @@ function TUI:DamageMeterOptions()
                         order = 4, type = "toggle", name = "Title Bar Border",
                         get = function() return tdb().headerBorder ~= false end,
                         set = function(_, v) tset("headerBorder", v) end,
+                    },
+                    sessionTag = {
+                        order = 4.5, type = "toggle", name = "Session Tag [C]/[O]",
+                        get = function() return tdb().sessionTag ~= false end,
+                        set = function(_, v) tset("sessionTag", v) end,
                     },
                     timer1 = TimerToggle(1),
                     timer2 = TimerToggle(2),

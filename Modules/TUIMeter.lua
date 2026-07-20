@@ -357,7 +357,13 @@ local function RefreshWindow(win)
         UpdateRow(win, shown, rank, sources[rank], maxAmt, db)
     end
     for i = shown + 1, #win.rows do win.rows[i]:Hide() end
-    win.title:SetText(TYPE_NAMES[win.cfg.type or 0] or "Damage Done")
+    local title = TYPE_NAMES[win.cfg.type or 0] or "Damage Done"
+    if db.sessionTag ~= false then
+        local s = win.cfg.session
+        local tag = (type(s) == "number") and ("#" .. s) or (s == "overall" and "O" or "C")
+        title = title .. " |cFF808080[" .. tag .. "]|r"
+    end
+    win.title:SetText(title)
     if win.cfg.showTimer then
         win.timer:Show()
         win.timer:SetText(M.testMode and "1:30" or SessionTimerText(win, session))
@@ -399,54 +405,219 @@ local function ExpandTick(win)
     RefreshWindow(win)
 end
 
-function M.ShowModeMenu(win)
-    if not MenuUtil or not MenuUtil.CreateContextMenu then return end
-    MenuUtil.CreateContextMenu(win.frame, function(_, root)
-        root:CreateTitle("thingsUI Meter")
-        for _, t in ipairs(TYPE_ORDER) do
-            root:CreateRadio(TYPE_NAMES[t], function() return win.cfg.type == t end, function()
-                win.cfg.type = t
-                win.scroll = 0
-                RefreshWindow(win)
+local menuFrame
+local MENU_ROW = 20
+local RenderMenu
+
+local function EnsureMenu()
+    if menuFrame then return menuFrame end
+    local catcher = CreateFrame("Frame", nil, E.UIParent)
+    catcher:SetAllPoints(E.UIParent)
+    catcher:SetFrameStrata("FULLSCREEN_DIALOG")
+    catcher:SetFrameLevel(100)
+    catcher:EnableMouse(true)
+    catcher:Hide()
+
+    menuFrame = CreateFrame("Frame", "TUI_MeterMenuFrame", E.UIParent, "BackdropTemplate")
+    menuFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+    menuFrame:SetFrameLevel(110)
+    menuFrame:SetBackdrop({ bgFile = [[Interface\Buttons\WHITE8x8]], edgeFile = [[Interface\Buttons\WHITE8x8]], edgeSize = 1 })
+    menuFrame:SetBackdropColor(0.04, 0.04, 0.04, 0.97)
+    menuFrame:SetBackdropBorderColor(0, 0, 0, 1)
+    menuFrame:SetClampedToScreen(true)
+    menuFrame:Hide()
+    menuFrame.rows = {}
+    menuFrame.catcher = catcher
+
+    catcher:SetScript("OnMouseDown", function() menuFrame:Hide() end)
+    menuFrame:SetScript("OnShow", function() catcher:Show() end)
+    menuFrame:SetScript("OnHide", function() catcher:Hide(); menuFrame.win = nil; menuFrame.kind = nil end)
+
+    menuFrame.upHint = menuFrame:CreateFontString(nil, "OVERLAY")
+    menuFrame.upHint:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
+    menuFrame.upHint:SetPoint("TOPRIGHT", menuFrame, "TOPRIGHT", -5, -4)
+    menuFrame.upHint:SetText("|cFF808080^|r")
+    menuFrame.upHint:Hide()
+    menuFrame.downHint = menuFrame:CreateFontString(nil, "OVERLAY")
+    menuFrame.downHint:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
+    menuFrame.downHint:SetPoint("BOTTOMRIGHT", menuFrame, "BOTTOMRIGHT", -5, 4)
+    menuFrame.downHint:SetText("|cFF808080v|r")
+    menuFrame.downHint:Hide()
+
+    menuFrame:EnableMouseWheel(true)
+    menuFrame:SetScript("OnMouseWheel", function(_, d)
+        if d > 0 then
+            if (menuFrame.offset or 0) <= 0 then return end
+            menuFrame.offset = menuFrame.offset - 1
+        else
+            if not menuFrame._lastShown or menuFrame._lastShown >= #(menuFrame.entries or {}) then return end
+            menuFrame.offset = (menuFrame.offset or 0) + 1
+        end
+        RenderMenu(menuFrame)
+    end)
+
+    tinsert(UISpecialFrames, "TUI_MeterMenuFrame")
+    return menuFrame
+end
+
+local function MenuRow(i)
+    local m = EnsureMenu()
+    if m.rows[i] then return m.rows[i] end
+    local row = CreateFrame("Button", nil, m)
+    row:SetHeight(MENU_ROW)
+    row:SetPoint("TOPLEFT", m, "TOPLEFT", 1, -(1 + (i - 1) * MENU_ROW))
+    row:SetPoint("TOPRIGHT", m, "TOPRIGHT", -1, -(1 + (i - 1) * MENU_ROW))
+    row:RegisterForClicks("LeftButtonUp")
+    row:SetHighlightTexture([[Interface\Buttons\WHITE8x8]])
+    row:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.08)
+    row.text = row:CreateFontString(nil, "OVERLAY")
+    row.text:SetPoint("LEFT", row, "LEFT", 8, 0)
+    row.text:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    row.text:SetJustifyH("LEFT")
+    row.text:SetWordWrap(false)
+    row.line = row:CreateTexture(nil, "OVERLAY")
+    row.line:SetColorTexture(1, 1, 1, 0.12)
+    row.line:SetHeight(1)
+    row.line:SetPoint("LEFT", row, "LEFT", 6, 0)
+    row.line:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+    m.rows[i] = row
+    return row
+end
+
+local function BuildTypeEntries(win)
+    local e = {}
+    for _, t in ipairs(TYPE_ORDER) do
+        e[#e + 1] = { label = TYPE_NAMES[t], selected = win.cfg.type == t, func = function()
+            win.cfg.type = t; win.scroll = 0
+        end }
+    end
+    return e
+end
+
+local function BuildSessionEntries(win)
+    local db = TDB()
+    local e = {}
+    e[#e + 1] = { label = "Current", selected = win.cfg.session ~= "overall" and type(win.cfg.session) ~= "number", func = function()
+        win.cfg.session = "current"; win.scroll = 0
+    end }
+    e[#e + 1] = { label = "Overall", selected = win.cfg.session == "overall", func = function()
+        win.cfg.session = "overall"; win.scroll = 0
+    end }
+    local avail = C_DamageMeter.GetAvailableCombatSessions and C_DamageMeter.GetAvailableCombatSessions()
+    if avail and #avail > 0 then
+        e[#e + 1] = { divider = true }
+        e[#e + 1] = { header = "Segments" }
+        local maxSeg = db.menuSegments or 20
+        local count = 0
+        for i = #avail, 1, -1 do
+            count = count + 1
+            if count > maxSeg then break end
+            local s = avail[i]
+            local nm = (s.name and s.name ~= "") and s.name or ("Combat " .. s.sessionID)
+            if type(s.durationSeconds) == "number" and not Secret(s.durationSeconds) then
+                nm = ("%s |cFF808080[%s]|r"):format(nm, Clock(s.durationSeconds))
+            end
+            local id = s.sessionID
+            e[#e + 1] = { label = nm, selected = win.cfg.session == id, func = function()
+                for _, w in ipairs(windows) do
+                    if w.cfg then w.cfg.session = id; w.scroll = 0 end
+                end
+            end }
+        end
+    end
+    e[#e + 1] = { divider = true }
+    e[#e + 1] = { label = "Test Mode", selected = M.testMode and true or false, func = function()
+        M.testMode = not M.testMode
+    end }
+    e[#e + 1] = { label = "Reset Data", func = function()
+        if C_DamageMeter.ResetAllCombatSessions then C_DamageMeter.ResetAllCombatSessions() end
+        frozenCur, frozenOverall = 0, 0
+        for _, w in ipairs(windows) do
+            if w.cfg and type(w.cfg.session) == "number" then w.cfg.session = "current" end
+        end
+    end }
+    return e
+end
+
+RenderMenu = function(m)
+    local db = TDB()
+    if not db then return end
+    local font = LSM and LSM:Fetch("font", db.font or "Expressway")
+    local flag = (db.fontOutline ~= "NONE") and (db.fontOutline or "OUTLINE") or ""
+    local entries = m.entries or {}
+    local first = m.offset or 0
+    local h = 2
+    local shown = 0
+    m._lastShown = first
+    for idx = first + 1, #entries do
+        local entry = entries[idx]
+        local rowH = entry.divider and 7 or MENU_ROW
+        if h + rowH + 2 > (m.maxH or 800) and shown > 0 then break end
+        shown = shown + 1
+        local row = MenuRow(shown)
+        row:Show()
+        row.line:Hide()
+        row.text:SetFont(font or STANDARD_TEXT_FONT, db.fontSize or 12, flag)
+        row.text:SetText("")
+        row:SetScript("OnClick", nil)
+        if entry.divider then
+            row:EnableMouse(false)
+            row:SetHeight(7)
+            row.line:Show()
+        else
+            row:SetHeight(MENU_ROW)
+            row:EnableMouse(not entry.header)
+            if entry.header then
+                row.text:SetText("|cFF808080" .. entry.header .. "|r")
+            elseif entry.selected then
+                row.text:SetText("|cFF8080FF" .. entry.label .. "|r")
+            else
+                row.text:SetText(entry.label)
+            end
+            row:SetScript("OnClick", function()
+                if entry.func then entry.func() end
+                m:Hide()
+                M.RefreshAll()
             end)
         end
-        root:CreateDivider()
-        root:CreateRadio("Current", function()
-            return win.cfg.session ~= "overall" and type(win.cfg.session) ~= "number"
-        end, function()
-            win.cfg.session = "current"; win.scroll = 0; RefreshWindow(win)
-        end)
-        root:CreateRadio("Overall", function() return win.cfg.session == "overall" end, function()
-            win.cfg.session = "overall"; win.scroll = 0; RefreshWindow(win)
-        end)
-        local avail = C_DamageMeter.GetAvailableCombatSessions and C_DamageMeter.GetAvailableCombatSessions()
-        if avail and #avail > 0 then
-            local seg = root:CreateButton("Segments")
-            for _, s in ipairs(avail) do
-                local nm = (s.name and s.name ~= "") and s.name or ("Combat " .. s.sessionID)
-                if type(s.durationSeconds) == "number" and not Secret(s.durationSeconds) then
-                    nm = ("%s [%s]"):format(nm, Clock(s.durationSeconds))
-                end
-                local id = s.sessionID
-                seg:CreateRadio(nm, function() return win.cfg.session == id end, function()
-                    win.cfg.session = id; win.scroll = 0; RefreshWindow(win)
-                end)
-            end
-        end
-        root:CreateDivider()
-        root:CreateCheckbox("Test Mode", function() return M.testMode end, function()
-            M.testMode = not M.testMode
-            M.RefreshAll()
-        end)
-        root:CreateButton("Reset Data", function()
-            if C_DamageMeter.ResetAllCombatSessions then C_DamageMeter.ResetAllCombatSessions() end
-            frozenCur, frozenOverall = 0, 0
-            for _, w in ipairs(windows) do
-                if type(w.cfg.session) == "number" then w.cfg.session = "current" end
-            end
-            M.RefreshAll()
-        end)
-    end)
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", m, "TOPLEFT", 1, -h)
+        row:SetPoint("TOPRIGHT", m, "TOPRIGHT", -1, -h)
+        h = h + rowH
+        m._lastShown = idx
+    end
+    for i = shown + 1, #m.rows do m.rows[i]:Hide() end
+    if m.autoHeight then m:SetHeight(h + 2) end
+    m.upHint:SetShown(first > 0)
+    m.downHint:SetShown(m._lastShown < #entries)
+end
+
+function M.ShowModeMenu(win, kind)
+    kind = kind or "types"
+    local m = EnsureMenu()
+    if m:IsShown() and m.win == win and m.kind == kind then m:Hide(); return end
+    local db = TDB()
+    if not db then return end
+    m.entries = (kind == "session") and BuildSessionEntries(win) or BuildTypeEntries(win)
+    m.offset = 0
+    m:ClearAllPoints()
+    if kind == "session" then
+        m.autoHeight = true
+        local headerTop = win.header:GetTop() or 0
+        local screenTop = E.UIParent:GetTop() or 1000
+        m.maxH = math.max(MENU_ROW + 4, screenTop - headerTop - 8)
+        m:SetPoint("BOTTOMLEFT", win.header, "TOPLEFT", 0, 0)
+        m:SetPoint("BOTTOMRIGHT", win.header, "TOPRIGHT", 0, 0)
+    else
+        m.autoHeight = false
+        m.maxH = math.max(MENU_ROW + 4, (win.frame:GetHeight() or 200) - (win.header:GetHeight() or 20))
+        m:SetPoint("TOPLEFT", win.header, "BOTTOMLEFT", 0, 0)
+        m:SetPoint("BOTTOMRIGHT", win.frame, "BOTTOMRIGHT", 0, 0)
+    end
+    m.win = win
+    m.kind = kind
+    RenderMenu(m)
+    m:Show()
 end
 
 local function CreateWindow(i)
@@ -493,7 +664,7 @@ local function CreateWindow(i)
     f.dividerTop:Hide()
 
     local win = { frame = f, header = header, title = title, timer = timer, content = content, rows = {}, cfg = db.windows[i], index = i, scroll = 0 }
-    header:SetScript("OnClick", function() M.ShowModeMenu(win) end)
+    header:SetScript("OnClick", function() M.ShowModeMenu(win, "session") end)
     header:SetScript("OnDragStart", function()
         if not (Active() and E.db.thingsUI.rightChatAsBackground and Panel()) then return end
         local left, bottom = f:GetLeft(), f:GetBottom()
@@ -510,10 +681,14 @@ local function CreateWindow(i)
     end)
     header:SetScript("OnDragStop", function() StopExpand(win) end)
 
+    f:EnableMouse(true)
     f:EnableMouseWheel(true)
     f:SetScript("OnMouseWheel", function(_, delta)
         win.scroll = math.max(0, (win.scroll or 0) - delta)
         RefreshWindow(win)
+    end)
+    f:SetScript("OnMouseUp", function(_, btn)
+        if btn == "RightButton" then M.ShowModeMenu(win) end
     end)
 
     if ns.MoverSync and ns.MoverSync.CreateManaged then
