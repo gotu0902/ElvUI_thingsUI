@@ -39,7 +39,7 @@ function TUI:DamageMeterOptions()
         args = {
             desc = {
                 order = 1, type = "description", fontSize = "medium", width = "full",
-                name = "If you want to use Ingame Meter instead of Details.\n",
+                name = "If you want to use Mini Meter instead of Details.\n",
             },
             providerGroup = {
                 order = 2, type = "group", name = "Provider", inline = true,
@@ -53,7 +53,7 @@ function TUI:DamageMeterOptions()
                         sorting = { "DETAILS", "TUI" },
                         confirm = function(_, v)
                             if v == "TUI" then
-                                return "Skin the Ingame Damage Meter? Details! (if installed) is disabled. Reload afterwards."
+                                return "Use the Mini Meter? Details! (if installed) is disabled. Reload afterwards."
                             end
                             return "Switch to Details!? The addon is re-enabled. Reload afterwards."
                         end,
@@ -75,7 +75,7 @@ function TUI:DamageMeterOptions()
                 args = {
                     d = {
                         order = 1, type = "description", fontSize = "medium", width = "full",
-                        name = "\n|cFFFFD200Details! is the selected damage meter - switch the provider above to configure the skinned Ingame meter.|r",
+                        name = "\n|cFFFFD200Details! is the selected damage meter - switch the provider above to configure the Mini Meter.|r",
                     },
                 },
             },

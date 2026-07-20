@@ -140,7 +140,7 @@ function ns.SetDamageMeterProvider(provider)
     if provider == "TUI" then
         if hasDetails then C_AddOns.DisableAddOn("Details", E.myguid) end
         pcall(SetCVar, "damageMeterEnabled", "0")
-        print("|cFF8080FFthingsUI|r - Skinned Ingame Meter selected" .. (hasDetails and ", Details! disabled." or ".") .. " |cFFFFFF00Reload required.|r")
+        print("|cFF8080FFthingsUI|r - Mini Meter selected" .. (hasDetails and ", Details! disabled." or ".") .. " |cFFFFFF00Reload required.|r")
     else
         if hasDetails then C_AddOns.EnableAddOn("Details", E.myguid) end
         print("|cFF8080FFthingsUI|r - Details! selected" .. (hasDetails and "." or " |cFFFF6060(not installed)|r.") .. " |cFFFFFF00Reload required.|r")
@@ -261,7 +261,7 @@ ns.installTable = {
             local hasDetails = IsInstalled("Details")
             f.SubTitle:SetText("Damage Meter")
             f.Desc1:SetText("Pick your damage meter. Details! gets anchored inside ElvUI's right chat panel; |cFF8080FFMini Meter|r uses Blizzard's built-in meter data with thingsUI's look, filling the same panel.")
-            f.Desc2:SetText(hasDetails and "Picking the Ingame meter disables the Details! addon." or "|cFFFF6060Details! is not installed - Mini Meter is your option.|r")
+            f.Desc2:SetText(hasDetails and "Picking the Mini Meter disables the Details! addon." or "|cFFFF6060Details! is not installed - Mini Meter is your option.|r")
             f.Desc3:SetText("")
             f.Option1:Show(); f.Option1:SetText("Details! + Right Chat")
             if hasDetails then
@@ -280,7 +280,7 @@ ns.installTable = {
             f.Option2:SetScript("OnClick", function()
                 ns.SetDamageMeterProvider("TUI")
                 E.db.thingsUI.rightChatAsBackground = true
-                StepDone("Ingame meter skinned - reload after finishing")
+                StepDone("Ingame Mini Meter OK - reload after finishing")
             end)
         end,
         -- 7: ActionBars style

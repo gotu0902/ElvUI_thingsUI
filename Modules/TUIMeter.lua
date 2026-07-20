@@ -34,28 +34,34 @@ end
 
 local TYPE_NAMES = {}
 local TYPE_ORDER = {}
+local TYPE_NO_PS = {}
 do
     local T = Enum.DamageMeterType
     if T then
         local defs = {
-            { T.DamageDone,   "Damage Done" },
-            { T.Dps,          "DPS" },
-            { T.HealingDone,  "Healing Done" },
-            { T.Hps,          "HPS" },
-            { T.DamageTaken,  "Damage Taken" },
-            { T.Interrupts,   "Interrupts" },
-            { T.Dispels,      "Dispels" },
-            { T.Deaths,       "Deaths" },
+            { T.DamageDone,        "Damage Done" },
+            { T.Dps,               "DPS" },
+            { T.HealingDone,       "Healing Done" },
+            { T.Hps,               "HPS" },
+            { T.DamageTaken,       "Damage Taken" },
+            { T.EnemyDamageTaken,  "Enemy Damage Taken" },
+            { T.Interrupts,        "Interrupts" },
+            { T.Dispels,           "Dispels" },
+            { T.Deaths,            "Deaths" },
         }
         for _, d in ipairs(defs) do
             if d[1] then TYPE_NAMES[d[1]] = d[2]; TYPE_ORDER[#TYPE_ORDER + 1] = d[1] end
         end
+        if T.Interrupts then TYPE_NO_PS[T.Interrupts] = true end
+        if T.Dispels then TYPE_NO_PS[T.Dispels] = true end
+        if T.Deaths then TYPE_NO_PS[T.Deaths] = true end
     end
 end
 
 local function Abbrev(v)
     if Secret(v) then return AbbreviateNumbers and AbbreviateNumbers(v) or "" end
     if v == nil then return "" end
+    if type(v) == "number" then v = math.floor(v + 0.5) end
     if AbbreviateNumbers then return AbbreviateNumbers(v) end
     if type(v) ~= "number" then return tostring(v) end
     if v >= 1e6 then return ("%.1fM"):format(v / 1e6) end
@@ -74,7 +80,7 @@ local function Clock(d)
 end
 
 local windows = {}
-local ApplyLayout
+local ApplyLayout, RefreshWindow, EnterDrill
 local function Panel() return _G.RightChatPanel end
 
 local function FetchSession(win)
@@ -91,6 +97,39 @@ local function FetchSession(win)
     local ok, session = pcall(C_DamageMeter.GetCombatSessionFromType, sType, t)
     if ok then return session end
     return nil
+end
+
+local function FetchDrill(win)
+    local cfg = win.cfg
+    local t = cfg.type or 0
+    local d = win.drill
+    if not d then return nil end
+    -- new PTR API; errors while no session data exists / on secret args in combat
+    local ok, src
+    if type(cfg.session) == "number" then
+        ok, src = pcall(C_DamageMeter.GetCombatSessionSourceFromID, cfg.session, t, d.guid, d.creatureID)
+    else
+        local sType = (cfg.session == "overall") and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
+        ok, src = pcall(C_DamageMeter.GetCombatSessionSourceFromType, sType, t, d.guid, d.creatureID)
+    end
+    if ok then return src end
+    return nil
+end
+
+local function SpellRowSrc(win, i, spell, drill)
+    win._scratch = win._scratch or {}
+    local t = win._scratch[i] or {}
+    win._scratch[i] = t
+    local sid = spell.spellID
+    t.name, t.specIconID = nil, 134400
+    if sid and not Secret(sid) then
+        t.name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(sid) or nil
+        t.specIconID = (C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)) or 134400
+    end
+    t.classFilename = drill.classFile
+    t.totalAmount = spell.totalAmount
+    t.amountPerSecond = spell.amountPerSecond
+    return t
 end
 
 local function StyleRowStatics(win, bar, db)
@@ -187,8 +226,18 @@ local function CreateRow(win, i)
     row.label:SetJustifyH("LEFT")
     row.label:SetWordWrap(false)
 
-    row:RegisterForClicks("RightButtonUp")
-    row:SetScript("OnClick", function() M.ShowModeMenu(win) end)
+    row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row:SetScript("OnClick", function(self, btn)
+        if btn == "RightButton" then
+            if win.drill then
+                win.drill = nil; win.scroll = 0; RefreshWindow(win)
+            else
+                M.ShowModeMenu(win)
+            end
+        elseif btn == "LeftButton" and not win.drill and not M.testMode then
+            EnterDrill(win, self._src)
+        end
+    end)
 
     PositionRow(win, row, i, db)
     win.rows[i] = row
@@ -261,7 +310,9 @@ local function UpdateRow(win, i, rank, src, maxAmt, db)
     else
         row.label:SetText("")
     end
-    row.amount:SetText(ValueText(src.totalAmount, src.amountPerSecond, db.numberFormat))
+    local fmt = TYPE_NO_PS[win.cfg and win.cfg.type or 0] and "total" or db.numberFormat
+    row.amount:SetText(ValueText(src.totalAmount, src.amountPerSecond, fmt))
+    row._src = src
     row:Show()
 end
 
@@ -330,12 +381,15 @@ local function TestSources()
     return testSources
 end
 
-local function RefreshWindow(win)
+RefreshWindow = function(win)
     if not (win.frame:IsShown() and Active()) then return end
     local db = TDB()
-    local session, sources
+    local session, sources, drill
     if M.testMode then
         sources = TestSources()
+    elseif win.drill then
+        drill = FetchDrill(win)
+        sources = drill and drill.combatSpells
     else
         session = FetchSession(win)
         sources = session and session.combatSources
@@ -354,16 +408,22 @@ local function RefreshWindow(win)
     local shown = 0
     for rank = first, math.min(total, first + vis - 1) do
         shown = shown + 1
-        UpdateRow(win, shown, rank, sources[rank], maxAmt, db)
+        local src = sources[rank]
+        if win.drill then src = SpellRowSrc(win, rank, src, win.drill) end
+        UpdateRow(win, shown, rank, src, maxAmt, db)
     end
     for i = shown + 1, #win.rows do win.rows[i]:Hide() end
-    local title = TYPE_NAMES[win.cfg.type or 0] or "Damage Done"
-    if db.sessionTag ~= false then
-        local s = win.cfg.session
-        local tag = (type(s) == "number") and ("#" .. s) or (s == "overall" and "O" or "C")
-        title = title .. " |cFF808080[" .. tag .. "]|r"
+    if win.drill then
+        win.title:SetText(win.drill.name or "")
+    else
+        local title = TYPE_NAMES[win.cfg.type or 0] or "Damage Done"
+        if db.sessionTag ~= false then
+            local s = win.cfg.session
+            local tag = (type(s) == "number") and ("#" .. s) or (s == "overall" and "O" or "C")
+            title = title .. " |cFF808080[" .. tag .. "]|r"
+        end
+        win.title:SetText(title)
     end
-    win.title:SetText(title)
     if win.cfg.showTimer then
         win.timer:Show()
         win.timer:SetText(M.testMode and "1:30" or SessionTimerText(win, session))
@@ -374,6 +434,19 @@ end
 
 function M.RefreshAll()
     for _, win in ipairs(windows) do RefreshWindow(win) end
+end
+
+EnterDrill = function(win, src)
+    if not src then return end
+    if not (src.sourceGUID or src.sourceCreatureID) then return end
+    win.drill = {
+        guid = src.sourceGUID,
+        creatureID = src.sourceCreatureID,
+        name = src.name,
+        classFile = (not Secret(src.classFilename)) and src.classFilename or nil,
+    }
+    win.scroll = 0
+    RefreshWindow(win)
 end
 
 local function StopExpand(win)
@@ -488,7 +561,7 @@ local function BuildTypeEntries(win)
     local e = {}
     for _, t in ipairs(TYPE_ORDER) do
         e[#e + 1] = { label = TYPE_NAMES[t], selected = win.cfg.type == t, func = function()
-            win.cfg.type = t; win.scroll = 0
+            win.cfg.type = t; win.scroll = 0; win.drill = nil
         end }
     end
     return e
@@ -498,10 +571,10 @@ local function BuildSessionEntries(win)
     local db = TDB()
     local e = {}
     e[#e + 1] = { label = "Current", selected = win.cfg.session ~= "overall" and type(win.cfg.session) ~= "number", func = function()
-        win.cfg.session = "current"; win.scroll = 0
+        win.cfg.session = "current"; win.scroll = 0; win.drill = nil
     end }
     e[#e + 1] = { label = "Overall", selected = win.cfg.session == "overall", func = function()
-        win.cfg.session = "overall"; win.scroll = 0
+        win.cfg.session = "overall"; win.scroll = 0; win.drill = nil
     end }
     local avail = C_DamageMeter.GetAvailableCombatSessions and C_DamageMeter.GetAvailableCombatSessions()
     if avail and #avail > 0 then
@@ -517,10 +590,11 @@ local function BuildSessionEntries(win)
             if type(s.durationSeconds) == "number" and not Secret(s.durationSeconds) then
                 nm = ("%s |cFF808080[%s]|r"):format(nm, Clock(s.durationSeconds))
             end
+            nm = ("|cFF808080%d.|r %s"):format(count, nm)
             local id = s.sessionID
             e[#e + 1] = { label = nm, selected = win.cfg.session == id, func = function()
                 for _, w in ipairs(windows) do
-                    if w.cfg then w.cfg.session = id; w.scroll = 0 end
+                    if w.cfg then w.cfg.session = id; w.scroll = 0; w.drill = nil end
                 end
             end }
         end
@@ -693,7 +767,13 @@ local function CreateWindow(i)
         RefreshWindow(win)
     end)
     f:SetScript("OnMouseUp", function(_, btn)
-        if btn == "RightButton" then M.ShowModeMenu(win) end
+        if btn == "RightButton" then
+            if win.drill then
+                win.drill = nil; win.scroll = 0; RefreshWindow(win)
+            else
+                M.ShowModeMenu(win)
+            end
+        end
     end)
 
     if ns.MoverSync and ns.MoverSync.CreateManaged then
