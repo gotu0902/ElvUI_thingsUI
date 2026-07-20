@@ -238,7 +238,7 @@ function TUI:PositioningTweaksOptions()
                             ufColoringDesc = {
                                 order = 1,
                                 type = "description",
-                                name = "Class Colored = class-coloured health bars, dark backdrop, white names.\n Dark Mode normal things colors.\n",
+                                name = "Class Colored = class-coloured health bars, dark backdrop, white names.\nDark Mode normal things colors.\n",
                             },
                             classColored = {
                                 order = 2, type = "execute", name = "Class Colored", width = 1.2,
@@ -259,7 +259,7 @@ function TUI:PositioningTweaksOptions()
                             friendPresetsDesc = {
                                 order = 1,
                                 type = "description",
-                                name = "Some buddys that uses things have made adjustments, the buttons will load their profiles. To revert you'll have to import NHT Profile from wago :)\n\n If you want your preset here, gimme a shout and I'll see what I can do o7\n",
+                                name = "Some buddys that uses things have made adjustments, the buttons will load their profiles. To revert you'll have to import NHT Profile from wago :)\n\nIf you want your preset here, gimme a shout and I'll see what I can do o7\n\n",
                             },
                             lommes = {
                                 order = 2, type = "execute", name = "Nala's profile", width = 1.2,

@@ -411,13 +411,6 @@ local RenderMenu
 
 local function EnsureMenu()
     if menuFrame then return menuFrame end
-    local catcher = CreateFrame("Frame", nil, E.UIParent)
-    catcher:SetAllPoints(E.UIParent)
-    catcher:SetFrameStrata("FULLSCREEN_DIALOG")
-    catcher:SetFrameLevel(100)
-    catcher:EnableMouse(true)
-    catcher:Hide()
-
     menuFrame = CreateFrame("Frame", "TUI_MeterMenuFrame", E.UIParent, "BackdropTemplate")
     menuFrame:SetFrameStrata("FULLSCREEN_DIALOG")
     menuFrame:SetFrameLevel(110)
@@ -427,11 +420,18 @@ local function EnsureMenu()
     menuFrame:SetClampedToScreen(true)
     menuFrame:Hide()
     menuFrame.rows = {}
-    menuFrame.catcher = catcher
 
-    catcher:SetScript("OnMouseDown", function() menuFrame:Hide() end)
-    menuFrame:SetScript("OnShow", function() catcher:Show() end)
-    menuFrame:SetScript("OnHide", function() catcher:Hide(); menuFrame.win = nil; menuFrame.kind = nil end)
+    local watcher = CreateFrame("Frame")
+    watcher:SetScript("OnEvent", function()
+        if menuFrame:IsShown() and not menuFrame:IsMouseOver() then menuFrame:Hide() end
+    end)
+    menuFrame:SetScript("OnShow", function() watcher:RegisterEvent("GLOBAL_MOUSE_DOWN") end)
+    menuFrame:SetScript("OnHide", function()
+        watcher:UnregisterEvent("GLOBAL_MOUSE_DOWN")
+        menuFrame._closedWin, menuFrame._closedKind, menuFrame._closedAt = menuFrame.win, menuFrame.kind, GetTime()
+        menuFrame.win = nil
+        menuFrame.kind = nil
+    end)
 
     menuFrame.upHint = menuFrame:CreateFontString(nil, "OVERLAY")
     menuFrame.upHint:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
@@ -596,6 +596,11 @@ function M.ShowModeMenu(win, kind)
     kind = kind or "types"
     local m = EnsureMenu()
     if m:IsShown() and m.win == win and m.kind == kind then m:Hide(); return end
+    if m._closedWin == win and m._closedKind == kind and GetTime() - (m._closedAt or 0) < 0.4 then
+        m._closedWin = nil
+        return
+    end
+    m._closedWin = nil
     local db = TDB()
     if not db then return end
     m.entries = (kind == "session") and BuildSessionEntries(win) or BuildTypeEntries(win)
@@ -606,12 +611,12 @@ function M.ShowModeMenu(win, kind)
         local headerTop = win.header:GetTop() or 0
         local screenTop = E.UIParent:GetTop() or 1000
         m.maxH = math.max(MENU_ROW + 4, screenTop - headerTop - 8)
-        m:SetPoint("BOTTOMLEFT", win.header, "TOPLEFT", 0, 0)
-        m:SetPoint("BOTTOMRIGHT", win.header, "TOPRIGHT", 0, 0)
+        m:SetPoint("BOTTOMLEFT", win.header, "TOPLEFT", 0, 1)
+        m:SetPoint("BOTTOMRIGHT", win.header, "TOPRIGHT", 0, 1)
     else
         m.autoHeight = false
         m.maxH = math.max(MENU_ROW + 4, (win.frame:GetHeight() or 200) - (win.header:GetHeight() or 20))
-        m:SetPoint("TOPLEFT", win.header, "BOTTOMLEFT", 0, 0)
+        m:SetPoint("TOPLEFT", win.header, "BOTTOMLEFT", 0, 1)
         m:SetPoint("BOTTOMRIGHT", win.frame, "BOTTOMRIGHT", 0, 0)
     end
     m.win = win

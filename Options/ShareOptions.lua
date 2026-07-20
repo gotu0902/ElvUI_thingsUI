@@ -16,7 +16,7 @@ function TUI:ShareOptions()
     local args = {
             desc = {
                 order = 1, type = "description", fontSize = "medium", width = "full",
-                name = "Export any sections to a string, or paste one below to import - the importer picks exactly what to bring in (whole sections, only new items, or individual bar setups / custom groups / specials, with per-part overwrite when something already exists).\n",
+                name = "\n",
             },
             runInstaller = {
                 order = 2, type = "execute", name = "|cFF40FF40Run Installer|r", width = "double",
@@ -27,7 +27,7 @@ function TUI:ShareOptions()
 
             defaultsHeader = { order = 4, type = "header", name = "Import default presets" },
             defaultsDesc = { order = 5, type = "description",
-                name = "Import all |cFF8080FFthingsUI|r stuff, if you want to start with and edit my stuff. |cFFFF6060Overwrites everythings hah.|r\n" },
+                name = "Import all |cFF8080FFplugin things|r, if you want to start with and edit my stuff. |cFFFF6060Overwrites everythings hah.|r\n\n" },
             defaultsBreak = { order = 7, type = "description", width = "full", name = "\n" },
 
             exportHeader = { order = 10, type = "header", name = "Export" },
@@ -68,7 +68,7 @@ function TUI:ShareOptions()
             importHeader = { order = 20, type = "header", name = "Import" },
             importDesc = {
                 order = 21, type = "description", fontSize = "medium", width = "full",
-                name = "Opens the importer - paste the string there and pick what to bring in.\n",
+                name = "Opens the importer - paste the string there and pick what you want.\n\n\n",
             },
             importButton = {
                 order = 22, type = "execute", name = "Import...", width = "double",
