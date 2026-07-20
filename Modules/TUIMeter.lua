@@ -127,9 +127,22 @@ local function StyleRowStatics(win, bar, db)
     bar._staticSig = win._staticSig
 end
 
+local function EffectiveBars(win, db)
+    local conf = db.barHeight or 23.4
+    local s = db.barSpacing or -1
+    local H = win.content:GetHeight() or 0
+    local step = conf + s
+    if H < 5 or step <= 0.5 then return conf, 1 end
+    if db.autoFit == false then
+        return conf, math.min(MAX_ROWS, math.max(1, math.floor((H + s + 0.001) / step)))
+    end
+    local n = math.min(MAX_ROWS, math.max(1, math.floor((H + s) / step + 0.5)))
+    return (H - (n - 1) * s) / n, n
+end
+
 local function PositionRow(win, row, i, db)
-    local barH = db.barHeight or 18
-    local sp   = db.barSpacing or 1
+    local barH = win._barH or db.barHeight or 23.4
+    local sp   = db.barSpacing or -1
     row:SetHeight(barH)
     row:ClearAllPoints()
     row:SetPoint("TOPLEFT", win.content, "TOPLEFT", 0, -((i - 1) * (barH + sp)))
@@ -184,6 +197,7 @@ end
 
 local function LayoutRows(win)
     local db = TDB()
+    win._barH = EffectiveBars(win, db)
     for i, row in ipairs(win.rows) do
         PositionRow(win, row, i, db)
     end
@@ -193,7 +207,7 @@ local function UpdateRow(win, i, rank, src, maxAmt, db)
     local row = win.rows[i] or CreateRow(win, i)
     if row._staticSig ~= win._staticSig then StyleRowStatics(win, row, db) end
 
-    local barH = db.barHeight or 18
+    local barH = win._barH or db.barHeight or 23.4
     local showIcon = (db.iconStyle or "spec") ~= "none"
     local classFile = src.classFilename
     if Secret(classFile) then classFile = nil end
@@ -281,22 +295,58 @@ local function SessionTimerText(win, session)
     return Clock(shown)
 end
 
-local function VisibleRows(win, db)
-    local h = win.content:GetHeight() or 0
-    local sp = db.barSpacing or 1
-    local step = (db.barHeight or 18) + sp
-    if step <= 0.5 then return 1 end
-    return math.min(MAX_ROWS, math.max(1, math.floor((h + sp + 0.001) / step)))
+
+local testSources
+local function TestSources()
+    if testSources then return testSources end
+    testSources = {}
+    local names = {
+        "Gruff", "Baregeir", "Odla", "Meiler", "Drgejr", "Leoridk", "Zerlat", "Quiys",
+        "Yrwenmonk", "Mcmengdh", "Askeladd", "Tussi", "Bolle", "Knerten", "Pesten", "Lusa",
+        "Brumund", "Sindre", "Vaffel", "Krampus", "Fjompen", "Snerk", "Vims", "Lurifax",
+    }
+    local numClasses = GetNumClasses and GetNumClasses() or 13
+    local total = #names
+    for i = 1, total do
+        local classID = ((i - 1) % numClasses) + 1
+        local _, classFile = GetClassInfo(classID)
+        local specIcon = 0
+        if GetNumSpecializationsForClassID and GetSpecializationInfoForClassID then
+            local n = GetNumSpecializationsForClassID(classID)
+            if n and n > 0 then
+                local _, _, _, icon = GetSpecializationInfoForClassID(classID, ((i - 1) % n) + 1)
+                specIcon = icon or 0
+            end
+        end
+        local amt = math.floor(2500000 * (1 - (i - 1) / total)) + math.random(0, 40000)
+        testSources[i] = {
+            name = names[i],
+            classFilename = classFile,
+            specIconID = specIcon,
+            totalAmount = amt,
+            amountPerSecond = math.floor(amt / 90),
+        }
+    end
+    return testSources
 end
 
 local function RefreshWindow(win)
     if not (win.frame:IsShown() and Active()) then return end
     local db = TDB()
-    local session = FetchSession(win)
-    local sources = session and session.combatSources
+    local session, sources
+    if M.testMode then
+        sources = TestSources()
+    else
+        session = FetchSession(win)
+        sources = session and session.combatSources
+    end
     local total = sources and #sources or 0
     win._lastTotal = total
-    local vis = VisibleRows(win, db)
+    local bh, vis = EffectiveBars(win, db)
+    if math.abs(bh - (win._barH or 0)) > 0.005 then
+        win._barH = bh
+        for i, row in ipairs(win.rows) do PositionRow(win, row, i, db) end
+    end
     local maxScroll = math.max(0, total - vis)
     if (win.scroll or 0) > maxScroll then win.scroll = maxScroll end
     local first = 1 + (win.scroll or 0)
@@ -310,7 +360,7 @@ local function RefreshWindow(win)
     win.title:SetText(TYPE_NAMES[win.cfg.type or 0] or "Damage Done")
     if win.cfg.showTimer then
         win.timer:Show()
-        win.timer:SetText(SessionTimerText(win, session))
+        win.timer:SetText(M.testMode and "1:30" or SessionTimerText(win, session))
     else
         win.timer:Hide()
     end
@@ -384,6 +434,10 @@ function M.ShowModeMenu(win)
             end
         end
         root:CreateDivider()
+        root:CreateCheckbox("Test Mode", function() return M.testMode end, function()
+            M.testMode = not M.testMode
+            M.RefreshAll()
+        end)
         root:CreateButton("Reset Data", function()
             if C_DamageMeter.ResetAllCombatSessions then C_DamageMeter.ResetAllCombatSessions() end
             frozenCur, frozenOverall = 0, 0

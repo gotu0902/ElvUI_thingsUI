@@ -48,7 +48,7 @@ function TUI:DamageMeterOptions()
                         order = 1, type = "select", name = "Damage Meter", width = 1.2,
                         values = {
                             DETAILS = "Details!",
-                            TUI     = "|cFF8080FFSkin Ingame Meter|r",
+                            TUI     = "|cFF8080FFMini Meter|r",
                         },
                         sorting = { "DETAILS", "TUI" },
                         confirm = function(_, v)
@@ -83,6 +83,13 @@ function TUI:DamageMeterOptions()
                 order = 10, type = "group", name = "Windows",
                 hidden = notTUI,
                 args = {
+                    testMode = {
+                        order = 0.5, type = "toggle", name = "|cFF40FF40Test Mode|r",
+                        get = function() return ns.TUIMeter and ns.TUIMeter.testMode end,
+                        set = function(_, v)
+                            if ns.TUIMeter then ns.TUIMeter.testMode = v; ns.TUIMeter.RefreshAll() end
+                        end,
+                    },
                     layout = {
                         order = 1, type = "select", name = "Window Layout", width = 1.4,
                         values = {
@@ -170,6 +177,12 @@ function TUI:DamageMeterOptions()
                     barsGroup = {
                         order = 1, type = "group", name = "Bars", inline = true,
                         args = {
+                            autoFit = {
+                                order = 0.5, type = "toggle", name = "Auto Fit Bars",
+                                desc = "Bar Height becomes a target - each window stretches its bars to fill the space exactly.",
+                                get = function() return tdb().autoFit ~= false end,
+                                set = function(_, v) tset("autoFit", v) end,
+                            },
                             barHeight = {
                                 order = 1, type = "range", name = "Bar Height", min = 6, max = 40, step = 0.01, bigStep = 1,
                                 get = function() return tdb().barHeight or 23.4 end,

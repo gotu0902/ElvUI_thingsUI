@@ -11,6 +11,7 @@ P["thingsUI"].damageMeter = {
         splitV = 0.5,
         barHeight = 23.4,
         barSpacing = -1,
+        autoFit = true,
         barBgAlpha = 0,
         bgAlpha = 0,
         windowBorder = false,
