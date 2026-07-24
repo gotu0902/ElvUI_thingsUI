@@ -175,15 +175,15 @@ function M.GetLustState(now)
     if elapsed >= 0 and elapsed < LUST_BUFF_DURATION then
         return "buff", lustState.start, LUST_BUFF_DURATION
     end
-    lustState.active = false
     return nil
 end
 
 local function ScheduleLustExpiry(start)
     local remain = LUST_BUFF_DURATION - (GetTime() - start) + 0.1
     if remain <= 0 then return end
+    -- keyed on start alone so a reader's stale view can't swallow the hide
     C_Timer.After(remain, function()
-        if lustState.active and lustState.start == start then
+        if lustState.start == start then
             lustState.active = false
             FireHosts()
         end
@@ -299,7 +299,6 @@ function M.GetActiveBuff(timer, now)
     if start + dur > now then
         return start, dur
     end
-    lastCastStart[timer.id] = nil
 end
 
 function M.IsInCombat()
@@ -336,7 +335,10 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, spellID)
                 local dur = timer and M.GetDuration(timer)
                 if dur and dur > 0 then
                     C_Timer.After(dur + 0.1, function()
-                        if lastCastStart[tid] == now then FireHosts() end
+                        if lastCastStart[tid] == now then
+                            lastCastStart[tid] = nil
+                            FireHosts()
+                        end
                     end)
                 end
             end

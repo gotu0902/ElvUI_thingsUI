@@ -412,7 +412,7 @@ local function CreateIcon(gs, group, kind, id)
 
         cd:SetScript("OnCooldownDone", function()
             local t = ns.Timers and ns.Timers.GetByID(btn._id)
-            if t and t.showIdle then
+            if t and t.showIdle and t.kind ~= "lust" then
                 UpdateIcon(btn)
             elseif QueueLayout then
                 QueueLayout()
