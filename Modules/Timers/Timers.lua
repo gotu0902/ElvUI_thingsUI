@@ -179,21 +179,23 @@ function M.GetLustState(now)
     return nil
 end
 
-local lustExpireScheduled = false
+local function ScheduleLustExpiry(start)
+    local remain = LUST_BUFF_DURATION - (GetTime() - start) + 0.1
+    if remain <= 0 then return end
+    C_Timer.After(remain, function()
+        if lustState.active and lustState.start == start then
+            lustState.active = false
+            FireHosts()
+        end
+    end)
+end
+
 local function TriggerLust()
-    lustState.start  = GetTime()
+    local start = GetTime()
+    lustState.start  = start
     lustState.active = true
     FireHosts()
-    if not lustExpireScheduled then
-        lustExpireScheduled = true
-        C_Timer.After(LUST_BUFF_DURATION + 0.1, function()
-            lustExpireScheduled = false
-            if lustState.active and (GetTime() - lustState.start) >= LUST_BUFF_DURATION then
-                lustState.active = false
-                FireHosts()
-            end
-        end)
-    end
+    ScheduleLustExpiry(start)
 end
 
 local lustEvents = CreateFrame("Frame")
@@ -226,6 +228,7 @@ local function ScanExistingLust()
             if (GetTime() - start) < LUST_BUFF_DURATION then
                 lustState.start, lustState.active = start, true
                 FireHosts()
+                ScheduleLustExpiry(start)
             end
             return
         end
@@ -323,7 +326,20 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, spellID)
         local ids = triggerMap[spellID]
         if ids then
             local now = GetTime()
-            for i = 1, #ids do lastCastStart[ids[i]] = now end
+            for i = 1, #ids do
+                local tid = ids[i]
+                lastCastStart[tid] = now
+                local timer
+                for _, t in ipairs(M.GetTimers()) do
+                    if t.id == tid then timer = t; break end
+                end
+                local dur = timer and M.GetDuration(timer)
+                if dur and dur > 0 then
+                    C_Timer.After(dur + 0.1, function()
+                        if lastCastStart[tid] == now then FireHosts() end
+                    end)
+                end
+            end
             FireHosts()   -- relayout: a buff just started
         end
     elseif event == "GET_ITEM_INFO_RECEIVED" then

@@ -58,21 +58,42 @@ do
     end
 end
 
+-- integer-tier config makes the C formatter round sub-1000 values (even secrets);
+-- same tier table as Details' Midnight branch and EllesmereUI
+local abb
+if CreateAbbreviateConfig then
+    abb = { config = CreateAbbreviateConfig({
+        { breakpoint = 1000000000, abbreviation = "B", significandDivisor = 10000000, fractionDivisor = 100, abbreviationIsGlobal = false },
+        { breakpoint = 1000000,    abbreviation = "M", significandDivisor = 10000,    fractionDivisor = 100, abbreviationIsGlobal = false },
+        { breakpoint = 1000,       abbreviation = "K", significandDivisor = 100,      fractionDivisor = 10,  abbreviationIsGlobal = false },
+        { breakpoint = 1,          abbreviation = "",  significandDivisor = 1,        fractionDivisor = 1,   abbreviationIsGlobal = false },
+    }) }
+end
+
 local function Abbrev(v)
-    if Secret(v) then return AbbreviateNumbers and AbbreviateNumbers(v) or "" end
     if v == nil then return "" end
-    if type(v) == "number" then v = math.floor(v + 0.5) end
-    if AbbreviateNumbers then return AbbreviateNumbers(v) end
+    if not Secret(v) and type(v) == "number" then v = math.floor(v + 0.5) end
+    if AbbreviateNumbers then
+        if abb then return AbbreviateNumbers(v, abb) or "" end
+        return AbbreviateNumbers(v) or ""
+    end
+    if Secret(v) then return "" end
     if type(v) ~= "number" then return tostring(v) end
     if v >= 1e6 then return ("%.1fM"):format(v / 1e6) end
     if v >= 1e3 then return ("%.0fK"):format(v / 1e3) end
     return ("%.0f"):format(v)
 end
 
+local function ClampPerSec(v)
+    if Secret(v) then return v end
+    if type(v) == "number" and v < 1 then return 1 end
+    return v
+end
+
 local function ValueText(total, perSec, mode)
     if mode == "total" then return ("%s"):format(Abbrev(total)) end
-    if mode == "persec" then return ("%s"):format(Abbrev(perSec)) end
-    return ("%s (%s)"):format(Abbrev(total), Abbrev(perSec))
+    if mode == "persec" then return ("%s"):format(Abbrev(ClampPerSec(perSec))) end
+    return ("%s (%s)"):format(Abbrev(total), Abbrev(ClampPerSec(perSec)))
 end
 
 local function Clock(d)
@@ -83,16 +104,36 @@ local windows = {}
 local ApplyLayout, RefreshWindow, EnterDrill, RenderPopout
 local function Panel() return _G.RightChatPanel end
 
+local frozenCur, frozenOverall = 0, 0
+local combatStart
+local lastCombatEnd = 0
+
+local function LiveNow()
+    return InCombatLockdown() or (GetTime() - lastCombatEnd) < 3
+end
+
+local function ResolveSession(sess)
+    if type(sess) == "number" then return sess end
+    if sess == "overall" then return "overall" end
+    if LiveNow() then return "current" end
+    -- OOC: pin "current" to the newest finished segment so party fights don't leak in
+    local avail = C_DamageMeter.GetAvailableCombatSessions and C_DamageMeter.GetAvailableCombatSessions()
+    local newest = avail and avail[#avail]
+    if newest and newest.sessionID then return newest.sessionID end
+    return "current"
+end
+
 local function FetchSession(win)
     local cfg = win.cfg
     local t = cfg.type or 0
-    if type(cfg.session) == "number" then
+    local sess = ResolveSession(cfg.session)
+    if type(sess) == "number" then
         -- new PTR API; errors while no session data exists
-        local ok, session = pcall(C_DamageMeter.GetCombatSessionFromID, cfg.session, t)
+        local ok, session = pcall(C_DamageMeter.GetCombatSessionFromID, sess, t)
         if ok then return session end
         return nil
     end
-    local sType = (cfg.session == "overall") and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
+    local sType = (sess == "overall") and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
     -- new PTR API; errors while no session data exists
     local ok, session = pcall(C_DamageMeter.GetCombatSessionFromType, sType, t)
     if ok then return session end
@@ -101,6 +142,7 @@ end
 
 local function FetchSource(session, t, d)
     if not d then return nil end
+    session = ResolveSession(session)
     -- new PTR API; errors while no session data exists / on secret args in combat
     local ok, src
     if type(session) == "number" then
@@ -426,14 +468,14 @@ local function UpdateRow(win, i, rank, src, maxAmt, db)
         row.label:SetText("")
     end
     local fmt = TYPE_NO_PS[win.cfg and win.cfg.type or 0] and "total" or db.numberFormat
-    row.amount:SetText(ValueText(src.totalAmount, src.amountPerSecond, fmt))
+    local perSec = src.amountPerSecond
+    if win._psDiv and type(src.totalAmount) == "number" and not Secret(src.totalAmount) then
+        perSec = src.totalAmount / win._psDiv
+    end
+    row.amount:SetText(ValueText(src.totalAmount, perSec, fmt))
     row._src = src
     row:Show()
 end
-
-local frozenCur, frozenOverall = 0, 0
-local combatStart
-local lastCombatEnd = 0
 
 local function SessionTimerText(win, session)
     local s = win.cfg.session
@@ -444,7 +486,11 @@ local function SessionTimerText(win, session)
         return ""
     end
     local overall = s == "overall"
-    if not InCombatLockdown() and C_DamageMeter.GetSessionDurationSeconds then
+    if not overall and not LiveNow() then
+        local d = session and session.durationSeconds
+        if not Secret(d) and type(d) == "number" then return Clock(d) end
+    end
+    if not InCombatLockdown() and (GetTime() - lastCombatEnd) < 3 and C_DamageMeter.GetSessionDurationSeconds then
         local sType = overall and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
         -- new PTR API; errors while no session data exists
         local ok, d = pcall(C_DamageMeter.GetSessionDurationSeconds, sType)
@@ -511,6 +557,12 @@ RefreshWindow = function(win)
     end
     local total = sources and #sources or 0
     win._lastTotal = total
+    local sess = win.cfg.session
+    win._psDiv = nil
+    if not M.testMode and sess == "overall" and not LiveNow() then
+        local dur = frozenOverall
+        if dur and dur > 1 then win._psDiv = dur end
+    end
     local bh, vis = EffectiveBars(win, db)
     if math.abs(bh - (win._barH or 0)) > 0.005 then
         win._barH = bh
@@ -654,6 +706,11 @@ RenderPopout = function()
     local cc = ctx.drill.classFile and RAID_CLASS_COLORS[ctx.drill.classFile]
     local maxAmt = (spells[1] and spells[1].totalAmount) or 1
     local pTotal = src and src.totalAmount
+    local psDiv
+    if ctx.session == "overall" and not LiveNow() then
+        local dur = frozenOverall
+        if dur and dur > 1 then psDiv = dur end
+    end
     local z = db.iconZoom or 0.05
     local y = 28
     local shown = 0
@@ -700,7 +757,11 @@ RenderPopout = function()
         row.fill:SetValue(sp.totalAmount or 0)
         row.pos:SetText(rank .. ".")
         if nm then row.label:SetText(nm) else row.label:SetText("") end
-        local vt = ValueText(sp.totalAmount, sp.amountPerSecond, db.numberFormat)
+        local perSec = sp.amountPerSecond
+        if psDiv and type(sp.totalAmount) == "number" and not Secret(sp.totalAmount) then
+            perSec = sp.totalAmount / psDiv
+        end
+        local vt = ValueText(sp.totalAmount, perSec, db.numberFormat)
         local ta = sp.totalAmount
         if type(ta) == "number" and not Secret(ta) and type(pTotal) == "number" and not Secret(pTotal) and pTotal > 0 then
             vt = vt .. ("  |cFF808080%.1f%%|r"):format(ta / pTotal * 100)
@@ -1349,6 +1410,7 @@ local function StartTicker()
     ticker = C_Timer.NewTicker(rate, M.RefreshAll)
 end
 
+local lastEventPaint = 0
 local pendingRefresh = false
 local function QueueRefresh()
     if pendingRefresh then return end
@@ -1358,19 +1420,37 @@ end
 
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")
-ev:RegisterEvent("PLAYER_REGEN_DISABLED")
-ev:RegisterEvent("PLAYER_REGEN_ENABLED")
-if C_DamageMeter then
-    ev:RegisterEvent("DAMAGE_METER_RESET")
-    ev:RegisterEvent("DAMAGE_METER_COMBAT_SESSION_UPDATED")
-    ev:RegisterEvent("DAMAGE_METER_CURRENT_SESSION_UPDATED")
+
+local COMBAT_EVENTS = {
+    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ENCOUNTER_START",
+    "DAMAGE_METER_RESET", "DAMAGE_METER_COMBAT_SESSION_UPDATED", "DAMAGE_METER_CURRENT_SESSION_UPDATED",
+}
+local eventsActive = false
+local function SetEventsActive(on)
+    if on == eventsActive then return end
+    eventsActive = on
+    for _, e in ipairs(COMBAT_EVENTS) do
+        if on then
+            if C_DamageMeter or not e:find("^DAMAGE_METER") then ev:RegisterEvent(e) end
+        else
+            ev:UnregisterEvent(e)
+        end
+    end
 end
 ev:SetScript("OnEvent", function(_, event)
     if not Active() then return end
-    if event == "PLAYER_REGEN_DISABLED" then
+    if event == "ENCOUNTER_START" then
+        -- hard segment boundary: repaint immediately even mid-chain-pull
+        frozenCur = 0
+        if InCombatLockdown() and not combatStart then combatStart = GetTime() end
+        lastEventPaint = 0
+        StartTicker()
+        QueueRefresh()
+    elseif event == "PLAYER_REGEN_DISABLED" then
         combatStart = GetTime()
         frozenCur = 0
         StartTicker()
+        QueueRefresh()
     elseif event == "PLAYER_REGEN_ENABLED" then
         lastCombatEnd = GetTime()
         if combatStart then
@@ -1394,11 +1474,52 @@ ev:SetScript("OnEvent", function(_, event)
         frozenCur, frozenOverall = 0, 0
         QueueRefresh()
     elseif event == "DAMAGE_METER_COMBAT_SESSION_UPDATED" then
-        if not InCombatLockdown() and (GetTime() - lastCombatEnd) < 3 then QueueRefresh() end
+        if InCombatLockdown() then
+            -- keep the pull feeling live regardless of the ticker rate, max 1 paint/s
+            local now = GetTime()
+            if now - lastEventPaint >= 1 then
+                lastEventPaint = now
+                QueueRefresh()
+            end
+        elseif (GetTime() - lastCombatEnd) < 3 then
+            QueueRefresh()
+        end
     else
         C_Timer.After(1, function() TUI:UpdateTUIMeter() end)
     end
 end)
+
+SLASH_TUIMETERDEBUG1 = "/tuimeterdbg"
+SlashCmdList["TUIMETERDEBUG"] = function()
+    local P = function(s) print("|cFF8080FFTUIMeter|r " .. s) end
+    P("client build: " .. table.concat({ GetBuildInfo() }, " / "))
+    if not C_DamageMeter then P("C_DamageMeter: MISSING"); return end
+    local fns = { "GetCombatSessionFromType", "GetCombatSessionFromID", "GetAvailableCombatSessions",
+                  "GetSessionDurationSeconds", "GetCombatSessionSourceFromType", "GetCombatSessionSourceFromID",
+                  "ResetAllCombatSessions" }
+    for _, f in ipairs(fns) do
+        P(("  %s: %s"):format(f, C_DamageMeter[f] and "yes" or "NO"))
+    end
+    if C_DamageMeter.GetAvailableCombatSessions then
+        local ok, avail = pcall(C_DamageMeter.GetAvailableCombatSessions)
+        P("  available sessions: " .. (ok and avail and tostring(#avail) or ("call failed: " .. tostring(avail))))
+    end
+    local T = Enum.DamageMeterType or {}
+    for _, name in ipairs({ "DamageDone", "Dps", "HealingDone", "Hps" }) do
+        local t = T[name]
+        if t then
+            local ok, s = pcall(C_DamageMeter.GetCombatSessionFromType, Enum.DamageMeterSessionType.Current, t)
+            local n = ok and s and s.combatSources and #s.combatSources or "?"
+            P(("  current/%s: %s (%s sources)"):format(name, ok and "ok" or "FAIL", tostring(n)))
+        else
+            P("  enum " .. name .. ": MISSING")
+        end
+    end
+    if AbbreviateNumbers then
+        P("  plain 732.14 -> " .. tostring(AbbreviateNumbers(732.14)))
+        if abb then P("  config 732.14 -> " .. tostring(AbbreviateNumbers(732.14, abb))) else P("  config: not built") end
+    end
+end
 
 local panelHooked = false
 function TUI:UpdateTUIMeter()
@@ -1407,8 +1528,10 @@ function TUI:UpdateTUIMeter()
     if not Active() then
         for _, win in ipairs(windows) do win.frame:Hide() end
         StopTicker()
+        SetEventsActive(false)
         return
     end
+    SetEventsActive(true)
     local db = TDB()
     db.windows = db.windows or {}
     local n = #Cells(db)

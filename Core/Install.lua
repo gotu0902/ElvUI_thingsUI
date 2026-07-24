@@ -143,6 +143,8 @@ function ns.SetDamageMeterProvider(provider)
         print("|cFF8080FFthingsUI|r - Mini Meter selected" .. (hasDetails and ", Details! disabled." or ".") .. " |cFFFFFF00Reload required.|r")
     else
         if hasDetails then C_AddOns.EnableAddOn("Details", E.myguid) end
+        -- modern Details drives Blizzard's meter machinery; leave the feature enabled
+        pcall(SetCVar, "damageMeterEnabled", "1")
         print("|cFF8080FFthingsUI|r - Details! selected" .. (hasDetails and "." or " |cFFFF6060(not installed)|r.") .. " |cFFFFFF00Reload required.|r")
     end
     if TUI.UpdateTUIMeter then TUI:UpdateTUIMeter() end

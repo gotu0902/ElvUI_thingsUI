@@ -447,7 +447,7 @@ function M.GetInheritedWidth()
     if setup.minWidth and setup.minWidth > w then w = setup.minWidth end
     w = w + (setup.widthOffset or 0)
     if w <= 1 then return nil end
-    return ns.Pixel and ns.Pixel.Snap(w) or math.floor(w + 0.5)
+    return math.floor(w + 0.5)
 end
 
 local lastWidth = {}

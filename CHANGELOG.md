@@ -1,5 +1,8 @@
 # Changelog
 
+## 4.1.0-beta3
+- 
+
 ## 4.1.0-beta2
 - Skinned minimal dmg meter thing
 - Anchor support and extra layout options for MinimapButtonButton addon

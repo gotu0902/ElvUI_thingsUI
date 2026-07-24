@@ -37,6 +37,8 @@ local function RetargetPoint(targetPoint)
     if not cx then return end
     local w, h = ref:GetSize()
     if not w or w < 1 then return end
+    -- Integer w/h keeps the center↔edge round-trip lossless
+    w, h = math.floor(w + 0.5), math.floor((h or 0) + 0.5)
     local uw = _G.UIParent:GetRight() or _G.UIParent:GetWidth() or 1
     local uh = _G.UIParent:GetTop()   or _G.UIParent:GetHeight() or 1
     local fx, fy = cx, cy
@@ -158,6 +160,7 @@ local function OnDragStop(self)
     local cx, cy = self:GetCenter()
     if not cx then return end
     local w, h = self:GetSize()
+    w, h = math.floor((w or 0) + 0.5), math.floor((h or 0) + 0.5)
     local point, x, y = ResolvePoint(cx, cy, w, h)
     local forced = GrowthDirectionPin()
     if forced and forced ~= point then
@@ -308,6 +311,7 @@ local function EnsureMover()
         if forced and forced ~= p then
             local cx, cy = self:GetCenter()
             local w, h = self:GetSize()
+            if w then w, h = math.floor(w + 0.5), math.floor((h or 0) + 0.5) end
             if cx and w and w > 0 then
                 local uw = _G.UIParent:GetRight() or _G.UIParent:GetWidth() or 1
                 local uh = _G.UIParent:GetTop()   or _G.UIParent:GetHeight() or 1

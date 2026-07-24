@@ -149,8 +149,9 @@ local function SyncProxyToViewer(proxy, viewer)
     if not w or w <= 0 or not h or h <= 0 then return false end
     local k = (viewer:GetEffectiveScale() or 1) / (_G.UIParent:GetEffectiveScale() or 1)
     proxy:ClearAllPoints()
-    proxy:SetSize(w * k, h * k)
-    proxy:SetPoint("BOTTOMLEFT", _G.UIParent, "BOTTOMLEFT", fl * k, fb * k)
+    -- Integer geometry keeps every downstream ±w/2 round-trip lossless
+    proxy:SetSize(math.floor(w * k + 0.5), math.floor(h * k + 0.5))
+    proxy:SetPoint("BOTTOMLEFT", _G.UIParent, "BOTTOMLEFT", math.floor(fl * k + 0.5), math.floor(fb * k + 0.5))
     return true
 end
 
@@ -187,7 +188,7 @@ local function UpdateClusterPositioning()
 
     local yOffset = 0
     local sideOverflow = utilityOverflow / 2
-    local viewerW = src:GetWidth() or 0
+    local viewerW = proxy:GetWidth() or 0
     local parityNudge = (math.floor(viewerW + 0.5) % 2 == 1) and 0.5 or 0
     local trinketExt, trinketSide = 0, "RIGHT"
 
@@ -206,7 +207,7 @@ local function UpdateClusterPositioning()
         local playerFrame = _G["ElvUF_Player"]
         if playerFrame then
             playerFrame:ClearAllPoints()
-            playerFrame:SetPoint("RIGHT", proxy, "LEFT", -(db.frameGap + sideOverflow + leftExtra) - parityNudge, yOffset)
+            playerFrame:SetPoint("RIGHT", proxy, "LEFT", -(math.floor(db.frameGap + sideOverflow + leftExtra + 0.5) + parityNudge), yOffset)
         end
     end
 
@@ -214,7 +215,7 @@ local function UpdateClusterPositioning()
         local targetFrame = _G["ElvUF_Target"]
         if targetFrame then
             targetFrame:ClearAllPoints()
-            targetFrame:SetPoint("LEFT", proxy, "RIGHT", db.frameGap + sideOverflow + rightExtra + parityNudge, yOffset)
+            targetFrame:SetPoint("LEFT", proxy, "RIGHT", math.floor(db.frameGap + sideOverflow + rightExtra + 0.5) + parityNudge, yOffset)
         end
     end
     
@@ -269,7 +270,7 @@ local function UpdateClusterPositioning()
                 and E.db.unitframe.units.focus.castbar
             local w = focus:GetWidth()
             if fcb and w and w > 0 then
-                w = ((ns.Pixel and ns.Pixel.Snap(w)) or math.floor(w + 0.5)) + 1
+                w = math.floor(w + 0.5) + 1
                 if cdb.savedWidth == nil then cdb.savedWidth = fcb.width end
                 if fcb.width ~= w then
                     fcb.width = w
