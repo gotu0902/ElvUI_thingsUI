@@ -200,27 +200,8 @@ function TUI:ClusterPositioningSubTab()
                                 order = 1,
                                 type = "description",
                                 name = function()
-                                    local hiddenCheck = ns.CDMIcons and ns.CDMIcons.IsPassiveHidden
-                                    local function countShown(viewer)
-                                        local n = 0
-                                        for _, child in ipairs({ viewer:GetChildren() }) do
-                                            if child and child:IsShown() and not (hiddenCheck and hiddenCheck(child)) then n = n + 1 end
-                                        end
-                                        return n
-                                    end
-                                    local essentialCount = EssentialCooldownViewer and countShown(EssentialCooldownViewer) or 0
-                                    local utilityCount = UtilityCooldownViewer and countShown(UtilityCooldownViewer) or 0
-
-                                    local TR = ns.TrinketsCDM
-                                    local trinketCount = (TR and TR.GetExtraEssentialCount and TR.GetExtraEssentialCount()) or 0
-                                    if trinketCount > 0 then
-                                        local key = (TR.GetTrinketAttachKey and TR.GetTrinketAttachKey()) or "essential"
-                                        if key == "utility" then
-                                            utilityCount = utilityCount + trinketCount
-                                        else
-                                            essentialCount = essentialCount + trinketCount
-                                        end
-                                    end
+                                    local essentialCount, utilityCount = 0, 0
+                                    if ns.ClusterCounts then essentialCount, utilityCount = ns.ClusterCounts() end
                                     return string.format("|cFFFFFF00Essential Icons:|r %d\n|cFFFFFF00Utility Icons:|r %d", essentialCount, utilityCount)
                                 end,
                             },
@@ -242,7 +223,7 @@ function TUI:ClusterPositioningSubTab()
                         args = {
                             iconSizeInfo = {
                                 order = 1, type = "description",
-                                name = "|cFF888888Essential and Utility icon widths are read from the CDM Icons tabs (Essential / Utility -> Icon Size).|r\n",
+                                name = "|cFF888888Overflow is measured from the live on-screen Essential and Utility row widths - each side moves only as far as Utility actually sticks out.|r\n",
                             },
                             accountForUtility = {
                                 order = 3,
@@ -270,7 +251,7 @@ function TUI:ClusterPositioningSubTab()
                                 order = 5,
                                 type = "range",
                                 name = "Overflow Offset",
-                                min = 10, max = 200, step = 5,
+                                min = 0, max = 200, step = 1,
                                 get = function() return E.db.thingsUI.clusterPositioning.utilityOverflowOffset end,
                                 set = function(_, value)
                                     E.db.thingsUI.clusterPositioning.utilityOverflowOffset = value

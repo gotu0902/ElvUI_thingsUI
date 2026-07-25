@@ -4,11 +4,9 @@ P["thingsUI"] = P["thingsUI"] or {}
 
 P["thingsUI"].clusterPositioning = {
     enabled              = false,
-    essentialIconPadding = 1,
-    utilityIconPadding   = 1,
     accountForUtility    = true,
     utilityThreshold     = 3,
-    utilityOverflowOffset = 25,
+    utilityOverflowOffset = 10,
     frameGap             = 20,
     playerFrame     = { enabled = true },
     targetFrame     = { enabled = true },

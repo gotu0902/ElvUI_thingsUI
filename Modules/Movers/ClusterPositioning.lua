@@ -6,11 +6,8 @@ local updateFrame = CreateFrame("Frame")
 local eventFrame = CreateFrame("Frame")
 local isDirty = false
 local isEnabled = false
-local lastEssentialCount = 0
-local lastUtilityCount = 0
 local lastGeoSig = nil
 local forceClusterUpdate = true
-local combatDeferred = false
 local MarkDirty
 local clusterProxy
 
@@ -45,12 +42,12 @@ local function HookViewerChildren(viewer)
     hooksecurefunc(viewer, "SetHeight", function() MarkDirty() end)
 end
 
-local hookedProxy = false
-local function HookEssentialProxy()
-    if hookedProxy then return end
-    local pr = ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(EssentialCooldownViewer)
+local hookedProxies = {}
+local function HookProxy(viewer)
+    if not viewer or hookedProxies[viewer] then return end
+    local pr = ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(viewer)
     if not pr then return end
-    hookedProxy = true
+    hookedProxies[viewer] = true
     local mark = function() MarkDirty() end
     hooksecurefunc(pr, "SetSize",        mark)
     hooksecurefunc(pr, "SetWidth",       mark)
@@ -75,7 +72,8 @@ end
 local function ScanAndHookViewers()
     HookViewerChildren(EssentialCooldownViewer)
     HookViewerChildren(UtilityCooldownViewer)
-    HookEssentialProxy()
+    HookProxy(EssentialCooldownViewer)
+    HookProxy(UtilityCooldownViewer)
     HookUFUpdates()
 end
 
@@ -90,49 +88,60 @@ function TUI:QueueClusterUpdate()
     end)
 end
 
-local function GetIconWidth(viewerKey, fallback)
-    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
-    local v = cdm and cdm[viewerKey]
-    if not v then return fallback end
-    return v.iconWidth or fallback
-end
+local INLINE_SOURCES = { "TrinketsCDM", "TimersCDM", "RacialsCDM" }
 
-local function CalculateEffectiveWidth()
-    local db = E.db.thingsUI.clusterPositioning
-    local essentialIconWidth = GetIconWidth("essential", 40)
-    local utilityIconWidth   = GetIconWidth("utility",   32)
-
+-- Fold-ins are UIParent-parented (invisible to GetChildren) but widen the rows
+local function CountClusterIcons()
     local essentialCount = EssentialCooldownViewer and CountVisibleChildren(EssentialCooldownViewer) or 0
     local utilityCount = UtilityCooldownViewer and CountVisibleChildren(UtilityCooldownViewer) or 0
 
-    local extraTrinkets = ns.TrinketsCDM and ns.TrinketsCDM.GetExtraEssentialCount and ns.TrinketsCDM.GetExtraEssentialCount() or 0
-    if extraTrinkets > 0 then
-        local attachKey = (ns.TrinketsCDM.GetTrinketAttachKey and ns.TrinketsCDM.GetTrinketAttachKey()) or "essential"
-        if attachKey == "utility" then
-            utilityCount = utilityCount + extraTrinkets
-        else
-            essentialCount = essentialCount + extraTrinkets
+    for _, key in ipairs(INLINE_SOURCES) do
+        local m = ns[key]
+        if m and m.GetInlineButtonsFor then
+            local eb = m.GetInlineButtonsFor(EssentialCooldownViewer)
+            if eb then essentialCount = essentialCount + #eb end
+            local ub = m.GetInlineButtonsFor(UtilityCooldownViewer)
+            if ub then utilityCount = utilityCount + #ub end
         end
     end
 
-    local essentialWidth = (essentialCount * essentialIconWidth) + (math.max(0, essentialCount - 1) * db.essentialIconPadding)
+    return essentialCount, utilityCount
+end
+ns.ClusterCounts = CountClusterIcons
 
-    if not db.accountForUtility or utilityCount == 0 or essentialCount == 0 then
-        return essentialWidth, essentialCount, utilityCount, 0
+local function GetBoundsInUIParent(frame)
+    if not frame then return end
+    local l, r = frame:GetLeft(), frame:GetRight()
+    if not l or not r then return end
+    local k = (frame:GetEffectiveScale() or 1) / (_G.UIParent:GetEffectiveScale() or 1)
+    return l * k, r * k
+end
+
+local STATIC_UTILITY_ANCHORS = { [""] = true, UIParent = true, EssentialCooldownViewer = true }
+
+-- Per-side push from the LIVE row bounds, not icon-size estimates
+local function ComputeUtilityOverflow(db, src, essentialCount, utilityCount)
+    if not db.accountForUtility or essentialCount == 0 or utilityCount == 0 then return 0, 0 end
+    if (utilityCount - essentialCount) < (db.utilityThreshold or 3) then return 0, 0 end
+    local uv = UtilityCooldownViewer
+    local up = uv and ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(uv)
+    local eL, eR = GetBoundsInUIParent(src)
+    local uL, uR = GetBoundsInUIParent(up or uv)
+    if not (eL and uL) then return 0, 0 end
+    local off = db.utilityOverflowOffset or 10
+    local udb = E.db.thingsUI.cdmIcons and E.db.thingsUI.cdmIcons.utility
+    if udb and udb.anchorEnabled and not STATIC_UTILITY_ANCHORS[udb.anchorFrame or "UIParent"] then
+        -- utility may follow a frame we move: width projection, never live edges
+        local half = math.max(0, ((uR - uL) - (eR - eL)) / 2)
+        if half == 0 then return 0, 0 end
+        return half + off, half + off
     end
-
-    local utilityWidth = (utilityCount * utilityIconWidth) + (math.max(0, utilityCount - 1) * db.utilityIconPadding)
-
-    local overflow = 0
-    local extraUtilityIcons = math.max(0, utilityCount - essentialCount)
-    local threshold = db.utilityThreshold or 3
-
-    if extraUtilityIcons >= threshold and utilityWidth > essentialWidth then
-        local widthDifference = utilityWidth - essentialWidth
-        overflow = widthDifference + ((db.utilityOverflowOffset or 25) * 2)
-    end
-
-    return essentialWidth + overflow, essentialCount, utilityCount, overflow
+    if uL >= eR or uR <= eL then return 0, 0 end
+    local left  = math.max(0, eL - uL)
+    local right = math.max(0, uR - eR)
+    if left  > 0 then left  = left  + off end
+    if right > 0 then right = right + off end
+    return left, right
 end
 
 local function EnsureProxy()
@@ -160,34 +169,28 @@ local function UpdateClusterPositioning()
     if not db.enabled then return end
     if not EssentialCooldownViewer then return end
     
-    if InCombatLockdown() then
-        if not combatDeferred then
-            combatDeferred = true
-        end
-        return
-    end
-    
-    local effectiveWidth, essentialCount, utilityCount, utilityOverflow = CalculateEffectiveWidth()
+    if InCombatLockdown() then return end
+
+    local essentialCount, utilityCount = CountClusterIcons()
 
     local cdmProxy = ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(EssentialCooldownViewer)
     local src = cdmProxy or EssentialCooldownViewer
+    local leftOverflow, rightOverflow = ComputeUtilityOverflow(db, src, essentialCount, utilityCount)
     local vLeft  = src:GetLeft()  or 0
     local vRight = src:GetRight() or 0
     local vCY    = ((src:GetTop() or 0) + (src:GetBottom() or 0)) * 0.5
     local geoSig = math.floor(vLeft + 0.5) + math.floor(vRight + 0.5) * 7
                  + math.floor(vCY + 0.5) * 13 + essentialCount * 101
-                 + utilityCount * 211 + math.floor((utilityOverflow or 0) + 0.5) * 17
+                 + utilityCount * 211 + math.floor(leftOverflow + 0.5) * 17
+                 + math.floor(rightOverflow + 0.5) * 19
     if (not forceClusterUpdate) and geoSig == lastGeoSig then return end
     forceClusterUpdate = false
     lastGeoSig = geoSig
-    lastEssentialCount = essentialCount
-    lastUtilityCount = utilityCount
 
     local proxy = EnsureProxy()
     if not SyncProxyToViewer(proxy, src) then return end
 
     local yOffset = 0
-    local sideOverflow = utilityOverflow / 2
     local viewerW = proxy:GetWidth() or 0
     local parityNudge = (math.floor(viewerW + 0.5) % 2 == 1) and 0.5 or 0
     local trinketExt, trinketSide = 0, "RIGHT"
@@ -207,7 +210,7 @@ local function UpdateClusterPositioning()
         local playerFrame = _G["ElvUF_Player"]
         if playerFrame then
             playerFrame:ClearAllPoints()
-            playerFrame:SetPoint("RIGHT", proxy, "LEFT", -(math.floor(db.frameGap + sideOverflow + leftExtra + 0.5) + parityNudge), yOffset)
+            playerFrame:SetPoint("RIGHT", proxy, "LEFT", -(math.floor(db.frameGap + leftOverflow + leftExtra + 0.5) + parityNudge), yOffset)
         end
     end
 
@@ -215,7 +218,7 @@ local function UpdateClusterPositioning()
         local targetFrame = _G["ElvUF_Target"]
         if targetFrame then
             targetFrame:ClearAllPoints()
-            targetFrame:SetPoint("LEFT", proxy, "RIGHT", math.floor(db.frameGap + sideOverflow + rightExtra + 0.5) + parityNudge, yOffset)
+            targetFrame:SetPoint("LEFT", proxy, "RIGHT", math.floor(db.frameGap + rightOverflow + rightExtra + 0.5) + parityNudge, yOffset)
         end
     end
     
@@ -310,16 +313,11 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "PLAYER_ENTERING_WORLD" then
         C_Timer.After(0.5, function()
             ScanAndHookViewers()
-            lastEssentialCount = -1
-            lastUtilityCount = -1
             ForceClusterUpdate()
             MarkDirty()
         end)
     elseif event == "PLAYER_REGEN_ENABLED" then
-        combatDeferred = false
         ScanAndHookViewers()
-        lastEssentialCount = -1
-        lastUtilityCount = -1
         ForceClusterUpdate()
         MarkDirty()
     end
@@ -415,19 +413,14 @@ function TUI:UpdateClusterPositioning()
 
         C_Timer.After(0.5, function()
             ScanAndHookViewers()
-            lastEssentialCount = -1
-            lastUtilityCount = -1
             ForceClusterUpdate()
             MarkDirty()
         end)
     else
         isEnabled = false
         isDirty = false
-        combatDeferred = false
         updateFrame:SetScript("OnUpdate", nil)
         eventFrame:UnregisterAllEvents()
-        lastEssentialCount = 0
-        lastUtilityCount = 0
         forceClusterUpdate = true
         -- Profile-switch guard
         C_Timer.After(0.1, RestoreFramesToElvUI)
@@ -442,14 +435,6 @@ function TUI:RecalculateCluster()
         return
     end
     
-    lastEssentialCount = -1
-    lastUtilityCount = -1
     ForceClusterUpdate()
     UpdateClusterPositioning()
-    
-    local db = E.db.thingsUI.clusterPositioning
-    local effectiveWidth, essentialCount, utilityCount, overflow = CalculateEffectiveWidth()
-    local extraIcons = math.max(0, utilityCount - essentialCount)
-    local threshold = db.utilityThreshold or 3
-    local triggered = extraIcons >= threshold
 end
