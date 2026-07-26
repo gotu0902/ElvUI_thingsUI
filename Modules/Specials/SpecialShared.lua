@@ -257,6 +257,9 @@ local function _doReturnFrame(child, keepPosition)
                 app:ClearAllPoints()
                 app:SetPoint(c.p, c.rel, c.rp or c.p, c.x, c.y)
             end
+            if orig.appParent and app:GetParent() ~= orig.appParent then
+                app:SetParent(orig.appParent)
+            end
         end
         child._tuiOrigStyle = nil
     end
@@ -359,6 +362,7 @@ local function SnapSpecialChild(child, key, isBar)
     _applyingSpecial = true
     UIParent.SetFrameStrata(child, wrapper:GetFrameStrata())
     UIParent.SetFrameLevel(child, wrapper:GetFrameLevel() + 1)
+    if child._tuiTextHolder then child._tuiTextHolder:SetFrameLevel(wrapper:GetFrameLevel() + 15) end
     UIParent.ClearAllPoints(child)
     UIParent.SetPoint(child, "CENTER", wrapper, "CENTER", 0, 0)
     local w, h = child._tuiSpecialW, child._tuiSpecialH

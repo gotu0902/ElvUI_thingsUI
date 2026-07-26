@@ -11,6 +11,16 @@ local function CurSpecID()
     return idx and GetSpecializationInfo(idx) or 0
 end
 
+-- Slot delete releases+renumbers all specials; groups must re-collect after the reclaim settles
+local function SettleAfterSlotChange()
+    TUI:UpdateSpecialBars()
+    if ns.CustomGroups and ns.CustomGroups.QueueLayout then ns.CustomGroups.QueueLayout() end
+    C_Timer.After(0.25, function()
+        TUI:UpdateSpecialBars()
+        if ns.CustomGroups and ns.CustomGroups.QueueLayout then ns.CustomGroups.QueueLayout() end
+    end)
+end
+
 local STRATA_VALUES = ns.STRATA.VALUES
 local STRATA_ORDER  = ns.STRATA.ORDER
 local POINT_VALUES  = ns.POINTS.VALUES
@@ -729,7 +739,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
         func = function()
             local idx = tonumber(barKey:match("%d+"))
             if SB.RemoveBarSlot then SB.RemoveBarSlot(idx, ESpec()) end
-            TUI:UpdateSpecialBars(); NotifyChange()
+            SettleAfterSlotChange(); NotifyChange()
         end,
     }
     commonArgs.divider = { order = 5, type = "header", name = "" }
@@ -1065,7 +1075,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
             local idx = tonumber(curKey():match("%d+"))
             if SB.RemoveIconSlot then SB.RemoveIconSlot(idx, ESpec()) end
             if ns.SB_CloseIconEditor then ns.SB_CloseIconEditor() end
-            TUI:UpdateSpecialBars(); NotifyChange()
+            SettleAfterSlotChange(); NotifyChange()
         end,
     }
     commonArgs.divider = { order = 5, type = "header", name = "" }

@@ -289,6 +289,7 @@ local function StyleYoinkedIcon(childFrame, db, gtext)
             orig.appFontOut  = o
             orig.appR, orig.appG, orig.appB = app:GetTextColor()
             orig.appAlpha = app:GetAlpha()
+            orig.appParent = app:GetParent()
             if app.GetNumPoints and app:GetNumPoints() > 0 then
                 local pt, rel, rp, px, py = app:GetPoint()
                 if not (issecretvalue(pt) or issecretvalue(rp) or issecretvalue(px) or issecretvalue(py)) and pt then
@@ -360,6 +361,16 @@ local function StyleYoinkedIcon(childFrame, db, gtext)
         app:ClearAllPoints()
         app:SetPoint(pt, childFrame, pt, sX or 0, sY or 0)
         app:SetAlpha(sShow and 1 or 0)
+
+        -- lift stacks above the border (12) and LCG glow (wrapper+8)
+        local holder = childFrame._tuiTextHolder
+        if not holder then
+            holder = CreateFrame('Frame', nil, childFrame)
+            holder:SetAllPoints(childFrame)
+            childFrame._tuiTextHolder = holder
+        end
+        holder:SetFrameLevel((childFrame:GetFrameLevel() or 11) + 14)
+        if app:GetParent() ~= holder then app:SetParent(holder) end
 
         local tc = childFrame._tuiSpecialText
         if not tc then tc = {}; childFrame._tuiSpecialText = tc end
