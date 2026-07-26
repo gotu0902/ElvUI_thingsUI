@@ -370,6 +370,20 @@ end
 
 ns.MarkBuffBarsDirty = MarkDirty
 
+-- Heals displacement paths that bypass the Lua SetPoint hook (managed re-flow)
+local anchorTicker
+local function VerifyAnchor()
+    if InCombatLockdown() then return end
+    if not BuffBarCooldownViewer then return end
+    local db = E.db.thingsUI and E.db.thingsUI.buffBars
+    if not (db and db.anchorEnabled) then return end
+    local target = (ns.SpecialBars and ns.SpecialBars.ResolveAnchorTarget
+        and ns.SpecialBars.ResolveAnchorTarget(db.anchorFrame)) or _G[db.anchorFrame]
+    if not target then return end
+    local _, relTo = BuffBarCooldownViewer:GetPoint(1)
+    if relTo ~= target then AnchorBuffBarContainer() end
+end
+
 local function MarkDirtyStaggered()
     MarkDirty()
     C_Timer.After(0.05, MarkDirty)
@@ -425,12 +439,14 @@ function TUI:UpdateBuffBars()
         eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
         eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
         wipe(skinnedBars)
+        if not anchorTicker then anchorTicker = C_Timer.NewTicker(0.5, VerifyAnchor) end
         MarkDirty()
     else
         isEnabled = false
         isDirty = false
         updateFrame:SetScript("OnUpdate", nil)
         eventFrame:UnregisterAllEvents()
+        if anchorTicker then anchorTicker:Cancel(); anchorTicker = nil end
     end
 end
 
