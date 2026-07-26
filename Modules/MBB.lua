@@ -253,6 +253,33 @@ function M.SetCollected(key, on)
     end
 end
 
+-- Re-adopts strays and re-anchors when Blizzard/MBB re-assert mid-session
+local function VerifyState()
+    if InCombatLockdown() then return end
+    if not Loaded() then return end
+    local db = DB()
+    if not db then return end
+    local main = MainButton()
+    if db.manage then
+        local target = ns.ANCHORS.ResolveAnchorTarget(db.anchor or "Minimap") or _G.UIParent
+        local _, relTo = main:GetPoint(1)
+        if relTo ~= target then ApplyPosition() end
+    end
+    local cont = ContainerOf(main)
+    if not cont then return end
+    for key, name in pairs(M.COLLECT) do
+        if M.IsCollected(key) then
+            local btn = _G[name]
+            if btn and btn:GetParent() ~= cont then
+                NormalizeCollected()
+                QueueSkin()
+                ForceRelayout()
+                return
+            end
+        end
+    end
+end
+
 local function ApplyHoverAlpha()
     local db = DB()
     local main = MainButton()
@@ -264,6 +291,7 @@ local function ApplyHoverAlpha()
 end
 
 local hoverTicker
+local verifyTicker
 local hooked = false
 function TUI:UpdateMBB()
     if not Loaded() then return end
@@ -273,6 +301,7 @@ function TUI:UpdateMBB()
         hooked = true
         main:HookScript("OnMouseDown", QueueSkin)
     end
+    if not verifyTicker then verifyTicker = C_Timer.NewTicker(1, VerifyState) end
     if db and not db.seeded then
         db.seeded = true
         M.SetDirection("leftup")
