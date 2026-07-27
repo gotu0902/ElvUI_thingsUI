@@ -297,7 +297,7 @@ function TUI:CustomGroupsOptions()
             addSpellID = {
                 order = 6, type = "input", name = "|cFFFFD200...or Spell by ID|r",   -- gold
                 get = function() return "" end,
-                set = function(_, v) local id = tonumber((v or ""):gsub("%s", "")); if id and CG then CG.AddSpell(group, scope, getKey(), id); NotifyChange() end end,
+                set = function(_, v) local id = tonumber(((v or ""):gsub("%s", ""))); if id and CG then CG.AddSpell(group, scope, getKey(), id); NotifyChange() end end,
             },
             addItem = {
                 order = 8, type = "input", name = "|cFFFF8040Add Item (ID or name)|r", width = "double",   -- items = orange
