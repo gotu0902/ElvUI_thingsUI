@@ -114,6 +114,13 @@ local function SafeMatch(child, spellID, wantsBar)
                 return true
             end
         end
+        local rawBase = PlainID(info.spellID)
+        if IsSafeID(rawBase) and rawBase ~= sid then
+            local brb = GetBaseSpellID(rawBase)
+            if rawBase == spellID or rawBase == baseTarget or brb == spellID or brb == baseTarget then
+                return true
+            end
+        end
         if info.linkedSpellIDs then
             for _, lid in ipairs(info.linkedSpellIDs) do
                 if IsSafeID(lid) then
@@ -297,8 +304,10 @@ local function _registerShownSpell(childFrame)
     local set = childFrame.Bar and knownBarSpells or (childFrame.Icon and knownIconSpells)
     if not set then return end
     local linkedID = info.linkedSpellIDs and info.linkedSpellIDs[1]
+    local baseID = PlainID(info.spellID)
     local changed = false
     if not set[si.spellID] then set[si.spellID] = true; changed = true end
+    if baseID and not set[baseID] then set[baseID] = true; changed = true end
     if linkedID and not set[linkedID] then set[linkedID] = true; changed = true end
     if changed then InvalidateSpellListCache() end
 end
@@ -422,6 +431,10 @@ local function RefreshSpecialCIDMaps(force)
                         if info then
                             local sid = InfoSpellID(info)
                             local key = sid and (spellToKey[sid] or spellToKey[GetBaseSpellID(sid)])
+                            if not key then
+                                local bsid = PlainID(info.spellID)
+                                key = bsid and (spellToKey[bsid] or spellToKey[GetBaseSpellID(bsid)])
+                            end
                             if not key and info.linkedSpellIDs and info.linkedSpellIDs[1] then
                                 key = spellToKey[info.linkedSpellIDs[1]]
                             end

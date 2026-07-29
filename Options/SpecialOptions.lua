@@ -5,7 +5,11 @@ local LSM   = ns.LSM
 
 local SB = ns.SpecialBars
 
-local function ESpec() return SB.EditingSpec and SB.EditingSpec() or nil end
+local forceCurrentSpec = false
+local function ESpec()
+    if forceCurrentSpec then return nil end
+    return SB.EditingSpec and SB.EditingSpec() or nil
+end
 local function CurSpecID()
     local idx = GetSpecialization()
     return idx and GetSpecializationInfo(idx) or 0
@@ -160,7 +164,7 @@ local function LiveAs(id, data, knownBar, knownIcon)
     return knownBar[id] or (pid and knownBar[pid]), knownIcon[id] or (pid and knownIcon[pid])
 end
 
-local function GetChoicesTable(currentKey, isBar)
+local function GetChoicesTable(currentKey, isBar, omitBarUsed)
     local choices = { [""] = "|cFF888888- None -|r" }
 
     if SB.ScanAndHookCDMChildren then SB.ScanAndHookCDMChildren() end
@@ -202,11 +206,23 @@ local function GetChoicesTable(currentKey, isBar)
         elseif liveAsIcon then liveType = "Icon"
         end
 
-        if usage then
+        if usage and omitBarUsed and usage:sub(1, 3) == "Bar" then
+            choices[tostring(id)] = nil
+        elseif omitBarUsed and not usage and liveType == "Bar" then
+            choices[tostring(id)] = nil
+        elseif usage then
             local isIconUsage = usage:find("Icon", 1, true)
             local nameColor = isIconUsage and "|cFFFFB347" or "|cFFFF8800"
             local tagColor  = isIconUsage and "|cFFCC8844" or "|cFFAA6600"
-            choices[tostring(id)] = iconStr .. nameColor .. displayName .. "|r " .. tagColor .. "(In use: " .. usage .. ")|r"
+            local where = ""
+            local iconNum = usage:match("^Icon (%d+)")
+            if iconNum then
+                local idb = SB.GetIconDB("icon" .. iconNum, ESpec())
+                local gid = idb and idb.customGroup
+                local g = gid and ns.CustomGroups and ns.CustomGroups.GroupByID and ns.CustomGroups.GroupByID(gid)
+                if g and g.name then where = " |cFF8AC8FF[" .. g.name .. "]|r" end
+            end
+            choices[tostring(id)] = iconStr .. nameColor .. displayName .. "|r " .. tagColor .. "(In use: " .. usage .. ")|r" .. where
         elseif liveType then
             local isBarOnly = liveType == "Bar"
             local nameColor = isBarOnly and "|cFFFFFF00" or "|cFF00FF00"
@@ -239,15 +255,29 @@ local function GetSortRank(id, data, knownBar, knownIcon)
     return 7
 end
 
-local function GetSortedKeys()
+local function GetSortedKeys(omitBarUsed)
+    -- AceConfig calls member functions with info as arg1; only literal true filters
+    if omitBarUsed ~= true then omitBarUsed = false end
     local rawList = GetEnrichedSpellList()
     local knownBar  = SB.knownBarSpells  or {}
     local knownIcon = SB.knownIconSpells or {}
     local ranks = {}
     local sorted = {}
     for id, data in pairs(rawList) do
-        sorted[#sorted+1] = id
-        ranks[id] = GetSortRank(id, data, knownBar, knownIcon)
+        local skip = false
+        if omitBarUsed then
+            local usage = SB.GetSpellUsageInfo(id, nil, nil, ESpec())
+            if usage then
+                skip = usage:sub(1, 3) == "Bar"
+            else
+                local liveAsBar, liveAsIcon = LiveAs(id, data, knownBar, knownIcon)
+                skip = (liveAsBar and not liveAsIcon) or false
+            end
+        end
+        if not skip then
+            sorted[#sorted+1] = id
+            ranks[id] = GetSortRank(id, data, knownBar, knownIcon)
+        end
     end
     table.sort(sorted, function(a, b)
         if ranks[a] ~= ranks[b] then return ranks[a] < ranks[b] end
@@ -258,6 +288,20 @@ local function GetSortedKeys()
     local keys = { "" }
     for _, id in ipairs(sorted) do keys[#keys+1] = tostring(id) end
     return keys
+end
+
+-- Shared with Custom Groups quick-add; forced to the ACTIVE spec (Editing Spec must not leak)
+function ns.SB_SpellChoices(currentKey, isBar, omitBarUsed)
+    forceCurrentSpec = true
+    local res = GetChoicesTable(currentKey, isBar, omitBarUsed)
+    forceCurrentSpec = false
+    return res
+end
+function ns.SB_SpellChoicesSorting(omitBarUsed)
+    forceCurrentSpec = true
+    local res = GetSortedKeys(omitBarUsed)
+    forceCurrentSpec = false
+    return res
 end
 
 StaticPopupDialogs["TUI_STYLE_USE_ALL"] = {

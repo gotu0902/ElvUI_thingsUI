@@ -1,7 +1,10 @@
 # Changelog
 
 ## 4.1.0-beta3
-- 
+- Fixed minimum width not doing shit when CDM is empty (when leveling etc)
+- Custom Groups kan quick add Special Icons, or add\move existing ones.
+- Special Icons stack counter had a higher frame strata than the glow, woopsie.
+- Class Bar got an whole class option, so it shows when leveling and cleans up the list a bit.
 
 ## 4.1.0-beta2
 - Skinned minimal dmg meter thing

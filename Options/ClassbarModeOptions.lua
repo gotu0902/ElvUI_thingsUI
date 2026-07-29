@@ -10,12 +10,18 @@ local function GetSelectedSpecIDs()
     local out = {}
     for key in pairs(db.specs) do
         local id = tonumber(key)
-        if id then out[id] = true end
+        if id then
+            out[id] = true
+        elseif type(key) == "string" and key:find("^CLASS:") then
+            out[key] = true
+        end
     end
     return out
 end
 
 local function CascadeKeyToSpecKey(value)
+    local token = value:match("^([A-Z_]+):CLASS$")
+    if token then return "CLASS:" .. token end
     local _, specID = value:match("^([A-Z_]+):(%d+)$")
     return specID
 end
@@ -62,7 +68,7 @@ function TUI:ClassbarModeOptions()
                 desc = "",
                 width = 2.0,
                 dialogControl = "TUI_CascadeDropdown",
-                values = function() return ns.CascadeDropdown.AllSpecs() end,
+                values = function() return ns.CascadeDropdown.AllSpecsWithClassEntries() end,
                 get = function(_, value)
                     local specKey = CascadeKeyToSpecKey(value)
                     if not specKey then return false end

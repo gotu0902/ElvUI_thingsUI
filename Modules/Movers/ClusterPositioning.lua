@@ -157,6 +157,12 @@ local function SyncProxyToViewer(proxy, viewer)
     local w, h = viewer:GetSize()
     if not w or w <= 0 or not h or h <= 0 then return false end
     local k = (viewer:GetEffectiveScale() or 1) / (_G.UIParent:GetEffectiveScale() or 1)
+    -- frames flank the wider of the icon cluster and the Bar Setup width (minWidth floor)
+    local bw = ns.BarSetup and ns.BarSetup.GetInheritedWidth and ns.BarSetup.GetInheritedWidth()
+    if bw and bw > w * k then
+        fl = fl - ((bw / k - w) / 2)
+        w = bw / k
+    end
     proxy:ClearAllPoints()
     -- Integer geometry keeps every downstream ±w/2 round-trip lossless
     proxy:SetSize(math.floor(w * k + 0.5), math.floor(h * k + 0.5))

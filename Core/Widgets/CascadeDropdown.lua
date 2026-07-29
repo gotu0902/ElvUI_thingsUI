@@ -56,10 +56,14 @@ end
 local function GroupValues(values)
     local grouped = {}
     local other = {}
+    local classWide = {}
     for value, label in pairs(values) do
         local base, count = SplitCount(label)
+        local cwToken = type(value) == "string" and value:match("^([A-Z_]+):CLASS$")
         local classToken, specID, _ = ParseKey(value)
-        if classToken and specID then
+        if cwToken then
+            classWide[cwToken] = { value = value, label = base, count = count }
+        elseif classToken and specID then
             grouped[classToken] = grouped[classToken] or {}
             grouped[classToken][specID] = grouped[classToken][specID] or {}
             local bucket = grouped[classToken][specID]
@@ -68,7 +72,7 @@ local function GroupValues(values)
             other[#other + 1] = { value = value, label = base, count = count }
         end
     end
-    return grouped, other
+    return grouped, other, classWide
 end
 
 -- Spec cache
@@ -235,10 +239,13 @@ do
         local pullout = self.pullout
         pullout:Clear()
 
-        local grouped, other = GroupValues(self.list or {})
+        local grouped, other, classWide = GroupValues(self.list or {})
 
         local classTokens = {}
         for token in pairs(grouped) do classTokens[#classTokens + 1] = token end
+        for token in pairs(classWide) do
+            if not grouped[token] then classTokens[#classTokens + 1] = token; grouped[token] = {} end
+        end
         table.sort(classTokens, function(a, b)
             local na = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[a]) or a
             local nb = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[b]) or b
@@ -259,6 +266,11 @@ do
             if classSum > 0 then classLabel = classLabel .. " |cFFFFD200(" .. classSum .. ")|r" end
             local classItem = MakeMenuItem(self, classLabel)
             local classSub = MakeSubPullout(self)
+
+            local cw = classWide[classToken]
+            if cw then
+                classSub:AddItem(MakeLeafItem(self, cw, "|cFFFFD200" .. (cw.label or "All Specs (Class)") .. "|r"))
+            end
 
             for _, specID in ipairs(specIDs) do
                 local leaves = specMap[specID]
@@ -539,6 +551,17 @@ function ns.CascadeDropdown.AllSpecs()
     local out = {}
     for _, r in ipairs(ns.AllSpecs()) do
         if r.name then out[r.classToken .. ":" .. r.id] = r.name end
+    end
+    return out
+end
+
+function ns.CascadeDropdown.AllSpecsWithClassEntries()
+    local out = {}
+    for _, r in ipairs(ns.AllSpecs()) do
+        if r.name then
+            out[r.classToken .. ":" .. r.id] = r.name
+            out[r.classToken .. ":CLASS"] = "All Specs (Class)"
+        end
     end
     return out
 end

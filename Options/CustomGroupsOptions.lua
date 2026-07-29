@@ -402,6 +402,40 @@ function TUI:CustomGroupsOptions()
                     end
                 end,
             },
+            newSpecialIcon = {
+                order = 13.5, type = "select", name = "|cFFFF80C0New Special Icon (from spell)|r", width = "double",
+                hidden = function()
+                    return scope ~= "spec" or getKey() ~= curSpecID() or not ns.SpecialBars
+                end,
+                values = function()
+                    return (ns.SB_SpellChoices and ns.SB_SpellChoices(nil, false, true)) or {}
+                end,
+                sorting = function()
+                    return ns.SB_SpellChoicesSorting and ns.SB_SpellChoicesSorting(true) or nil
+                end,
+                get = function() return "" end,
+                set = function(_, v)
+                    local SB = ns.SpecialBars
+                    local id = tonumber(v)
+                    if not (SB and id and SB.GetSpecRoot and SB.GetIconDB) then return end
+                    local usage = SB.GetSpellUsageInfo and SB.GetSpellUsageInfo(id)
+                    if usage then E:Print("This spell is already used by " .. usage .. "!") return end
+                    local s = SB.GetSpecRoot()
+                    local c = s.iconCount or 3
+                    if c >= 12 then E:Print("All 12 Special Icon slots are in use on this spec.") return end
+                    s.iconCount = c + 1
+                    local idb = SB.GetIconDB("icon" .. (c + 1))
+                    if SB.Styles and SB.Styles.ApplyToDB then
+                        SB.Styles.ApplyToDB("icons", SB.Styles.EffectiveDefault("icons"), idb)
+                    end
+                    local raw = SB.GetRawSpellList and SB.GetRawSpellList() or {}
+                    idb.spellID = id
+                    idb.spellName = (raw[id] and raw[id].name) or ""
+                    idb.enabled = true
+                    idb.customGroup = group.id
+                    TUI:UpdateSpecialBars(); TUI:UpdateCustomGroups(); NotifyChange()
+                end,
+            },
             entriesBox = {
                 order = 15, type = "group", inline = true, name = " ",
                 args = (function()
@@ -480,6 +514,35 @@ function TUI:CustomGroupsOptions()
                             end,
                         }
 
+                        box["r" .. i .. "_style"] = {
+                            order = base + 4.5, type = "select", name = "", width = 1.2,
+                            hidden = function() local e = entry(); return not (e and e.kind == "specialicon" and e.live) end,
+                            values = function()
+                                local SB = ns.SpecialBars
+                                return (SB and SB.Styles and SB.Styles.DropdownValues("icons", "|cFF888888- No Style -|r")) or {}
+                            end,
+                            sorting = function()
+                                local SB = ns.SpecialBars
+                                return SB and SB.Styles and SB.Styles.DropdownSorting("icons", true) or nil
+                            end,
+                            get = function()
+                                local e = entry(); local SB = ns.SpecialBars
+                                local idb = e and SB and SB.GetIconDB and SB.GetIconDB(e.iconKey)
+                                return (idb and idb.styleName) or ""
+                            end,
+                            set = function(_, v)
+                                local e = entry(); local SB = ns.SpecialBars
+                                local idb = e and SB and SB.GetIconDB and SB.GetIconDB(e.iconKey)
+                                if not idb then return end
+                                idb._styleDriftAck = nil
+                                if v == "" then
+                                    idb.styleName = nil
+                                else
+                                    SB.Styles.ApplyToDB("icons", v, idb)
+                                end
+                                TUI:UpdateSpecialBars(); NotifyChange()
+                            end,
+                        }
                         box["r" .. i .. "_break"] = {
                             order = base + 5, type = "description", width = "full", fontSize = "small", name = " ", hidden = gone,
                         }

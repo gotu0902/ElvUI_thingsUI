@@ -562,9 +562,9 @@ function M.PositionStack(positionOnly)
     if not setup then return end
 
     local anchorName = setup.anchorFrame or "EssentialCooldownViewer"
+    -- widths/heights/modes must apply even before the CDM anchor exists (fresh chars)
     local stackAnchor = (ns.CDMIcons and ns.CDMIcons.ProxyForName and ns.CDMIcons.ProxyForName(anchorName))
         or _G[anchorName]
-    if not stackAnchor then return end
 
     local inCombat = InCombatLockdown()
 
@@ -710,25 +710,27 @@ function M.PositionStack(positionOnly)
             end
         end
     end
-    for _, key in ipairs(setup.order) do
-        local b = setup.bars[key]
-        if b and b.enabled and b.mode == "NHT" and ShouldInclude(key) then
-            local f = GetBarFrame(key)
-            if f and f ~= stackAnchor and not IsDescendantOf(stackAnchor, f) then
-                local protected = inCombat and f.IsProtected and f:IsProtected()
-                local w = EffectiveWidth(b)
-                if w and f.SetWidth and not positionOnly and not protected then f:SetWidth(w) end
-                accY = accY + gap
-                if not protected then
-                    local localXOff = xOff + (b.xOffset or 0) + trinketShift + (BAR_X_NUDGE[key] or 0)
-                    if key == "castbar" then
-                        local wo = b.widthOffset or 0
-                        if wo ~= 0 then localXOff = localXOff - (wo / 2) end
+    if stackAnchor then
+        for _, key in ipairs(setup.order) do
+            local b = setup.bars[key]
+            if b and b.enabled and b.mode == "NHT" and ShouldInclude(key) then
+                local f = GetBarFrame(key)
+                if f and f ~= stackAnchor and not IsDescendantOf(stackAnchor, f) then
+                    local protected = inCombat and f.IsProtected and f:IsProtected()
+                    local w = EffectiveWidth(b)
+                    if w and f.SetWidth and not positionOnly and not protected then f:SetWidth(w) end
+                    accY = accY + gap
+                    if not protected then
+                        local localXOff = xOff + (b.xOffset or 0) + trinketShift + (BAR_X_NUDGE[key] or 0)
+                        if key == "castbar" then
+                            local wo = b.widthOffset or 0
+                            if wo ~= 0 then localXOff = localXOff - (wo / 2) end
+                        end
+                        f:ClearAllPoints()
+                        f:SetPoint(setup.anchorPoint or "BOTTOM", stackAnchor, setup.anchorTo or "TOP", localXOff, accY)
                     end
-                    f:ClearAllPoints()
-                    f:SetPoint(setup.anchorPoint or "BOTTOM", stackAnchor, setup.anchorTo or "TOP", localXOff, accY)
+                    accY = accY + GetBarHeight(key, setup)
                 end
-                accY = accY + GetBarHeight(key, setup)
             end
         end
     end

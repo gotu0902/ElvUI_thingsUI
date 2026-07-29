@@ -18,7 +18,13 @@ local function ClassName(token)
     return (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[token]) or token
 end
 
-local GetMeta = ns.SpecMeta
+local function GetMeta(id)
+    local cls = type(id) == "string" and id:match("^CLASS:(.+)$")
+    if cls then
+        return { classToken = cls, name = "All Specs (Class)", specIndex = 0 }
+    end
+    return ns.SpecMeta(id)
+end
 
 local function SortSpecIDs(ids)
     table.sort(ids, function(a, b)

@@ -24,6 +24,10 @@ end
 local function GetSpecEntry()
     local db = E.db.thingsUI.classbarMode
     if not db or not db.enabled or not db.specs then return nil end
+    -- class-wide entry wins: works before level 10 when no spec exists yet
+    local _, cf = UnitClass("player")
+    local classEntry = cf and db.specs["CLASS:" .. cf]
+    if classEntry then return classEntry end
     local id = GetCurrentSpecID()
     if id == 0 then return nil end
     return db.specs[tostring(id)]

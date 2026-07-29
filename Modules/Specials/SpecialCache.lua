@@ -80,7 +80,8 @@ local function BuildCDMSpellList()
         for _, cdID in ipairs(ids) do
             local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
             if info then
-                local sid = PlainID(info.overrideSpellID) or PlainID(info.spellID)
+                -- base first: overrideSpellID is static data, present even untalented
+                local sid = PlainID(info.spellID) or PlainID(info.overrideSpellID)
                 if sid then rowSpellCount[sid] = (rowSpellCount[sid] or 0) + 1 end
             end
         end
@@ -95,7 +96,7 @@ local function BuildCDMSpellList()
             for _, cdID in ipairs(ids) do
                 local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
                 if info then
-                    local parentID = PlainID(info.overrideSpellID) or PlainID(info.spellID)
+                    local parentID = PlainID(info.spellID) or PlainID(info.overrideSpellID)
                     local key = parentID
                     if parentID and rowSpellCount[parentID] and rowSpellCount[parentID] > 1
                         and info.linkedSpellIDs and info.linkedSpellIDs[1] then
