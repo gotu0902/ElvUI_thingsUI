@@ -23,6 +23,11 @@ function TUI:ShareOptions()
                 hidden = function() return not ns.OpenInstaller end,
                 func = function() if ns.OpenInstaller then ns.OpenInstaller() end end,
             },
+            runAltSetup = {
+                order = 2.2, type = "execute", name = "|cFF8AC8FFAlt Profile Setup|r", width = "double",
+                hidden = function() return not (ns.AltInstall and ns.AltInstall.Open) end,
+                func = function() ns.AltInstall.Open() end,
+            },
             installerBreak = { order = 3, type = "description", width = "full", name = "\n" },
 
             defaultsHeader = { order = 4, type = "header", name = "Import default presets" },
