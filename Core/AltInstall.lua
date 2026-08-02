@@ -115,6 +115,127 @@ local function EditModeLayouts()
     return combined, presets, info.activeLayout
 end
 
+local function Presets()
+    _G.thingsUIGlobalDB = _G.thingsUIGlobalDB or {}
+    local g = _G.thingsUIGlobalDB
+    g.altPresets = g.altPresets or {}
+    return g.altPresets
+end
+
+local PRESET_PREFIX = "!TUIALT1!"
+
+local function ShareTools()
+    local Deflate = E.Libs and E.Libs.Deflate
+    local D = E.GetModule and E:GetModule("Distributor", true)
+    if Deflate and D and D.Serialize and D.Deserialize then return Deflate, D end
+end
+
+function M.ExportPresets()
+    local Deflate, D = ShareTools()
+    local presets = Presets()
+    if not (Deflate and next(presets)) then return nil end
+    local s = D:Serialize(presets)
+    local c = s and Deflate:CompressDeflate(s, { level = 9 })
+    if not c then return nil end
+    return PRESET_PREFIX .. Deflate:EncodeForPrint(c)
+end
+
+function M.ImportPresets(str)
+    local Deflate, D = ShareTools()
+    if not Deflate then return 0 end
+    str = tostring(str or ""):gsub("%s", "")
+    if str == "" or str:sub(1, #PRESET_PREFIX) ~= PRESET_PREFIX then return 0 end
+    local c = Deflate:DecodeForPrint(str:sub(#PRESET_PREFIX + 1))
+    local s = c and Deflate:DecompressDeflate(c)
+    if not s then return 0 end
+    local ok, data = D:Deserialize(s)
+    if not (ok and type(data) == "table") then return 0 end
+    local presets = Presets()
+    local n = 0
+    for name, p in pairs(data) do
+        if type(name) == "string" and type(p) == "table" then
+            presets[name] = p
+            n = n + 1
+        end
+    end
+    return n
+end
+
+-- captures the EFFECTIVE visible state: untouched dropdowns fall back to current
+local function CapturePreset(sel, emSel)
+    local p = { providers = {} }
+    for _, prov in ipairs(PROVIDERS) do
+        if prov.loaded() then
+            local s = sel[prov.key]
+            local profile = (s and s.profile) or prov.current()
+            if profile then
+                local entry = { profile = profile }
+                if s and s.specEnabled then
+                    entry.specEnabled = true
+                    if s.spec and next(s.spec) then entry.spec = CopyTable(s.spec) end
+                end
+                p.providers[prov.key] = entry
+            end
+        end
+    end
+    local combined, _, active = EditModeLayouts()
+    local idx = emSel or active
+    local l = combined and idx and combined[idx]
+    if l and l.layoutName then p.editModeLayout = l.layoutName end
+    return p
+end
+
+-- fills sel from a preset; only profiles that exist locally are picked
+local function ApplyPresetToSel(preset, sel, specs)
+    for _, prov in ipairs(PROVIDERS) do
+        local pp = preset.providers and preset.providers[prov.key]
+        if pp and prov.loaded() then
+            local s = sel[prov.key] or { spec = {} }
+            sel[prov.key] = s
+            local exists = {}
+            for _, n in ipairs(prov.profiles() or {}) do exists[n] = true end
+            if pp.profile and exists[pp.profile] then s.profile = pp.profile end
+            s.specEnabled = pp.specEnabled or false
+            s.spec = {}
+            for i in ipairs(specs) do
+                local want = (pp.spec and pp.spec[i]) or pp.profile
+                if want and exists[want] then s.spec[i] = want end
+            end
+        end
+    end
+    if preset.editModeLayout then
+        local combined = EditModeLayouts()
+        if combined then
+            for i, l in ipairs(combined) do
+                if l.layoutName == preset.editModeLayout then return i end
+            end
+        end
+    end
+end
+
+local function ShowTextPopup(title, text, onAccept)
+    local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
+    if not AceGUI then return end
+    local f = AceGUI:Create("Frame")
+    f:SetTitle(title)
+    f:SetWidth(480)
+    f:SetHeight(340)
+    f:SetLayout("Fill")
+    f:SetCallback("OnClose", function(w) AceGUI:Release(w) end)
+    local eb = AceGUI:Create("MultiLineEditBox")
+    eb:SetLabel(onAccept and "Paste the string, then press Accept" or "Copy the string (Ctrl+C)")
+    eb:SetText(text or "")
+    if onAccept then
+        eb:SetCallback("OnEnterPressed", function(_, _, v) f:Hide(); onAccept(v) end)
+    else
+        eb:DisableButton(true)
+    end
+    eb:SetFullWidth(true)
+    eb:SetFullHeight(true)
+    f:AddChild(eb)
+    if text and eb.editBox then eb.editBox:HighlightText(); eb.editBox:SetFocus() end
+end
+
 E.PopupDialogs["TUI_ALT_RELOAD"] = {
     text = "|cFF8080FFthingsUI|r: Edit Mode layout switched. Reload now to apply it cleanly?",
     button1 = ACCEPT, button2 = CANCEL,
@@ -162,6 +283,7 @@ function M.Open()
 
     local sel = {}
     local emSel
+    local presetSel
     local specs = ClassSpecs()
 
     local f = AceGUI:Create("Frame")
@@ -196,6 +318,82 @@ function M.Open()
             w:SetFontObject(GameFontHighlight)
             w:SetText("Pick which of your existing profiles this character should use.\nSpec profiles chosen before level 10 are stored and apply automatically once specializations unlock.\n")
         end)
+
+        local presets = Presets()
+        Add(scroll, "Heading", function(w) w:SetText("Presets"); w:SetFullWidth(true) end)
+        do
+            local list, order = { [""] = "|cFF888888- None -|r" }, { "" }
+            local names = {}
+            for name in pairs(presets) do names[#names + 1] = name end
+            table.sort(names)
+            for _, n in ipairs(names) do list[n] = n; order[#order + 1] = n end
+            Add(scroll, "Dropdown", function(w)
+                w:SetLabel("Load Preset")
+                w:SetRelativeWidth(0.4)
+                w:SetList(list, order)
+                w:SetValue((presetSel and presets[presetSel]) and presetSel or "")
+                w:SetCallback("OnValueChanged", function(_, _, v)
+                    if v == "" then presetSel = nil; render() return end
+                    presetSel = v
+                    local p = presets[v]
+                    if p then
+                        local emIdx = ApplyPresetToSel(p, sel, specs)
+                        if emIdx then emSel = emIdx end
+                        render()
+                    end
+                end)
+            end)
+            Add(scroll, "Button", function(w)
+                w:SetText("Update Preset")
+                w:SetRelativeWidth(0.3)
+                w:SetDisabled(not (presetSel and presets[presetSel]))
+                w:SetCallback("OnClick", function()
+                    if presetSel and presets[presetSel] then
+                        presets[presetSel] = CapturePreset(sel, emSel)
+                        print("|cFF8080FFthingsUI|r - preset '" .. presetSel .. "' updated.")
+                    end
+                end)
+            end)
+            Add(scroll, "Button", function(w)
+                w:SetText("Delete")
+                w:SetRelativeWidth(0.3)
+                w:SetDisabled(not (presetSel and presets[presetSel]))
+                w:SetCallback("OnClick", function()
+                    if presetSel then presets[presetSel] = nil; presetSel = nil; render() end
+                end)
+            end)
+            Add(scroll, "EditBox", function(w)
+                w:SetLabel("Save current as new preset")
+                w:SetRelativeWidth(0.5)
+                w:SetCallback("OnEnterPressed", function(_, _, v)
+                    v = (v or ""):match("^%s*(.-)%s*$")
+                    if v ~= "" then
+                        presets[v] = CapturePreset(sel, emSel)
+                        presetSel = v
+                        render()
+                    end
+                end)
+            end)
+            Add(scroll, "Button", function(w)
+                w:SetText("Export Presets")
+                w:SetRelativeWidth(0.5)
+                w:SetCallback("OnClick", function()
+                    local str = M.ExportPresets()
+                    ShowTextPopup("Alt Presets Export", str or "Nothing to export.")
+                end)
+            end)
+            Add(scroll, "Button", function(w)
+                w:SetText("Import Presets")
+                w:SetRelativeWidth(0.5)
+                w:SetCallback("OnClick", function()
+                    ShowTextPopup("Alt Presets Import", nil, function(v)
+                        local n = M.ImportPresets(v)
+                        print("|cFF8080FFthingsUI|r - imported " .. n .. " alt preset(s).")
+                        render()
+                    end)
+                end)
+            end)
+        end
 
         for _, prov in ipairs(PROVIDERS) do
             if prov.loaded() then
@@ -301,20 +499,39 @@ function M.Open()
     f:Show()
 end
 
-SLASH_TUIALTSETUP1 = "/tuialt"
-SlashCmdList["TUIALTSETUP"] = function() M.Open() end
+local function GateCheck(verbose)
+    local function why(msg)
+        if verbose then print("|cFF8080FFthingsUI|r AltSetup gate: " .. msg) end
+    end
+    local g = _G.thingsUIGlobalDB
+    if not (g and g.installComplete) then why("main installer not completed yet") return false end
+    if Store()[CharKey()] then why("already done/skipped on " .. CharKey()) return false end
+    if not (E.data and E.data.GetCurrentProfile) then why("E.data not ready") return false end
+    local cur = E.data:GetCurrentProfile()
+    if cur ~= "Default" then why("ElvUI profile is '" .. tostring(cur) .. "', not 'Default'") return false end
+    if InCombatLockdown() then why("in combat") return false end
+    why("all gates pass")
+    return true
+end
 
+SLASH_TUIALTSETUP1 = "/tuialt"
+SlashCmdList["TUIALTSETUP"] = function(msg)
+    if (msg or ""):match("^%s*why") then GateCheck(true) return end
+    M.Open()
+end
+
+local booted = false
 local boot = CreateFrame("Frame")
 boot:RegisterEvent("PLAYER_ENTERING_WORLD")
 boot:SetScript("OnEvent", function(self)
     self:UnregisterEvent("PLAYER_ENTERING_WORLD")
-    C_Timer.After(4, function()
-        local g = _G.thingsUIGlobalDB
-        if not (g and g.installComplete) then return end
-        if Store()[CharKey()] then return end
-        if not (E.data and E.data.GetCurrentProfile) then return end
-        if E.data:GetCurrentProfile() ~= "Default" then return end
-        if InCombatLockdown() then return end
-        M.Open()
-    end)
+    for _, t in ipairs({ 4, 10, 20 }) do
+        C_Timer.After(t, function()
+            if booted or frame then return end
+            if GateCheck() then
+                booted = true
+                M.Open()
+            end
+        end)
+    end
 end)

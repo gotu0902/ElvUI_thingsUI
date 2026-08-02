@@ -290,6 +290,8 @@ local function ReturnFrame(child, keepPosition)
     child._tuiSpecialBarKey  = nil
     child._tuiBarStyleSig    = nil
     child._tuiTextConfig     = nil
+    -- released bar must re-skin as a NORMAL buff bar (special style lingers otherwise)
+    if ns.skinnedBars then ns.skinnedBars[child] = nil end
 end
 
 local function _registerShownSpell(childFrame)
@@ -586,6 +588,13 @@ local cdmMixinHooked = false
 local function HookCDMMixins()
     if cdmMixinHooked then return end
     local function OnCooldownIDSet(frame, isBar)
+        -- settings/preview frames can share these mixins; only touch real viewer children
+        local p = frame and frame.GetParent and frame:GetParent()
+        if not (p == _G.BuffBarCooldownViewer or p == _G.BuffIconCooldownViewer
+            or p == _G.EssentialCooldownViewer or p == _G.UtilityCooldownViewer
+            or yoinkedBars[frame] or frame._tuiSpecialBarKey or frame._tuiSpecialIconKey) then
+            return
+        end
         local set = isBar and knownBarSpells or knownIconSpells
         if C_CooldownViewer then
             local info = GetCooldownInfoForFrame(frame)

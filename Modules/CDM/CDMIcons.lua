@@ -93,17 +93,32 @@ local function CollectAndHook(viewer, out, hookFn)
     return out
 end
 
+local passiveMouse = {}
+local pendingMouse = {}
+
+-- EnableMouse in combat = ADDON_ACTION_BLOCKED; defer, drained by the OOC rebuild
+local function SetChildMouse(child, on)
+    if InCombatLockdown() then
+        pendingMouse[child] = on
+    else
+        pendingMouse[child] = nil
+        child:EnableMouse(on)
+    end
+end
+
 local function ApplyPassiveState(child, hide)
     if hide then
         if not passiveHidden[child] then
             passiveHidden[child] = true
+            passiveMouse[child] = child:IsMouseEnabled() and true or false
             child:SetAlpha(0)
-            child:EnableMouse(false)
+            SetChildMouse(child, false)
         end
     elseif passiveHidden[child] then
         passiveHidden[child] = nil
         child:SetAlpha(1)
-        child:EnableMouse(true)
+        SetChildMouse(child, passiveMouse[child] ~= false)
+        passiveMouse[child] = nil
     end
 end
 
@@ -113,8 +128,15 @@ local function PlainID(v)
 end
 
 local function RebuildPassiveCache()
-    if InCombatLockdown() then passiveDirty = true return end
-    passiveDirty = false
+    -- in combat: delta-pass (override flips must show mid-fight); secret reads skip, OOC pass re-validates
+    local inCombat = InCombatLockdown()
+    passiveDirty = inCombat
+    if not inCombat then
+        for c, want in pairs(pendingMouse) do
+            pendingMouse[c] = nil
+            if c.EnableMouse then c:EnableMouse(want) end
+        end
+    end
     local changed = false
     for name in pairs(VIEWERS) do
         local viewer = _G[name]
@@ -128,14 +150,25 @@ local function RebuildPassiveCache()
                     and not (ns.yoinkedBars and ns.yoinkedBars[c])
                     and not c._tuiSpecialBarKey and not c._tuiSpecialIconKey then
                     local info = c.cooldownInfo
+                    local base = info and PlainID(info.spellID) or nil
                     local sid = info and (PlainID(info.overrideTooltipSpellID)
-                        or PlainID(info.overrideSpellID) or PlainID(info.spellID)) or nil
+                        or PlainID(info.overrideSpellID) or base) or nil
+                    -- an ACTIVE override (Blightfall during Dark Transformation) is usable: judge IT,
+                    -- not the passive talent the static tooltip field points at
+                    if base and C_Spell.GetOverrideSpell then
+                        local live = PlainID(C_Spell.GetOverrideSpell(base))
+                        if live and live ~= 0 and live ~= base then sid = live end
+                    end
                     local hide
                     if not wantHide then
                         hide = false
                     elseif sid then
                         local p = C_Spell.IsSpellPassive(sid)
-                        hide = (NotSecret(p) and p == true) or false
+                        if NotSecret(p) then
+                            hide = p == true
+                        elseif not inCombat then
+                            hide = false
+                        end
                     end
                     if sid and not hide and ns.RacialsCDM and ns.RacialsCDM.ShouldHideNativeSpell
                         and ns.RacialsCDM.ShouldHideNativeSpell(sid) then
@@ -278,10 +311,71 @@ local function ApplyAuraState(child, cd, spellID)
     elseif cd.Clear then cd:Clear() end
 end
 
+-- aura-first display picks the AURA's icon (DT) over a live override (Blightfall);
+-- GetSpellTexture(base) resolves live overrides, so enforce the spell's texture
+local function EnforceSpellTexture(child)
+    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    if not (cdm and cdm.hideAuraOverlay) then return end
+    local cvs = _G.CooldownViewerSettings
+    if cvs and cvs:IsShown() then return end
+    if not OverlayEligible(child) then return end
+    local info = child.cooldownInfo
+    local base = info and PlainID(info.spellID) or nil
+    if not (type(base) == "number" and base > 0) then return end
+    local tex = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(base)
+    local icon = child.Icon
+    if not (tex and icon and icon.SetTexture) then return end
+    local cur = icon:GetTexture()
+    if NotSecret(cur) and cur == tex then return end
+    icon:SetTexture(tex)
+    local tc = child._tuiZoomCoord
+    if tc and icon.SetTexCoord then icon:SetTexCoord(tc[1], tc[2], tc[3], tc[4]) end
+end
+
+local LCG = LibStub and LibStub("LibCustomGlow-1.0", true)
+local overrideGlow = {}
+local childAuraOn  = {}
+
+local function StopOverrideGlow(child)
+    if not overrideGlow[child] then return end
+    overrideGlow[child] = nil
+    if LCG then LCG.ProcGlow_Stop(child, "tuiOverrideGlow") end
+end
+
+-- Blizzard's glow matches its aura-first spell id, so an active override's proc
+-- glow never shows while the aura display runs; mirror it from the live override
+local function UpdateOverrideGlow(child)
+    if not (LCG and IsSpellOverlayed) then return end
+    if not childAuraOn[child] then StopOverrideGlow(child) return end
+    local info = child.cooldownInfo
+    local base = info and PlainID(info.spellID) or nil
+    local live
+    if type(base) == "number" and base > 0 and C_Spell.GetOverrideSpell then
+        live = PlainID(C_Spell.GetOverrideSpell(base))
+        if live == 0 or live == base then live = nil end
+    end
+    if not live then StopOverrideGlow(child) return end
+    local o = IsSpellOverlayed(live)
+    if not NotSecret(o) then return end
+    if o == true then
+        if not overrideGlow[child] then
+            overrideGlow[child] = true
+            LCG.ProcGlow_Start(child, { key = "tuiOverrideGlow" })
+        end
+    else
+        StopOverrideGlow(child)
+    end
+end
+
 local function ProcessCooldownFrame(child)
     local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
     if not (cdm and cdm.hideAuraOverlay) then return end
+    -- hands off while the user edits the tracked set (pool churn + live rebuilds)
+    local cvs = _G.CooldownViewerSettings
+    if cvs and cvs:IsShown() then return end
     if not OverlayEligible(child) then return end
+    EnforceSpellTexture(child)
+    UpdateOverrideGlow(child)
     local cd = child.Cooldown
     if not cd or applyingOverlay[cd] then return end
 
@@ -308,6 +402,11 @@ local function EnsureOverlayHooks(child)
     if not cd or cd._tuiOverlayHooked then return end
     if not OverlayEligible(child) then return end
     cd._tuiOverlayHooked = true
+    -- instance hook: mixin fns are copied per frame, a mixin-table hook never fires
+    if not child._tuiTexHooked and type(child.RefreshSpellTexture) == "function" then
+        child._tuiTexHooked = true
+        hooksecurefunc(child, "RefreshSpellTexture", EnforceSpellTexture)
+    end
     local function reapply() ProcessCooldownFrame(child) end
     hooksecurefunc(cd, "SetCooldown", reapply)
     if cd.SetCooldownFromDurationObject then hooksecurefunc(cd, "SetCooldownFromDurationObject", reapply) end
@@ -329,10 +428,17 @@ local function HookChild(child, viewer)
     hooksecurefunc(child, "ClearAllPoints", ReapplyChildAnchor)
 
     if type(child.OnAuraInstanceInfoSet) == "function" then
-        hooksecurefunc(child, "OnAuraInstanceInfoSet", OnChildAuraChanged)
+        hooksecurefunc(child, "OnAuraInstanceInfoSet", function(self)
+            childAuraOn[self] = true
+            OnChildAuraChanged(self)
+        end)
     end
     if type(child.OnAuraInstanceInfoCleared) == "function" then
-        hooksecurefunc(child, "OnAuraInstanceInfoCleared", OnChildAuraChanged)
+        hooksecurefunc(child, "OnAuraInstanceInfoCleared", function(self)
+            childAuraOn[self] = nil
+            StopOverrideGlow(self)
+            OnChildAuraChanged(self)
+        end)
     end
 
     local db = child.DebuffBorder
@@ -482,6 +588,7 @@ local function ComputeLayoutSig(visible, vdb)
         + (vdb.overrideSize and 1 or 0) * 211
     local g = vdb.growthDirection
     if g then for i = 1, #g do sig = sig + g:byte(i) * i end end
+    if vdb.wrapDirection == "UP" or vdb.wrapDirection == "LEFT" then sig = sig + 307 end
     return sig
 end
 
@@ -609,6 +716,9 @@ LayoutViewer = function(viewer)
             local tex = c.Icon
             if tex and tex.SetTexCoord then
                 tex:SetTexCoord(left, right, top, bottom)
+                local tc = c._tuiZoomCoord
+                if not tc then tc = {}; c._tuiZoomCoord = tc end
+                tc[1], tc[2], tc[3], tc[4] = left, right, top, bottom
             end
         end
     end
@@ -657,6 +767,10 @@ LayoutViewer = function(viewer)
     local cellW = iconW + spacing
     local cellH = iconH + spacing
     local centered = (growth.pin == "CENTER")
+    -- wrap flip = mirror the wrap-axis index; box/pin math stays untouched
+    local wrapDir = vdb.wrapDirection
+    local wrapFlip = (growth.axis == "H" and wrapDir == "UP")
+        or (growth.axis == "V" and wrapDir == "LEFT")
     for i = 1, count do
         local child = visible[i]
         local col, row, lineLen
@@ -668,6 +782,9 @@ LayoutViewer = function(viewer)
             row = math.floor((i - 1) / perLine)
             col = (i - 1) % perLine
             lineLen = math.min(perLine, count - row * perLine)
+        end
+        if wrapFlip then
+            if growth.axis == "V" then col = cols - 1 - col else row = rows - 1 - row end
         end
 
         local x, y
@@ -735,6 +852,13 @@ local function HookViewer(name)
     if type(viewer.OnAcquireItemFrame) == "function" then
         hooksecurefunc(viewer, "OnAcquireItemFrame", function(self, itemFrame)
             HookChild(itemFrame, self)
+            -- pooled frames migrate between viewers: refresh ownership, drop stale state
+            itemFrame._tuiViewer = self
+            itemFrame._tuiAnchor = nil
+            childAuraOn[itemFrame] = nil
+            StopOverrideGlow(itemFrame)
+            ApplyPassiveState(itemFrame, false)
+            passiveMouse[itemFrame] = nil
             self._tuiLayoutSig = nil
             QueueLayout(self)
             QueuePassiveRebuild()
@@ -838,6 +962,10 @@ function M.RefreshAllSoft()
     HookEditModeExit()
     EnsureUtilityMover()
     HealViewerVisibility()
+    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    if not (cdm and cdm.hideAuraOverlay) then
+        for c in pairs(overrideGlow) do StopOverrideGlow(c) end
+    end
     for name in pairs(VIEWERS) do
         HookViewer(name)
         QueueLayout(_G[name])
@@ -894,8 +1022,13 @@ f:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 f:RegisterEvent("PLAYER_REGEN_ENABLED")
 f:RegisterEvent("SPELLS_CHANGED")
 f:RegisterEvent("TRAIT_CONFIG_UPDATED")
+if C_EventUtils and C_EventUtils.IsEventValid
+    and C_EventUtils.IsEventValid("COOLDOWN_VIEWER_SPELL_OVERRIDE_UPDATED") then
+    f:RegisterEvent("COOLDOWN_VIEWER_SPELL_OVERRIDE_UPDATED")
+end
 f:SetScript("OnEvent", function(_, event)
-    if event == "SPELLS_CHANGED" or event == "TRAIT_CONFIG_UPDATED" then
+    if event == "SPELLS_CHANGED" or event == "TRAIT_CONFIG_UPDATED"
+        or event == "COOLDOWN_VIEWER_SPELL_OVERRIDE_UPDATED" then
         QueuePassiveRebuild()
         return
     end

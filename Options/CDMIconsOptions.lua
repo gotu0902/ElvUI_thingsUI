@@ -263,6 +263,26 @@ local function ViewerGroup(order, key, label, opts)
                     TUI:UpdateCDMIcons()
                 end,
             },
+            wrapDirection = {
+                order = 13.5, type = "select", name = "Wrap Direction",
+                values = function()
+                    local g = E.db.thingsUI.cdmIcons[key].growthDirection or "CENTERED_H"
+                    if g == "DOWN" or g == "UP" or g == "CENTERED_V" then
+                        return { RIGHT = "Right", LEFT = "Left" }
+                    end
+                    return { DOWN = "Down", UP = "Up" }
+                end,
+                get = function()
+                    local db = E.db.thingsUI.cdmIcons[key]
+                    local g = db.growthDirection or "CENTERED_H"
+                    local vertical = (g == "DOWN" or g == "UP" or g == "CENTERED_V")
+                    return db.wrapDirection or (vertical and "RIGHT" or "DOWN")
+                end,
+                set = function(_, v)
+                    E.db.thingsUI.cdmIcons[key].wrapDirection = v
+                    TUI:UpdateCDMIcons()
+                end,
+            },
     }
 
     if key ~= "buffIcon" then

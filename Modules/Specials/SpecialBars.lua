@@ -117,10 +117,49 @@ local function ReassertBarVisuals(childFrame, db)
     end
 end
 
+local function ReassertBarText(child)
+    local key = child and child._tuiSpecialBarKey
+    if not key then return end
+    local db = SB.GetBarDB and SB.GetBarDB(key)
+    local bar = child.Bar
+    if not (db and bar) then return end
+    local font = LSM:Fetch("font", db.font or "Expressway")
+    if bar.Name then
+        bar.Name:SetAlpha(db.showName and 1 or 0)
+        if db.showName then
+            E:SetFont(bar.Name, font, db.fontSize, db.fontOutline)
+            bar.Name:ClearAllPoints()
+            bar.Name:SetPoint(db.namePoint or "LEFT", bar, db.namePoint or "LEFT", db.nameXOffset or 2, db.nameYOffset or 0)
+        end
+    end
+    if bar.Duration then
+        bar.Duration:SetAlpha(db.showDuration and 1 or 0)
+        if db.showDuration then
+            E:SetFont(bar.Duration, font, db.fontSize, db.fontOutline)
+            bar.Duration:ClearAllPoints()
+            bar.Duration:SetPoint(db.durationPoint or "RIGHT", bar, db.durationPoint or "RIGHT", db.durationXOffset or -4, db.durationYOffset or 0)
+        end
+    end
+end
+
+-- ElvUI's CDM skin re-anchors bar Name/Duration after us at login; re-assert ours
+local hookedElvUIBarText = false
+local function HookElvUIBarText()
+    if hookedElvUIBarText then return end
+    local S = E.GetModule and E:GetModule("Skins", true)
+    if not S or type(S.CooldownManager_UpdateTextBar) ~= "function" then return end
+    hookedElvUIBarText = true
+    hooksecurefunc(S, "CooldownManager_UpdateTextBar", function(_, bar)
+        local child = bar and bar.GetParent and bar:GetParent()
+        if child and child._tuiSpecialBarKey then ReassertBarText(child) end
+    end)
+end
+
 local function StyleSpecialBar(childFrame, db, effectiveHeight)
     local bar  = childFrame.Bar
     local icon = childFrame.Icon
     if not bar then return end
+    HookElvUIBarText()
 
     if not childFrame._tuiBarTextSaved then
         childFrame._tuiBarTextSaved = {
