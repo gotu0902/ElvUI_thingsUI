@@ -107,20 +107,27 @@ local function Panel() return _G.RightChatPanel end
 local frozenCur, frozenOverall = 0, 0
 local combatStart
 local lastCombatEnd = 0
+local liveSessionID, pinnedSession
 
 local function LiveNow()
     return InCombatLockdown() or (GetTime() - lastCombatEnd) < 3
 end
 
+local function NewestSessionID()
+    local avail = C_DamageMeter.GetAvailableCombatSessions and C_DamageMeter.GetAvailableCombatSessions()
+    local newest = avail and avail[#avail]
+    return newest and newest.sessionID
+end
+
+-- the live session's per-second values divide by a wall clock that keeps
+-- running after the fight, so pin to the archived segment the moment combat
+-- ends instead of riding the tail
 local function ResolveSession(sess)
     if type(sess) == "number" then return sess end
     if sess == "overall" then return "overall" end
-    if LiveNow() then return "current" end
-    -- OOC: pin "current" to the newest finished segment so party fights don't leak in
-    local avail = C_DamageMeter.GetAvailableCombatSessions and C_DamageMeter.GetAvailableCombatSessions()
-    local newest = avail and avail[#avail]
-    if newest and newest.sessionID then return newest.sessionID end
-    return "current"
+    if InCombatLockdown() then return "current" end
+    if pinnedSession then return pinnedSession end
+    return NewestSessionID() or "current"
 end
 
 local function FetchSession(win)
@@ -1437,11 +1444,12 @@ local function SetEventsActive(on)
         end
     end
 end
-ev:SetScript("OnEvent", function(_, event)
+ev:SetScript("OnEvent", function(_, event, arg1, arg2)
     if not Active() then return end
     if event == "ENCOUNTER_START" then
         -- hard segment boundary: repaint immediately even mid-chain-pull
         frozenCur = 0
+        pinnedSession = nil
         if InCombatLockdown() and not combatStart then combatStart = GetTime() end
         lastEventPaint = 0
         StartTicker()
@@ -1449,6 +1457,7 @@ ev:SetScript("OnEvent", function(_, event)
     elseif event == "PLAYER_REGEN_DISABLED" then
         combatStart = GetTime()
         frozenCur = 0
+        pinnedSession = nil
         StartTicker()
         QueueRefresh()
     elseif event == "PLAYER_REGEN_ENABLED" then
@@ -1459,8 +1468,14 @@ ev:SetScript("OnEvent", function(_, event)
         end
         combatStart = nil
         StopTicker()
+        -- pin before painting: the first post-combat paint must already read
+        -- the archived segment, or the number shifts on the next repaint
+        pinnedSession = liveSessionID or NewestSessionID()
         M.RefreshAll()
-        C_Timer.After(0.5, M.RefreshAll)
+        C_Timer.After(0.5, function()
+            pinnedSession = NewestSessionID() or pinnedSession
+            M.RefreshAll()
+        end)
     elseif event == "DAMAGE_METER_CURRENT_SESSION_UPDATED" then
         if InCombatLockdown() then
             frozenCur = 0
@@ -1472,8 +1487,10 @@ ev:SetScript("OnEvent", function(_, event)
         end
     elseif event == "DAMAGE_METER_RESET" then
         frozenCur, frozenOverall = 0, 0
+        liveSessionID, pinnedSession = nil, nil
         QueueRefresh()
     elseif event == "DAMAGE_METER_COMBAT_SESSION_UPDATED" then
+        if type(arg2) == "number" and arg2 ~= 0 then liveSessionID = arg2 end
         if InCombatLockdown() then
             -- keep the pull feeling live regardless of the ticker rate, max 1 paint/s
             local now = GetTime()

@@ -51,7 +51,10 @@ local function ReleaseFromElvUICooldown(cd)
         E.RegisteredCooldowns[cd] = nil
     end
     local mod = E.CooldownByModule and E.CooldownByModule.cdmanager
-    if mod and mod[cd] then mod[cd] = nil end
+    if mod then mod[cd] = nil end
+    -- 12.1: ElvUI welds a countdown formatter onto the frame itself, so
+    -- de-registering alone leaves its colours and number format in place
+    if cd.SetCountdownFormatter then cd:SetCountdownFormatter(nil) end
 end
 M.ReleaseFromElvUICooldown = ReleaseFromElvUICooldown
 
