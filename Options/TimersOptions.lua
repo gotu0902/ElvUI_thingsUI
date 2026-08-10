@@ -8,26 +8,6 @@ local function CurrentSpecID()
     return i and select(1, GetSpecializationInfo(i)) or 0
 end
 
-local POTION_NAMES = {
-    [241288] = "Potion of Recklessness",
-    [241308] = "Light's Potential",
-    [241292] = "Draught of Rampant Abandon",
-}
-local function PotionValues()
-    local v = {}
-    for id, name in pairs(POTION_NAMES) do
-        local icon = C_Item.GetItemIconByID and C_Item.GetItemIconByID(id)
-        v[id] = (icon and ("|T" .. icon .. ":16:16:0:0:64:64:5:59:5:59|t ") or "") .. name
-    end
-    return v
-end
-local function PotionSorting()
-    local s = {}
-    for id in pairs(POTION_NAMES) do s[#s + 1] = id end
-    table.sort(s, function(a, b) return POTION_NAMES[a] < POTION_NAMES[b] end)
-    return s
-end
-
 local CDM_HEX, CG_HEX = "FFD27F", "F20553"
 local function DestinationValues()
     local v = {
@@ -408,11 +388,23 @@ function TUI:TimersOptions()
             add = {
                 order = 2, type = "group", inline = true, name = "Add Timer",
                 args = {
-                    addPotion = {
-                        order = 1, type = "select", name = "Common Potion", width = 1.5,
-                        values = PotionValues, sorting = PotionSorting,
-                        get = function() end,
-                        set = function(_, v) T.AddTimer("item", v); Rebuild(); NotifyChange() end,
+                    desc = {
+                        order = 0.5, type = "description", width = "full",
+                        name = "A timer starts when YOU cast the spell or use the item, and runs its duration as a static icon.\n",
+                    },
+                    addSpell = {
+                        order = 1, type = "input", name = "Add Spell (ID or name)", width = 1.2,
+                        get = function() return "" end,
+                        set = function(_, v)
+                            local id = tonumber(v)
+                            if not id then
+                                local info = C_Spell.GetSpellInfo(v)
+                                id = info and info.spellID
+                            end
+                            if id and C_Spell.GetSpellInfo(id) then
+                                T.AddTimer("spell", id); Rebuild(); NotifyChange()
+                            end
+                        end,
                     },
                     addItem = {
                         order = 2, type = "input", name = "Add Item (ID)", width = 1.0,
