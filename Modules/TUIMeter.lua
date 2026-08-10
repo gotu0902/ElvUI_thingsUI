@@ -352,6 +352,66 @@ local function DeathClockText(src)
     return ""
 end
 
+-- one formatter for drill and popout: school-coloured name, source in
+-- parens, red amount + orange overkill + absorbed + hp%
+local function RecapHPTop(events)
+    local top = 1
+    for i = 1, #events do
+        local c = events[i].currentHP
+        if not Secret(c) and type(c) == "number" and c > top then top = c end
+    end
+    return top
+end
+
+local function RecapLine(ev, killing, deathTime, hpTop)
+    local sid = (not Secret(ev.spellId)) and ev.spellId or nil
+    local nm = PlainStr(ev.spellName)
+        or (sid and C_Spell.GetSpellName and C_Spell.GetSpellName(sid)) or "Melee"
+    if killing then
+        -- white + skull: red-on-red text drowned in the killing blow's bar
+        nm = "|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_8:12|t |cFFFFFFFF" .. nm .. "|r"
+    else
+        local school = (not Secret(ev.school)) and ev.school or nil
+        local c = school and CombatLog_Color_ColorArrayBySchool
+            and CombatLog_Color_ColorArrayBySchool(school)
+        if c then
+            nm = ("|cFF%02x%02x%02x%s|r"):format(c.r * 255, c.g * 255, c.b * 255, nm)
+        end
+    end
+    local srcName = (not ev.hideCaster) and PlainStr(ev.sourceName) or nil
+    if srcName then nm = nm .. " |cFF808080(" .. srcName .. ")|r" end
+    local ts = ev.timestamp
+    if deathTime and not Secret(ts) and type(ts) == "number" and (deathTime - ts) > 0.05 then
+        nm = ("|cFF606060-%.1fs|r  "):format(deathTime - ts) .. nm
+    end
+
+    -- no maxHealth in the live payload: normalise against the highest HP
+    -- seen in this recap, the bar reads as the health trajectory
+    local hp = ev.currentHP
+    if Secret(hp) or type(hp) ~= "number" then hp = 0 end
+    local hpMax = (type(hpTop) == "number" and hpTop > 1) and hpTop or 1
+    local hpFrac = math.max(0, math.min(1, hp / hpMax))
+
+    local amt = (not Secret(ev.amount)) and tonumber(ev.amount) or 0
+    local vt = ""
+    if amt > 0 then
+        vt = "|cFFFF5050-" .. Abbrev(amt) .. "|r"
+        if ev.critical == true then vt = vt .. " |cFFFFD200(Critical)|r" end
+        if ev.crushing == true then vt = vt .. " |cFFFFD200(Crushing)|r" end
+        local over = (not Secret(ev.overkill)) and tonumber(ev.overkill) or 0
+        if over > 0 then vt = vt .. " |cFFFFA040(+" .. Abbrev(over) .. ")|r" end
+        local abs = (not Secret(ev.absorbed)) and tonumber(ev.absorbed) or 0
+        if abs > 0 then vt = vt .. " |cFF808080(" .. Abbrev(abs) .. " abs)|r" end
+        if hpMax > 1 then vt = vt .. (" |cFF808080(%d%%)|r"):format(hpFrac * 100 + 0.5) end
+    end
+
+    local tex = sid and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)
+    if not tex or tex == 0 then
+        tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(6603)) or 134400
+    end
+    return nm, vt, tex, hpFrac, amt
+end
+
 local function RecapRows(drill)
     local events = RecapEvents(drill.recapID)
     if not events then return nil end
@@ -359,34 +419,17 @@ local function RecapRows(drill)
     local rows, maxAmt = {}, 1
     local deathTime = events[1] and events[1].timestamp
     if Secret(deathTime) or type(deathTime) ~= "number" then deathTime = nil end
+    local hpTop = RecapHPTop(events)
     for i = #events, 1, -1 do
         local ev = events[i]
-        local sid = (not Secret(ev.spellId)) and ev.spellId or nil
-        local nm = PlainStr(ev.spellName)
-            or (sid and C_Spell.GetSpellName and C_Spell.GetSpellName(sid)) or "Melee"
-        if i == 1 then nm = "|cFFFF4040" .. nm .. "|r" end
-        local srcName = (not ev.hideCaster) and PlainStr(ev.sourceName) or nil
-        if srcName then nm = nm .. "  |cFF808080" .. srcName .. "|r" end
-        local ts = ev.timestamp
-        if deathTime and not Secret(ts) and type(ts) == "number" and (deathTime - ts) > 0.05 then
-            nm = ("|cFF606060-%.1fs|r  "):format(deathTime - ts) .. nm
-        end
-        local amt = (not Secret(ev.amount)) and tonumber(ev.amount) or 0
+        local nm, vt, tex, hpFrac, amt = RecapLine(ev, i == 1, deathTime, hpTop)
         if amt > maxAmt then maxAmt = amt end
-        local hp, hpMax = ev.currentHP, ev.maxHealth
-        if Secret(hp) or type(hp) ~= "number" then hp = 0 end
-        if Secret(hpMax) or type(hpMax) ~= "number" or hpMax <= 0 then hpMax, hp = 1, 0 end
-        local vt
-        if amt > 0 then
-            vt = "|cFFFF5050-" .. Abbrev(amt) .. "|r"
-            local over = (not Secret(ev.overkill)) and tonumber(ev.overkill) or 0
-            if over > 0 then vt = vt .. " |cFF808080(+" .. Abbrev(over) .. ")|r" end
-        end
         rows[#rows + 1] = {
             name = nm,
             totalAmount = amt,
-            _recapText = vt or "",
-            _hpFrac = math.max(0, math.min(1, hp / hpMax)),
+            specIconID = tex,
+            _recapText = vt,
+            _hpFrac = hpFrac,
             _recapKill = (i == 1) or nil,
         }
     end
@@ -559,7 +602,7 @@ local function UpdateRow(win, i, rank, src, maxAmt, db)
         local z = db.iconZoom or 0.05
         local specIcon = src.specIconID
         if Secret(specIcon) then specIcon = nil end
-        if db.iconStyle == "spec" and specIcon and specIcon ~= 0 then
+        if (db.iconStyle == "spec" or src._hpFrac) and specIcon and specIcon ~= 0 then
             row.icon:SetTexture(specIcon)
             row.icon:SetTexCoord(z, 1 - z, z, 1 - z)
             row.icon:Show(); iconW = barH
@@ -897,6 +940,7 @@ local function RenderRecapPopout(p, db, ctx)
     local z = db.iconZoom or 0.05
     local deathTime = events[1] and events[1].timestamp
     if Secret(deathTime) or type(deathTime) ~= "number" then deathTime = nil end
+    local hpTop = RecapHPTop(events)
     local y, shown = 28, 0
 
     for di = first, math.min(total, first + maxRows - 1) do
@@ -920,28 +964,15 @@ local function RenderRecapPopout(p, db, ctx)
         row.amount:SetFont(font, db.valueFontSize or 12, flag)
 
         local killing = idx == 1
+        local nm, at, icon, hpFrac = RecapLine(ev, killing, nil, hpTop)
         row.fill:SetStatusBarColor(killing and 0.7 or 0.42, 0.14, 0.14)
-        local hp, hpMax = ev.currentHP, ev.maxHealth
-        if Secret(hp) or type(hp) ~= "number" then hp = 0 end
-        if Secret(hpMax) or type(hpMax) ~= "number" or hpMax <= 0 then hpMax, hp = 1, 0 end
-        row.fill:SetMinMaxValues(0, hpMax)
-        row.fill:SetValue(math.max(0, hp))
+        row.fill:SetMinMaxValues(0, 1)
+        row.fill:SetValue(hpFrac)
 
         row.icon:SetWidth(rowH)
-        local sid = (not Secret(ev.spellId)) and ev.spellId or nil
-        local icon = sid and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)
-        if not icon or icon == 0 then
-            icon = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(6603)) or 134400
-        end
         row.icon:SetTexture(icon)
         row.icon:SetTexCoord(z, 1 - z, z, 1 - z)
-
-        local spellName = PlainStr(ev.spellName)
-            or (sid and C_Spell.GetSpellName and C_Spell.GetSpellName(sid)) or "Melee"
-        if killing then spellName = "|cFFFF4040" .. spellName .. "|r" end
-        local srcName = (not ev.hideCaster) and PlainStr(ev.sourceName) or nil
-        if srcName then spellName = spellName .. "  |cFF808080" .. srcName .. "|r" end
-        row.label:SetText(spellName)
+        row.label:SetText(nm)
 
         local ts = ev.timestamp
         if deathTime and not Secret(ts) and type(ts) == "number" and (deathTime - ts) > 0.05 then
@@ -950,16 +981,6 @@ local function RenderRecapPopout(p, db, ctx)
             row.pos:SetText("")
         end
 
-        local amt = ev.amount
-        local at = ""
-        if not Secret(amt) and type(amt) == "number" and amt > 0 then
-            at = "|cFFFF5050-" .. Abbrev(amt) .. "|r"
-            local over = (not Secret(ev.overkill)) and tonumber(ev.overkill) or 0
-            if over > 0 then at = at .. " |cFF808080(+" .. Abbrev(over) .. ")|r" end
-            if hpMax > 1 then
-                at = at .. ("  |cFF808080%d%%|r"):format(hp / hpMax * 100 + 0.5)
-            end
-        end
         row.amount:SetText(at)
         row._src = nil
     end

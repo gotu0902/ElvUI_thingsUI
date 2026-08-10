@@ -53,14 +53,16 @@ function TUI:DamageMeterOptions()
                         sorting = { "DETAILS", "TUI" },
                         confirm = function(_, v)
                             if v == "TUI" then
-                                return "Use the Mini Meter? Details! (if installed) is disabled. Reload afterwards."
+                                return "Use the Mini Meter? Details! (if installed) is disabled and the UI reloads now."
                             end
-                            return "Switch to Details!? The addon is re-enabled. Reload afterwards."
+                            return "Switch to Details!? The addon is re-enabled and the UI reloads now."
                         end,
                         get = function() return ns.GetDamageMeterProvider() end,
                         set = function(_, v)
                             if ns.SetDamageMeterProvider then ns.SetDamageMeterProvider(v) end
-                            ns.NotifyChange()
+                            -- addon enable-state only applies at load; without
+                            -- this the OTHER meter keeps running underneath
+                            if C_UI and C_UI.Reload then C_UI.Reload() else ReloadUI() end
                         end,
                     },
                     reload = {
