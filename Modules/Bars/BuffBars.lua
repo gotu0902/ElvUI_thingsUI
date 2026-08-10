@@ -291,24 +291,16 @@ local function ProcessUpdate()
     if HookBuffBarEditMode then HookBuffBarEditMode() end
 
     local buffBarsEnabled = E.db.thingsUI.buffBars and E.db.thingsUI.buffBars.enabled
-    local specialBarsExist = E.db.thingsUI.specialBars
-
-    if specialBarsExist then
-        ns.SpecialBars.ScanAndHookCDMChildren()
-    end
-
     if not buffBarsEnabled then return end
 
     local db = E.db.thingsUI.buffBars
     wipe(sortedBars)
     local children = { BuffBarCooldownViewer:GetChildren() }
 
-    local SB = ns.SpecialBars
     for _, childFrame in ipairs(children) do
         if childFrame then ApplyAuraBorderHide(childFrame) end
         if childFrame and childFrame:IsShown() and childFrame.Bar
-           and not yoinkedBars[childFrame] and not childFrame._tui_hidden
-           and not (SB and SB.IsChildClaimedBySpecial and SB.IsChildClaimedBySpecial(childFrame)) then
+           and not yoinkedBars[childFrame] and not childFrame._tui_hidden then
             SkinBuffBar(childFrame)
             LayoutBuffBar(childFrame)
             sortedBars[#sortedBars + 1] = childFrame
@@ -430,7 +422,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 end)
 
 function TUI:UpdateBuffBars()
-    if E.db.thingsUI.buffBars.enabled or (E.db.thingsUI.specialBars and next(E.db.thingsUI.specialBars.specs or {})) then
+    if E.db.thingsUI.buffBars.enabled then
         isEnabled = true
         StartViewerReadyTicker()
         eventFrame:RegisterUnitEvent("UNIT_AURA", "player")

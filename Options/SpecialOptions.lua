@@ -15,7 +15,6 @@ local function CurSpecID()
     return idx and GetSpecializationInfo(idx) or 0
 end
 
--- Slot delete releases+renumbers all specials; groups must re-collect after the reclaim settles
 local function SettleAfterSlotChange()
     TUI:UpdateSpecialBars()
     if ns.CustomGroups and ns.CustomGroups.QueueLayout then ns.CustomGroups.QueueLayout() end
@@ -164,7 +163,7 @@ local function LiveAs(id, data, knownBar, knownIcon)
     return knownBar[id] or (pid and knownBar[pid]), knownIcon[id] or (pid and knownIcon[pid])
 end
 
-local function GetChoicesTable(currentKey, isBar, omitBarUsed)
+local function GetChoicesTable(currentKey, isBar)
     local choices = { [""] = "|cFF888888- None -|r" }
 
     if SB.ScanAndHookCDMChildren then SB.ScanAndHookCDMChildren() end
@@ -199,18 +198,9 @@ local function GetChoicesTable(currentKey, isBar, omitBarUsed)
 
         local talented = IsPlayerSpell(id) or (pid and IsPlayerSpell(pid)) or false
         local inCDM = data.type and data.type ~= "Unknown"
+        local live = liveAsBar or liveAsIcon
 
-        local liveType
-        if liveAsBar and liveAsIcon then liveType = "Bar & Icon"
-        elseif liveAsBar then liveType = "Bar"
-        elseif liveAsIcon then liveType = "Icon"
-        end
-
-        if usage and omitBarUsed and usage:sub(1, 3) == "Bar" then
-            choices[tostring(id)] = nil
-        elseif omitBarUsed and not usage and liveType == "Bar" then
-            choices[tostring(id)] = nil
-        elseif usage then
+        if usage then
             local isIconUsage = usage:find("Icon", 1, true)
             local nameColor = isIconUsage and "|cFFFFB347" or "|cFFFF8800"
             local tagColor  = isIconUsage and "|cFFCC8844" or "|cFFAA6600"
@@ -223,11 +213,8 @@ local function GetChoicesTable(currentKey, isBar, omitBarUsed)
                 if g and g.name then where = " |cFF8AC8FF[" .. g.name .. "]|r" end
             end
             choices[tostring(id)] = iconStr .. nameColor .. displayName .. "|r " .. tagColor .. "(In use: " .. usage .. ")|r" .. where
-        elseif liveType then
-            local isBarOnly = liveType == "Bar"
-            local nameColor = isBarOnly and "|cFFFFFF00" or "|cFF00FF00"
-            local typeLabel = "|cFF888888(" .. liveType .. ")|r"
-            choices[tostring(id)] = iconStr .. nameColor .. displayName .. "|r " .. typeLabel
+        elseif live then
+            choices[tostring(id)] = iconStr .. "|cFF00FF00" .. displayName .. "|r"
         elseif inCDM and talented then
             choices[tostring(id)] = iconStr .. "|cFF66CCFF" .. displayName .. "|r |cFF6699CC(Not tracked)|r"
         elseif inCDM then
@@ -246,38 +233,23 @@ local function GetSortRank(id, data, knownBar, knownIcon)
     if usage then
         return usage:find("Icon", 1, true) and 2 or 1
     end
-    if liveAsBar and not liveAsIcon then return 3 end
-    if liveAsIcon then return 4 end  -- Icon-only or Bar & Icon
+    if liveAsBar or liveAsIcon then return 3 end
     local talented = IsPlayerSpell(id) or (pid and IsPlayerSpell(pid)) or false
     local inCDM = data.type and data.type ~= "Unknown"
-    if inCDM and talented then return 5 end
-    if inCDM then return 6 end
-    return 7
+    if inCDM and talented then return 4 end
+    if inCDM then return 5 end
+    return 6
 end
 
-local function GetSortedKeys(omitBarUsed)
-    -- AceConfig calls member functions with info as arg1; only literal true filters
-    if omitBarUsed ~= true then omitBarUsed = false end
+local function GetSortedKeys()
     local rawList = GetEnrichedSpellList()
     local knownBar  = SB.knownBarSpells  or {}
     local knownIcon = SB.knownIconSpells or {}
     local ranks = {}
     local sorted = {}
     for id, data in pairs(rawList) do
-        local skip = false
-        if omitBarUsed then
-            local usage = SB.GetSpellUsageInfo(id, nil, nil, ESpec())
-            if usage then
-                skip = usage:sub(1, 3) == "Bar"
-            else
-                local liveAsBar, liveAsIcon = LiveAs(id, data, knownBar, knownIcon)
-                skip = (liveAsBar and not liveAsIcon) or false
-            end
-        end
-        if not skip then
-            sorted[#sorted+1] = id
-            ranks[id] = GetSortRank(id, data, knownBar, knownIcon)
-        end
+        sorted[#sorted+1] = id
+        ranks[id] = GetSortRank(id, data, knownBar, knownIcon)
     end
     table.sort(sorted, function(a, b)
         if ranks[a] ~= ranks[b] then return ranks[a] < ranks[b] end
@@ -290,16 +262,15 @@ local function GetSortedKeys(omitBarUsed)
     return keys
 end
 
--- Shared with Custom Groups quick-add; forced to the ACTIVE spec (Editing Spec must not leak)
-function ns.SB_SpellChoices(currentKey, isBar, omitBarUsed)
+function ns.SB_SpellChoices(currentKey, isBar)
     forceCurrentSpec = true
-    local res = GetChoicesTable(currentKey, isBar, omitBarUsed)
+    local res = GetChoicesTable(currentKey, isBar)
     forceCurrentSpec = false
     return res
 end
-function ns.SB_SpellChoicesSorting(omitBarUsed)
+function ns.SB_SpellChoicesSorting()
     forceCurrentSpec = true
-    local res = GetSortedKeys(omitBarUsed)
+    local res = GetSortedKeys()
     forceCurrentSpec = false
     return res
 end
@@ -1183,10 +1154,13 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                         zoom   = { order = 5, type = "range", name = "Zoom", min = 0, max = 0.45, step = 0.01, bigStep = 0.05, isPercent = true,
                             disabled = function() return isGrouped() end,
                             get = function() return get("zoom") end, set = function(_, v) set("zoom", v) end },
-                        desaturate = { order = 6, type = "toggle", name = "Show when Idle", get = function() return get("desaturateWhenInactive") end, set = function(_, v) set("desaturateWhenInactive", v) end },
+                        desaturate = { order = 6, type = "toggle", name = "Show when Idle",
+                            disabled = function() return isGrouped() end,
+                            get = function() return get("desaturateWhenInactive") end, set = function(_, v) set("desaturateWhenInactive", v) end },
                         frameStrata = {
                             order = 7, type = "select", name = "Frame Strata",
                             values = STRATA_VALUES, sorting = STRATA_ORDER,
+                            disabled = function() return isGrouped() end,
                             get = function() return get("frameStrata") or "MEDIUM" end,
                             set = function(_, v) set("frameStrata", v) end,
                         },
@@ -1199,6 +1173,9 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                         invertSwipe = { order = 2, type = "toggle", name = "Invert Sweep",
                             disabled = function() return not get("showCooldown") end,
                             get = function() return get("invertSwipe") end, set = function(_, v) set("invertSwipe", v) end },
+                        showPandemic = { order = 3, type = "toggle", name = "Pandemic Indicator",
+                            get = function() return get("showPandemic") end,
+                            set = function(_, v) set("showPandemic", v) end },
                     },
                 },
                 borderGroup = {
@@ -1226,15 +1203,18 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                     },
                 },
                 glowGroup = {
-                    order = 13, type = "group", name = "Glow", inline = true,
+                    order = 13, type = "group", name = "Glow While Active", inline = true,
                     args = {
                         showGlow = { order = 1, type = "toggle", name = "Show Glow",
                             get = function() return get("showGlow") end,
                             set = function(_, v) set("showGlow", v) end },
-                        glowType = { order = 2, type = "select", name = "Type",
+                        glowType = { order = 2, type = "select", name = "Style",
                             disabled = function() return not get("showGlow") end,
-                            values = { ["pixel"]="Pixel", ["autocast"]="Auto Cast", ["button"]="Button", ["proc"]="Proc" },
-                            get = function() return get("glowType") or "pixel" end,
+                            values = { ["pulse"]="Pulse Ring", ["proc"]="Proc Glow", ["ants"]="Marching Ants" },
+                            get = function()
+                                local AL = ns.AuraLane
+                                return AL and AL.MapGlowStyle(get("glowType")) or "pulse"
+                            end,
                             set = function(_, v) set("glowType", v) end },
                         glowColor = { order = 3, type = "color", name = "Color", hasAlpha = true,
                             disabled = function() return not get("showGlow") end,
@@ -1242,37 +1222,12 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             set = function(_, r, g, b, a) set("glowColor", { r=r, g=g, b=b, a=a }) end },
                         glowThickness = { order = 4, type = "range", name = "Thickness", min = 0.5, max = 10, step = 0.5,
                             disabled = function()
-                                return not get("showGlow")
-                                    or get("glowType") == "button"
-                                    or get("glowType") == "proc"
-                                    or (get("glowInsideBorder") and get("showBorder"))
+                                local AL = ns.AuraLane
+                                local style = AL and AL.MapGlowStyle(get("glowType")) or "pulse"
+                                return not get("showGlow") or style ~= "pulse"
                             end,
                             get = function() return get("glowThickness") or 2 end,
                             set = function(_, v) set("glowThickness", v) end },
-                        glowLength = { order = 5, type = "range", name = "Length", min = 1, max = 40, step = 1,
-                            disabled = function() return not get("showGlow") or get("glowType") ~= "pixel" end,
-                            get = function() return get("glowLength") or 10 end,
-                            set = function(_, v) set("glowLength", v) end },
-                        glowN = { order = 6, type = "range", name = "Particles", min = 1, max = 32, step = 1,
-                            disabled = function() return not get("showGlow") or get("glowType") == "button" or get("glowType") == "proc" end,
-                            get = function() return get("glowN") or 8 end,
-                            set = function(_, v) set("glowN", v) end },
-                        glowFrequency = { order = 7, type = "range", name = "Speed", min = -2, max = 2, step = 0.05, bigStep = 0.25,
-                            disabled = function() return not get("showGlow") end,
-                            get = function() return get("glowFrequency") or 0.25 end,
-                            set = function(_, v) set("glowFrequency", v) end },
-                        glowXOffset = { order = 8, type = "range", name = "X Offset", min = -20, max = 20, step = 0.5,
-                            disabled = function() return not get("showGlow") or get("glowType") == "button" or get("glowType") == "proc" end,
-                            get = function() return get("glowXOffset") or 0 end,
-                            set = function(_, v) set("glowXOffset", v) end },
-                        glowYOffset = { order = 9, type = "range", name = "Y Offset", min = -20, max = 20, step = 0.5,
-                            disabled = function() return not get("showGlow") or get("glowType") == "button" or get("glowType") == "proc" end,
-                            get = function() return get("glowYOffset") or 0 end,
-                            set = function(_, v) set("glowYOffset", v) end },
-                        glowInsideBorder = { order = 10, type = "toggle", name = "Glow Inside Border",
-                            disabled = function() return not get("showGlow") or not get("showBorder") end,
-                            get = function() return get("glowInsideBorder") end,
-                            set = function(_, v) set("glowInsideBorder", v) end },
                     },
                 },
             }),

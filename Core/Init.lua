@@ -92,7 +92,6 @@ end
 
 function TUI:Initialize()
     EP:RegisterPlugin(addon, function(...)
-        -- surface config-build errors with our name (EP/options loaders can swallow them)
         local ok, err = pcall(TUI.ConfigTable, ...)
         if not ok then geterrorhandler()("|cFF8080FFthingsUI|r ConfigTable failed: " .. tostring(err)) end
     end)
@@ -138,6 +137,7 @@ function TUI:Initialize()
     if self.UpdateRacialsCDM then self:UpdateRacialsCDM() end
     self:UpdateEssentialMover()
     self:UpdateCustomGroups()
+    if self.UpdateCustomBars then self:UpdateCustomBars() end
     if self.UpdateTUIMeter then self:UpdateTUIMeter() end
     if self.UpdateMBB then self:UpdateMBB() end
     if self.UpdateInstanceDifficulty then self:UpdateInstanceDifficulty() end
@@ -178,6 +178,7 @@ function TUI:Initialize()
             TUI:UpdateClassbarMode()
             TUI:UpdateChargeBar()
             TUI:UpdateCustomGroups()
+            if TUI.UpdateCustomBars then TUI:UpdateCustomBars() end
         end)
     end)
 
@@ -200,6 +201,7 @@ function TUI:ProfileUpdate()
     if self.UpdateRacialsCDM then self:UpdateRacialsCDM() end
     self:UpdateEssentialMover()
     self:UpdateCustomGroups()
+    if self.UpdateCustomBars then self:UpdateCustomBars() end
     if self.UpdateTUIMeter then self:UpdateTUIMeter() end
     if self.UpdateMBB then self:UpdateMBB() end
     if self.UpdateInstanceDifficulty then self:UpdateInstanceDifficulty() end
@@ -209,9 +211,7 @@ function TUI:ProfileUpdate()
         if ns.Timers.DropLustTimers then ns.Timers.DropLustTimers() end
         if ns.Timers.Update then ns.Timers.Update() end
     end
-    -- module removed: Blizzard's CDM tracks trinkets natively since 12.1
     if E.db.thingsUI then E.db.thingsUI.trinketsCDM = nil end
-    -- global icons folded into per-group aura entries
     local sb = E.db.thingsUI and E.db.thingsUI.specialBars
     if sb then sb.globalIcons = nil end
     self:UpdateMoverSync()

@@ -1,8 +1,9 @@
-<Ui xmlns="http://www.blizzard.com/wow/ui/">
+﻿<Ui xmlns="http://www.blizzard.com/wow/ui/">
 	<Script file="CDHelpers.lua"/>
 	<Script file="Specials\SpecialDB.lua"/>
 	<Script file="Specials\SpecialStyles.lua"/>
 	<Script file="Specials\SpecialCache.lua"/>
+	<Script file="Specials\SpecialAura.lua"/>
 	<Script file="Specials\SpecialShared.lua"/>
 	<Script file="Specials\SpecialBars.lua"/>
 	<Script file="Specials\SpecialIcons.lua"/>
@@ -22,6 +23,7 @@
 	<Script file="CDM\RacialsCDM.lua"/>
 	<Script file="CustomGroups.lua"/>
 	<Script file="AuraLane.lua"/>
+	<Script file="CustomBars.lua"/>
 	<Script file="TUIMeter.lua"/>
 	<Script file="MBB.lua"/>
 	<Script file="MinimapDifficulty.lua"/>

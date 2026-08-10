@@ -24,6 +24,8 @@ local function Ready()
     return true
 end
 
+A.Ready = Ready
+
 function A.DB(group)
     group.auras = group.auras or {}
     return group.auras
@@ -58,6 +60,27 @@ function A.Entries(group)
         end
     end
 
+    local SB = ns.SpecialBars
+    if SB and SB.GetIconCount and SB.GetIconDB then
+        local siSpec = 3
+        for i, s in ipairs(order) do
+            if s == "spec" then siSpec = i break end
+        end
+        for i = 1, SB.GetIconCount() do
+            local ikey = "icon" .. i
+            local idb = SB.GetIconDB(ikey)
+            if idb and idb.enabled and idb.spellID and idb.customGroup == group.id then
+                local spells = (ns.SpecialAura and ns.SpecialAura.ExpandSpellIDs
+                    and ns.SpecialAura.ExpandSpellIDs(idb.spellID)) or { [idb.spellID] = true }
+                out[#out + 1] = {
+                    key = ("TUIAura%d_si_%s"):format(group.id or 0, ikey),
+                    def = { spells = spells, max = 1, iconDB = idb },
+                    rank = siSpec * 100000 + (idb.customGroupOrder or 20000),
+                }
+            end
+        end
+    end
+
     table.sort(out, function(x, y)
         if x.rank ~= y.rank then return x.rank < y.rank end
         return x.key < y.key
@@ -85,6 +108,8 @@ local function Formatter()
     })
     return durFormatter
 end
+
+A.DurFormatter = Formatter
 
 local colourCache = {}
 local function ThresholdColour(group)
@@ -120,12 +145,175 @@ function A.SourceProbed()
     return sourceOK ~= nil
 end
 
+local pandemicOK
+function A.CanPandemic(button)
+    if pandemicOK == nil and button then
+        pandemicOK = type(button.AddPandemicRegion) == "function"
+    end
+    return pandemicOK == true
+end
+
+function A.MapGlowStyle(v)
+    if v == "pulse" or v == "proc" or v == "ants" then return v end
+    if v == "pixel" then return "ants" end
+    if v == "button" then return "proc" end
+    return "pulse"
+end
+
+local RING_BLACK = {}
+local function EdgeRing(host, texs, size, inset, c)
+    for _, tex in ipairs(texs) do
+        tex:SetColorTexture(c.r or 0, c.g or 0, c.b or 0, c.a or 1)
+        tex:ClearAllPoints()
+        tex:Show()
+    end
+    texs[1]:SetPoint("TOPLEFT", host, "TOPLEFT", inset, -inset)
+    texs[1]:SetPoint("BOTTOMRIGHT", host, "TOPRIGHT", -inset, -inset - size)
+    texs[2]:SetPoint("TOPLEFT", host, "BOTTOMLEFT", inset, inset + size)
+    texs[2]:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -inset, inset)
+    texs[3]:SetPoint("TOPLEFT", host, "TOPLEFT", inset, -inset)
+    texs[3]:SetPoint("BOTTOMRIGHT", host, "BOTTOMLEFT", inset + size, inset)
+    texs[4]:SetPoint("TOPLEFT", host, "TOPRIGHT", -inset - size, -inset)
+    texs[4]:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -inset, inset)
+end
+A.EdgeRing = EdgeRing
+
+local function LayoutRing(g, th)
+    for i = 1, 4 do
+        g.tex[i]:ClearAllPoints()
+        g.tex[i]:Show()
+    end
+    g.tex[1]:SetPoint("BOTTOMLEFT", g, "TOPLEFT", -th, 0)
+    g.tex[1]:SetPoint("TOPRIGHT", g, "TOPRIGHT", th, th)
+    g.tex[2]:SetPoint("TOPLEFT", g, "BOTTOMLEFT", -th, 0)
+    g.tex[2]:SetPoint("BOTTOMRIGHT", g, "BOTTOMRIGHT", th, -th)
+    g.tex[3]:SetPoint("TOPRIGHT", g, "TOPLEFT", 0, 0)
+    g.tex[3]:SetPoint("BOTTOMLEFT", g, "BOTTOMLEFT", -th, 0)
+    g.tex[4]:SetPoint("TOPLEFT", g, "TOPRIGHT", 0, 0)
+    g.tex[4]:SetPoint("BOTTOMRIGHT", g, "BOTTOMRIGHT", th, 0)
+end
+
+function A.ApplyButtonFX(button, r, opts)
+    local style = opts.style
+    local gc = opts.color
+
+    if style == "pulse" then
+        local g = r.glow
+        if not g then
+            g = CreateFrame("Frame", nil, button)
+            g:SetAllPoints(button)
+            g.tex = {}
+            for i = 1, 4 do g.tex[i] = g:CreateTexture(nil, "OVERLAY", nil, 7) end
+            local ag = g:CreateAnimationGroup()
+            ag:SetLooping("BOUNCE")
+            local a = ag:CreateAnimation("Alpha")
+            a:SetFromAlpha(1)
+            a:SetToAlpha(0.25)
+            a:SetDuration(0.5)
+            g.anim = ag
+            r.glow = g
+        end
+        local c = gc or {}
+        for i = 1, 4 do
+            g.tex[i]:SetColorTexture(c.r or 1, c.g or 1, c.b or 0.25, c.a or 1)
+        end
+        LayoutRing(g, opts.thickness or 2)
+        g:Show()
+        if not g.anim:IsPlaying() then g.anim:Play() end
+    elseif r.glow then
+        r.glow.anim:Stop()
+        r.glow:Hide()
+    end
+
+    if style == "proc" then
+        local p = r.glowProc
+        if not p then
+            p = CreateFrame("Frame", nil, button)
+            p:SetPoint("CENTER", button, "CENTER", 0, 0)
+            p.tex = p:CreateTexture(nil, "OVERLAY", nil, 7)
+            p.tex:SetAllPoints(p)
+            p.tex:SetAtlas("UI-HUD-ActionBar-Proc-Loop-Flipbook")
+            local ag = p.tex:CreateAnimationGroup()
+            ag:SetLooping("REPEAT")
+            local fb = ag:CreateAnimation("FlipBook")
+            fb:SetDuration(1)
+            fb:SetFlipBookRows(6)
+            fb:SetFlipBookColumns(5)
+            fb:SetFlipBookFrames(30)
+            p.anim = ag
+            r.glowProc = p
+        end
+        p:SetSize((opts.w or 36) * 1.4, (opts.h or 36) * 1.4)
+        if gc then p.tex:SetVertexColor(gc.r or 1, gc.g or 1, gc.b or 1, gc.a or 1)
+        else p.tex:SetVertexColor(1, 1, 1, 1) end
+        p:Show()
+        if not p.anim:IsPlaying() then p.anim:Play() end
+    elseif r.glowProc then
+        r.glowProc.anim:Stop()
+        r.glowProc:Hide()
+    end
+
+    if style == "ants" then
+        local n = r.glowAnts
+        if not n then
+            n = CreateFrame("Frame", nil, button)
+            n:SetPoint("CENTER", button, "CENTER", 0, 0)
+            n.tex = n:CreateTexture(nil, "OVERLAY", nil, 7)
+            n.tex:SetAllPoints(n)
+            n.tex:SetTexture("Interface\\SpellActivationOverlay\\IconAlertAnts")
+            local ag = n.tex:CreateAnimationGroup()
+            ag:SetLooping("REPEAT")
+            local fb = ag:CreateAnimation("FlipBook")
+            fb:SetDuration(0.3)
+            fb:SetFlipBookRows(5)
+            fb:SetFlipBookColumns(5)
+            fb:SetFlipBookFrames(22)
+            fb:SetFlipBookFrameWidth(48)
+            fb:SetFlipBookFrameHeight(48)
+            n.anim = ag
+            r.glowAnts = n
+        end
+        n:SetSize((opts.w or 36) * 1.25, (opts.h or 36) * 1.25)
+        if gc then
+            n.tex:SetDesaturated(true)
+            n.tex:SetVertexColor(gc.r or 1, gc.g or 1, gc.b or 1, gc.a or 1)
+        else
+            n.tex:SetDesaturated(false)
+            n.tex:SetVertexColor(1, 1, 1, 1)
+        end
+        n:Show()
+        if not n.anim:IsPlaying() then n.anim:Play() end
+    elseif r.glowAnts then
+        r.glowAnts.anim:Stop()
+        r.glowAnts:Hide()
+    end
+
+    local wantPand = opts.pandemic and A.CanPandemic(button) or false
+    if wantPand and not r.pand then
+        local pd = CreateFrame("Frame", nil, button)
+        pd:SetAllPoints(button)
+        pd:SetFrameLevel(button:GetFrameLevel() + 4)
+        pd.tex = {}
+        for i = 1, 4 do pd.tex[i] = pd:CreateTexture(nil, "OVERLAY", nil, 6) end
+        r.pand = pd
+        button:AddPandemicRegion(pd)
+    end
+    if r.pand then
+        local pc = opts.pandemicColor or { r = 1, g = 0.35, b = 0.1 }
+        for i = 1, 4 do
+            r.pand.tex[i]:SetColorTexture(pc.r or 1, pc.g or 0.35, pc.b or 0.1, pc.a or 1)
+        end
+        LayoutRing(r.pand, 2)
+        r.pand:SetAlpha(wantPand and 1 or 0)
+    end
+end
+
 local function Font(name, size, outline)
     local path = (LSM and LSM:Fetch("font", name or "Expressway")) or STANDARD_TEXT_FONT
     return path, size, outline
 end
 
-local function StyleButton(button, group, lane, def)
+local function StyleButton(button, group, lane)
     local S = lane.slot
     if not S then return end
     button:SetSize(S.iw, S.ih)
@@ -143,31 +331,62 @@ local function StyleButton(button, group, lane, def)
     r.overlay:SetFrameLevel(button:GetFrameLevel() + 3)
     ns.CustomGroups.ApplyIconSkin(button, r.icon, S.crop, S.skin)
 
-    local t = S.text or group.text or {}
+    local key = lane.keyByButton[button]
+    local def = key and lane.defByKey[key]
+
+    local idb = def and def.iconDB
     local au = group.auras or {}
 
-    if group.showBorder then
+    local t = S.text or group.text or {}
+    if idb and idb.overrideGroupText then
+        t = {
+            showCooldown = idb.showDuration ~= false,
+            cooldownFont = idb.durationFont,
+            cooldownFontSize = idb.durationFontSize,
+            cooldownFontOutline = idb.durationFontOutline,
+            cooldownColor = idb.durationColor,
+            cooldownPoint = idb.durationPoint,
+            cooldownXOffset = idb.durationXOffset,
+            cooldownYOffset = idb.durationYOffset,
+            showStacks = idb.showStacks and true or false,
+            stacksFont = idb.stackFont,
+            stacksFontSize = idb.stackFontSize,
+            stacksFontOutline = idb.stackFontOutline,
+            stacksColor = idb.stackColor,
+            stacksPoint = idb.stackPoint,
+            stacksXOffset = idb.stackXOffset,
+            stacksYOffset = idb.stackYOffset,
+        }
+    end
+
+    local bShow, bSize, bInset, bColor, bStroke = group.showBorder,
+        group.borderSize or 1, group.borderInset or 0, group.borderColor, group.borderStroke
+    if idb and idb.showBorder then
+        bShow, bSize, bInset, bColor, bStroke = true,
+            idb.borderSize or 1, idb.borderInset or 0, idb.borderColor, idb.borderStroke
+    end
+
+    if bShow then
         if not r.border then
             r.border = {}
             for i = 1, 4 do r.border[i] = button:CreateTexture(nil, "OVERLAY") end
         end
-        local bs, bi = group.borderSize or 1, group.borderInset or 0
-        local bc = group.borderColor or { r = 0, g = 0, b = 0, a = 1 }
-        for _, tex in ipairs(r.border) do
-            tex:SetColorTexture(bc.r, bc.g, bc.b, bc.a or 1)
-            tex:ClearAllPoints()
-            tex:Show()
-        end
-        r.border[1]:SetPoint("TOPLEFT", button, "TOPLEFT", bi, -bi)
-        r.border[1]:SetPoint("BOTTOMRIGHT", button, "TOPRIGHT", -bi, -bi - bs)
-        r.border[2]:SetPoint("TOPLEFT", button, "BOTTOMLEFT", bi, bi + bs)
-        r.border[2]:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -bi, bi)
-        r.border[3]:SetPoint("TOPLEFT", button, "TOPLEFT", bi, -bi)
-        r.border[3]:SetPoint("BOTTOMRIGHT", button, "BOTTOMLEFT", bi + bs, bi)
-        r.border[4]:SetPoint("TOPLEFT", button, "TOPRIGHT", -bi - bs, -bi)
-        r.border[4]:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -bi, bi)
+        EdgeRing(button, r.border, bSize, bInset, bColor or RING_BLACK)
     elseif r.border then
         for _, tex in ipairs(r.border) do tex:Hide() end
+    end
+    if bShow and bStroke then
+        if not r.borderIn then
+            r.borderIn, r.borderOut = {}, {}
+            for i = 1, 4 do
+                r.borderIn[i] = button:CreateTexture(nil, "OVERLAY")
+                r.borderOut[i] = button:CreateTexture(nil, "OVERLAY")
+            end
+        end
+        EdgeRing(button, r.borderIn, 1, bInset + bSize, RING_BLACK)
+        EdgeRing(button, r.borderOut, 1, bInset - 1, RING_BLACK)
+    elseif r.borderIn then
+        for i = 1, 4 do r.borderIn[i]:Hide() r.borderOut[i]:Hide() end
     end
 
     if t.showCooldown ~= false then
@@ -185,14 +404,14 @@ local function StyleButton(button, group, lane, def)
         if r.duration then r.duration:SetText("") r.duration:Hide() end
     end
 
-    if t.showCount ~= false then
+    if t.showStacks ~= false then
         r.count = r.count or r.overlay:CreateFontString(nil, "OVERLAY")
         r.count:ClearAllPoints()
-        r.count:SetPoint(t.countPoint or "BOTTOMRIGHT", button, t.countPoint or "BOTTOMRIGHT",
-            t.countXOffset or -1, t.countYOffset or 1)
-        E:SetFont(r.count, Font(t.countFont, t.countFontSize or 12, t.countFontOutline or "OUTLINE"))
-        local nc = t.countColor or {}
-        r.count:SetTextColor(nc.r or 1, nc.g or 1, nc.b or 1)
+        r.count:SetPoint(t.stacksPoint or "TOP", button, t.stacksPoint or "TOP",
+            t.stacksXOffset or 0, t.stacksYOffset or 7)
+        E:SetFont(r.count, Font(t.stacksFont, t.stacksFontSize or 11, t.stacksFontOutline or "OUTLINE"))
+        local nc = t.stacksColor or {}
+        r.count:SetTextColor(nc.r or 0, nc.g or 1, nc.b or 0)
         r.count:Show()
         button:SetApplicationCount(r.count, {})
     else
@@ -200,7 +419,14 @@ local function StyleButton(button, group, lane, def)
         if r.count then r.count:SetText("") r.count:Hide() end
     end
 
-    if au.swipe ~= false then
+    local swipeOn = au.swipe ~= false
+    local swipeRev = au.swipeInverse and true or false
+    if idb then
+        swipeOn = idb.showCooldown and true or false
+        swipeRev = idb.invertSwipe and true or false
+    end
+
+    if swipeOn then
         if not r.cd then
             r.cd = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
             r.cd:SetAllPoints(r.icon)
@@ -208,7 +434,7 @@ local function StyleButton(button, group, lane, def)
             r.cd:SetDrawEdge(false)
             r.cd:SetHideCountdownNumbers(true)
         end
-        r.cd:SetReverse(au.swipeInverse and true or false)
+        r.cd:SetReverse(swipeRev)
         r.cd:Show()
         button:SetDurationCooldown(r.cd)
     else
@@ -216,8 +442,23 @@ local function StyleButton(button, group, lane, def)
         if r.cd then r.cd:Hide() end
     end
 
-    def = def or lane.defByButton[button]
-    if def then lane.defByButton[button] = def end
+    local style, gColor, gTh
+    if idb then
+        if idb.showGlow then
+            style = A.MapGlowStyle(idb.glowType)
+            gColor = idb.glowColor
+            gTh = idb.glowThickness
+        end
+    elseif def and def.showGlow then
+        style = def.glowStyle or "pulse"
+        gColor = def.glowColor
+    end
+    A.ApplyButtonFX(button, r, {
+        style = style, color = gColor, thickness = gTh,
+        w = S.iw, h = S.ih,
+        pandemic = (idb and idb.showPandemic) or (def and def.showPandemic) or false,
+        pandemicColor = def and def.pandemicColor,
+    })
 
     if def and def.showSource and A.CanShowSource(button) then
         r.source = r.source or r.overlay:CreateFontString(nil, "OVERLAY")
@@ -254,7 +495,7 @@ local function LaneFor(group, frame)
     local tail = CreateFrame("Frame", "TUI_CustomGroup" .. group.id .. "_AuraTail", frame)
     local container = CreateFrame("AuraContainer", nil, frame, "CustomAuraContainerTemplate")
     lane = { frame = frame, tail = tail, container = container,
-             regions = {}, keys = {}, defByButton = {} }
+             regions = {}, keys = {}, defByKey = {}, keyByButton = {} }
     lanes[group.id] = lane
     return lane
 end
@@ -277,8 +518,14 @@ local function ApplyFlow(lane, group, entries)
     local perLine = (S.perLine > 0) and S.perLine or math.max(total, 1)
     local axis, hDir, vDir = FlowFor(S)
 
+    local anchor = S.pt
+    if S.center then
+        anchor = ((vDir == FLOW_UP) and "BOTTOM" or "TOP")
+            .. ((hDir == FLOW_LEFT) and "RIGHT" or "LEFT")
+    end
+
     lane.container:SetFlowLayoutAxis(axis)
-    lane.container:SetFlowLayoutAnchorPoint(S.pt)
+    lane.container:SetFlowLayoutAnchorPoint(anchor)
     lane.container:SetFlowLayoutGrowthDirection(hDir, vDir)
     lane.container:SetFlowLayoutMaximumLineSize(perLine * S.alongDim + (perLine - 1) * S.sp)
 
@@ -296,9 +543,8 @@ local function SortFor(def)
     return SM.AuraInstanceIDOnly, SD.Normal
 end
 
-local function ApplyEntry(lane, group, entry)
+local function ApplyEntry(lane, group, entry, ord)
     local key, def = entry.key, entry.def
-    -- 12.1 only sanctions YOUR debuffs on enemies; the choice doesn't exist
     local filter
     if def.kind == "HARMFUL" then
         filter = "HARMFUL|PLAYER"
@@ -317,10 +563,12 @@ local function ApplyEntry(lane, group, entry)
         elementHeight = lane.slot.ih,
         elementSpacing = lane.slot.sp,
         lineSpacing = lane.slot.sp,
+        layoutIndex = ord,
     }
     local sortMethod, sortDir = SortFor(def)
     local maxCount = math.max(1, def.max or 1)
 
+    lane.defByKey[key] = def
     if lane.container:HasAuraGroup(key) then
         lane.container:SetAuraGroupMaxFrameCount(key, maxCount)
         lane.container:SetAuraGroupFilterString(key, filter)
@@ -334,7 +582,10 @@ local function ApplyEntry(lane, group, entry)
             sortDirection = sortDir,
             candidateFilters = { includeSpellIDs = map },
             layout = layout,
-            initializeFrame = function(button) StyleButton(button, group, lane, def) end,
+            initializeFrame = function(button)
+                lane.keyByButton[button] = key
+                StyleButton(button, group, lane)
+            end,
         })
     end
     lane.keys[key] = true
@@ -342,7 +593,8 @@ end
 
 function Teardown(groupID)
     local lane = lanes[groupID]
-    if not (lane and not InCombatLockdown()) then return end
+    if not lane then return end
+    if InCombatLockdown() then pendingSync = true return end
     for key in pairs(lane.keys) do lane.container:SetAuraGroupMaxFrameCount(key, 0) end
     lane.container:Hide()
     lane.tail:Hide()
@@ -382,25 +634,30 @@ function A.Sync(group, frame)
     ns.Pixel.SetPoint(lane.tail, pt, frame, pt, tx, ty)
     lane.tail:Show()
 
-    local unit = entries[1].def.unit or "player"
+    local unit = "player"
+    for _, e in ipairs(entries) do
+        if e.def.unit then unit = e.def.unit break end
+    end
     lane.container:ClearAllPoints()
     lane.container:SetSize(S.iw, S.ih)
     lane.container:SetPoint(S.pt, lane.tail, S.pt, 0, 0)
     lane.container:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
-    if lane.unit ~= unit then
-        lane.container:SetUnit(unit)
-        lane.unit = unit
-    end
 
     ApplyFlow(lane, group, entries)
 
     local wanted = {}
-    for _, entry in ipairs(entries) do
-        ApplyEntry(lane, group, entry)
+    for i, entry in ipairs(entries) do
+        ApplyEntry(lane, group, entry, i)
         wanted[entry.key] = true
     end
     for key in pairs(lane.keys) do
         if not wanted[key] then lane.container:SetAuraGroupMaxFrameCount(key, 0) end
+    end
+
+    if lane.unit ~= unit then
+        lane.container:SetUnit(unit)
+        lane.unit = unit
+        if lane.container.UpdateAllAuras then lane.container:UpdateAllAuras() end
     end
 
     for button in pairs(lane.regions) do StyleButton(button, group, lane) end
@@ -413,8 +670,23 @@ end
 
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_REGEN_ENABLED")
-ev:SetScript("OnEvent", function()
-    if not pendingSync then return end
-    pendingSync = false
-    if TUI and TUI.UpdateCustomGroups then TUI:UpdateCustomGroups() end
+ev:RegisterEvent("PLAYER_TARGET_CHANGED")
+ev:RegisterEvent("PLAYER_FOCUS_CHANGED")
+ev:RegisterUnitEvent("UNIT_PET", "player")
+ev:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_REGEN_ENABLED" then
+        if not pendingSync then return end
+        pendingSync = false
+        if TUI and TUI.UpdateCustomGroups then TUI:UpdateCustomGroups() end
+        return
+    end
+
+    local want = (event == "PLAYER_FOCUS_CHANGED") and "focus"
+        or (event == "UNIT_PET") and "pet" or "target"
+    for _, lane in pairs(lanes) do
+        if lane.unit == want then
+            lane.container:SetUnit(want)
+            if lane.container.UpdateAllAuras then lane.container:UpdateAllAuras() end
+        end
+    end
 end)

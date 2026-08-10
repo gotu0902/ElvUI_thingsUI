@@ -178,6 +178,19 @@ local function RebuildPassiveCache()
                         and ns.RacialsCDM.ShouldHideNativeSpell(sid) then
                         hide = true
                     end
+                    local slot = info and PlainID(info.equipSlot)
+                    if slot then
+                        local bl = E.db.thingsUI.cdmIcons and E.db.thingsUI.cdmIcons.trinketBlacklist
+                        local itemID = GetInventoryItemID and GetInventoryItemID("player", slot)
+                        local ent = itemID and bl and bl[itemID]
+                        if ent == true then ent = { use = true, buff = true } end
+                        if ent then
+                            local isBuff = VIEWERS[name] == "buffIcon"
+                            hide = ((isBuff and ent.buff) or (not isBuff and ent.use)) and true or false
+                        else
+                            hide = false
+                        end
+                    end
                     if hide ~= nil then
                         if (passiveHidden[c] and true or false) ~= hide then changed = true end
                         ApplyPassiveState(c, hide)
@@ -203,6 +216,7 @@ local function QueuePassiveRebuild()
 end
 
 function M.IsPassiveHidden(child) return passiveHidden[child] == true end
+M.QueuePassiveRebuild = function() QueuePassiveRebuild() end
 
 local function SortByCooldownID(children)
     table.sort(children, function(a, b)
@@ -758,9 +772,7 @@ LayoutViewer = function(viewer)
             end
         end
     end
-
-    -- pooled frames migrate between viewers, so the reverse flag must be
-    -- asserted (or cleared) on every pass, not only where it is wanted
+    
     local wantRev = VIEWERS[viewer:GetName()] == "buffIcon" and vdb.invertSwipe or false
     for i = 1, #visible do
         local cd = visible[i].Cooldown
@@ -1160,11 +1172,19 @@ f:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 f:RegisterEvent("PLAYER_REGEN_ENABLED")
 f:RegisterEvent("SPELLS_CHANGED")
 f:RegisterEvent("TRAIT_CONFIG_UPDATED")
+f:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 if C_EventUtils and C_EventUtils.IsEventValid
     and C_EventUtils.IsEventValid("COOLDOWN_VIEWER_SPELL_OVERRIDE_UPDATED") then
     f:RegisterEvent("COOLDOWN_VIEWER_SPELL_OVERRIDE_UPDATED")
 end
-f:SetScript("OnEvent", function(_, event)
+f:SetScript("OnEvent", function(_, event, arg1)
+    if event == "PLAYER_EQUIPMENT_CHANGED" then
+        if arg1 == 13 or arg1 == 14 then
+            QueuePassiveRebuild()
+            if ns.CustomGroups and ns.CustomGroups.QueueLayout then ns.CustomGroups.QueueLayout() end
+        end
+        return
+    end
     if event == "SPELLS_CHANGED" or event == "TRAIT_CONFIG_UPDATED"
         or event == "COOLDOWN_VIEWER_SPELL_OVERRIDE_UPDATED" then
         QueuePassiveRebuild()

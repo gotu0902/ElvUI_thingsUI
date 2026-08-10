@@ -371,7 +371,6 @@ local function ViewerGroup(order, key, label, opts)
                 order = 13.9, type = "select", name = "Overflow Position",
                 desc = "Where the moved icons land in the receiving bar.",
                 values = function()
-                    -- label by how the RECEIVING bar grows
                     local t = E.db.thingsUI.cdmIcons[key].overflowTarget
                     local tdb = t and t ~= "" and E.db.thingsUI.cdmIcons[t]
                     local g = tdb and tdb.growthDirection or "CENTERED_H"
@@ -594,6 +593,152 @@ local function RacialsToCDMTab(order)
     }
 end
 
+local function TrinketsTab(order)
+    local function bl()
+        local db = E.db.thingsUI.cdmIcons
+        db.trinketBlacklist = db.trinketBlacklist or {}
+        return db.trinketBlacklist
+    end
+    local function poke()
+        if ns.CDMIcons and ns.CDMIcons.QueuePassiveRebuild then ns.CDMIcons.QueuePassiveRebuild() end
+    end
+    local function ent(id, create)
+        local b = bl()
+        local e = b[id]
+        if e == true then e = { use = true, buff = true }; b[id] = e end
+        if not e and create then e = {}; b[id] = e end
+        return e
+    end
+    local function setFlag(id, flag, v)
+        if not id then return end
+        local e = ent(id, true)
+        e[flag] = v or nil
+        if not (e.use or e.buff) then bl()[id] = nil end
+        poke()
+    end
+    local function itemLabel(id)
+        local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
+        local icon = C_Item.GetItemIconByID and C_Item.GetItemIconByID(id)
+        return ("|T%d:16:16|t %s"):format(icon or 134400, name or ("Item " .. id))
+    end
+    local function listedIDs()
+        local out = {}
+        for id in pairs(bl()) do out[#out + 1] = id end
+        table.sort(out)
+        return out
+    end
+    local function slotID(slot)
+        return GetInventoryItemID and GetInventoryItemID("player", slot) or nil
+    end
+
+    local eqArgs = {}
+    local function slotRow(ord, slot)
+        eqArgs["s" .. slot .. "_label"] = {
+            order = ord, type = "description", width = 1.0, fontSize = "medium",
+            name = function()
+                local id = slotID(slot)
+                return id and itemLabel(id) or "|cff888888(empty slot)|r"
+            end,
+        }
+        eqArgs["s" .. slot .. "_use"] = {
+            order = ord + 0.1, type = "toggle", name = "Hide Cooldown", width = 0.65,
+            disabled = function() return not slotID(slot) end,
+            get = function() local e = slotID(slot) and ent(slotID(slot)) return (e and e.use) and true or false end,
+            set = function(_, v) setFlag(slotID(slot), "use", v) end,
+        }
+        eqArgs["s" .. slot .. "_buff"] = {
+            order = ord + 0.2, type = "toggle", name = "Hide Buff", width = 0.65,
+            disabled = function() return not slotID(slot) end,
+            get = function() local e = slotID(slot) and ent(slotID(slot)) return (e and e.buff) and true or false end,
+            set = function(_, v) setFlag(slotID(slot), "buff", v) end,
+        }
+        eqArgs["s" .. slot .. "_dest"] = {
+            -- re-home the slot's icon into a Groups - Icons group (its Global list)
+            order = ord + 0.25, type = "select", name = "Destination", width = 0.9,
+            values = function()
+                local out = { [0] = "CDM" }
+                for _, g in ipairs((ns.CustomGroups and ns.CustomGroups.GetGroups and ns.CustomGroups.GetGroups()) or {}) do
+                    out[g.id] = g.name or ("Group " .. g.id)
+                end
+                return out
+            end,
+            get = function()
+                local db = E.db.thingsUI.cdmIcons
+                local d = db and db.trinketDest and db.trinketDest[tostring(slot)]
+                return d and d.group or 0
+            end,
+            set = function(_, v)
+                local db = E.db.thingsUI.cdmIcons
+                db.trinketDest = db.trinketDest or {}
+                db.trinketDest[tostring(slot)] = (v ~= 0) and { group = v } or nil
+                if TUI.UpdateCustomGroups then TUI:UpdateCustomGroups() end
+                if ns.CustomGroups and ns.CustomGroups._rebuildOptions then ns.CustomGroups._rebuildOptions() end
+                ns.NotifyChange()
+            end,
+        }
+        eqArgs["s" .. slot .. "_brk"] = { order = ord + 0.3, type = "description", name = "", width = "full" }
+    end
+    slotRow(1, 13)
+    slotRow(2, 14)
+
+    local blArgs = {}
+    for ri = 1, 10 do
+        local function rowID() return listedIDs()[ri] end
+        local hidden = function() return rowID() == nil end
+        blArgs["b" .. ri .. "_label"] = {
+            order = ri, type = "description", width = 1.2, fontSize = "medium",
+            name = function() local id = rowID() return id and itemLabel(id) or "" end,
+            hidden = hidden,
+        }
+        blArgs["b" .. ri .. "_use"] = {
+            order = ri + 0.1, type = "toggle", name = "Hide Cooldown", width = 0.7, hidden = hidden,
+            get = function() local id = rowID() local e = id and ent(id) return (e and e.use) and true or false end,
+            set = function(_, v) setFlag(rowID(), "use", v) end,
+        }
+        blArgs["b" .. ri .. "_buff"] = {
+            order = ri + 0.2, type = "toggle", name = "Hide Buff", width = 0.7, hidden = hidden,
+            get = function() local id = rowID() local e = id and ent(id) return (e and e.buff) and true or false end,
+            set = function(_, v) setFlag(rowID(), "buff", v) end,
+        }
+        blArgs["b" .. ri .. "_del"] = {
+            order = ri + 0.3, type = "execute", name = "|TInterface\\RaidFrame\\ReadyCheck-NotReady:13|t", width = 0.3, hidden = hidden,
+            func = function()
+                local id = rowID()
+                if id then bl()[id] = nil; poke() end
+            end,
+        }
+        blArgs["b" .. ri .. "_brk"] = { order = ri + 0.4, type = "description", name = "", width = "full", hidden = hidden }
+    end
+
+    return {
+        order = order, type = "group", name = "Trinkets",
+        args = {
+            desc = {
+                order = 1, type = "description",
+                name = "Hide trinkets from the CDM viewers: the |cFFFFD200cooldown|r (Essential/Utility) and the |cFF60E0A0buff|r (Buff Icons) hide separately. Blacklisting is by item, so it sticks across swaps.\n",
+            },
+            addID = {
+                order = 2, type = "input", name = "Add by Item ID or name",
+                get = function() return "" end,
+                set = function(_, v)
+                    v = (v or ""):gsub("^%s+", ""):gsub("%s+$", "")
+                    if v == "" then return end
+                    local id = tonumber(v)
+                    if not id and C_Item.GetItemInfoInstant then
+                        id = C_Item.GetItemInfoInstant(v)
+                    end
+                    if id then
+                        bl()[id] = { use = true, buff = true }
+                        poke()
+                    end
+                end,
+            },
+            equippedGrp = { order = 3, type = "group", inline = true, name = "Equipped", args = eqArgs },
+            blacklistGrp = { order = 4, type = "group", inline = true, name = "Blacklisted", args = blArgs },
+        },
+    }
+end
+
 function TUI:CDMIconsOptions()
 
     return {
@@ -646,6 +791,7 @@ function TUI:CDMIconsOptions()
                                     { includeAnchor = true, alwaysOnAnchor = true,
                                       minIconSize = 10, maxIconSize = 60 }),
             racialsToCDMSubTab = RacialsToCDMTab(45),
+            trinketBlacklistSubTab = TrinketsTab(47),
             clusterPositioningSubTab = (function()
                 local g = TUI.ClusterPositioningSubTab and TUI:ClusterPositioningSubTab() or nil
                 if g then g.order = 50 end

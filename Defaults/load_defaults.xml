@@ -1,9 +1,10 @@
-<Ui xmlns="http://www.blizzard.com/wow/ui/">
+﻿<Ui xmlns="http://www.blizzard.com/wow/ui/">
 	<Script file="Defaults.lua"/>
 	<Script file="CDMIcons.lua"/>
 	<Script file="BuffBars.lua"/>
 	<Script file="ClusterPositioning.lua"/>
 	<Script file="CustomGroups.lua"/>
+	<Script file="CustomBars.lua"/>
 	<Script file="AuraPresets.lua"/>
 	<Script file="Timers.lua"/>
 	<Script file="RacialsCDM.lua"/>

@@ -10,6 +10,13 @@
 - Add auras to custom groups with spellID or a dropdown with the importantish ones. Multi add groups in cg -> auras.
 - CGs can be anchored to buff icons, so auras can piggyback of them.
 - Fixes to mini meter: death log, layout\design.
+- Special icons/bars render via aura containers. Grouped special icons live in the group's lane. glow styles: pulse/proc/marching ants, not as nice as libcustomglow but we can't do that with auracontainers atm... pandemic texture for dots was luckily a thing in last build.
+- New module Groups - Bars: aura-driven buff/debuff bars w/ spec/class/global lists, presets, special bars fold in, half-width bars share a line, inherit w/h from anchor
+- Custom groups renamed Groups - Icons, entry counts in the scope tabs, centered growth (h/v) for icons AND the lane
+- Trinkets tab moved as a module to a tab in CDM: hide cooldown and buff separately, blacklist by item, and move to a custom group.
+- Add buff = externals only, special picker simplified (no icon/bar split, live = green)
+- Test mode covers icons/bars/specials with stand-ins for everything, hopefully.
+
 
 ## 4.1.0-beta2
 - Skinned minimal dmg meter thing

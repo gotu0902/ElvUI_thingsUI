@@ -45,16 +45,23 @@ local function AskScope(title, subtitle, apply)
     end
 end
 -- an aura row stays as narrow as every other row; the per-aura knobs live here
+local editAuraFrame
 local function EditAura(def, title, onChange)
     local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
     if not (AceGUI and def) then return end
+    if editAuraFrame then editAuraFrame:Hide() end
 
     local f = AceGUI:Create("Frame")
+    editAuraFrame = f
+    f:SetCallback("OnClose", function(w)
+        if editAuraFrame == w then editAuraFrame = nil end
+        AceGUI:Release(w)
+    end)
     f:SetTitle(title or "Buff")
     f:SetStatusText("Applies to this entry only")
     f:SetLayout("Flow")
     f:SetWidth(400)
-    f:SetHeight(300)
+    f:SetHeight(380)
     f:EnableResize(false)
 
     local on = AceGUI:Create("CheckBox")
@@ -69,7 +76,7 @@ local function EditAura(def, title, onChange)
     spacer:SetText(" ")
     f:AddChild(spacer)
 
-    local mine
+    local mine, pand
 
     local kind = AceGUI:Create("Dropdown")
     kind:SetLabel("Type")
@@ -80,6 +87,7 @@ local function EditAura(def, title, onChange)
         def.kind = v
         -- enemy debuffs are always yours; the toggle only means something for buffs
         if mine then mine:SetDisabled(v == "HARMFUL") end
+        if pand then pand:SetDisabled(v ~= "HARMFUL") end
         onChange()
     end)
     f:AddChild(kind)
@@ -101,7 +109,6 @@ local function EditAura(def, title, onChange)
     mine:SetCallback("OnValueChanged", function(_, _, v) def.onlyMine = v; onChange() end)
     f:AddChild(mine)
 
-    -- stored now, rendered the moment Blizzard hands out the sink
     local AL = ns.AuraLane
     local caster = AceGUI:Create("CheckBox")
     caster:SetLabel("Show Caster Name")
@@ -112,7 +119,7 @@ local function EditAura(def, title, onChange)
     if AL.SourceProbed() and not AL.CanShowSource() then
         local note = AceGUI:Create("Label")
         note:SetFullWidth(true)
-        note:SetText("|cff888888Caster names arrive with Blizzard patch 12.1.5 - the setting applies automatically once it ships.|r")
+        note:SetText("|cff888888Caster names arrive with Blizzard patch 12.1.5|r")
         f:AddChild(note)
     end
 
@@ -123,6 +130,37 @@ local function EditAura(def, title, onChange)
     max:SetValue(def.max or 1)
     max:SetCallback("OnValueChanged", function(_, _, v) def.max = v; onChange() end)
     f:AddChild(max)
+
+    local gstyle
+
+    local glow = AceGUI:Create("CheckBox")
+    glow:SetLabel("Glow While Active")
+    glow:SetWidth(170)
+    glow:SetValue(def.showGlow and true or false)
+    glow:SetCallback("OnValueChanged", function(_, _, v)
+        def.showGlow = v
+        if gstyle then gstyle:SetDisabled(not v) end
+        onChange()
+    end)
+    f:AddChild(glow)
+
+    gstyle = AceGUI:Create("Dropdown")
+    gstyle:SetLabel("Glow Style")
+    gstyle:SetWidth(170)
+    gstyle:SetList({ pulse = "Pulse Ring", proc = "Proc Glow", ants = "Marching Ants" },
+        { "pulse", "proc", "ants" })
+    gstyle:SetValue(def.glowStyle or "pulse")
+    gstyle:SetDisabled(not def.showGlow)
+    gstyle:SetCallback("OnValueChanged", function(_, _, v) def.glowStyle = v; onChange() end)
+    f:AddChild(gstyle)
+
+    pand = AceGUI:Create("CheckBox")
+    pand:SetLabel("Pandemic Indicator")
+    pand:SetWidth(170)
+    pand:SetValue(def.showPandemic and true or false)
+    pand:SetDisabled((def.kind or "HELPFUL") ~= "HARMFUL")
+    pand:SetCallback("OnValueChanged", function(_, _, v) def.showPandemic = v; onChange() end)
+    f:AddChild(pand)
 end
 
 local CG_UP   = "|TInterface\\Buttons\\Arrow-Up-Up:16:16:0:2|t"
@@ -347,6 +385,18 @@ function TUI:CustomGroupsOptions()
             end
         end
 
+        if scope == "global" and ns.CustomGroups and ns.CustomGroups.TrinketDestFor then
+            for _, slot in ipairs({ 13, 14 }) do
+                local d = ns.CustomGroups.TrinketDestFor(slot)
+                if d and d.group == group.id then
+                    local itemID = GetInventoryItemID and GetInventoryItemID("player", slot)
+                    out[#out + 1] = { kind = "trinket", id = slot, li = d.order or 15000, uid = "trinket:" .. slot,
+                        name = (itemID and C_Item.GetItemInfo(itemID)) or ("Trinket " .. (slot == 13 and "1" or "2")),
+                        tex  = (itemID and C_Item.GetItemIconByID and C_Item.GetItemIconByID(itemID)) or 134400 }
+                end
+            end
+        end
+
         if scope == "spec" and ns.SpecialBars then
             local isLive = (tostring(key) == curSpecID())
             local sb = E.db.thingsUI and E.db.thingsUI.specialBars
@@ -378,6 +428,9 @@ function TUI:CustomGroupsOptions()
         local idShown = (e.kind == "timer" and e.realID) or e.id
         if e.kind == "timer" then extra = extra .. " |cFF8AC8FF(Timer)|r" end
         if e.kind == "specialicon" then extra = extra .. " |cFFFF80C0(Special Icon)|r" end
+        if e.kind == "trinket" then
+            return ("|T%d:14:14:0:0|t %s |cFFFFD200(Trinket %d)|r"):format(e.tex or 134400, name, e.id == 13 and 1 or 2)
+        end
         if e.kind == "aura" then
             extra = extra .. " |cFF60E0A0(Buff)|r"
             if e.setCount then
@@ -493,54 +546,10 @@ function TUI:CustomGroupsOptions()
                 set = function(_, v) local id = tonumber(v); if id and CG then CG.AddItem(group, scope, getKey(), id); NotifyChange() end end,
             },
             addAura = {
+                -- external buffs only: the spec's own spells live in Add Special Icon
                 order = 11.5, type = "select", name = "|cFF60E0A0Add Buff|r", width = "double",   -- auras = green
-                values = function()
-                    local out = auraCommonValues()
-                    -- CDM's tracked buffs/bars = the spec's own aura registry
-                    local map
-                    if scope == "spec" then
-                        map = ns.CDMSpells and ns.CDMSpells.GetBuffsForSpec
-                            and ns.CDMSpells.GetBuffsForSpec(tonumber(getKey()))
-                    elseif scope == "class" then
-                        map = ns.CDMSpells and ns.CDMSpells.GetBuffsForClass
-                            and ns.CDMSpells.GetBuffsForClass(editedClassFile())
-                    end
-                    for sid, nd in pairs(map or {}) do
-                        if not out[tostring(sid)] then
-                            local nm = C_Spell.GetSpellName and C_Spell.GetSpellName(sid)
-                            if not nm and C_Spell.RequestLoadSpellData then C_Spell.RequestLoadSpellData(sid) end
-                            local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)) or 0
-                            out[tostring(sid)] = nd
-                                and ("|T%d:14:14|t |cFFFF6060%s|r"):format(tex, nm or ("Spell " .. sid))
-                                or  ("|T%d:14:14|t %s"):format(tex, nm or ("Spell " .. sid))
-                        end
-                    end
-                    return out
-                end,
-                sorting = function()
-                    local map
-                    if scope == "spec" then
-                        map = ns.CDMSpells and ns.CDMSpells.GetBuffsForSpec
-                            and ns.CDMSpells.GetBuffsForSpec(tonumber(getKey()))
-                    elseif scope == "class" then
-                        map = ns.CDMSpells and ns.CDMSpells.GetBuffsForClass
-                            and ns.CDMSpells.GetBuffsForClass(editedClassFile())
-                    end
-                    local cdm = {}
-                    for sid in pairs(map or {}) do
-                        cdm[#cdm + 1] = { id = sid, nm = (C_Spell.GetSpellName and C_Spell.GetSpellName(sid)) or tostring(sid) }
-                    end
-                    table.sort(cdm, function(a, b) return a.nm < b.nm end)
-                    local out, seen = {}, {}
-                    for _, e in ipairs(cdm) do
-                        out[#out + 1] = tostring(e.id)
-                        seen[tostring(e.id)] = true
-                    end
-                    for _, k in ipairs(auraCommonSorting()) do
-                        if not seen[k] then out[#out + 1] = k end
-                    end
-                    return out
-                end,
+                values = auraCommonValues,
+                sorting = auraCommonSorting,
                 get = function() return "" end,
                 set = function(_, v)
                     if not CG then return end
@@ -656,10 +665,10 @@ function TUI:CustomGroupsOptions()
                     return scope ~= "spec" or getKey() ~= curSpecID() or not ns.SpecialBars
                 end,
                 values = function()
-                    return (ns.SB_SpellChoices and ns.SB_SpellChoices(nil, false, true)) or {}
+                    return (ns.SB_SpellChoices and ns.SB_SpellChoices(nil, false)) or {}
                 end,
                 sorting = function()
-                    return ns.SB_SpellChoicesSorting and ns.SB_SpellChoicesSorting(true) or nil
+                    return ns.SB_SpellChoicesSorting and ns.SB_SpellChoicesSorting() or nil
                 end,
                 get = function() return "" end,
                 set = function(_, v)
@@ -721,6 +730,7 @@ function TUI:CustomGroupsOptions()
                                 local e = entry(); if not e then return "" end
                                 if e.kind == "timer" then return "|cFF8AC8FFEdit Timer|r" end
                                 if e.kind == "aura" then return "|cFF60E0A0Settings|r" end
+                                if e.kind == "trinket" then return "|cFFFFD200Trinkets|r" end
                                 if e.kind ~= "specialicon" then return "" end
                                 if e.live then return "|cFFFF80C0Edit Icon|r" end
                                 if e.existsKey then return "|cFF999999Exists|r" end
@@ -728,10 +738,15 @@ function TUI:CustomGroupsOptions()
                             end,
                             hidden = function()
                                 local e = entry()
-                                return not (e and (e.kind == "timer" or e.kind == "specialicon" or e.kind == "aura"))
+                                return not (e and (e.kind == "timer" or e.kind == "specialicon"
+                                    or e.kind == "aura" or e.kind == "trinket"))
                             end,
                             func = function()
                                 local e = entry(); if not e then return end
+                                if e.kind == "trinket" then
+                                    if E.ToggleOptions then E:ToggleOptions("thingsUI,modulesTab,cdm,trinketBlacklistSubTab") end
+                                    return
+                                end
                                 if e.kind == "aura" then
                                     local root = CG and CG.GetScopeRoot(group, scope, getKey(), false)
                                     local def = root and root.auras and root.auras[e.auraUID]
@@ -758,6 +773,10 @@ function TUI:CustomGroupsOptions()
                                 if e.kind == "timer" then
                                     local t = ns.Timers and ns.Timers.GetByID(e.id)
                                     if t then t.destination = nil; ns.Timers.Update() end
+                                elseif e.kind == "trinket" then
+                                    local db = E.db.thingsUI.cdmIcons
+                                    if db and db.trinketDest then db.trinketDest[tostring(e.id)] = nil end
+                                    TUI:UpdateCustomGroups()
                                 elseif e.kind == "specialicon" then
                                     local SB = ns.SpecialBars
                                     if e.live then
@@ -1038,7 +1057,17 @@ function TUI:CustomGroupsOptions()
 
         return {
             order = 10 + index, type = "group", childGroups = "tab",
-            name = (group.enabled and group.name) or ("|cFF888888" .. (group.name or "Group") .. "|r"),
+            name = function()
+                local nm = group.name or "Group"
+                local CGm = ns.CustomGroups
+                if CGm and CGm.TrinketDestFor then
+                    local a, b = CGm.TrinketDestFor(13), CGm.TrinketDestFor(14)
+                    if (a and a.group == group.id) or (b and b.group == group.id) then
+                        nm = nm .. " |cFFFFD200[T]|r"
+                    end
+                end
+                return group.enabled and nm or ("|cFF888888" .. nm .. "|r")
+            end,
             args = {
                 enable = {
                     order = 0, type = "toggle", name = "Enable", width = "half",
@@ -1065,9 +1094,12 @@ function TUI:CustomGroupsOptions()
                     end,
                 },
 
-                specTab   = { order = 10, type = "group", name = "Spec",   args = specArgs },
-                classTab  = { order = 11, type = "group", name = "Class",  args = classArgs },
-                globalTab = { order = 12, type = "group", name = "Global", args = globalArgs },
+                specTab   = { order = 10, type = "group", args = specArgs,
+                    name = function() return "Spec (" .. #entriesFor(group, "spec", getEditSpec()) .. ")" end },
+                classTab  = { order = 11, type = "group", args = classArgs,
+                    name = function() return "Class (" .. #entriesFor(group, "class", getEditClass()) .. ")" end },
+                globalTab = { order = 12, type = "group", args = globalArgs,
+                    name = function() return "Global (" .. #entriesFor(group, "global", nil) .. ")" end },
                 itemsTab = {
                     order = 14.5, type = "group", name = "Items",
                     hidden = function() return not hasItems() end,
@@ -1198,7 +1230,7 @@ function TUI:CustomGroupsOptions()
                             disabled = function() return group.matchAnchorIcons end,
                             get = function() return (group.spacing or 2) - (ns.CDM_SPACING_INSET or 2) end,
                             set = function(_, v) gset("spacing", v + (ns.CDM_SPACING_INSET or 2)) end },
-                        growth = { order = 3, type = "select", name = "Growth Direction", values = ns.GROWTH.DIRECTIONAL, sorting = ns.GROWTH.DIRECTIONAL_ORDER,
+                        growth = { order = 3, type = "select", name = "Growth Direction", values = ns.GROWTH.VALUES, sorting = ns.GROWTH.ORDER,
                             get = function() return group.growth end, set = function(_, v) gset("growth", v) end },
                         columns = { order = 4, type = "range", name = "Wrap After (0 = no wrap)", min = 0, max = 20, step = 1,
                             get = function() return group.columns end, set = function(_, v) gset("columns", v) end },
@@ -1209,12 +1241,12 @@ function TUI:CustomGroupsOptions()
                             disabled = function() return (group.columns or 0) <= 0 end,
                             values = function()
                                 local g = group.growth
-                                if g == "UP" or g == "DOWN" then return { RIGHT = "Right", LEFT = "Left" } end
+                                if g == "UP" or g == "DOWN" or g == "CENTERED_V" then return { RIGHT = "Right", LEFT = "Left" } end
                                 return { DOWN = "Down", UP = "Up" }
                             end,
                             get = function()
                                 local g = group.growth
-                                local default = (g == "UP" or g == "DOWN") and "RIGHT" or "DOWN"
+                                local default = (g == "UP" or g == "DOWN" or g == "CENTERED_V") and "RIGHT" or "DOWN"
                                 return group.wrapDir or default
                             end,
                             set = function(_, v) gset("wrapDir", v) end },
@@ -1315,7 +1347,7 @@ function TUI:CustomGroupsOptions()
                             order = 3, type = "group", name = "Stacks Text", inline = true,
                             args = {
                                 stacksDesc = { order = 0, type = "description",
-                                    name = "Buff |cFFFFD200stack count|r (e.g. Moonfire stacks) on folded Special Icons.\n" },
+                                    name = "Buff |cFFFFD200stack count|r (e.g. Moonfire stacks) on the group's aura icons.\n" },
                                 showStacks = { order = 1, type = "toggle", name = "Show Stacks Text", width = "full",
                                     get = function() return tdb().showStacks ~= false end, set = function(_, v) tset("showStacks", v) end },
                                 stkFont = { order = 2, type = "select", dialogControl = "LSM30_Font", name = "Font", values = ns.FontValues, disabled = noStacks,
@@ -1376,7 +1408,7 @@ function TUI:CustomGroupsOptions()
     rebuildGroupEntries()
 
     return {
-        order = 8, type = "group", name = "Custom Groups", childGroups = "tab",
+        order = 8, type = "group", name = "Groups - Icons", childGroups = "tab",
         args = args,
     }
 end

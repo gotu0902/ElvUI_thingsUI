@@ -7,9 +7,6 @@ local function Colorize(tab, hex)
     return tab
 end
 
--- which config section is on screen right now. AceConfig only evaluates args
--- of the group it is drawing, so a zero-height description doubles as a
--- "this section rendered" signal.
 local curSection, weOpenedCDM
 
 local function OpenCDMSettings()
@@ -51,13 +48,15 @@ local function EnsureCloseHook()
     end
 end
 
+local TEST_SECTIONS = { customGroups = true, customBars = true, specialIcons = true, specialBars = true }
+
 local function SectionShown(key)
     EnsureCloseHook()
     if key == curSection then return end
     local prev = curSection
     curSection = key
     if ns.CustomGroups and ns.CustomGroups.SetTestMode then
-        ns.CustomGroups.SetTestMode(key == "customGroups")
+        ns.CustomGroups.SetTestMode(TEST_SECTIONS[key] or false)
     end
     if CDM_SECTIONS[key] then
         OpenCDMSettings()
@@ -93,6 +92,7 @@ function TUI.ConfigTable()
             chargeBar    = WithSentinel(withOrder(Colorize(TUI:ChargeBarOptions(),    "C780FF"), 4), "chargeBar"),
             classbar     = WithSentinel(withOrder(Colorize(TUI:ClassbarModeOptions(), "6FB7FF"), 5), "classbar"),
             customGroups = WithSentinel(withOrder(Colorize(TUI:CustomGroupsOptions(), "F20553"), 6), "customGroups"),
+            customBars   = WithSentinel(withOrder(Colorize(TUI:CustomBarsOptions(), "F27D2A"), 6.2), "customBars"),
             damageMeter  = WithSentinel(withOrder(Colorize(TUI:DamageMeterOptions(),  "FF5C5C"), 6.5), "damageMeter"),
             specialBars  = WithSentinel(withOrder(Colorize(TUI:SpecialBarsOptions(),  "80FF80"), 7), "specialBars"),
             specialIcons = WithSentinel(withOrder(Colorize(TUI:SpecialIconsOptions(), "FF80C0"), 8), "specialIcons"),

@@ -352,7 +352,6 @@ function M.CreateManaged(frame, moverName, label, opts)
         mv._tuiDragHooked = true
         mv:HookScript("OnDragStart", function() _managedDragging[moverName] = true end)
     end
-    -- Anchored movers nudge their anchor offset (onNudge); others save absolute (save).
     M.RegisterNudge(moverName, function(self, nx, ny)
         if opts.onNudge then opts.onNudge(nx or 0, ny or 0) else save(self) end
     end)
@@ -514,6 +513,42 @@ function M.SyncAll()
             if id and not live[id] then orphans[#orphans + 1] = { mname, id } end
         end
         for _, o in ipairs(orphans) do M.RemoveManaged(o[1], _G["TUI_CustomGroup" .. o[2]]) end
+    end
+
+    local CBm = ns.CustomBars
+    local cbGroups = (CBm and CBm.GetGroups and CBm.GetGroups()) or {}
+    for _, g in ipairs(cbGroups) do
+        local mname = "TUI_CustomBarsMover" .. g.id
+        local mover = _G[mname]
+        if mover then
+            if not g.enabled then
+                if E.DisableMover and E.CreatedMovers and E.CreatedMovers[mname] then E:DisableMover(mname) end
+            else
+                if E.EnableMover and E.DisabledMovers and E.DisabledMovers[mname] then E:EnableMover(mname) end
+                local af = g.anchorFrame
+                if af == "CUSTOM" then af = g.anchorFrameCustom end
+                local lock, label = false, (g.name or "Bar Group")
+                if af and af ~= "UIParent" and af ~= "" then
+                    label = label .. " |cFFFFAA00(Anchor: " .. ShortAnchor(af) .. ")|r"
+                    lock = true
+                end
+                local frame = _G["TUI_CustomBars" .. g.id]
+                if frame then SyncMoverToFrame(mover, frame) end
+                if mover.text and mover.text.SetText then mover.text:SetText(label) end
+                SetMoverLock(mover, lock)
+            end
+            ColorMover(mname)
+        end
+    end
+
+    if E.CreatedMovers then
+        local live, orphans = {}, {}
+        for _, g in ipairs(cbGroups) do live[tostring(g.id)] = true end
+        for mname in pairs(E.CreatedMovers) do
+            local id = mname:match("^TUI_CustomBarsMover(%d+)$")
+            if id and not live[id] then orphans[#orphans + 1] = { mname, id } end
+        end
+        for _, o in ipairs(orphans) do M.RemoveManaged(o[1], _G["TUI_CustomBars" .. o[2]]) end
     end
 
     local Tm = ns.Timers

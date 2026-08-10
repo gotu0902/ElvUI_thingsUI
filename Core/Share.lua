@@ -13,7 +13,8 @@ M.SECTIONS = {
     { name = "CDM Icons",            keys = { "cdmIcons" },                                   color = "FFD27F" },
     { name = "Charge Bar",           keys = { "chargeBar" },                                  color = "C780FF" },
     { name = "Classbar",             keys = { "classbarMode" },                               color = "6FB7FF" },
-    { name = "Custom Groups",        keys = { "customGroups" }, collection = "customGroups",  color = "F20553" },
+    { name = "Groups - Icons",       keys = { "customGroups" }, collection = "customGroups",  color = "F20553" },
+    { name = "Groups - Bars",        keys = { "customBars" },                                 color = "F27D2A" },
     { name = "Special Bars & Icons", keys = { "specialBars" },  collection = "specialBars",   color = "80FF80" },
     { name = "Special Styles",       keys = { "specialStyles" }, collection = "specialStyles", color = "FF80C0" },
     { name = "Timers",               keys = { "timers" },                                     color = "FFC04D" },
@@ -82,8 +83,6 @@ function M.Import(str)
     return true
 end
 
--- Granular merge engine ------------------------------------------------------
-
 local function Root(key, seed)
     local db = E.db.thingsUI
     if db[key] == nil then db[key] = seed and DeepCopy(seed) or {} end
@@ -97,7 +96,6 @@ local function SpecLabel(specKey)
     return icon .. (ns.ClassColor and ns.ClassColor(m.classToken) or "") .. (m.name or specKey) .. "|r"
 end
 
--- customGroups ---------------------------------------------------------------
 local CG_IDENTITY = { id = true, name = true }
 local CG_SPELLS   = { global = true, classes = true, specs = true }
 local CG_ANCHOR   = { enabled = true, anchorFrame = true, anchorFrameCustom = true,
@@ -109,7 +107,6 @@ local function CGGroupOf(k)
     return "layout"
 end
 
--- barSetup -------------------------------------------------------------------
 local BS_IDENTITY = { name = true }
 local BS_ANCHOR   = { anchorFrame = true, anchorPoint = true, anchorTo = true, xOffset = true, yOffset = true }
 
@@ -323,7 +320,6 @@ function M.Analyze(str)
     return out
 end
 
--- plan[sectionIndex] = { mode = "overwrite"|"add"|"choose"|"skip", items = { [id] = { include, fields } } }
 function M.ApplyPlan(data, plan)
     if not (data and plan) then return false end
     for i, sec in ipairs(M.SECTIONS) do

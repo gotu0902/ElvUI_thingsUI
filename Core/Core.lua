@@ -17,7 +17,10 @@ ns.skinnedBars = ns.skinnedBars or {}
 ns.yoinkedBars = ns.yoinkedBars or {}
 
 function ns.NotifyChange()
-    local reg = LibStub("AceConfigRegistry-3.0", true)
+    local E = ns.E
+    local reg = (E and E.Libs and E.Libs.AceConfigRegistry)
+        or LibStub("AceConfigRegistry-3.0-ElvUI", true)
+        or LibStub("AceConfigRegistry-3.0", true)
     if reg and reg.NotifyChange then reg:NotifyChange("ElvUI") end
 end
 

@@ -2,7 +2,6 @@ local _, ns = ...
 local TUI = ns.TUI
 local E   = ns.E
 local LSM = ns.LSM
-local LCG = LibStub and LibStub("LibCustomGlow-1.0", true)
 
 ns.CustomGroups = ns.CustomGroups or {}
 local M = ns.CustomGroups
@@ -31,6 +30,13 @@ end
 function M.SlotPoint(frame, slotIndex)
     local S = frame and frame._tuiSlot
     if not S then return nil end
+    if S.center then
+        local tll = (S.perLine > 0) and S.perLine or math.max(S.n, 1)
+        local rows = (S.n > 0) and math.ceil(S.n / tll) or 0
+        local cross = rows * (S.crossDim + S.sp)
+        if S.horizontal then return S.pt, 0, cross * S.crossSign end
+        return S.pt, cross * S.crossSign, 0
+    end
     local tll = (S.perLine > 0) and S.perLine or (slotIndex + 1)
     local along = (slotIndex % tll) * (S.alongDim + S.sp)
     local cross = math.floor(slotIndex / tll) * (S.crossDim + S.sp)
@@ -78,12 +84,6 @@ local function EnsureDB()
             db.nextID = db.nextID + 1
             CarryOldFlat(g, db)
             db.groups[1] = g
-        end
-    end
-    if not db._droppedHosting then
-        db._droppedHosting = true
-        for _, g in ipairs(db.groups) do
-            g.nsrtEntries, g.nsrtHostCfg, g.nsrtScope, g.nsrtChain = nil, nil, nil, nil
         end
     end
     return db
@@ -391,8 +391,31 @@ local function UpdateTimerIcon(btn)
     UpdateTimerGlow(btn, timer, now)
 end
 
+local function TrinketDestFor(slot)
+    local db = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    local td = db and db.trinketDest
+    return td and td[tostring(slot)]
+end
+M.TrinketDestFor = TrinketDestFor
+
+local function UpdateTrinketIcon(btn)
+    local itemID = GetInventoryItemID and GetInventoryItemID("player", btn._slot or 13)
+    if btn._id ~= itemID then
+        btn._id = itemID
+        btn._styledItemID = nil
+    end
+    if not itemID then
+        if btn.icon then btn.icon:SetTexture(134400) end
+        if btn.cooldown then btn.cooldown:Clear() end
+        if btn.count then btn.count:SetText("") end
+        return
+    end
+    UpdateItemIcon(btn, false)
+end
+
 local function UpdateIcon(btn)
     if btn._type == "item" then UpdateItemIcon(btn, true)
+    elseif btn._type == "trinket" then UpdateTrinketIcon(btn)
     elseif btn._type == "timer" then UpdateTimerIcon(btn)
     else UpdateSpellIcon(btn) end
     ApplyGroupBorder(btn)
@@ -404,14 +427,20 @@ local function StyleIcon(btn)
 end
 
 local function CreateIcon(gs, group, kind, id)
+    if kind == "trinket" then gs.trinketIcons = gs.trinketIcons or {} end
     local pool = (kind == "item") and gs.itemIcons
               or (kind == "timer") and gs.timerIcons
+              or (kind == "trinket") and gs.trinketIcons
               or gs.spellIcons
     if pool[id] then pool[id]._group = group; return pool[id] end
 
     local name = "TUI_CustomGroup" .. group.id .. "_" .. kind .. id
     local btn = CreateFrame("Button", name, gs.container)
     btn._type, btn._id, btn._group = kind, id, group
+    if kind == "trinket" then
+        btn._slot = id
+        btn._id = nil
+    end
     btn:EnableMouse(false)
 
     local icon = btn:CreateTexture(nil, "ARTWORK")
@@ -463,8 +492,10 @@ local function CreateIcon(gs, group, kind, id)
     btn.count:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
     btn.count:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE")
 
-    if kind == "item" then
-        icon:SetTexture(select(10, C_Item.GetItemInfo(id)) or 134400)
+    if kind == "item" or kind == "trinket" then
+        if kind == "item" then
+            icon:SetTexture(select(10, C_Item.GetItemInfo(id)) or 134400)
+        end
 
         btn.QualityFrame = CreateFrame("Frame", nil, btn)
         btn.QualityFrame:SetFrameLevel(btn:GetFrameLevel() + 11)
@@ -524,6 +555,7 @@ local function HideGroupIcons(gs)
     for _, b in pairs(gs.spellIcons) do b:Hide() end
     for _, b in pairs(gs.itemIcons) do b:Hide() end
     if gs.timerIcons then for _, b in pairs(gs.timerIcons) do b:Hide() end end
+    if gs.trinketIcons then for _, b in pairs(gs.trinketIcons) do b:Hide() end end
     if gs.testIcons then for _, b in pairs(gs.testIcons) do b:Hide() end end
 end
 
@@ -554,6 +586,8 @@ function M.SetTestMode(on)
     if M.testMode == on then return end
     M.testMode = on
     QueueLayout()
+    if TUI.UpdateSpecialBars then TUI:UpdateSpecialBars() end
+    if TUI.UpdateCustomBars then TUI:UpdateCustomBars() end
 end
 
 local function RenderTestLane(gs, group, frame)
@@ -567,8 +601,12 @@ local function RenderTestLane(gs, group, frame)
     local S = frame._tuiSlot
     if not (S and ns.AuraLane) then return end
 
+    local entries = ns.AuraLane.Entries(group)
+    local total = 0
+    for _, entry in ipairs(entries) do total = total + math.max(1, entry.def.max or 1) end
+
     local idx, slot = 0, M.NextFreeSlot(group, frame)
-    for _, entry in ipairs(ns.AuraLane.Entries(group)) do
+    for _, entry in ipairs(entries) do
         local spells = ns.AuraLane.SpellList(entry.def)
         for k = 1, math.max(1, entry.def.max or 1) do
             idx = idx + 1
@@ -579,13 +617,40 @@ local function RenderTestLane(gs, group, frame)
                 f.tex:SetAllPoints(f)
                 pool[idx] = f
             end
-            -- slot k previews the k-th spell of the set, not N copies of one
             local sid = spells[((k - 1) % math.max(1, #spells)) + 1]
             f.tex:SetTexture((sid and C_Spell.GetSpellTexture(sid)) or 134400)
             f.tex:SetAlpha(0.9)
             M.ApplyIconSkin(f, f.tex, S.crop, S.skin)
 
-            -- fake numbers so the Text tab has something to tune against
+            local AL = ns.AuraLane
+            if group.showBorder and AL.EdgeRing then
+                if not f.border then
+                    f.border = {}
+                    for j = 1, 4 do f.border[j] = f:CreateTexture(nil, "OVERLAY") end
+                end
+                local bs, bi = group.borderSize or 1, group.borderInset or 0
+                AL.EdgeRing(f, f.border, bs, bi, group.borderColor or { a = 1 })
+                if group.borderStroke then
+                    if not f.borderIn then
+                        f.borderIn, f.borderOut = {}, {}
+                        for j = 1, 4 do
+                            f.borderIn[j] = f:CreateTexture(nil, "OVERLAY")
+                            f.borderOut[j] = f:CreateTexture(nil, "OVERLAY")
+                        end
+                    end
+                    AL.EdgeRing(f, f.borderIn, 1, bi + bs, { a = 1 })
+                    AL.EdgeRing(f, f.borderOut, 1, bi - 1, { a = 1 })
+                elseif f.borderIn then
+                    for j = 1, 4 do f.borderIn[j]:Hide() f.borderOut[j]:Hide() end
+                end
+            else
+                if f.border then for j = 1, 4 do f.border[j]:Hide() end end
+                if f.borderIn then
+                    for j = 1, 4 do f.borderIn[j]:Hide() f.borderOut[j]:Hide() end
+                end
+            end
+
+            -- fake numbers
             local tc = S.text or group.text or {}
             local function stamp(key, shown, fontN, size, outline, col, point, xo, yo, txt)
                 local fs = f[key]
@@ -606,16 +671,28 @@ local function RenderTestLane(gs, group, frame)
             stamp("cdText", tc.showCooldown ~= false, tc.cooldownFont, tc.cooldownFontSize or 16,
                 tc.cooldownFontOutline, tc.cooldownColor, tc.cooldownPoint or "CENTER",
                 tc.cooldownXOffset, tc.cooldownYOffset, "12")
-            stamp("cntText", tc.showCount ~= false, tc.countFont, tc.countFontSize or 12,
-                tc.countFontOutline, tc.countColor, tc.countPoint or "BOTTOMRIGHT",
-                tc.countXOffset, tc.countYOffset, "2")
+            if f.cntText then f.cntText:Hide() end
             stamp("stkText", tc.showStacks ~= false, tc.stacksFont, tc.stacksFontSize or 11,
                 tc.stacksFontOutline, tc.stacksColor, tc.stacksPoint or "TOP",
                 tc.stacksXOffset, tc.stacksYOffset, "3")
-            local pt, x, y = M.SlotPoint(frame, slot)
             ns.Pixel.SetSize(f, S.iw, S.ih)
             f:ClearAllPoints()
-            ns.Pixel.SetPoint(f, pt, frame, pt, x, y)
+            if S.center then
+                local tll = (S.perLine > 0) and S.perLine or math.max(total, 1)
+                local baseTll = (S.perLine > 0) and S.perLine or math.max(S.n, 1)
+                local baseRows = (S.n > 0) and math.ceil(S.n / baseTll) or 0
+                local row = math.floor((idx - 1) / tll)
+                local col = (idx - 1) % tll
+                local widest = math.min(tll, total)
+                local c = (col - (widest - 1) / 2) * (S.alongDim + S.sp)
+                local cr = (baseRows + row) * (S.crossDim + S.sp) * S.crossSign
+                local x, y
+                if S.horizontal then x, y = c, cr else x, y = cr, -c end
+                ns.Pixel.SetPoint(f, S.pt, frame, S.pt, x, y)
+            else
+                local pt, x, y = M.SlotPoint(frame, slot)
+                ns.Pixel.SetPoint(f, pt, frame, pt, x, y)
+            end
             f:Show()
             slot = slot + 1
         end
@@ -704,13 +781,11 @@ local function CollectScopeInto(group, scope, root, shown)
         end
     end
 
-    if scope == "spec" and ns.SpecialBars then
-        local SB = ns.SpecialBars
-        for i = 1, (SB.GetIconCount and SB.GetIconCount() or 0) do
-            local ikey = "icon" .. i
-            local idb = SB.GetIconDB and SB.GetIconDB(ikey)
-            if idb and idb.enabled and idb.spellID and idb.customGroup == group.id then
-                list[#list + 1] = { kind = "specialicon", id = ikey, li = idb.customGroupOrder or 20000 }
+    if scope == "global" then
+        for _, slot in ipairs({ 13, 14 }) do
+            local d = TrinketDestFor(slot)
+            if d and d.group == group.id then
+                list[#list + 1] = { kind = "trinket", id = slot, li = d.order or 15000 }
             end
         end
     end
@@ -759,8 +834,7 @@ local function ApplyGroup(group)
             local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
             local vdb = cdm and cdm[CDM_KEY[vname]]
             mscale = proxy:GetScale() or 1
-            -- the CDM skin draws its border OUTSIDE the child frame: an icon
-            -- is visually 2px wider than it measures, the gap 2px narrower
+
             local pad = ns.CDM_SPACING_INSET or 2
             m_iw = proxy._tuiLastIconW or (vdb and vdb.overrideSize and vdb.iconWidth) or nil
             m_ih = proxy._tuiLastIconH or (vdb and vdb.overrideSize and vdb.iconHeight) or m_iw
@@ -769,7 +843,6 @@ local function ApplyGroup(group)
                 m_sp = (vdb and vdb.spacing) or 0
                 m_zoom = tonumber(vdb and vdb.iconZoom) or 0
                 m_lock = (vdb and vdb.iconLockAspectRatio) ~= false
-                -- same schema on both sides: CDMText.StyleChild consumes either
                 m_text = vdb and vdb.text or nil
             end
         end
@@ -811,63 +884,49 @@ local function ApplyGroup(group)
     local cap = tonumber(group.maxIcons) or 0
     if cap > 0 then
         for i = #gs.shown, cap + 1, -1 do
-            local e = gs.shown[i]
-            if e.kind == "specialicon" and ns.SpecialBars and ns.SpecialBars.GetIconWrapper then
-                local w = ns.SpecialBars.GetIconWrapper(e.id)
-                if w then w:Hide() end
-            end
             gs.shown[i] = nil
         end
     end
 
-    -- yoinked children carry the ElvUI skin's OUTSIDE border: shrink 1px per
-    -- side so their visible box matches the plain icons, nudge into the cell
-    local onePx = ns.Pixel.Size(frame)
-    local sw, sh = iw - 2 * onePx, ih - 2 * onePx
-    local specialWrap = {}
-    if ns.SpecialBars and ns.SpecialBars.SyncGroupedIconSizes then
-        ns.SpecialBars.SyncGroupedIconSizes(group.id, sw, sh)
-    end
     local btns = {}
     for _, e in ipairs(gs.shown) do
-        if e.kind == "specialicon" then
+        local btn = CreateIcon(gs, group, e.kind, e.id)
+        if btn:GetParent() ~= frame then btn:SetParent(frame) end
+        btn:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
+        ns.Pixel.SetSize(btn, iw, ih)
+        UpdateIcon(btn)
+        M.ApplyIconSkin(btn, btn.icon, crop, skinPx)
+        if btn.count then
+            local t = m_text or group.text or {}
+            local font = (LSM and LSM:Fetch("font", t.countFont or "Expressway")) or STANDARD_TEXT_FONT
 
-            local w = ns.SpecialBars and ns.SpecialBars.GetIconWrapper and ns.SpecialBars.GetIconWrapper(e.id)
-            if w and w:IsShown() then
-                ns.Pixel.SetSize(w, sw, sh)
-                specialWrap[w] = true
-                btns[#btns + 1] = w
-            end
-        else
-            local btn = CreateIcon(gs, group, e.kind, e.id)
-            if btn:GetParent() ~= frame then btn:SetParent(frame) end
-            btn:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
-            ns.Pixel.SetSize(btn, iw, ih)
-            UpdateIcon(btn)
-            M.ApplyIconSkin(btn, btn.icon, crop, skinPx)
-            if btn.count then
-                local t = m_text or group.text or {}
-                local font = (LSM and LSM:Fetch("font", t.countFont or "Expressway")) or STANDARD_TEXT_FONT
-
-                E:SetFont(btn.count, font, t.countFontSize or 12, t.countFontOutline or "OUTLINE")
-                local cc = t.countColor or {}
-                btn.count:SetTextColor(cc.r or 1, cc.g or 1, cc.b or 1)
-                local pt = t.countPoint or "BOTTOMRIGHT"
-                btn.count:ClearAllPoints()
-                btn.count:SetPoint(pt, btn, pt, t.countXOffset or 0, t.countYOffset or 0)
-                btn.count:SetShown(t.showCount ~= false)
-            end
-            btns[#btns + 1] = btn
+            E:SetFont(btn.count, font, t.countFontSize or 12, t.countFontOutline or "OUTLINE")
+            local cc = t.countColor or {}
+            btn.count:SetTextColor(cc.r or 1, cc.g or 1, cc.b or 1)
+            local pt = t.countPoint or "BOTTOMRIGHT"
+            btn.count:ClearAllPoints()
+            btn.count:SetPoint(pt, btn, pt, t.countXOffset or 0, t.countYOffset or 0)
+            btn.count:SetShown(t.showCount ~= false)
         end
+        btns[#btns + 1] = btn
     end
 
     local n = #btns
     local lineLen = (perLine > 0) and perLine or n
     if lineLen < 1 then lineLen = 1 end
-    local horizontal = (growth == "LEFT" or growth == "RIGHT")
+    local centered = (growth == "CENTERED_H" or growth == "CENTERED_V")
+    local horizontal = (growth == "LEFT" or growth == "RIGHT" or growth == "CENTERED_H")
     local wrapDir = group.wrapDir or (horizontal and "DOWN" or "RIGHT")
     local pt, alongSign, crossSign
-    if horizontal then
+    if centered then
+        if horizontal then
+            alongSign = 1
+            if wrapDir == "UP" then pt, crossSign = "BOTTOM", 1 else pt, crossSign = "TOP", -1 end
+        else
+            alongSign = -1
+            if wrapDir == "LEFT" then pt, crossSign = "RIGHT", -1 else pt, crossSign = "LEFT", 1 end
+        end
+    elseif horizontal then
         local h = (growth == "LEFT") and "RIGHT" or "LEFT"
         alongSign = (growth == "LEFT") and -1 or 1
         if wrapDir == "UP" then pt, crossSign = "BOTTOM" .. h, 1 else pt, crossSign = "TOP" .. h, -1 end
@@ -882,14 +941,19 @@ local function ApplyGroup(group)
     for i, btn in ipairs(btns) do
         btn:ClearAllPoints()
         local idx = i - 1
-        local along = (idx % lineLen) * (alongDim + sp)
-        local cross = math.floor(idx / lineLen) * (crossDim + sp)
         local x, y
-        if horizontal then x, y = along * alongSign, cross * crossSign
-        else               x, y = cross * crossSign, along * alongSign end
-        if specialWrap[btn] then
-            x = x + (pt:find("LEFT") and onePx or -onePx)
-            y = y + (pt:find("TOP") and -onePx or onePx)
+        if centered then
+            local row = math.floor(idx / lineLen)
+            local col = idx % lineLen
+            local rowN = math.min(lineLen, n - row * lineLen)
+            local c = (col - (rowN - 1) / 2) * (alongDim + sp)
+            local cr = row * (crossDim + sp) * crossSign
+            if horizontal then x, y = c, cr else x, y = cr, -c end
+        else
+            local along = (idx % lineLen) * (alongDim + sp)
+            local cross = math.floor(idx / lineLen) * (crossDim + sp)
+            if horizontal then x, y = along * alongSign, cross * crossSign
+            else               x, y = cross * crossSign, along * alongSign end
         end
         ns.Pixel.SetPoint(btn, pt, frame, pt, x, y)
         btn:Show()
@@ -898,7 +962,7 @@ local function ApplyGroup(group)
     frame._tuiSlot = {
         pt = pt, sp = sp, iw = iw, ih = ih, n = n, perLine = perLine,
         horizontal = horizontal, alongDim = alongDim, crossDim = crossDim,
-        alongSign = alongSign, crossSign = crossSign,
+        alongSign = alongSign, crossSign = crossSign, center = centered,
         crop = crop, skin = skinPx, text = m_text,
     }
 
@@ -1184,6 +1248,14 @@ function M.MoveEntry(group, scope, key, uid, dir)
             local ikey = "icon" .. i
             local idb = SB.GetIconDB and SB.GetIconDB(ikey)
             if idb and idb.customGroup == group.id then list[#list + 1] = { uid = "si:" .. ikey, ref = idb, of = "customGroupOrder", dflt = 20000 } end
+        end
+    end
+    if scope == "global" then
+        for _, slot in ipairs({ 13, 14 }) do
+            local d = TrinketDestFor(slot)
+            if d and d.group == group.id then
+                list[#list + 1] = { uid = "trinket:" .. slot, ref = d, of = "order", dflt = 15000 }
+            end
         end
     end
     table.sort(list, function(a, b)
