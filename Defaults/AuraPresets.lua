@@ -44,7 +44,7 @@ ns.AURA_PRESETS = {
         },
     },
     {
-        key = "raiddefensives", name = "Raid Defensives", kind = "HELPFUL", unit = "player", max = 1,
+        key = "raiddefensives", name = "Raid Defensives", kind = "HELPFUL", unit = "player", max = 10,
         spells = {
             31821,  -- Aura Mastery
             97462,  -- Rally

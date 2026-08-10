@@ -268,6 +268,15 @@ local function ViewerGroup(order, key, label, opts)
                     TUI:UpdateCDMIcons()
                 end,
             },
+            invertSwipe = {
+                order = 13.42, type = "toggle", name = "Invert Swipe",
+                hidden = function() return key ~= "buffIcon" end,
+                get = function() return E.db.thingsUI.cdmIcons[key].invertSwipe end,
+                set = function(_, v)
+                    E.db.thingsUI.cdmIcons[key].invertSwipe = v
+                    TUI:UpdateCDMIcons()
+                end,
+            },
             elbowHeader = {
                 order = 13.51, type = "header", name = "Elbow",
             },

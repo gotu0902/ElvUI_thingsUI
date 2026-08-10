@@ -69,12 +69,19 @@ local function EditAura(def, title, onChange)
     spacer:SetText(" ")
     f:AddChild(spacer)
 
+    local mine
+
     local kind = AceGUI:Create("Dropdown")
     kind:SetLabel("Type")
     kind:SetWidth(170)
     kind:SetList({ HELPFUL = "Buff", HARMFUL = "Debuff" }, { "HELPFUL", "HARMFUL" })
     kind:SetValue(def.kind or "HELPFUL")
-    kind:SetCallback("OnValueChanged", function(_, _, v) def.kind = v; onChange() end)
+    kind:SetCallback("OnValueChanged", function(_, _, v)
+        def.kind = v
+        -- enemy debuffs are always yours; the toggle only means something for buffs
+        if mine then mine:SetDisabled(v == "HARMFUL") end
+        onChange()
+    end)
     f:AddChild(kind)
 
     local unit = AceGUI:Create("Dropdown")
@@ -86,10 +93,11 @@ local function EditAura(def, title, onChange)
     unit:SetCallback("OnValueChanged", function(_, _, v) def.unit = v; onChange() end)
     f:AddChild(unit)
 
-    local mine = AceGUI:Create("CheckBox")
+    mine = AceGUI:Create("CheckBox")
     mine:SetLabel("Only Mine")
     mine:SetWidth(170)
     mine:SetValue(def.onlyMine and true or false)
+    mine:SetDisabled((def.kind or "HELPFUL") == "HARMFUL")
     mine:SetCallback("OnValueChanged", function(_, _, v) def.onlyMine = v; onChange() end)
     f:AddChild(mine)
 
@@ -486,7 +494,53 @@ function TUI:CustomGroupsOptions()
             },
             addAura = {
                 order = 11.5, type = "select", name = "|cFF60E0A0Add Buff|r", width = "double",   -- auras = green
-                values = auraCommonValues, sorting = auraCommonSorting,
+                values = function()
+                    local out = auraCommonValues()
+                    -- CDM's tracked buffs/bars = the spec's own aura registry
+                    local map
+                    if scope == "spec" then
+                        map = ns.CDMSpells and ns.CDMSpells.GetBuffsForSpec
+                            and ns.CDMSpells.GetBuffsForSpec(tonumber(getKey()))
+                    elseif scope == "class" then
+                        map = ns.CDMSpells and ns.CDMSpells.GetBuffsForClass
+                            and ns.CDMSpells.GetBuffsForClass(editedClassFile())
+                    end
+                    for sid, nd in pairs(map or {}) do
+                        if not out[tostring(sid)] then
+                            local nm = C_Spell.GetSpellName and C_Spell.GetSpellName(sid)
+                            if not nm and C_Spell.RequestLoadSpellData then C_Spell.RequestLoadSpellData(sid) end
+                            local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)) or 0
+                            out[tostring(sid)] = nd
+                                and ("|T%d:14:14|t |cFFFF6060%s|r"):format(tex, nm or ("Spell " .. sid))
+                                or  ("|T%d:14:14|t %s"):format(tex, nm or ("Spell " .. sid))
+                        end
+                    end
+                    return out
+                end,
+                sorting = function()
+                    local map
+                    if scope == "spec" then
+                        map = ns.CDMSpells and ns.CDMSpells.GetBuffsForSpec
+                            and ns.CDMSpells.GetBuffsForSpec(tonumber(getKey()))
+                    elseif scope == "class" then
+                        map = ns.CDMSpells and ns.CDMSpells.GetBuffsForClass
+                            and ns.CDMSpells.GetBuffsForClass(editedClassFile())
+                    end
+                    local cdm = {}
+                    for sid in pairs(map or {}) do
+                        cdm[#cdm + 1] = { id = sid, nm = (C_Spell.GetSpellName and C_Spell.GetSpellName(sid)) or tostring(sid) }
+                    end
+                    table.sort(cdm, function(a, b) return a.nm < b.nm end)
+                    local out, seen = {}, {}
+                    for _, e in ipairs(cdm) do
+                        out[#out + 1] = tostring(e.id)
+                        seen[tostring(e.id)] = true
+                    end
+                    for _, k in ipairs(auraCommonSorting()) do
+                        if not seen[k] then out[#out + 1] = k end
+                    end
+                    return out
+                end,
                 get = function() return "" end,
                 set = function(_, v)
                     if not CG then return end
@@ -1148,6 +1202,8 @@ function TUI:CustomGroupsOptions()
                             get = function() return group.growth end, set = function(_, v) gset("growth", v) end },
                         columns = { order = 4, type = "range", name = "Wrap After (0 = no wrap)", min = 0, max = 20, step = 1,
                             get = function() return group.columns end, set = function(_, v) gset("columns", v) end },
+                        maxIcons = { order = 4.5, type = "range", name = "Max Icons (0 = Off)", min = 0, max = 30, step = 1,
+                            get = function() return group.maxIcons or 0 end, set = function(_, v) gset("maxIcons", v) end },
                         wrapDir = {
                             order = 5, type = "select", name = "Wrap Direction",
                             disabled = function() return (group.columns or 0) <= 0 end,

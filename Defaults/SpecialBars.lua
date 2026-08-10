@@ -68,6 +68,7 @@ ns.SPECIAL_ICON_DEFAULTS = {
     anchorXOffset         = 0,
     anchorYOffset         = 0,
     showCooldown          = true,
+    invertSwipe           = false,
     desaturateWhenInactive = false,
     showBorder            = false,
     borderSize            = 1,

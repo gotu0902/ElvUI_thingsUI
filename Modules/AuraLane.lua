@@ -298,8 +298,13 @@ end
 
 local function ApplyEntry(lane, group, entry)
     local key, def = entry.key, entry.def
-    local filter = (def.kind == "HARMFUL") and "HARMFUL" or "HELPFUL"
-    if def.onlyMine then filter = filter .. "|PLAYER" end
+    -- 12.1 only sanctions YOUR debuffs on enemies; the choice doesn't exist
+    local filter
+    if def.kind == "HARMFUL" then
+        filter = "HARMFUL|PLAYER"
+    else
+        filter = def.onlyMine and "HELPFUL|PLAYER" or "HELPFUL"
+    end
 
     local map = {}
     for id in pairs(def.spells or {}) do

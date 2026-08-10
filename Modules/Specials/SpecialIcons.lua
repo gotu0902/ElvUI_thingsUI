@@ -236,6 +236,15 @@ local function ComputeIconTexCoord(db)
     local z = db.zoom or 0.1
     local w = db.width or 36
     local h = (db.keepAspectRatio ~= false) and w or (db.height or 36)
+    -- inside a custom group the neighbours' crop wins, not the icon's own
+    if db.customGroup and ns.CustomGroups and ns.CustomGroups.GroupByID then
+        local g = ns.CustomGroups.GroupByID(db.customGroup)
+        if g then
+            z = tonumber(g.iconZoom) or 0
+            w = g.iconWidth or g.iconSize or 36
+            h = (g.squareIcon ~= false) and w or (g.iconHeight or w)
+        end
+    end
     if db.iconLockAspectRatio ~= false and w > 0 and h > 0 then
         local base = 1 - z * 2
         local xCrop, yCrop = base, base
@@ -249,6 +258,8 @@ local function ComputeIconTexCoord(db)
     return z, 1 - z, z, 1 - z
 end
 
+SB.ComputeIconTexCoord = ComputeIconTexCoord
+
 local function StyleYoinkedIcon(childFrame, db, gtext)
     if not childFrame._tuiOrigStyle then
         local orig = {}
@@ -259,6 +270,7 @@ local function StyleYoinkedIcon(childFrame, db, gtext)
         if childFrame.Cooldown then
             orig.drawSwipe = childFrame.Cooldown:GetDrawSwipe()
             orig.drawEdge  = childFrame.Cooldown:GetDrawEdge()
+            orig.reverse   = childFrame.Cooldown:GetReverse()
             for i = 1, childFrame.Cooldown:GetNumRegions() do
                 local r = select(i, childFrame.Cooldown:GetRegions())
                 if r and r.GetObjectType and r:GetObjectType() == 'FontString' then
@@ -309,6 +321,7 @@ local function StyleYoinkedIcon(childFrame, db, gtext)
     if childFrame.Cooldown then
         childFrame.Cooldown:SetDrawSwipe(db.showCooldown)
         childFrame.Cooldown:SetDrawEdge(false)
+        childFrame.Cooldown:SetReverse(db.invertSwipe and true or false)
         if ns.CDMText and ns.CDMText.ReleaseFromElvUICooldown then
             ns.CDMText.ReleaseFromElvUICooldown(childFrame.Cooldown)
         end

@@ -548,6 +548,7 @@ local function ComputeLayoutSig(visible, vdb)
         + (vdb.overrideSize and 1 or 0) * 211
         + (vdb.elbowEnabled and 1 or 0) * 65521
         + (vdb.elbowAfter or 0) * 1543
+        + (vdb.invertSwipe and 1 or 0) * 379
     local g = vdb.growthDirection
     if g then for i = 1, #g do sig = sig + g:byte(i) * i end end
     local eb = vdb.elbowDirection
@@ -756,6 +757,14 @@ LayoutViewer = function(viewer)
                 Pixel.SetSize(c, sizeW, sizeH)
             end
         end
+    end
+
+    -- pooled frames migrate between viewers, so the reverse flag must be
+    -- asserted (or cleared) on every pass, not only where it is wanted
+    local wantRev = VIEWERS[viewer:GetName()] == "buffIcon" and vdb.invertSwipe or false
+    for i = 1, #visible do
+        local cd = visible[i].Cooldown
+        if cd and cd.SetReverse then cd:SetReverse(wantRev) end
     end
 
     local zoom = tonumber(vdb.iconZoom) or 0

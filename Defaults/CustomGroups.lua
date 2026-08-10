@@ -21,6 +21,7 @@ function ns.Defaults.Group(id, name)
         spacing              = 3,
         growth               = "RIGHT",
         columns              = 0,
+        maxIcons             = 0,
         wrapDir              = "DOWN",
         hideZeroCharges      = false,
         qualityBorder        = true,

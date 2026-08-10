@@ -584,6 +584,34 @@ local function RenderTestLane(gs, group, frame)
             f.tex:SetTexture((sid and C_Spell.GetSpellTexture(sid)) or 134400)
             f.tex:SetAlpha(0.9)
             M.ApplyIconSkin(f, f.tex, S.crop, S.skin)
+
+            -- fake numbers so the Text tab has something to tune against
+            local tc = S.text or group.text or {}
+            local function stamp(key, shown, fontN, size, outline, col, point, xo, yo, txt)
+                local fs = f[key]
+                if shown == false then
+                    if fs then fs:Hide() end
+                    return
+                end
+                if not fs then fs = f:CreateFontString(nil, "OVERLAY"); f[key] = fs end
+                local fontPath = (LSM and LSM:Fetch("font", fontN or "Expressway")) or STANDARD_TEXT_FONT
+                E:SetFont(fs, fontPath, size or 12, outline or "OUTLINE")
+                local c = col or {}
+                fs:SetTextColor(c.r or 1, c.g or 1, c.b or 1)
+                fs:ClearAllPoints()
+                fs:SetPoint(point or "CENTER", f, point or "CENTER", xo or 0, yo or 0)
+                fs:SetText(txt)
+                fs:Show()
+            end
+            stamp("cdText", tc.showCooldown ~= false, tc.cooldownFont, tc.cooldownFontSize or 16,
+                tc.cooldownFontOutline, tc.cooldownColor, tc.cooldownPoint or "CENTER",
+                tc.cooldownXOffset, tc.cooldownYOffset, "12")
+            stamp("cntText", tc.showCount ~= false, tc.countFont, tc.countFontSize or 12,
+                tc.countFontOutline, tc.countColor, tc.countPoint or "BOTTOMRIGHT",
+                tc.countXOffset, tc.countYOffset, "2")
+            stamp("stkText", tc.showStacks ~= false, tc.stacksFont, tc.stacksFontSize or 11,
+                tc.stacksFontOutline, tc.stacksColor, tc.stacksPoint or "TOP",
+                tc.stacksXOffset, tc.stacksYOffset, "3")
             local pt, x, y = M.SlotPoint(frame, slot)
             ns.Pixel.SetSize(f, S.iw, S.ih)
             f:ClearAllPoints()
@@ -780,8 +808,25 @@ local function ApplyGroup(group)
     HideGroupIcons(gs)
     CollectEntries(group, gs.shown)
 
+    local cap = tonumber(group.maxIcons) or 0
+    if cap > 0 then
+        for i = #gs.shown, cap + 1, -1 do
+            local e = gs.shown[i]
+            if e.kind == "specialicon" and ns.SpecialBars and ns.SpecialBars.GetIconWrapper then
+                local w = ns.SpecialBars.GetIconWrapper(e.id)
+                if w then w:Hide() end
+            end
+            gs.shown[i] = nil
+        end
+    end
+
+    -- yoinked children carry the ElvUI skin's OUTSIDE border: shrink 1px per
+    -- side so their visible box matches the plain icons, nudge into the cell
+    local onePx = ns.Pixel.Size(frame)
+    local sw, sh = iw - 2 * onePx, ih - 2 * onePx
+    local specialWrap = {}
     if ns.SpecialBars and ns.SpecialBars.SyncGroupedIconSizes then
-        ns.SpecialBars.SyncGroupedIconSizes(group.id, iw, ih)
+        ns.SpecialBars.SyncGroupedIconSizes(group.id, sw, sh)
     end
     local btns = {}
     for _, e in ipairs(gs.shown) do
@@ -789,7 +834,8 @@ local function ApplyGroup(group)
 
             local w = ns.SpecialBars and ns.SpecialBars.GetIconWrapper and ns.SpecialBars.GetIconWrapper(e.id)
             if w and w:IsShown() then
-                ns.Pixel.SetSize(w, iw, ih)
+                ns.Pixel.SetSize(w, sw, sh)
+                specialWrap[w] = true
                 btns[#btns + 1] = w
             end
         else
@@ -841,6 +887,10 @@ local function ApplyGroup(group)
         local x, y
         if horizontal then x, y = along * alongSign, cross * crossSign
         else               x, y = cross * crossSign, along * alongSign end
+        if specialWrap[btn] then
+            x = x + (pt:find("LEFT") and onePx or -onePx)
+            y = y + (pt:find("TOP") and -onePx or onePx)
+        end
         ns.Pixel.SetPoint(btn, pt, frame, pt, x, y)
         btn:Show()
     end

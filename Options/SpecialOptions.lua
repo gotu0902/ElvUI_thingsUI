@@ -1177,9 +1177,12 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             set = function(_, v) set("height", v) end },
                         iconLockAspectRatio = { order = 4.5, type = "toggle", name = "Lock Icon Aspect Ratio",
                             hidden = function() return get("keepAspectRatio") ~= false end,
+                            disabled = function() return isGrouped() end,
                             get = function() return get("iconLockAspectRatio") ~= false end,
                             set = function(_, v) set("iconLockAspectRatio", v) end },
-                        zoom   = { order = 5, type = "range", name = "Zoom", min = 0, max = 0.45, step = 0.01, bigStep = 0.05, isPercent = true, get = function() return get("zoom") end, set = function(_, v) set("zoom", v) end },
+                        zoom   = { order = 5, type = "range", name = "Zoom", min = 0, max = 0.45, step = 0.01, bigStep = 0.05, isPercent = true,
+                            disabled = function() return isGrouped() end,
+                            get = function() return get("zoom") end, set = function(_, v) set("zoom", v) end },
                         desaturate = { order = 6, type = "toggle", name = "Show when Idle", get = function() return get("desaturateWhenInactive") end, set = function(_, v) set("desaturateWhenInactive", v) end },
                         frameStrata = {
                             order = 7, type = "select", name = "Frame Strata",
@@ -1193,6 +1196,9 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                     order = 11, type = "group", name = "Cooldown", inline = true,
                     args = {
                         showCooldown = { order = 1, type = "toggle", name = "Show Cooldown Sweep", get = function() return get("showCooldown") end, set = function(_, v) set("showCooldown", v) end },
+                        invertSwipe = { order = 2, type = "toggle", name = "Invert Sweep",
+                            disabled = function() return not get("showCooldown") end,
+                            get = function() return get("invertSwipe") end, set = function(_, v) set("invertSwipe", v) end },
                     },
                 },
                 borderGroup = {

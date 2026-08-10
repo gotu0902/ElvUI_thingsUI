@@ -233,6 +233,7 @@ local function _doReturnFrame(child, keepPosition)
         if child.Cooldown then
             if orig.drawSwipe ~= nil then child.Cooldown:SetDrawSwipe(orig.drawSwipe) end
             if orig.drawEdge  ~= nil then child.Cooldown:SetDrawEdge(orig.drawEdge) end
+            if orig.reverse   ~= nil then child.Cooldown:SetReverse(orig.reverse) end
             if orig.cdFont then
                 for i = 1, child.Cooldown:GetNumRegions() do
                     local r = select(i, child.Cooldown:GetRegions())
@@ -968,6 +969,13 @@ function SB.SyncGroupedIconSizes(groupID, w, h)
                 if child then
                     child._tuiSpecialW, child._tuiSpecialH = w, h
                     UIParent.SetSize(child, w, h)
+                    -- group sliders must reach the already-yoinked child's crop
+                    local icon = child.Icon
+                    if icon and SB.ComputeIconTexCoord then
+                        local l, r, t, b = SB.ComputeIconTexCoord(db)
+                        child._tuiTexCoord = { l, r, t, b }
+                        icon:SetTexCoord(l, r, t, b)
+                    end
                 end
                 st.w, st.h = w, h
             end

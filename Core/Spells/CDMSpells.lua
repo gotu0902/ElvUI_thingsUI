@@ -5,9 +5,12 @@ local M = ns.CDMSpells
 
 local CAT_ESSENTIAL = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.Essential
 local CAT_UTILITY   = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.Utility
+local CAT_BUFF      = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.TrackedBuff
+local CAT_BAR       = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.TrackedBar
 
 local liveCache = {}
 local liveCharges = {}
+local liveBuffs = {}
 
 local function CurrentSpecID()
     if PlayerUtil and PlayerUtil.GetCurrentSpecID then
@@ -30,6 +33,13 @@ local function ChargeStore()
     local g = _G.thingsUIGlobalDB
     g.cdmChargeCache = g.cdmChargeCache or {}
     return g.cdmChargeCache
+end
+
+local function BuffStore()
+    _G.thingsUIGlobalDB = _G.thingsUIGlobalDB or {}
+    local g = _G.thingsUIGlobalDB
+    g.cdmBuffCache = g.cdmBuffCache or {}
+    return g.cdmBuffCache
 end
 
 local function ChargesOf(spellID)
@@ -83,6 +93,16 @@ function M.RefreshCurrentSpec()
     local store = Store()
     if store then store[specID] = map end
 
+    -- tracked buffs/bars are auras: the registry that feeds Add Buff
+    local buffs = {}
+    CollectCategory(CAT_BUFF, buffs)
+    CollectCategory(CAT_BAR, buffs)
+    if next(buffs) ~= nil then
+        liveBuffs[specID] = buffs
+        local bstore = BuffStore()
+        if bstore then bstore[specID] = buffs end
+    end
+
     if not InCombatLockdown() then
         local charges = {}
         for sid in pairs(map) do
@@ -113,6 +133,34 @@ function M.GetChargesForSpec(specID)
     end
     local store = ChargeStore()
     return (store and store[specID]) or liveCharges[specID]
+end
+
+function M.GetBuffsForSpec(specID)
+    if not specID then return nil end
+    if specID == CurrentSpecID() then
+        if not liveBuffs[specID] then M.RefreshCurrentSpec() end
+        if liveBuffs[specID] then return liveBuffs[specID] end
+    end
+    local store = BuffStore()
+    return (store and store[specID]) or liveBuffs[specID]
+end
+
+function M.GetBuffsForClass(classToken)
+    if not classToken then return nil end
+    local merged, any = {}, false
+    for _, rec in ipairs(ns.AllSpecs() or {}) do
+        if rec.classToken == classToken then
+            local m = M.GetBuffsForSpec(rec.id)
+            if m then
+                any = true
+                for sid, nd in pairs(m) do
+                    if merged[sid] == nil then merged[sid] = nd
+                    elseif merged[sid] and not nd then merged[sid] = false end
+                end
+            end
+        end
+    end
+    return any and merged or nil
 end
 
 function M.GetForClass(classToken)
