@@ -29,7 +29,6 @@ end
 
 local function GlowActiveNow(timer)
     local T = ns.Timers
-    if timer.kind == "lust" then return T.GetLustState and T.GetLustState() ~= nil end
     return T.GetActiveBuff and T.GetActiveBuff(timer, GetTime()) ~= nil
 end
 
@@ -37,7 +36,7 @@ function R.UpdateGlow(btn, timer)
     if not (LCG and btn) then return end
     local ready
     if timer and timer.glowReadyInCombat then
-        local mode = (timer.kind == "lust") and "active" or (timer.glowWhen or "active")
+        local mode = timer.glowWhen or "active"
         if mode == "active" then
             ready = GlowActiveNow(timer)
         else
@@ -126,19 +125,7 @@ function R.Update(btn, timer)
     end
     local now = GetTime()
     if btn.cooldown and btn.cooldown.SetReverse then
-        btn.cooldown:SetReverse(timer.kind == "lust")
-    end
-
-    if timer.kind == "lust" then
-        local phase, start, dur = T.GetLustState(now)
-        if phase == "buff" then
-            if ItemCooldownChanged(btn.cooldown, true, start, dur) then btn.cooldown:SetCooldown(start, dur) end
-        else
-            if ItemCooldownChanged(btn.cooldown, false) then btn.cooldown:Clear() end
-        end
-        SetDesat(btn.icon, 0)
-        UpdateGlow(btn, timer, now)
-        return
+        btn.cooldown:SetReverse(false)
     end
 
     local bStart, bDur = T.GetActiveBuff(timer, now)

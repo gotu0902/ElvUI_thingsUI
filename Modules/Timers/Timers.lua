@@ -35,6 +35,16 @@ end
 
 M.DefaultTimer = ns.Defaults.Timer
 
+-- the lust tracker moved to the aura lane (Bloodlust preset); old profiles
+-- still carry the builtin timer
+function M.DropLustTimers()
+    local db = DB()
+    if not (db and db.list) then return end
+    for i = #db.list, 1, -1 do
+        if db.list[i].kind == "lust" then table.remove(db.list, i) end
+    end
+end
+
 function M.GetTimers()
     local db = DB()
     return db and db.list or {}
@@ -102,9 +112,7 @@ function M.GetAllTriggerSpellIDs(timer)
 end
 
 function M.GetTexture(timer)
-    if timer.kind == "lust" then
-        return C_Spell.GetSpellTexture((M.PlayerLustID and M.PlayerLustID()) or 2825)
-    elseif timer.kind == "spell" and timer.spellID then
+    if timer.kind == "spell" and timer.spellID then
         return C_Spell.GetSpellTexture(timer.spellID)
     elseif timer.kind == "item" and timer.itemID then
         return (select(10, C_Item.GetItemInfo(timer.itemID))) or C_Item.GetItemIconByID(timer.itemID)
@@ -155,108 +163,6 @@ function M.GetDuration(timer)
     return durationCache[id] or timer.duration  -- still nil -> manual fallback
 end
 
-local SATED_DEBUFFS = { [57723]=true, [57724]=true, [80354]=true, [95809]=true, [160455]=true, [264689]=true, [390435]=true }
-local LUST_CLASS  = { SHAMAN = 2825, MAGE = 80353, EVOKER = 390386, HUNTER = 272678 }
-local LUST_BUFF_DURATION = 40
-
-local IsSecret = ns.CDHelpers.IsSecret
-
-function M.PlayerLustID()
-    local _, cf = UnitClass("player")
-    return LUST_CLASS[cf]
-end
-
-local lustState = { active = false, start = 0 }
-
-function M.GetLustState(now)
-    if not lustState.active then return nil end
-    now = now or GetTime()
-    local elapsed = now - lustState.start
-    if elapsed >= 0 and elapsed < LUST_BUFF_DURATION then
-        return "buff", lustState.start, LUST_BUFF_DURATION
-    end
-    return nil
-end
-
-local function ScheduleLustExpiry(start)
-    local remain = LUST_BUFF_DURATION - (GetTime() - start) + 0.1
-    if remain <= 0 then return end
-    C_Timer.After(remain, function()
-        if lustState.start == start then
-            lustState.active = false
-            FireHosts()
-        end
-    end)
-end
-
-local function TriggerLust()
-    local start = GetTime()
-    lustState.start  = start
-    lustState.active = true
-    FireHosts()
-    ScheduleLustExpiry(start)
-end
-
-local lustEvents = CreateFrame("Frame")
-lustEvents:SetScript("OnEvent", function(_, _, unit, updateInfo)
-    if unit ~= "player" then return end
-    if IsSecret(updateInfo) or not updateInfo then return end
-    local full = updateInfo.isFullUpdate
-    if IsSecret(full) or full then return end
-    local added = updateInfo.addedAuras
-    if IsSecret(added) or not added then return end
-    for _, ai in pairs(added) do
-        if not IsSecret(ai) and ai then
-            local sid = ai.spellId
-            if not IsSecret(sid) and sid and SATED_DEBUFFS[sid] then
-                TriggerLust()
-                return
-            end
-        end
-    end
-end)
-
-local function ScanExistingLust()
-    if not (C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID) then return end
-    for sid in pairs(SATED_DEBUFFS) do
-        local ok, a = pcall(C_UnitAuras.GetPlayerAuraBySpellID, sid)
-        if ok and a and not IsSecret(a.expirationTime) and not IsSecret(a.duration)
-           and a.expirationTime and a.duration and a.duration > 0 then
-            local start = a.expirationTime - a.duration
-            if (GetTime() - start) < LUST_BUFF_DURATION then
-                lustState.start, lustState.active = start, true
-                FireHosts()
-                ScheduleLustExpiry(start)
-            end
-            return
-        end
-    end
-end
-
-local function UpdateLustPoller()
-    local on = false
-    for _, t in ipairs(M.GetTimers()) do
-        if t.kind == "lust" and t.enabled then on = true; break end
-    end
-    if on then
-        lustEvents:RegisterUnitEvent("UNIT_AURA", "player")
-        ScanExistingLust()
-    else
-        lustEvents:UnregisterEvent("UNIT_AURA")
-        lustState.active = false
-    end
-end
-
-function M.EnsureLustTimer()
-    local db = DB(); if not db then return end
-    for _, t in ipairs(db.list) do if t.kind == "lust" then return t end end
-    local t = M.DefaultTimer(db.nextID)
-    t.kind, t.builtin, t.enabled, t.order = "lust", true, false, 0
-    db.nextID = db.nextID + 1
-    table.insert(db.list, 1, t)
-    return t
-end
-
 function M.Rebuild()
     wipe(triggerMap)
     wipe(durationCache)
@@ -278,7 +184,6 @@ function M.Rebuild()
             end
         end
     end
-    UpdateLustPoller()
     if ns.TimersRender and ns.TimersRender.SetGlowActive then
         local wantGlow = false
         for _, timer in ipairs(M.GetTimers()) do
@@ -349,7 +254,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, spellID)
     elseif event == "BAG_UPDATE_COOLDOWN" then
         if next(trackedItems) then QueueCDRepaint() end
     else
-        if event == "PLAYER_ENTERING_WORLD" then M.EnsureLustTimer() end
+        if event == "PLAYER_ENTERING_WORLD" then M.DropLustTimers() end
         M.Rebuild()
         FireHosts()
     end

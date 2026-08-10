@@ -209,7 +209,7 @@ function TUI:ProfileUpdate()
     if ns.CustomGroups and ns.CustomGroups._rebuildOptions then ns.CustomGroups._rebuildOptions() end
     if ns.BarSetup and ns.BarSetup._rebuildSetupOptions then ns.BarSetup._rebuildSetupOptions() end
     if ns.Timers then
-        if ns.Timers.EnsureLustTimer then ns.Timers.EnsureLustTimer() end
+        if ns.Timers.DropLustTimers then ns.Timers.DropLustTimers() end
         if ns.Timers.Update then ns.Timers.Update() end
     end
     self:UpdateMoverSync()

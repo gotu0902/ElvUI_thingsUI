@@ -4,7 +4,7 @@
 
 
 ## Installer
-One-time setup: import a preset (NHT/FHT), set UI scale, pick unitframe coloring, move the minimap/auras, anchor Details!, pick an action bar layout, and choose ElvUI UnitFrames or Grid2. Auto-opens once, re-run it from the Share tab.
+One-time setup: import a preset (NHT/FHT), set UI scale, pick unitframe coloring, move the minimap/auras, anchor Details!, pick an action bar layout, and choose ElvUI UnitFrames or Grid2. Auto-opens once, re-run it from the Share tab. /tuialt for, alts. Yeeees, alts.
 
 ## Modules
 - **Bar Setup** - arrange and stack your bars into one cluster.

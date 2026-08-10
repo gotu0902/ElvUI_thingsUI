@@ -361,20 +361,7 @@ local function UpdateTimerIcon(btn)
     end
     local now = GetTime()
     if btn.cooldown and btn.cooldown.SetReverse then
-        btn.cooldown:SetReverse(timer.kind == "lust")
-    end
-    if timer.kind == "lust" then
-
-        local phase, start, dur = ns.Timers.GetLustState(now)
-        if phase == "buff" then
-            if ItemCooldownChanged(btn.cooldown, true, start, dur) then btn.cooldown:SetCooldown(start, dur) end
-        else
-            if ItemCooldownChanged(btn.cooldown, false) then btn.cooldown:Clear() end
-        end
-        SetDesat(btn.icon, 0)
-        if btn.count then btn.count:SetText("") end
-        UpdateTimerGlow(btn, timer, now)
-        return
+        btn.cooldown:SetReverse(false)
     end
     local bStart, bDur = ns.Timers.GetActiveBuff(timer, now)
     if bStart and timer.showCDTimer then
@@ -442,7 +429,7 @@ local function CreateIcon(gs, group, kind, id)
 
         cd:SetScript("OnCooldownDone", function()
             local t = ns.Timers and ns.Timers.GetByID(btn._id)
-            if t and t.showIdle and t.kind ~= "lust" then
+            if t and t.showIdle then
                 UpdateIcon(btn)
             elseif QueueLayout then
                 QueueLayout()
@@ -675,7 +662,7 @@ local function CollectScopeInto(group, scope, root, shown)
         local now = GetTime()
         for _, t in ipairs(ns.Timers.GetTimers()) do
             if t.enabled and t.destination == group.id and TimerInScope(t, scope)
-               and ((t.showIdle and t.kind ~= "lust") or TimerActive(t, now)) then
+               and (t.showIdle or TimerActive(t, now)) then
                 local li = t.groupOrder or 10000
                 if t.kind == "item" and t.itemID then
                     if not _seen["i" .. t.itemID] then

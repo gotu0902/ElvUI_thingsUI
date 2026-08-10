@@ -162,7 +162,7 @@ local function GroupClassCount(group, classFile)
     end
     if ns.Timers then
         for _, t in ipairs(ns.Timers.GetTimers()) do
-            if t.destination == group.id and t.kind ~= "lust" and t.groupScope == classFile then n = n + 1 end
+            if t.destination == group.id and t.groupScope == classFile then n = n + 1 end
         end
     end
     return n
@@ -321,7 +321,7 @@ function TUI:CustomGroupsOptions()
 
         if ns.Timers then
             for _, t in ipairs(ns.Timers.GetTimers()) do
-                if t.destination == group.id and t.kind ~= "lust" then
+                if t.destination == group.id then
                     local gs = t.groupScope or "global"
                     local match = (scope == "global" and gs == "global")
                         or (scope == "spec" and tostring(gs) == tostring(key))
@@ -521,29 +521,27 @@ function TUI:CustomGroupsOptions()
                 order = 12, type = "select", name = "|cFF8AC8FFAdd Timer|r", width = "double",   -- timers = light blue
                 hidden = function()
                     if not ns.Timers then return true end
-                    for _, t in ipairs(ns.Timers.GetTimers()) do if t.kind ~= "lust" then return false end end
+                    if #ns.Timers.GetTimers() > 0 then return false end
                     return true
                 end,
                 values = function()
                     local v = {}
                     if ns.Timers then
                         for _, t in ipairs(ns.Timers.GetTimers()) do
-                            if t.kind ~= "lust" then
-                                local nm = (t.kind == "item")
-                                    and ((C_Item.GetItemInfo(t.itemID)) or ("Item " .. tostring(t.itemID)))
-                                    or  ((C_Spell.GetSpellName and C_Spell.GetSpellName(t.spellID)) or ("Spell " .. tostring(t.spellID)))
-                                -- Show where the timer currently lives
-                                local d, where = t.destination, ""
-                                if d == "essential" then where = "  |cFF888888(in CDM Essential)|r"
-                                elseif d == "utility" then where = "  |cFF888888(in CDM Utility)|r"
-                                elseif d == "standalone" then where = "  |cFF888888(Standalone)|r"
-                                elseif d == group.id then where = "  |cFF888888(here)|r"
-                                elseif type(d) == "number" then
-                                    local og = CG and CG.GroupByID and CG.GroupByID(d)
-                                    where = ("  |cFFFF8040(in %s)|r"):format(og and (og.name or ("Group " .. d)) or ("Group " .. d))
-                                end
-                                v[tostring(t.id)] = ("|T%d:16:16:0:0|t %s%s"):format((ns.Timers.GetTexture and ns.Timers.GetTexture(t)) or 134400, nm, where)
+                            local nm = (t.kind == "item")
+                                and ((C_Item.GetItemInfo(t.itemID)) or ("Item " .. tostring(t.itemID)))
+                                or  ((C_Spell.GetSpellName and C_Spell.GetSpellName(t.spellID)) or ("Spell " .. tostring(t.spellID)))
+                            -- Show where the timer currently lives
+                            local d, where = t.destination, ""
+                            if d == "essential" then where = "  |cFF888888(in CDM Essential)|r"
+                            elseif d == "utility" then where = "  |cFF888888(in CDM Utility)|r"
+                            elseif d == "standalone" then where = "  |cFF888888(Standalone)|r"
+                            elseif d == group.id then where = "  |cFF888888(here)|r"
+                            elseif type(d) == "number" then
+                                local og = CG and CG.GroupByID and CG.GroupByID(d)
+                                where = ("  |cFFFF8040(in %s)|r"):format(og and (og.name or ("Group " .. d)) or ("Group " .. d))
                             end
+                            v[tostring(t.id)] = ("|T%d:16:16:0:0|t %s%s"):format((ns.Timers.GetTexture and ns.Timers.GetTexture(t)) or 134400, nm, where)
                         end
                     end
                     return v

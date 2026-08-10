@@ -9,7 +9,6 @@ local CreateFrame, GetTime, ipairs, pairs = CreateFrame, GetTime, ipairs, pairs
 local state = {}
 
 local function PlainName(timer)
-    if timer.kind == "lust" then return "Hero / Lust" end
     if timer.kind == "spell" then
         return (C_Spell.GetSpellName and C_Spell.GetSpellName(timer.spellID)) or ("Spell " .. tostring(timer.spellID))
     end
@@ -82,7 +81,7 @@ function M.Refresh()
             ns.Pixel.SetSize(st.container, size, size)
             ns.Pixel.SetSize(st.btn, size, size)
             PositionContainer(timer, st.container)
-            local idle = timer.showIdle and timer.kind ~= "lust"
+            local idle = timer.showIdle
             local show = idle or ns.TimersRender.TimerActive(timer, now) or (E and E.ConfigurationMode)
             if show then
                 st.container:Show()

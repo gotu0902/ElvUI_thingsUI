@@ -90,7 +90,6 @@ H.SpellDesat = SpellDesat
 
 local function TimerActive(timer, now)
     local T = ns.Timers
-    if timer.kind == "lust" then return (T.GetLustState(now)) ~= nil end
     if T.GetActiveBuff(timer, now) then return true end
     if timer.trackCooldown == false then return false end
     if timer.kind == "item" and timer.itemID then

@@ -76,9 +76,7 @@ local function TimerLabel(t)
     local T = ns.Timers
     local tex = T and T.GetTexture(t)
     local label
-    if t.kind == "lust" then
-        label = "Hero / Lust"
-    elseif t.kind == "spell" then
+    if t.kind == "spell" then
         label = (C_Spell.GetSpellName and C_Spell.GetSpellName(t.spellID)) or ("Spell " .. tostring(t.spellID))
     else
         label = (C_Item.GetItemInfo(t.itemID)) or ("Item " .. tostring(t.itemID))
@@ -115,20 +113,17 @@ local function TimerTab(t, id, order, Rebuild)
         styleHeader = { order = 10, type = "header", name = "Behaviour" },
         showCDTimer = {
             order = 11, type = "toggle", name = "Show Buff Swipe", width = 1.2,
-            hidden = function() return t.kind == "lust" end, 
-            get = function() return t.showCDTimer end,
+                        get = function() return t.showCDTimer end,
             set = function(_, v) t.showCDTimer = v; T.Update() end,
         },
         trackCooldown = {
             order = 11.5, type = "toggle", name = "Show Cooldown", width = 1.2,
-            hidden = function() return t.kind == "lust" end,
-            get = function() return t.trackCooldown ~= false end,
+                        get = function() return t.trackCooldown ~= false end,
             set = function(_, v) t.trackCooldown = v; T.Update() end,
         },
         showIdle = {
             order = 12, type = "toggle", name = "Show When Idle", width = 1.0,
-            hidden = function() return t.kind == "lust" end,
-            get = function() return t.showIdle end,
+                        get = function() return t.showIdle end,
             set = function(_, v) t.showIdle = v; T.Update() end,
         },
 
@@ -137,13 +132,13 @@ local function TimerTab(t, id, order, Rebuild)
             args = {
                 showGlow = {
                     order = 1, type = "toggle", width = 1.0,
-                    name = function() return t.kind == "lust" and "Glow when Active" or "Show Glow" end,
+                    name = "Show Glow",
                     get = function() return t.glowReadyInCombat end,
                     set = function(_, v) t.glowReadyInCombat = v; T.Update() end,
                 },
                 glowWhen = {
                     order = 2, type = "select", name = "Glow When", width = 1.2,
-                    hidden = function() return t.kind == "lust" or not t.glowReadyInCombat end,
+                    hidden = function() return not t.glowReadyInCombat end,
                     values = function()
                         local v = { active = "While Active" }
                         if t.showIdle then v.ready = "Ready in Combat" end
@@ -243,21 +238,19 @@ local function TimerTab(t, id, order, Rebuild)
     if lbl and ns.OptionLink then
         args.gotoDest = ns.OptionLink(4, lbl, unpack(path))
     end
-    if t.kind ~= "lust" then
-        args.durHeader = { order = 20, type = "header", name = "Duration" }
-        args.durationAuto = {
-            order = 21, type = "toggle", name = "Auto Duration", width = 1.3,
-            get = function() return t.durationAuto end,
-            set = function(_, v) t.durationAuto = v; T.Update() end,
-        }
-        args.duration = {
-            order = 22, type = "range", name = "Manual Duration (s)", width = 1.3,
-            min = 0, max = 600, step = 0.5, bigStep = 1,
-            hidden = function() return t.durationAuto end,
-            get = function() return t.duration or 0 end,
-            set = function(_, v) t.duration = (v > 0) and v or nil; T.Update() end,
-        }
-    end
+    args.durHeader = { order = 20, type = "header", name = "Duration" }
+    args.durationAuto = {
+        order = 21, type = "toggle", name = "Auto Duration", width = 1.3,
+        get = function() return t.durationAuto end,
+        set = function(_, v) t.durationAuto = v; T.Update() end,
+    }
+    args.duration = {
+        order = 22, type = "range", name = "Manual Duration (s)", width = 1.3,
+        min = 0, max = 600, step = 0.5, bigStep = 1,
+        hidden = function() return t.durationAuto end,
+        get = function() return t.duration or 0 end,
+        set = function(_, v) t.duration = (v > 0) and v or nil; T.Update() end,
+    }
 
     if t.destination == "standalone" then
         local function txt() t.text = t.text or { showCooldown = true }; return t.text end
@@ -436,7 +429,7 @@ function TUI:TimersOptions()
             if type(k) == "string" and k:match("^tmr") then opts.args[k] = nil end
         end
         for i, t in ipairs(T and T.GetTimers() or {}) do
-            local order = (t.kind == "lust") and 1 or (10 + i)
+            local order = 10 + i
             opts.args["tmr" .. t.id] = TimerTab(t, t.id, order, Rebuild)
         end
     end
