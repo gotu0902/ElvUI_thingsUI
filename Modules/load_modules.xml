@@ -22,6 +22,7 @@
 	<Script file="Timers\TimersCDM.lua"/>
 	<Script file="CDM\RacialsCDM.lua"/>
 	<Script file="CustomGroups.lua"/>
+	<Script file="AuraLane.lua"/>
 	<Script file="TUIMeter.lua"/>
 	<Script file="MBB.lua"/>
 	<Script file="MinimapDifficulty.lua"/>

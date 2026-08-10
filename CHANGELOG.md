@@ -2,11 +2,14 @@
 
 ## 4.1.0-beta3
 - Fixed minimum width not doing shit when CDM is empty (when leveling etc)
-- Custom Groups kan quick add Special Icons, or add\move existing ones.
+- Custom Groups can quick add Special Icons, or add\move existing ones.
 - Special Icons stack counter had a higher frame strata than the glow, woopsie.
 - Class Bar got an whole class option, so it shows when leveling and cleans up the list a bit.
 - Hopefully fixed buff bars sometimes inheriting special bars style when shuffling stuff in CDM
 - Added a profile setup popup for alts (/tuialt), choose profiles for elv, grid, bw, br and editmode in one window. Still need to set editmode for other specs one time tho cause idontfuckingknowdude.
+- Add auras to custom groups with spellID or a dropdown with the importantish ones. Multi add groups in cg -> auras.
+- CGs can be anchored to buff icons, so auras can piggyback of them.
+- Fixes to mini meter: death log, layout\design.
 
 ## 4.1.0-beta2
 - Skinned minimal dmg meter thing

@@ -7,6 +7,75 @@ local function Colorize(tab, hex)
     return tab
 end
 
+-- which config section is on screen right now. AceConfig only evaluates args
+-- of the group it is drawing, so a zero-height description doubles as a
+-- "this section rendered" signal.
+local curSection, weOpenedCDM
+
+local function OpenCDMSettings()
+    if InCombatLockdown() then return end
+    local cvs = _G.CooldownViewerSettings
+    if cvs and cvs.ShowUIPanel and not cvs:IsShown() then
+        weOpenedCDM = true
+        cvs:ShowUIPanel()
+    end
+end
+
+local function CloseCDMSettings()
+    if not weOpenedCDM then return end
+    weOpenedCDM = nil
+    if InCombatLockdown() then return end
+    local cvs = _G.CooldownViewerSettings
+    if cvs and cvs:IsShown() then HideUIPanel(cvs) end
+end
+
+local CDM_SECTIONS = { cdm = true, buffBars = true }
+
+local function OnConfigClosed()
+    curSection = nil
+    if ns.CustomGroups and ns.CustomGroups.SetTestMode then
+        ns.CustomGroups.SetTestMode(false)
+    end
+    CloseCDMSettings()
+end
+
+-- ElvUI wires OnHide with a captured function reference at window creation,
+-- so hooking E.Config_WindowClosed after the fact would never fire; hook the
+-- window itself. AceGUI recycles windows, hence the weak per-frame set.
+local hookedWindows = setmetatable({}, { __mode = "k" })
+local function EnsureCloseHook()
+    local frame = E.Config_GetWindow and E:Config_GetWindow()
+    if frame and not hookedWindows[frame] then
+        hookedWindows[frame] = true
+        frame:HookScript("OnHide", OnConfigClosed)
+    end
+end
+
+local function SectionShown(key)
+    EnsureCloseHook()
+    if key == curSection then return end
+    local prev = curSection
+    curSection = key
+    if ns.CustomGroups and ns.CustomGroups.SetTestMode then
+        ns.CustomGroups.SetTestMode(key == "customGroups")
+    end
+    if CDM_SECTIONS[key] then
+        OpenCDMSettings()
+    elseif prev and CDM_SECTIONS[prev] then
+        CloseCDMSettings()
+    end
+end
+
+local function WithSentinel(grp, key)
+    if grp and grp.args then
+        grp.args._section = {
+            order = 0, type = "description",
+            name = function() SectionShown(key) return "" end,
+        }
+    end
+    return grp
+end
+
 local BANNER_TEX = [[Interface\AddOns\ElvUI_thingsUI\tui_options_banner]]
 local BANNER_W, BANNER_H = 198, 60
 
@@ -18,17 +87,17 @@ function TUI.ConfigTable()
         name = "Modules",
         childGroups = "tree",
         args = {
-            barSetup     = withOrder(Colorize(TUI:BarSetupOptions(),     "FFB060"), 1),
-            buffBars     = withOrder(Colorize(TUI:BuffBarsOptions(),     "05D6F2"), 2),
-            cdm          = withOrder(Colorize(TUI:CDMIconsOptions(),     "FFD27F"), 3), 
-            chargeBar    = withOrder(Colorize(TUI:ChargeBarOptions(),    "C780FF"), 4), 
-            classbar     = withOrder(Colorize(TUI:ClassbarModeOptions(), "6FB7FF"), 5),
-            customGroups = withOrder(Colorize(TUI:CustomGroupsOptions(), "F20553"), 6),
-            damageMeter  = withOrder(Colorize(TUI:DamageMeterOptions(),  "FF5C5C"), 6.5),
-            specialBars  = withOrder(Colorize(TUI:SpecialBarsOptions(),  "80FF80"), 7),
-            specialIcons = withOrder(Colorize(TUI:SpecialIconsOptions(), "FF80C0"), 8),
-            timers       = withOrder(Colorize(TUI:TimersOptions(),       "FFC04D"), 9),
-            trinkets     = withOrder(Colorize(TUI:TrinketsOptions(),     "40D0B0"), 10),
+            barSetup     = WithSentinel(withOrder(Colorize(TUI:BarSetupOptions(),     "FFB060"), 1), "barSetup"),
+            buffBars     = WithSentinel(withOrder(Colorize(TUI:BuffBarsOptions(),     "05D6F2"), 2), "buffBars"),
+            cdm          = WithSentinel(withOrder(Colorize(TUI:CDMIconsOptions(),     "FFD27F"), 3), "cdm"),
+            chargeBar    = WithSentinel(withOrder(Colorize(TUI:ChargeBarOptions(),    "C780FF"), 4), "chargeBar"),
+            classbar     = WithSentinel(withOrder(Colorize(TUI:ClassbarModeOptions(), "6FB7FF"), 5), "classbar"),
+            customGroups = WithSentinel(withOrder(Colorize(TUI:CustomGroupsOptions(), "F20553"), 6), "customGroups"),
+            damageMeter  = WithSentinel(withOrder(Colorize(TUI:DamageMeterOptions(),  "FF5C5C"), 6.5), "damageMeter"),
+            specialBars  = WithSentinel(withOrder(Colorize(TUI:SpecialBarsOptions(),  "80FF80"), 7), "specialBars"),
+            specialIcons = WithSentinel(withOrder(Colorize(TUI:SpecialIconsOptions(), "FF80C0"), 8), "specialIcons"),
+            timers       = WithSentinel(withOrder(Colorize(TUI:TimersOptions(),       "FFC04D"), 9), "timers"),
+            trinkets     = WithSentinel(withOrder(Colorize(TUI:TrinketsOptions(),     "40D0B0"), 10), "trinkets"),
         },
     }
     E.Options.args.thingsUI = {
@@ -87,10 +156,10 @@ function TUI.ConfigTable()
             },
 
             modulesTab           = modulesGroup,
-            positioningTweaksTab = TUI:PositioningTweaksOptions(),
-            fixesAndQoLTab       = TUI:FixesAndQoLOptions(),
-            grid2Tab             = TUI:Grid2Options(),
-            shareTab             = TUI:ShareOptions(),
+            positioningTweaksTab = WithSentinel(TUI:PositioningTweaksOptions(), "positioning"),
+            fixesAndQoLTab       = WithSentinel(TUI:FixesAndQoLOptions(), "fixes"),
+            grid2Tab             = WithSentinel(TUI:Grid2Options(), "grid2"),
+            shareTab             = WithSentinel(TUI:ShareOptions(), "share"),
         },
     }
 end

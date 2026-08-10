@@ -370,7 +370,6 @@ end
 
 ns.MarkBuffBarsDirty = MarkDirty
 
--- Heals displacement paths that bypass the Lua SetPoint hook (managed re-flow)
 local anchorTicker
 local function VerifyAnchor()
     if InCombatLockdown() then return end

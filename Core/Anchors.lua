@@ -16,6 +16,8 @@ local STATIC_VALUES = {
     ["Minimap"]                   = col(C_ELV, "ElvUI Minimap"),
     ["EssentialCooldownViewer"]   = col(C_CDM, "CDM: Essential Cooldowns"),
     ["UtilityCooldownViewer"]     = col(C_CDM, "CDM: Utility Cooldowns"),
+    ["BuffIconCooldownViewer"]    = col(C_CDM, "CDM: Buff Icons"),
+    ["CDMTAIL_BuffIconCooldownViewer"] = col(C_CDM, "CDM: Buff Icons (After Last Icon)"),
     ["ElvUI_thingsUI_ChargeBar"]  = col(C_TUI, "TUI Charge Bar"),
     ["Grid2LayoutFrame"]          = "Grid2 Layout Frame",
     ["UIParent"]                  = "Screen (UIParent)",
@@ -25,7 +27,7 @@ local STATIC_VALUES = {
 local STATIC_ORDER = {
     "BARSETUP_TOP",
     "ElvUF_Player", "ElvUF_Target", "ElvUF_TargetTarget", "ElvUF_Focus", "ElvUF_Player_ClassBar", "ElvUF_Player_CastBar", "Minimap",
-    "EssentialCooldownViewer", "UtilityCooldownViewer", "ElvUI_thingsUI_ChargeBar", "Grid2LayoutFrame", "UIParent", "CUSTOM",
+    "EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer", "CDMTAIL_BuffIconCooldownViewer", "ElvUI_thingsUI_ChargeBar", "Grid2LayoutFrame", "UIParent", "CUSTOM",
 }
 
 local function ResolveSpellName(spellID)
@@ -99,6 +101,10 @@ function ns.ANCHORS.ResolveAnchorTarget(anchorName)
     if anchorName == "ElvUF_Player_ClassBar" then
         local p = _G.ElvUF_Player
         return p and (p.ClassBarHolder or p.ClassBar) or nil
+    end
+    local tailName = anchorName:match("^CDMTAIL_(.+)")
+    if tailName then
+        return ns.CDMIcons and ns.CDMIcons.FlowTailForName and ns.CDMIcons.FlowTailForName(tailName)
     end
     local proxy = ns.CDMIcons and ns.CDMIcons.ProxyForName and ns.CDMIcons.ProxyForName(anchorName)
     if proxy then return proxy end

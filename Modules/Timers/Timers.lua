@@ -181,7 +181,6 @@ end
 local function ScheduleLustExpiry(start)
     local remain = LUST_BUFF_DURATION - (GetTime() - start) + 0.1
     if remain <= 0 then return end
-    -- keyed on start alone so a reader's stale view can't swallow the hide
     C_Timer.After(remain, function()
         if lustState.start == start then
             lustState.active = false
@@ -220,7 +219,6 @@ end)
 local function ScanExistingLust()
     if not (C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID) then return end
     for sid in pairs(SATED_DEBUFFS) do
-        -- 12.1: aura reads throw from addon context when the aura is secret
         local ok, a = pcall(C_UnitAuras.GetPlayerAuraBySpellID, sid)
         if ok and a and not IsSecret(a.expirationTime) and not IsSecret(a.duration)
            and a.expirationTime and a.duration and a.duration > 0 then

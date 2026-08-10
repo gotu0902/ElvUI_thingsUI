@@ -31,6 +31,7 @@ P["thingsUI"].damageMeter = {
         barTexture = "ElvUI Blank",
         barBorder = true,
         classColor = true,
+        nsrtNicknames = true,
         barColor = { r = 0.35, g = 0.55, b = 0.8 },
         iconStyle = "spec",
         iconZoom = 0.05,

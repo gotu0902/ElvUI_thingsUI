@@ -257,9 +257,129 @@ local function ViewerGroup(order, key, label, opts)
             iconsPerRow = {
                 order = 13, type = "range", name = "Icons per Row",
                 min = 1, max = 30, step = 1,
+                disabled = function()
+                    local v = E.db.thingsUI.cdmIcons[key]
+                    if v.elbowEnabled then return true end
+                    return (v.maxIcons or 0) > 0 and (v.overflowTarget or "") ~= ""
+                end,
                 get = function() return E.db.thingsUI.cdmIcons[key].iconsPerRow end,
                 set = function(_, v)
                     E.db.thingsUI.cdmIcons[key].iconsPerRow = v
+                    TUI:UpdateCDMIcons()
+                end,
+            },
+            elbowHeader = {
+                order = 13.51, type = "header", name = "Elbow",
+            },
+            elbowEnabled = {
+                order = 13.52, type = "toggle", name = "Turn After X Icons", width = "full",
+                desc = "The run turns a corner instead of starting a new full row, so the bar reads as an L.",
+                get = function() return E.db.thingsUI.cdmIcons[key].elbowEnabled end,
+                set = function(_, v)
+                    E.db.thingsUI.cdmIcons[key].elbowEnabled = v
+                    TUI:UpdateCDMIcons()
+                end,
+            },
+            elbowAfter = {
+                order = 13.53, type = "range", name = "Turn After",
+                min = 1, max = 30, step = 1,
+                disabled = function() return not E.db.thingsUI.cdmIcons[key].elbowEnabled end,
+                get = function() return E.db.thingsUI.cdmIcons[key].elbowAfter or 10 end,
+                set = function(_, v)
+                    E.db.thingsUI.cdmIcons[key].elbowAfter = v
+                    TUI:UpdateCDMIcons()
+                end,
+            },
+            elbowDirection = {
+                order = 13.54, type = "select", name = "Turn Towards",
+                values = function()
+                    local g = E.db.thingsUI.cdmIcons[key].growthDirection or "CENTERED_H"
+                    if g == "DOWN" or g == "UP" or g == "CENTERED_V" then
+                        return { RIGHT = "Right", LEFT = "Left" }
+                    end
+                    return { DOWN = "Down", UP = "Up" }
+                end,
+                sorting = function()
+                    local g = E.db.thingsUI.cdmIcons[key].growthDirection or "CENTERED_H"
+                    if g == "DOWN" or g == "UP" or g == "CENTERED_V" then
+                        return { "LEFT", "RIGHT" }
+                    end
+                    return { "UP", "DOWN" }
+                end,
+                disabled = function() return not E.db.thingsUI.cdmIcons[key].elbowEnabled end,
+                get = function()
+                    local db = E.db.thingsUI.cdmIcons[key]
+                    local g = db.growthDirection or "CENTERED_H"
+                    local vertical = (g == "DOWN" or g == "UP" or g == "CENTERED_V")
+                    local cur = db.elbowDirection
+                    local ok = vertical and (cur == "LEFT" or cur == "RIGHT")
+                        or (not vertical and (cur == "UP" or cur == "DOWN"))
+                    return ok and cur or (vertical and "LEFT" or "DOWN")
+                end,
+                set = function(_, v)
+                    E.db.thingsUI.cdmIcons[key].elbowDirection = v
+                    TUI:UpdateCDMIcons()
+                end,
+            },
+            overflowHeader = {
+                order = 13.6, type = "header", name = "Overflow",
+                hidden = function() return key == "buffIcon" end,
+            },
+            maxIcons = {
+                order = 13.7, type = "range", name = "Max Icons (0 = Off)",
+                desc = "Icons past this count move to the bar below.",
+                min = 0, max = 30, step = 1,
+                hidden = function() return key == "buffIcon" end,
+                get = function() return E.db.thingsUI.cdmIcons[key].maxIcons or 0 end,
+                set = function(_, v)
+                    E.db.thingsUI.cdmIcons[key].maxIcons = v
+                    TUI:UpdateCDMIcons()
+                end,
+            },
+            overflowTarget = {
+                order = 13.8, type = "select", name = "Overflow To",
+                values = function()
+                    local out = { [""] = "None" }
+                    local names = { essential = "Essential", utility = "Utility", buffIcon = "Buff Icons" }
+                    for k, label in pairs(names) do
+                        -- a receiving bar may not also push onward
+                        local o = E.db.thingsUI.cdmIcons[k]
+                        if k ~= key and not (o and (o.maxIcons or 0) > 0 and (o.overflowTarget or "") ~= "") then
+                            out[k] = label
+                        end
+                    end
+                    return out
+                end,
+                hidden = function() return key == "buffIcon" end,
+                disabled = function() return (E.db.thingsUI.cdmIcons[key].maxIcons or 0) <= 0 end,
+                get = function() return E.db.thingsUI.cdmIcons[key].overflowTarget or "" end,
+                set = function(_, v)
+                    E.db.thingsUI.cdmIcons[key].overflowTarget = v
+                    TUI:UpdateCDMIcons()
+                end,
+            },
+            overflowPlacement = {
+                order = 13.9, type = "select", name = "Overflow Position",
+                desc = "Where the moved icons land in the receiving bar.",
+                values = function()
+                    -- label by how the RECEIVING bar grows
+                    local t = E.db.thingsUI.cdmIcons[key].overflowTarget
+                    local tdb = t and t ~= "" and E.db.thingsUI.cdmIcons[t]
+                    local g = tdb and tdb.growthDirection or "CENTERED_H"
+                    if g == "DOWN" or g == "UP" or g == "CENTERED_V" then
+                        return { START = "Top", END = "Bottom" }
+                    end
+                    return { START = "Left", END = "Right" }
+                end,
+                sorting = { "START", "END" },
+                hidden = function() return key == "buffIcon" end,
+                disabled = function()
+                    local v = E.db.thingsUI.cdmIcons[key]
+                    return (v.maxIcons or 0) <= 0 or (v.overflowTarget or "") == ""
+                end,
+                get = function() return E.db.thingsUI.cdmIcons[key].overflowPlacement or "END" end,
+                set = function(_, v)
+                    E.db.thingsUI.cdmIcons[key].overflowPlacement = v
                     TUI:UpdateCDMIcons()
                 end,
             },

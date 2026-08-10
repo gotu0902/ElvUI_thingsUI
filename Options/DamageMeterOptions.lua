@@ -209,6 +209,18 @@ function TUI:DamageMeterOptions()
                                 get = function() return tdb().classColor ~= false end,
                                 set = function(_, v) tset("classColor", v) end,
                             },
+                            nsrtNicknames = {
+                                order = 4.5, type = "toggle", name = "NSRT Nicknames",
+                                desc = "Show Northern Sky Raid Tools nicknames instead of character names.",
+                                hidden = function() return _G.NSAPI == nil end,
+                                get = function() return tdb().nsrtNicknames ~= false end,
+                                set = function(_, v)
+                                    if ns.TUIMeter and ns.TUIMeter.InvalidateNicknames then
+                                        ns.TUIMeter.InvalidateNicknames()
+                                    end
+                                    tset("nsrtNicknames", v)
+                                end,
+                            },
                             barBgAlpha = {
                                 order = 5, type = "range", name = "Bar Background", min = 0, max = 1, step = 0.01, isPercent = true,
                                 get = function() return tdb().barBgAlpha or 0 end,

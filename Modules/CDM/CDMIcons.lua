@@ -19,6 +19,14 @@ local VIEWERS = {
     BuffIconCooldownViewer  = "buffIcon",
 }
 
+local VIEWER_BY_KEY = {
+    essential = "EssentialCooldownViewer",
+    utility   = "UtilityCooldownViewer",
+    buffIcon  = "BuffIconCooldownViewer",
+}
+
+local overflowOut = {}
+
 local hookedViewers = {}
 local hookedChildren = {}
 local applyingChild  = {}
@@ -96,7 +104,6 @@ end
 local passiveMouse = {}
 local pendingMouse = {}
 
--- EnableMouse in combat = ADDON_ACTION_BLOCKED; defer, drained by the OOC rebuild
 local function SetChildMouse(child, on)
     if InCombatLockdown() then
         pendingMouse[child] = on
@@ -128,7 +135,6 @@ local function PlainID(v)
 end
 
 local function RebuildPassiveCache()
-    -- in combat: delta-pass (override flips must show mid-fight); secret reads skip, OOC pass re-validates
     local inCombat = InCombatLockdown()
     passiveDirty = inCombat
     if not inCombat then
@@ -153,8 +159,6 @@ local function RebuildPassiveCache()
                     local base = info and PlainID(info.spellID) or nil
                     local sid = info and (PlainID(info.overrideTooltipSpellID)
                         or PlainID(info.overrideSpellID) or base) or nil
-                    -- an ACTIVE override (Blightfall during Dark Transformation) is usable: judge IT,
-                    -- not the passive talent the static tooltip field points at
                     if base and C_Spell.GetOverrideSpell then
                         local live = PlainID(C_Spell.GetOverrideSpell(base))
                         if live and live ~= 0 and live ~= base then sid = live end
@@ -311,8 +315,6 @@ local function ApplyAuraState(child, cd, spellID)
     elseif cd.Clear then cd:Clear() end
 end
 
--- aura-first display picks the AURA's icon (DT) over a live override (Blightfall);
--- GetSpellTexture(base) resolves live overrides, so enforce the spell's texture
 local function EnforceSpellTexture(child)
     local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
     if not (cdm and cdm.hideAuraOverlay) then return end
@@ -342,8 +344,6 @@ local function StopOverrideGlow(child)
     if LCG then LCG.ProcGlow_Stop(child, "tuiOverrideGlow") end
 end
 
--- Blizzard's glow matches its aura-first spell id, so an active override's proc
--- glow never shows while the aura display runs; mirror it from the live override
 local function UpdateOverrideGlow(child)
     if not (LCG and IsSpellOverlayed) then return end
     if not childAuraOn[child] then StopOverrideGlow(child) return end
@@ -370,7 +370,6 @@ end
 local function ProcessCooldownFrame(child)
     local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
     if not (cdm and cdm.hideAuraOverlay) then return end
-    -- hands off while the user edits the tracked set (pool churn + live rebuilds)
     local cvs = _G.CooldownViewerSettings
     if cvs and cvs:IsShown() then return end
     if not OverlayEligible(child) then return end
@@ -402,7 +401,6 @@ local function EnsureOverlayHooks(child)
     if not cd or cd._tuiOverlayHooked then return end
     if not OverlayEligible(child) then return end
     cd._tuiOverlayHooked = true
-    -- instance hook: mixin fns are copied per frame, a mixin-table hook never fires
     if not child._tuiTexHooked and type(child.RefreshSpellTexture) == "function" then
         child._tuiTexHooked = true
         hooksecurefunc(child, "RefreshSpellTexture", EnforceSpellTexture)
@@ -426,6 +424,8 @@ local function HookChild(child, viewer)
 
     hooksecurefunc(child, "SetPoint",        ReapplyChildAnchor)
     hooksecurefunc(child, "ClearAllPoints", ReapplyChildAnchor)
+    hooksecurefunc(child, "Hide", OnChildAuraChanged)
+    hooksecurefunc(child, "SetShown", OnChildAuraChanged)
 
     if type(child.OnAuraInstanceInfoSet) == "function" then
         hooksecurefunc(child, "OnAuraInstanceInfoSet", function(self)
@@ -582,14 +582,51 @@ local function ComputeLayoutSig(visible, vdb)
         + (vdb.iconHeight or 36) * 503
         + math.floor((vdb.spacing or 0) * 100) * 31
         + (vdb.iconsPerRow or 20) * 41
+        + (vdb.maxIcons or 0) * 4099
+        + ((vdb.overflowPlacement == "START") and 8191 or 0)
         + math.floor((vdb.iconZoom or 0) * 1000) * 7
         + (vdb.iconLockAspectRatio ~= false and 1 or 0) * 13
         + (vdb.lockAspect and 1 or 0) * 113
         + (vdb.overrideSize and 1 or 0) * 211
+        + (vdb.elbowEnabled and 1 or 0) * 65521
+        + (vdb.elbowAfter or 0) * 1543
     local g = vdb.growthDirection
     if g then for i = 1, #g do sig = sig + g:byte(i) * i end end
+    local eb = vdb.elbowDirection
+    if eb then for i = 1, #eb do sig = sig + eb:byte(i) * i * 3 end end
     if vdb.wrapDirection == "UP" or vdb.wrapDirection == "LEFT" then sig = sig + 307 end
     return sig
+end
+
+local ELBOW_STEP = {
+    UP = { 0, 1 }, DOWN = { 0, -1 }, LEFT = { -1, 0 }, RIGHT = { 1, 0 },
+}
+
+local function ElbowCell(i, elbowAt, growth, step)
+    if i <= elbowAt then
+        if growth.axis == "V" then return 0, (i - 1) * growth.stepY end
+        return (i - 1) * growth.stepX, 0
+    end
+    local j = i - elbowAt
+    if growth.axis == "V" then
+        return j * step[1], (elbowAt - 1) * growth.stepY
+    end
+    return (elbowAt - 1) * growth.stepX, j * step[2]
+end
+
+local function EnsureFlowTail(proxy, viewerName)
+    if not proxy._tuiFlowTail then
+        proxy._tuiFlowTail = CreateFrame("Frame", "TUI_CDMFlowTail_" .. viewerName, proxy)
+    end
+    return proxy._tuiFlowTail
+end
+
+function M.FlowTailForName(name)
+    if name and VIEWERS[name] then
+        local v = _G[name]
+        if v then return EnsureFlowTail(GetProxy(v), name) end
+    end
+    return nil
 end
 
 local function _cornerXY(point, w, h)
@@ -655,9 +692,84 @@ LayoutViewer = function(viewer)
         if rcb then for i = 1, #rcb do visible[#visible + 1] = rcb[i] end end
     end
 
-    if #visible == 0 then return end
-
     SortByCooldownID(visible)
+
+    local myName = viewer:GetName()
+    local cap = tonumber(vdb.maxIcons) or 0
+    local targetKey = vdb.overflowTarget
+    local targetName = targetKey and targetKey ~= "" and VIEWER_BY_KEY[targetKey] or nil
+    if targetName == myName then targetName = nil end
+
+    local moved
+    if cap > 0 and targetName and #visible > cap then
+        moved = {}
+        for i = cap + 1, #visible do moved[#moved + 1] = visible[i] end
+        for i = #visible, cap + 1, -1 do visible[i] = nil end
+        moved._from = myName
+        moved._placement = vdb.overflowPlacement
+    end
+
+    local prev, prevName
+    for name, list in pairs(overflowOut) do
+        if list._from == myName then prev, prevName = list, name end
+    end
+
+    local changed = false
+    if prevName ~= targetName or (prev == nil) ~= (moved == nil) then
+        changed = true
+    elseif prev and moved then
+        if #prev ~= #moved then
+            changed = true
+        else
+            for i = 1, #moved do
+                if prev[i] ~= moved[i] then changed = true break end
+            end
+        end
+    end
+
+    if changed then
+        if prevName then overflowOut[prevName] = nil end
+        local dirty = _G[prevName or ""]
+        if dirty then dirty._tuiLayoutSig = nil; QueueLayout(dirty) end
+    end
+    if moved then
+        overflowOut[targetName] = moved
+        if changed then
+            local tv = _G[targetName]
+            if tv then tv._tuiLayoutSig = nil; QueueLayout(tv) end
+        end
+    end
+
+    local incoming = overflowOut[myName]
+    if incoming then
+        if incoming._placement == "START" then
+            for i = #incoming, 1, -1 do table.insert(visible, 1, incoming[i]) end
+        else
+            for i = 1, #incoming do visible[#visible + 1] = incoming[i] end
+        end
+    end
+
+    if #visible == 0 then
+        local proxy = GetProxy(viewer)
+        local tail = EnsureFlowTail(proxy, viewer:GetName())
+        local sizeW, sizeH = GetIconSize(vdb)
+        local w = sizeW or proxy._tuiLastIconW or 36
+        local h = sizeH or proxy._tuiLastIconH or 36
+        local pin = vdb.anchorPoint or "CENTER"
+        Pixel.SetSize(proxy, w, h)
+        if viewer == _G.EssentialCooldownViewer then NotifyClusterWidthChanged() end
+        local dx, dy = _cornerXY(pin, w, h)
+        tail:SetSize(w, h)
+        tail:ClearAllPoints()
+        tail:SetPoint("CENTER", proxy, pin, w / 2 - dx, -h / 2 - dy)
+        if proxy._tuiLastIconW ~= w or proxy._tuiLastIconH ~= h then
+            proxy._tuiLastIconW, proxy._tuiLastIconH = w, h
+            local T = ns.TUI
+            if T and T.UpdateCustomGroups then T:UpdateCustomGroups() end
+        end
+        viewer._tuiLayoutSig = nil
+        return
+    end
 
     local sig = ComputeLayoutSig(visible, vdb)
     if viewer._tuiLayoutSig == sig then
@@ -731,8 +843,21 @@ LayoutViewer = function(viewer)
     local anchorPin = vdb.anchorPoint or "CENTER"
     local count    = #visible
 
+    local elbowStep
+    if vdb.elbowEnabled then
+        local vertical = (growth.axis == "V")
+        local step = ELBOW_STEP[vdb.elbowDirection]
+        local fits = step and ((vertical and step[1] ~= 0) or (not vertical and step[2] ~= 0))
+        elbowStep = fits and step or (vertical and ELBOW_STEP.LEFT or ELBOW_STEP.DOWN)
+    end
+    local elbowAt = elbowStep and math.max(1, vdb.elbowAfter or 10) or nil
+    if elbowAt and count <= elbowAt then elbowStep, elbowAt = nil, nil end
+
     local cols, rows
-    if growth.axis == "V" then
+    if elbowStep then
+        if growth.axis == "V" then cols, rows = 1, math.min(elbowAt, count)
+        else                       cols, rows = math.min(elbowAt, count), 1 end
+    elseif growth.axis == "V" then
         rows = math.min(perLine, count)
         cols = math.ceil(count / perLine)
     else
@@ -767,12 +892,19 @@ LayoutViewer = function(viewer)
     local cellW = iconW + spacing
     local cellH = iconH + spacing
     local centered = (growth.pin == "CENTER")
-    -- wrap flip = mirror the wrap-axis index; box/pin math stays untouched
     local wrapDir = vdb.wrapDirection
     local wrapFlip = (growth.axis == "H" and wrapDir == "UP")
         or (growth.axis == "V" and wrapDir == "LEFT")
     for i = 1, count do
         local child = visible[i]
+        local ancX, ancY = _cornerXY(anchorPin, totalW, totalH)
+        local ax, ay
+
+        if elbowStep then
+            local cx, cy = ElbowCell(i, elbowAt, growth, elbowStep)
+            ax = iconW / 2 + cx * cellW - ancX
+            ay = -iconH / 2 + cy * cellH - ancY
+        else
         local col, row, lineLen
         if growth.axis == "V" then
             col = math.floor((i - 1) / perLine)
@@ -800,8 +932,8 @@ LayoutViewer = function(viewer)
         end
 
         local pinX, pinY = _cornerXY(growth.pin, totalW, totalH)
-        local ancX, ancY = _cornerXY(anchorPin,  totalW, totalH)
-        local ax, ay = pinX + x - ancX, pinY + y - ancY
+        ax, ay = pinX + x - ancX, pinY + y - ancY
+        end
 
         child._tuiAnchor = child._tuiAnchor or {}
         child._tuiAnchor.point         = "CENTER"
@@ -813,6 +945,52 @@ LayoutViewer = function(viewer)
         child:ClearAllPoints()
         child:SetPoint("CENTER", proxy, anchorPin, ax, ay)
         applyingChild[child] = nil
+    end
+
+    do
+        local tail = EnsureFlowTail(proxy, viewer:GetName())
+        local ti, total = count + 1, count + 1
+        local ax, ay
+        if elbowStep then
+            local cx, cy = ElbowCell(ti, elbowAt, growth, elbowStep)
+            local ancX, ancY = _cornerXY(anchorPin, totalW, totalH)
+            ax = iconW / 2 + cx * cellW - ancX
+            ay = -iconH / 2 + cy * cellH - ancY
+        else
+            local col, row, lineLen
+            if growth.axis == "V" then
+                col = math.floor((ti - 1) / perLine)
+                row = (ti - 1) % perLine
+                lineLen = math.min(perLine, total - col * perLine)
+            else
+                row = math.floor((ti - 1) / perLine)
+                col = (ti - 1) % perLine
+                lineLen = math.min(perLine, total - row * perLine)
+            end
+            local x, y
+            if centered and growth.axis == "V" then
+                x = startX + col * stepX
+                y = ((lineLen - 1) / 2 - row) * cellH
+            elseif centered then
+                x = (col - (lineLen - 1) / 2) * cellW
+                y = startY + row * stepY
+            else
+                x = startX + col * stepX
+                y = startY + row * stepY
+            end
+            local pinX, pinY = _cornerXY(growth.pin, totalW, totalH)
+            local ancX, ancY = _cornerXY(anchorPin, totalW, totalH)
+            ax, ay = pinX + x - ancX, pinY + y - ancY
+        end
+        tail:SetSize(iconW, iconH)
+        tail:ClearAllPoints()
+        tail:SetPoint("CENTER", proxy, anchorPin, ax, ay)
+        tail:Show()
+        if proxy._tuiLastIconW ~= iconW or proxy._tuiLastIconH ~= iconH then
+            proxy._tuiLastIconW, proxy._tuiLastIconH = iconW, iconH
+            local T = ns.TUI
+            if T and T.UpdateCustomGroups then T:UpdateCustomGroups() end
+        end
     end
 
     local vscale = (viewer:GetEffectiveScale() or 1) / (_G.UIParent:GetEffectiveScale() or 1)
@@ -852,7 +1030,6 @@ local function HookViewer(name)
     if type(viewer.OnAcquireItemFrame) == "function" then
         hooksecurefunc(viewer, "OnAcquireItemFrame", function(self, itemFrame)
             HookChild(itemFrame, self)
-            -- pooled frames migrate between viewers: refresh ownership, drop stale state
             itemFrame._tuiViewer = self
             itemFrame._tuiAnchor = nil
             childAuraOn[itemFrame] = nil
@@ -947,7 +1124,6 @@ end
 
 local HEAL_VIEWERS = { "EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer" }
 local function HealViewerVisibility()
-    -- 12.1 secures viewer state: UpdateShownState from addon context sticks taint on the event path
     if Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.SpecAgnosticEssential then return end
     if InCombatLockdown() then return end
     for _, name in ipairs(HEAL_VIEWERS) do

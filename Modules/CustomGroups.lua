@@ -20,6 +20,29 @@ local function GetCurrentClassFile()
     return cf or "PRIEST"
 end
 
+function M.VisibilityOK(group)
+    local v = group and group.visibility
+    if not (v and v.enabled) then return true end
+    if IsInRaid() then return v.raid ~= false end
+    if IsInGroup() then return v.party ~= false end
+    return v.solo ~= false
+end
+
+function M.SlotPoint(frame, slotIndex)
+    local S = frame and frame._tuiSlot
+    if not S then return nil end
+    local tll = (S.perLine > 0) and S.perLine or (slotIndex + 1)
+    local along = (slotIndex % tll) * (S.alongDim + S.sp)
+    local cross = math.floor(slotIndex / tll) * (S.crossDim + S.sp)
+    if S.horizontal then return S.pt, along * S.alongSign, cross * S.crossSign end
+    return S.pt, cross * S.crossSign, along * S.alongSign
+end
+
+function M.NextFreeSlot(group, frame)
+    local S = frame and frame._tuiSlot
+    return (S and S.n) or 0
+end
+
 local function GetDB()
     return E.db.thingsUI and E.db.thingsUI.customGroups
 end
@@ -55,6 +78,12 @@ local function EnsureDB()
             db.nextID = db.nextID + 1
             CarryOldFlat(g, db)
             db.groups[1] = g
+        end
+    end
+    if not db._droppedHosting then
+        db._droppedHosting = true
+        for _, g in ipairs(db.groups) do
+            g.nsrtEntries, g.nsrtHostCfg, g.nsrtScope, g.nsrtChain = nil, nil, nil, nil
         end
     end
     return db
@@ -93,6 +122,7 @@ function M.GetScopeRoot(group, scope, key, create)
     if create and root then
         root.spells = root.spells or {}
         root.items  = root.items  or {}
+        root.auras  = root.auras  or {}
     end
     return root
 end
@@ -507,6 +537,75 @@ local function HideGroupIcons(gs)
     for _, b in pairs(gs.spellIcons) do b:Hide() end
     for _, b in pairs(gs.itemIcons) do b:Hide() end
     if gs.timerIcons then for _, b in pairs(gs.timerIcons) do b:Hide() end end
+    if gs.testIcons then for _, b in pairs(gs.testIcons) do b:Hide() end end
+end
+
+function M.ApplyIconSkin(btn, icon, crop, px)
+    if not icon then return end
+    if crop then icon:SetTexCoord(crop[1], crop[2], crop[3], crop[4])
+    else icon:SetTexCoord(0, 1, 0, 1) end
+    if px then
+        if not btn._tuiSkinBg then
+            local bg = btn:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints(btn)
+            bg:SetColorTexture(0, 0, 0, 1)
+            btn._tuiSkinBg = bg
+        end
+        btn._tuiSkinBg:Show()
+        icon:ClearAllPoints()
+        icon:SetPoint("TOPLEFT", btn, "TOPLEFT", px, -px)
+        icon:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -px, px)
+    else
+        if btn._tuiSkinBg then btn._tuiSkinBg:Hide() end
+        icon:ClearAllPoints()
+        icon:SetAllPoints(btn)
+    end
+end
+
+function M.SetTestMode(on)
+    on = on and true or nil
+    if M.testMode == on then return end
+    M.testMode = on
+    QueueLayout()
+end
+
+local function RenderTestLane(gs, group, frame)
+    local pool = gs.testIcons
+    if not M.testMode then
+        if pool then for _, f in ipairs(pool) do f:Hide() end end
+        return
+    end
+    gs.testIcons = gs.testIcons or {}
+    pool = gs.testIcons
+    local S = frame._tuiSlot
+    if not (S and ns.AuraLane) then return end
+
+    local idx, slot = 0, M.NextFreeSlot(group, frame)
+    for _, entry in ipairs(ns.AuraLane.Entries(group)) do
+        local spells = ns.AuraLane.SpellList(entry.def)
+        for k = 1, math.max(1, entry.def.max or 1) do
+            idx = idx + 1
+            local f = pool[idx]
+            if not f then
+                f = CreateFrame("Frame", nil, frame)
+                f.tex = f:CreateTexture(nil, "ARTWORK")
+                f.tex:SetAllPoints(f)
+                pool[idx] = f
+            end
+            -- slot k previews the k-th spell of the set, not N copies of one
+            local sid = spells[((k - 1) % math.max(1, #spells)) + 1]
+            f.tex:SetTexture((sid and C_Spell.GetSpellTexture(sid)) or 134400)
+            f.tex:SetAlpha(0.9)
+            M.ApplyIconSkin(f, f.tex, S.crop, S.skin)
+            local pt, x, y = M.SlotPoint(frame, slot)
+            ns.Pixel.SetSize(f, S.iw, S.ih)
+            f:ClearAllPoints()
+            ns.Pixel.SetPoint(f, pt, frame, pt, x, y)
+            f:Show()
+            slot = slot + 1
+        end
+    end
+    for k = idx + 1, #pool do pool[k]:Hide() end
 end
 
 local function PlayerHasRacial(id)
@@ -631,15 +730,72 @@ local function ApplyGroup(group)
 
     if not group.enabled then
         HideGroupIcons(gs)
+        if ns.AuraLane then ns.AuraLane.Release(group.id) end
         frame:Hide()
         return
     end
 
-    local iw = group.iconWidth or group.iconSize or 36
-    local ih = (group.squareIcon ~= false) and iw or (group.iconHeight or iw)
-    local sp     = group.spacing or 2
+    local CDM_KEY = {
+        EssentialCooldownViewer = "essential",
+        UtilityCooldownViewer   = "utility",
+        BuffIconCooldownViewer  = "buffIcon",
+    }
+    local mscale, m_iw, m_ih, m_sp = 1
+    local m_zoom, m_lock, m_text
+    if group.matchAnchorIcons then
+        local af0 = group.anchorFrame or ""
+        local vname = af0:match("^CDMTAIL_(.+)") or (CDM_KEY[af0] and af0)
+        local proxy = vname and ns.CDMIcons and ns.CDMIcons.ProxyForName
+            and ns.CDMIcons.ProxyForName(vname)
+        if proxy then
+            local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+            local vdb = cdm and cdm[CDM_KEY[vname]]
+            mscale = proxy:GetScale() or 1
+            -- the CDM skin draws its border OUTSIDE the child frame: an icon
+            -- is visually 2px wider than it measures, the gap 2px narrower
+            local pad = ns.CDM_SPACING_INSET or 2
+            m_iw = proxy._tuiLastIconW or (vdb and vdb.overrideSize and vdb.iconWidth) or nil
+            m_ih = proxy._tuiLastIconH or (vdb and vdb.overrideSize and vdb.iconHeight) or m_iw
+            if m_iw then
+                m_iw, m_ih = m_iw + pad, (m_ih or m_iw) + pad
+                m_sp = (vdb and vdb.spacing) or 0
+                m_zoom = tonumber(vdb and vdb.iconZoom) or 0
+                m_lock = (vdb and vdb.iconLockAspectRatio) ~= false
+                -- same schema on both sides: CDMText.StyleChild consumes either
+                m_text = vdb and vdb.text or nil
+            end
+        end
+    end
+    if math.abs((frame:GetScale() or 1) - mscale) > 0.001 then
+        frame:SetScale(mscale)
+        if frame.mover then frame.mover:SetScale(mscale) end
+    end
+
+    local iw = m_iw or group.iconWidth or group.iconSize or 36
+    local ih = m_ih or ((group.squareIcon ~= false) and iw or (group.iconHeight or iw))
+    local sp     = m_sp or group.spacing or 2
     local growth = group.growth or "RIGHT"
     local perLine = math.max(0, math.floor(group.columns or 0))
+    local crop, skinPx
+    do
+        local zoom, lockA
+        if m_iw then
+            zoom, lockA = m_zoom or 0, m_lock
+            skinPx = ns.Pixel.Size(frame)
+        else
+            zoom, lockA = tonumber(group.iconZoom) or 0, true
+        end
+        if zoom > 0 or (lockA and iw ~= ih) then
+            local base = 1 - zoom * 2
+            local xC, yC = base, base
+            if lockA and iw > 0 and ih > 0 then
+                local ratio = iw / ih
+                if ratio > 1 then yC = xC / ratio elseif ratio < 1 then xC = yC * ratio end
+            end
+            local l, t = (1 - xC) / 2, (1 - yC) / 2
+            crop = { l, 1 - l, t, 1 - t }
+        end
+    end
 
     HideGroupIcons(gs)
     CollectEntries(group, gs.shown)
@@ -662,8 +818,9 @@ local function ApplyGroup(group)
             btn:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
             ns.Pixel.SetSize(btn, iw, ih)
             UpdateIcon(btn)
+            M.ApplyIconSkin(btn, btn.icon, crop, skinPx)
             if btn.count then
-                local t = group.text or {}
+                local t = m_text or group.text or {}
                 local font = (LSM and LSM:Fetch("font", t.countFont or "Expressway")) or STANDARD_TEXT_FONT
 
                 E:SetFont(btn.count, font, t.countFontSize or 12, t.countFontOutline or "OUTLINE")
@@ -723,6 +880,13 @@ local function ApplyGroup(group)
         btn:Show()
     end
 
+    frame._tuiSlot = {
+        pt = pt, sp = sp, iw = iw, ih = ih, n = n, perLine = perLine,
+        horizontal = horizontal, alongDim = alongDim, crossDim = crossDim,
+        alongSign = alongSign, crossSign = crossSign,
+        crop = crop, skin = skinPx, text = m_text,
+    }
+
     local lines = (n > 0) and math.ceil(n / lineLen) or 1
     local alongCount = math.min(lineLen, math.max(n, 1))
     local alongPx = alongCount * alongDim + math.max(0, alongCount - 1) * sp
@@ -739,14 +903,24 @@ local function ApplyGroup(group)
     local target = (af ~= "UIParent")
         and ((SB and SB.ResolveAnchorTarget and SB.ResolveAnchorTarget(af)) or _G[af])
         or nil
+    local ox, oy = group.anchorXOffset or 0, group.anchorYOffset or 0
+    if m_iw then
+        local onePx = ns.Pixel.Size(frame)
+        ox, oy = ox - onePx, oy + onePx
+    end
     frame:ClearAllPoints()
     ns.Pixel.SetPoint(frame, group.anchorPoint or "CENTER", target or _G.UIParent,
-        group.anchorRelativePoint or "CENTER", group.anchorXOffset or 0, group.anchorYOffset or 0)
+        group.anchorRelativePoint or "CENTER", ox, oy)
 
-    frame:SetShown(n > 0)
+    local visible = M.VisibilityOK(group) or M.testMode
+    local lane = ns.AuraLane and ns.AuraLane.HasSets(group)
+    frame:SetShown((visible and (n > 0 or lane or M.testMode)) and true or false)
+    if ns.AuraLane then ns.AuraLane.Sync(group, frame) end
+    RenderTestLane(gs, group, frame)
 
-    if ns.CDMText and ns.CDMText.StyleChild and group.text then
-        for _, btn in ipairs(btns) do ns.CDMText.StyleChild(btn, group.text) end
+    local textCfg = m_text or group.text
+    if ns.CDMText and ns.CDMText.StyleChild and textCfg then
+        for _, btn in ipairs(btns) do ns.CDMText.StyleChild(btn, textCfg) end
     end
 end
 
@@ -895,6 +1069,43 @@ function M.RemoveSpell(group, scope, key, spellID)
     root.spells[spellID] = nil
     QueueLayout()
 end
+
+function M.AddAura(group, scope, key, spellID)
+    spellID = tonumber(spellID)
+    local root = M.GetScopeRoot(group, scope, key, true); if not (root and spellID) then return end
+    local uid = "spell:" .. spellID
+    if root.auras[uid] then return end
+    root.auras[uid] = {
+        enabled = true, layoutIndex = NextIndex(root),
+        spells = { [spellID] = true },
+        unit = "player", kind = "HELPFUL", max = 1, sort = "instance",
+    }
+    QueueLayout()
+    return uid
+end
+
+function M.AddAuraSet(group, scope, key, uid, def)
+    local root = M.GetScopeRoot(group, scope, key, true); if not (root and uid) then return end
+    if root.auras[uid] then return end
+    local spells = {}
+    for _, id in ipairs(def.spells or {}) do spells[id] = true end
+    root.auras[uid] = {
+        enabled = true, layoutIndex = NextIndex(root),
+        name = def.name, spells = spells,
+        unit = def.unit or "player", kind = def.kind or "HELPFUL",
+        max = def.max or 1, sort = "instance",
+        showSource = def.showSource or false,
+    }
+    QueueLayout()
+    return uid
+end
+
+function M.RemoveAura(group, scope, key, uid)
+    local root = M.GetScopeRoot(group, scope, key, false); if not (root and root.auras) then return end
+    root.auras[uid] = nil
+    QueueLayout()
+end
+
 function M.AddItem(group, scope, key, itemID)
     itemID = tonumber(itemID)
     local root = M.GetScopeRoot(group, scope, key, true); if not (root and itemID) then return end
@@ -939,6 +1150,7 @@ function M.MoveEntry(group, scope, key, uid, dir)
     if root then
         for sid, d in pairs(root.spells or {}) do list[#list + 1] = { uid = "spell:" .. sid, ref = d, of = "layoutIndex", dflt = 999 } end
         for iid, d in pairs(root.items  or {}) do list[#list + 1] = { uid = "item:"  .. iid, ref = d, of = "layoutIndex", dflt = 999 } end
+        for aid, d in pairs(root.auras  or {}) do list[#list + 1] = { uid = "aura:"  .. tostring(aid), ref = d, of = "layoutIndex", dflt = 999 } end
     end
     if ns.Timers then
         for _, t in ipairs(ns.Timers.GetTimers()) do
@@ -1021,9 +1233,11 @@ ev:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 ev:RegisterEvent("SPELL_UPDATE_CHARGES")
 ev:RegisterEvent("BAG_UPDATE_COOLDOWN")
 ev:RegisterEvent("BAG_UPDATE_DELAYED")
+ev:RegisterEvent("GROUP_ROSTER_UPDATE")
 ev:SetScript("OnEvent", function(_, event, arg1)
     if event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED"
-       or event == "BAG_UPDATE_DELAYED" or event == "SPELLS_CHANGED" then
+       or event == "BAG_UPDATE_DELAYED" or event == "SPELLS_CHANGED"
+       or event == "GROUP_ROSTER_UPDATE" then
         QueueLayout()
     elseif event == "SPELL_UPDATE_COOLDOWN" then
         if arg1 then RefreshSpellThrottled(arg1) end
@@ -1037,3 +1251,4 @@ end)
 function TUI:UpdateCustomGroups()
     QueueLayout()
 end
+

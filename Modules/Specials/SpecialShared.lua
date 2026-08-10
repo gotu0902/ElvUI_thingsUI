@@ -290,7 +290,6 @@ local function ReturnFrame(child, keepPosition)
     child._tuiSpecialBarKey  = nil
     child._tuiBarStyleSig    = nil
     child._tuiTextConfig     = nil
-    -- released bar must re-skin as a NORMAL buff bar (special style lingers otherwise)
     if ns.skinnedBars then ns.skinnedBars[child] = nil end
 end
 
@@ -588,7 +587,6 @@ local cdmMixinHooked = false
 local function HookCDMMixins()
     if cdmMixinHooked then return end
     local function OnCooldownIDSet(frame, isBar)
-        -- settings/preview frames can share these mixins; only touch real viewer children
         local p = frame and frame.GetParent and frame:GetParent()
         if not (p == _G.BuffBarCooldownViewer or p == _G.BuffIconCooldownViewer
             or p == _G.EssentialCooldownViewer or p == _G.UtilityCooldownViewer
@@ -910,28 +908,7 @@ do
 end
 
 local function ResolveAnchorTarget(anchorName)
-    if not anchorName or anchorName == "" then return nil end
-    if anchorName == "BARSETUP_TOP" then
-        local bs = ns.BarSetup
-        if bs and bs.GetTopmostBarFrame then
-            local top = bs.GetTopmostBarFrame()
-            if top then return top end
-        end
-        local setup = bs and bs.GetActiveSetup and bs.GetActiveSetup()
-        return setup and _G[setup.anchorFrame or ""] or nil
-    end
-
-    if anchorName == "ElvUF_Player_ClassBar" then
-        local p = _G.ElvUF_Player
-        return p and (p.ClassBarHolder or p.ClassBar) or nil
-    end
-    local proxy = ns.CDMIcons and ns.CDMIcons.ProxyForName and ns.CDMIcons.ProxyForName(anchorName)
-    if proxy then return proxy end
-    local target = _G[anchorName]
-    if anchorName == "ElvUF_Player_CastBar" and target and target.Holder then
-        return target.Holder
-    end
-    return target
+    return ns.ANCHORS.ResolveAnchorTarget(anchorName)
 end
 
 local function RemoveBarSlot(index, specID)

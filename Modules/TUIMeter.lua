@@ -58,8 +58,6 @@ do
     end
 end
 
--- integer-tier config makes the C formatter round sub-1000 values (even secrets);
--- same tier table as Details' Midnight branch and EllesmereUI
 local abb
 if CreateAbbreviateConfig then
     abb = { config = CreateAbbreviateConfig({
@@ -101,11 +99,14 @@ local function Clock(d)
 end
 
 local windows = {}
-local ApplyLayout, RefreshWindow, EnterDrill, RenderPopout
+local ApplyLayout, RefreshWindow, EnterDrill, EnterRecapDrill, RenderPopout
 local function Panel() return _G.RightChatPanel end
 
 local frozenCur, frozenOverall = 0, 0
 local combatStart
+-- both clocks kept: recap timestamps' epoch is undocumented
+local lastFightStart = 0
+local lastFightStartWall = 0
 local lastCombatEnd = 0
 local liveSessionID, pinnedSession
 
@@ -119,9 +120,6 @@ local function NewestSessionID()
     return newest and newest.sessionID
 end
 
--- the live session's per-second values divide by a wall clock that keeps
--- running after the fight, so pin to the archived segment the moment combat
--- ends instead of riding the tail
 local function ResolveSession(sess)
     if type(sess) == "number" then return sess end
     if sess == "overall" then return "overall" end
@@ -135,13 +133,11 @@ local function FetchSession(win)
     local t = cfg.type or 0
     local sess = ResolveSession(cfg.session)
     if type(sess) == "number" then
-        -- new PTR API; errors while no session data exists
         local ok, session = pcall(C_DamageMeter.GetCombatSessionFromID, sess, t)
         if ok then return session end
         return nil
     end
     local sType = (sess == "overall") and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
-    -- new PTR API; errors while no session data exists
     local ok, session = pcall(C_DamageMeter.GetCombatSessionFromType, sType, t)
     if ok then return session end
     return nil
@@ -150,7 +146,6 @@ end
 local function FetchSource(session, t, d)
     if not d then return nil end
     session = ResolveSession(session)
-    -- new PTR API; errors while no session data exists / on secret args in combat
     local ok, src
     if type(session) == "number" then
         ok, src = pcall(C_DamageMeter.GetCombatSessionSourceFromID, session, t, d.guid, d.creatureID)
@@ -169,11 +164,17 @@ end
 local function DrillInfo(src)
     if not src then return nil end
     if not (src.sourceGUID or src.sourceCreatureID) then return nil end
+    local recap = src.deathRecapID
+    if Secret(recap) or type(recap) ~= "number" or recap <= 0 then recap = nil end
+    local si = src.specIconID
+    if Secret(si) or type(si) ~= "number" then si = nil end
     return {
         guid = src.sourceGUID,
         creatureID = src.sourceCreatureID,
         name = src.name,
         classFile = (not Secret(src.classFilename)) and src.classFilename or nil,
+        deathRecapID = recap,
+        specIconID = si,
     }
 end
 
@@ -181,6 +182,46 @@ local function PlainStr(v)
     if v and not Secret(v) and v ~= "" then return v end
     return nil
 end
+
+-- NSRT nicknames
+local nickCache, nickShort, nickReady, nickHooked
+
+local function BuildNickCache()
+    nickCache, nickShort = nil, nil
+    local db = TDB()
+    if db and db.nsrtNicknames == false then nickReady = true return end
+    local API = _G.NSAPI
+    if not (API and API.GetAllCharacters) then return end
+    nickReady = true
+    -- honour NSRT's own master switch
+    local S = _G.NSRT and _G.NSRT.Settings
+    if not (S and S.GlobalNickNames) then return end
+    if not nickHooked and API.RegisterCallback then
+        nickHooked = true
+        API.RegisterCallback("ElvUI_thingsUI", "NSRT_NICKNAME_UPDATED", function()
+            nickReady = nil
+        end)
+    end
+    local ok, all = pcall(API.GetAllCharacters, API)
+    if not ok or type(all) ~= "table" then return end
+    nickCache, nickShort = {}, {}
+    for fullName, nick in pairs(all) do
+        if type(fullName) == "string" and type(nick) == "string" and nick ~= "" then
+            nick = nick:gsub("||", "|"):gsub("|", "||")
+            nickCache[fullName] = nick
+            local base = strsplit("-", fullName)
+            if base then nickShort[base] = nick end
+        end
+    end
+end
+
+local function NickFor(name)
+    if not nickReady then BuildNickCache() end
+    if not nickCache or Secret(name) or type(name) ~= "string" then return nil end
+    return nickCache[name] or nickShort[name]
+end
+
+function M.InvalidateNicknames() nickReady = nil end
 
 local function SpellDisplay(spell, drill)
     local det = spell.combatSpellDetails
@@ -231,7 +272,6 @@ local function PlayerTargets(ctx)
     local edt = T and T.EnemyDamageTaken
     if not edt then return nil end
     local session
-    -- new PTR API; errors while no session data exists
     if type(ctx.session) == "number" then
         local ok, s = pcall(C_DamageMeter.GetCombatSessionFromID, ctx.session, edt)
         session = ok and s or nil
@@ -242,10 +282,19 @@ local function PlayerTargets(ctx)
     end
     local enemies = session and session.combatSources
     if not enemies then return nil end
-    local out, byName = {}, {}
+    local out, byName, seenCID = {}, {}, {}
     for i = 1, math.min(#enemies, 40) do
         local en = enemies[i]
-        local src = FetchSource(ctx.session, edt, { guid = en.sourceGUID, creatureID = en.sourceCreatureID })
+        local cid, d = en.sourceCreatureID, nil
+        if not Secret(cid) and type(cid) == "number" and cid ~= 0 then
+            if not seenCID[cid] then
+                seenCID[cid] = true
+                d = { creatureID = cid }
+            end
+        elseif not Secret(en.sourceGUID) and en.sourceGUID then
+            d = { guid = en.sourceGUID }
+        end
+        local src = d and FetchSource(ctx.session, edt, d)
         local spells = src and src.combatSpells
         if spells then
             local sum = 0
@@ -271,6 +320,80 @@ local function PlayerTargets(ctx)
     end
     table.sort(out, function(a, b) return a.amount > b.amount end)
     return out
+end
+
+local recapCache = {}
+local function RecapEvents(id)
+    if Secret(id) or type(id) ~= "number" or id <= 0 then return nil end
+    local hit = recapCache[id]
+    if hit ~= nil then return hit or nil end
+    if not (C_DeathRecap and C_DeathRecap.GetRecapEvents) then return nil end
+
+    local ok, events = pcall(C_DeathRecap.GetRecapEvents, id)
+    if not ok or type(events) ~= "table" or #events == 0 then return nil end
+    -- secrets stay secret forever once stored; only cache clean reads
+    local probe = events[1]
+    if not (Secret(probe.amount) or Secret(probe.timestamp) or Secret(probe.currentHP)) then
+        recapCache[id] = events
+    end
+    return events
+end
+
+local function DeathClockText(src)
+    local events = RecapEvents(src and (src.deathRecapID or src.recapID))
+    local ts = events and events[1] and events[1].timestamp
+    if Secret(ts) or type(ts) ~= "number" then return "" end
+    for _, base in ipairs({ lastFightStart, lastFightStartWall }) do
+        local rel = ts - base
+        if base > 0 and rel >= -1 and rel <= 7200 then
+            return Clock(math.max(0, rel))
+        end
+    end
+    return ""
+end
+
+local function RecapRows(drill)
+    local events = RecapEvents(drill.recapID)
+    if not events then return nil end
+    if drill._rows then return drill._rows end
+    local rows, maxAmt = {}, 1
+    local deathTime = events[1] and events[1].timestamp
+    if Secret(deathTime) or type(deathTime) ~= "number" then deathTime = nil end
+    for i = #events, 1, -1 do
+        local ev = events[i]
+        local sid = (not Secret(ev.spellId)) and ev.spellId or nil
+        local nm = PlainStr(ev.spellName)
+            or (sid and C_Spell.GetSpellName and C_Spell.GetSpellName(sid)) or "Melee"
+        if i == 1 then nm = "|cFFFF4040" .. nm .. "|r" end
+        local srcName = (not ev.hideCaster) and PlainStr(ev.sourceName) or nil
+        if srcName then nm = nm .. "  |cFF808080" .. srcName .. "|r" end
+        local ts = ev.timestamp
+        if deathTime and not Secret(ts) and type(ts) == "number" and (deathTime - ts) > 0.05 then
+            nm = ("|cFF606060-%.1fs|r  "):format(deathTime - ts) .. nm
+        end
+        local amt = (not Secret(ev.amount)) and tonumber(ev.amount) or 0
+        if amt > maxAmt then maxAmt = amt end
+        local hp, hpMax = ev.currentHP, ev.maxHealth
+        if Secret(hp) or type(hp) ~= "number" then hp = 0 end
+        if Secret(hpMax) or type(hpMax) ~= "number" or hpMax <= 0 then hpMax, hp = 1, 0 end
+        local vt
+        if amt > 0 then
+            vt = "|cFFFF5050-" .. Abbrev(amt) .. "|r"
+            local over = (not Secret(ev.overkill)) and tonumber(ev.overkill) or 0
+            if over > 0 then vt = vt .. " |cFF808080(+" .. Abbrev(over) .. ")|r" end
+        end
+        rows[#rows + 1] = {
+            name = nm,
+            totalAmount = amt,
+            _recapText = vt or "",
+            _hpFrac = math.max(0, math.min(1, hp / hpMax)),
+            _recapKill = (i == 1) or nil,
+        }
+    end
+    if recapCache[drill.recapID] then
+        drill._rows, drill._max = rows, maxAmt
+    end
+    return rows
 end
 
 local function SpellRowSrc(win, i, spell, drill)
@@ -389,10 +512,20 @@ local function CreateRow(win, i)
                 M.ShowModeMenu(win)
             end
         elseif btn == "MiddleButton" and not win.drill and not M.testMode then
-            M.OpenPopout(win, DrillInfo(self._src))
+            local DTm = Enum.DamageMeterType
+            if DTm and DTm.Deaths and win.cfg and win.cfg.type == DTm.Deaths then
+                M.OpenDeathRecap(self._src)
+            else
+                M.OpenPopout(win, DrillInfo(self._src))
+            end
         elseif btn == "LeftButton" and not M.testMode then
+            local DT = Enum.DamageMeterType
+            local isDeaths = DT and DT.Deaths and win.cfg and win.cfg.type == DT.Deaths
             if win.drill then
+                if win.drill.recapID then M.OpenDeathRecap(win.drill) return end
                 M.OpenPopout(win, win.drill)
+            elseif isDeaths then
+                EnterRecapDrill(win, self._src)
             else
                 EnterDrill(win, self._src)
             end
@@ -460,13 +593,30 @@ local function UpdateRow(win, i, rank, src, maxAmt, db)
         row.fill:SetStatusBarColor(c.r or 0.35, c.g or 0.55, c.b or 0.8)
     end
 
-    row.fill:SetMinMaxValues(0, maxAmt)
-    row.fill:SetValue(src.totalAmount or 0)
+    local DTr = Enum.DamageMeterType
+    local deathsRow = DTr and DTr.Deaths and win.cfg and win.cfg.type == DTr.Deaths and not win.drill
+    if deathsRow then
+        row.fill:SetMinMaxValues(0, 1)
+        row.fill:SetValue(1)
+    elseif src._hpFrac then
+        -- bar = victim's remaining health after the hit
+        row.fill:SetStatusBarColor(src._recapKill and 0.7 or 0.42, 0.14, 0.14)
+        row.fill:SetMinMaxValues(0, 1)
+        row.fill:SetValue(src._hpFrac)
+    else
+        row.fill:SetMinMaxValues(0, maxAmt)
+        row.fill:SetValue(src.totalAmount or 0)
+    end
 
     row.pos:SetText(db.showRank ~= false and (rank .. ".") or "")
     local name = src.name
-    if name then
-        if win.drill then
+    if Secret(name) then
+        row.label:SetText(name)
+    elseif name then
+        local nick = NickFor(name)
+        if nick then
+            row.label:SetText(nick)
+        elseif win.drill then
             row.label:SetText(name)
         else
             row.label:SetText(Ambiguate and Ambiguate(name, "short") or name)
@@ -479,7 +629,13 @@ local function UpdateRow(win, i, rank, src, maxAmt, db)
     if win._psDiv and type(src.totalAmount) == "number" and not Secret(src.totalAmount) then
         perSec = src.totalAmount / win._psDiv
     end
-    row.amount:SetText(ValueText(src.totalAmount, perSec, fmt))
+    if deathsRow then
+        row.amount:SetText(DeathClockText(src))
+    elseif src._recapText then
+        row.amount:SetText(src._recapText)
+    else
+        row.amount:SetText(ValueText(src.totalAmount, perSec, fmt))
+    end
     row._src = src
     row:Show()
 end
@@ -493,13 +649,13 @@ local function SessionTimerText(win, session)
         return ""
     end
     local overall = s == "overall"
-    if not overall and not LiveNow() then
+    if not overall and not InCombatLockdown() then
         local d = session and session.durationSeconds
         if not Secret(d) and type(d) == "number" then return Clock(d) end
     end
-    if not InCombatLockdown() and (GetTime() - lastCombatEnd) < 3 and C_DamageMeter.GetSessionDurationSeconds then
+    if not InCombatLockdown() and not pinnedSession
+        and (GetTime() - lastCombatEnd) < 3 and C_DamageMeter.GetSessionDurationSeconds then
         local sType = overall and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
-        -- new PTR API; errors while no session data exists
         local ok, d = pcall(C_DamageMeter.GetSessionDurationSeconds, sType)
         if ok and type(d) == "number" and not Secret(d) then
             if overall then frozenOverall = d else frozenCur = d end
@@ -555,6 +711,8 @@ RefreshWindow = function(win)
     local session, sources, drill
     if M.testMode then
         sources = TestSources()
+    elseif win.drill and win.drill.recapID then
+        sources = RecapRows(win.drill)
     elseif win.drill then
         drill = FetchDrill(win)
         sources = drill and drill.combatSpells
@@ -578,17 +736,32 @@ RefreshWindow = function(win)
     local maxScroll = math.max(0, total - vis)
     if (win.scroll or 0) > maxScroll then win.scroll = maxScroll end
     local first = 1 + (win.scroll or 0)
-    local maxAmt = (sources and sources[1] and sources[1].totalAmount) or 1
+    local maxAmt = session and session.maxAmount
+    if Secret(maxAmt) or type(maxAmt) ~= "number" or maxAmt <= 0 then
+        maxAmt = (sources and sources[1] and sources[1].totalAmount) or 1
+    end
+    if win.drill and win.drill.recapID then maxAmt = win.drill._max or 1 end
     local shown = 0
+    local DTd = Enum.DamageMeterType
+    local deathsView = DTd and DTd.Deaths and not win.drill
+        and win.cfg and win.cfg.type == DTd.Deaths and not M.testMode
     for rank = first, math.min(total, first + vis - 1) do
         shown = shown + 1
-        local src = sources[rank]
-        if win.drill then src = SpellRowSrc(win, rank, src, win.drill) end
+        local src = sources[deathsView and (total - rank + 1) or rank]
+        if win.drill and not win.drill.recapID then src = SpellRowSrc(win, rank, src, win.drill) end
         UpdateRow(win, shown, rank, src, maxAmt, db)
     end
     for i = shown + 1, #win.rows do win.rows[i]:Hide() end
     if win.drill then
-        win.title:SetText(win.drill.name or "")
+        local dn = win.drill.name
+        local t = (not Secret(dn) and dn and NickFor(dn)) or dn or ""
+        if win.drill.recapID then
+            local c = DeathClockText(win.drill)
+            if c ~= "" then t = t .. "  |cFF808080" .. c .. "|r" end
+        end
+        local si = win.drill.specIconID
+        if si then t = ("|T%d:14:14:0:0:64:64:4:60:4:60|t "):format(si) .. t end
+        win.title:SetText(t)
     else
         local title = TYPE_NAMES[win.cfg.type or 0] or "Damage Done"
         if db.sessionTag ~= false then
@@ -615,6 +788,21 @@ EnterDrill = function(win, src)
     local d = DrillInfo(src)
     if not d then return end
     win.drill = d
+    win.scroll = 0
+    RefreshWindow(win)
+end
+
+EnterRecapDrill = function(win, src)
+    local id = src and src.deathRecapID
+    if Secret(id) or type(id) ~= "number" or id <= 0 then return end
+    local cf = src.classFile
+    if not cf then
+        local cfn = src.classFilename
+        if not Secret(cfn) and type(cfn) == "string" then cf = cfn end
+    end
+    local si = src.specIconID
+    if Secret(si) or type(si) ~= "number" then si = nil end
+    win.drill = { recapID = id, name = src.name, classFile = cf, specIconID = si }
     win.scroll = 0
     RefreshWindow(win)
 end
@@ -694,11 +882,110 @@ local function PopoutRow(i)
     return row
 end
 
+local function RenderRecapPopout(p, db, ctx)
+    local ok, events = pcall(C_DeathRecap.GetRecapEvents, ctx.recapID)
+    if not ok or type(events) ~= "table" then events = {} end
+    local total = #events
+    local rowH = math.max(20, math.floor((db.barHeight or 20) + 0.5))
+    local maxRows = math.max(4, math.floor(((E.UIParent:GetHeight() or 800) * 0.6) / (rowH + 1)))
+    local offMax = math.max(0, total - maxRows)
+    if (p.offset or 0) > offMax then p.offset = offMax end
+    local first = 1 + (p.offset or 0)
+    local font = (LSM and LSM:Fetch("font", db.font or "Expressway")) or STANDARD_TEXT_FONT
+    local flag = (db.fontOutline ~= "NONE") and (db.fontOutline or "OUTLINE") or ""
+    local tex = (db.barTexture and db.barTexture ~= "" and LSM) and LSM:Fetch("statusbar", db.barTexture) or [[Interface\Buttons\WHITE8x8]]
+    local z = db.iconZoom or 0.05
+    local deathTime = events[1] and events[1].timestamp
+    if Secret(deathTime) or type(deathTime) ~= "number" then deathTime = nil end
+    local y, shown = 28, 0
+
+    for di = first, math.min(total, first + maxRows - 1) do
+        local idx = total - di + 1   -- oldest at the top, killing blow last
+        local ev = events[idx]
+        shown = shown + 1
+        local row = PopoutRow(shown)
+        row:Show()
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", p, "TOPLEFT", 1, -y)
+        row:SetPoint("TOPRIGHT", p, "TOPRIGHT", -1, -y)
+        row:SetHeight(rowH)
+        y = y + rowH + 1
+        row.bg:SetColorTexture(0, 0, 0, math.max(db.barBgAlpha or 0, 0.25))
+        row.fill:SetStatusBarTexture(tex)
+        row.fill:ClearAllPoints()
+        row.fill:SetPoint("TOPLEFT", row, "TOPLEFT", rowH + 1, 0)
+        row.fill:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0, 0)
+        row.pos:SetFont(font, db.fontSize or 12, flag)
+        row.label:SetFont(font, db.fontSize or 12, flag)
+        row.amount:SetFont(font, db.valueFontSize or 12, flag)
+
+        local killing = idx == 1
+        row.fill:SetStatusBarColor(killing and 0.7 or 0.42, 0.14, 0.14)
+        local hp, hpMax = ev.currentHP, ev.maxHealth
+        if Secret(hp) or type(hp) ~= "number" then hp = 0 end
+        if Secret(hpMax) or type(hpMax) ~= "number" or hpMax <= 0 then hpMax, hp = 1, 0 end
+        row.fill:SetMinMaxValues(0, hpMax)
+        row.fill:SetValue(math.max(0, hp))
+
+        row.icon:SetWidth(rowH)
+        local sid = (not Secret(ev.spellId)) and ev.spellId or nil
+        local icon = sid and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)
+        if not icon or icon == 0 then
+            icon = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(6603)) or 134400
+        end
+        row.icon:SetTexture(icon)
+        row.icon:SetTexCoord(z, 1 - z, z, 1 - z)
+
+        local spellName = PlainStr(ev.spellName)
+            or (sid and C_Spell.GetSpellName and C_Spell.GetSpellName(sid)) or "Melee"
+        if killing then spellName = "|cFFFF4040" .. spellName .. "|r" end
+        local srcName = (not ev.hideCaster) and PlainStr(ev.sourceName) or nil
+        if srcName then spellName = spellName .. "  |cFF808080" .. srcName .. "|r" end
+        row.label:SetText(spellName)
+
+        local ts = ev.timestamp
+        if deathTime and not Secret(ts) and type(ts) == "number" and (deathTime - ts) > 0.05 then
+            row.pos:SetText(("|cFF808080-%.1fs|r"):format(deathTime - ts))
+        else
+            row.pos:SetText("")
+        end
+
+        local amt = ev.amount
+        local at = ""
+        if not Secret(amt) and type(amt) == "number" and amt > 0 then
+            at = "|cFFFF5050-" .. Abbrev(amt) .. "|r"
+            local over = (not Secret(ev.overkill)) and tonumber(ev.overkill) or 0
+            if over > 0 then at = at .. " |cFF808080(+" .. Abbrev(over) .. ")|r" end
+            if hpMax > 1 then
+                at = at .. ("  |cFF808080%d%%|r"):format(hp / hpMax * 100 + 0.5)
+            end
+        end
+        row.amount:SetText(at)
+        row._src = nil
+    end
+
+    for i = shown + 1, #p.rows do p.rows[i]:Hide() end
+    p:SetHeight(y + 2)
+    p.title:SetFont(font, db.headerFontSize or 13, flag)
+    p.tag:SetFont(font, math.max(8, (db.headerFontSize or 13) - 2), flag)
+    local nm = ctx.recapName
+    nm = (not Secret(nm) and nm) and (NickFor(nm) or nm) or ""
+    if ctx.recapClass and RAID_CLASS_COLORS[ctx.recapClass] then
+        nm = RAID_CLASS_COLORS[ctx.recapClass]:WrapTextInColorCode(nm)
+    end
+    if ctx.recapSpec then
+        nm = ("|T%d:14:14:0:0:64:64:4:60:4:60|t "):format(ctx.recapSpec) .. nm
+    end
+    p.title:SetText("|cFF808080Death:|r " .. nm)
+    p.tag:SetText("|cFF808080Recap|r")
+end
+
 RenderPopout = function()
     local p = popout
     if not (p and p:IsShown() and p.ctx and Active()) then return end
     local db = TDB()
     local ctx = p.ctx
+    if ctx.recapID then return RenderRecapPopout(p, db, ctx) end
     local src = FetchSource(ctx.session, ctx.type or 0, ctx.drill)
     local spells = src and src.combatSpells or {}
     local total = #spells
@@ -840,8 +1127,11 @@ RenderPopout = function()
     p.title:SetFont(font, db.headerFontSize or 13, flag)
     p.tag:SetFont(font, math.max(8, (db.headerFontSize or 13) - 2), flag)
     local nm = ctx.drill.name
+    if not Secret(nm) and nm then nm = NickFor(nm) or nm end
     local typeName = TYPE_NAMES[ctx.type or 0] or ""
     if nm and not Secret(nm) then
+        local si = ctx.drill.specIconID
+        if si then nm = ("|T%d:14:14:0:0:64:64:4:60:4:60|t "):format(si) .. nm end
         p.title:SetText("|cFF808080" .. typeName .. ":|r " .. nm)
     else
         p.title:SetText(nm or "")
@@ -858,6 +1148,26 @@ function M.OpenPopout(win, drill)
     p.offset = 0
     p:Show()
     RenderPopout()
+end
+
+function M.OpenDeathRecap(src)
+    local id = src and (src.deathRecapID or src.recapID)
+    if Secret(id) or type(id) ~= "number" or id <= 0 then return false end
+    if not (C_DeathRecap and C_DeathRecap.GetRecapEvents) then return false end
+    if C_DeathRecap.HasRecapEvents and not C_DeathRecap.HasRecapEvents(id) then return false end
+    local cf = src.classFile
+    if not cf then
+        local cfn = src.classFilename
+        if not Secret(cfn) and type(cfn) == "string" then cf = cfn end
+    end
+    local si = src.specIconID
+    if Secret(si) or type(si) ~= "number" then si = nil end
+    local p = EnsurePopout()
+    p.ctx = { recapID = id, recapName = src.name, recapClass = cf, recapSpec = si }
+    p.offset = 0
+    p:Show()
+    RenderPopout()
+    return true
 end
 
 local function StopExpand(win)
@@ -1447,17 +1757,20 @@ end
 ev:SetScript("OnEvent", function(_, event, arg1, arg2)
     if not Active() then return end
     if event == "ENCOUNTER_START" then
-        -- hard segment boundary: repaint immediately even mid-chain-pull
         frozenCur = 0
-        pinnedSession = nil
-        if InCombatLockdown() and not combatStart then combatStart = GetTime() end
+        liveSessionID, pinnedSession = nil, nil
+        if InCombatLockdown() and not combatStart then
+            combatStart = GetTime()
+            lastFightStart = combatStart; lastFightStartWall = time()
+        end
         lastEventPaint = 0
         StartTicker()
         QueueRefresh()
     elseif event == "PLAYER_REGEN_DISABLED" then
         combatStart = GetTime()
+        lastFightStart = combatStart; lastFightStartWall = time()
         frozenCur = 0
-        pinnedSession = nil
+        liveSessionID, pinnedSession = nil, nil
         StartTicker()
         QueueRefresh()
     elseif event == "PLAYER_REGEN_ENABLED" then
@@ -1468,9 +1781,7 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
         end
         combatStart = nil
         StopTicker()
-        -- pin before painting: the first post-combat paint must already read
-        -- the archived segment, or the number shifts on the next repaint
-        pinnedSession = liveSessionID or NewestSessionID()
+        pinnedSession = NewestSessionID() or liveSessionID
         M.RefreshAll()
         C_Timer.After(0.5, function()
             pinnedSession = NewestSessionID() or pinnedSession
@@ -1479,7 +1790,10 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
     elseif event == "DAMAGE_METER_CURRENT_SESSION_UPDATED" then
         if InCombatLockdown() then
             frozenCur = 0
-            if not combatStart then combatStart = GetTime() end
+            if not combatStart then
+                combatStart = GetTime()
+                lastFightStart = combatStart; lastFightStartWall = time()
+            end
             QueueRefresh()
             StartTicker()
         elseif GetTime() - lastCombatEnd < 3 then
@@ -1492,7 +1806,6 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
     elseif event == "DAMAGE_METER_COMBAT_SESSION_UPDATED" then
         if type(arg2) == "number" and arg2 ~= 0 then liveSessionID = arg2 end
         if InCombatLockdown() then
-            -- keep the pull feeling live regardless of the ticker rate, max 1 paint/s
             local now = GetTime()
             if now - lastEventPaint >= 1 then
                 lastEventPaint = now

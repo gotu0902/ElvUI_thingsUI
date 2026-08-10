@@ -5,7 +5,121 @@ local E = ns.E
 local NotifyChange = ns.NotifyChange
 
 local SCOPE_LABEL = { global = "|cFFFFCF40Global|r", class = "|cFF80C0FFClass|r", spec = "|cFFFFD200Spec|r" }
-local CG_UP, CG_DOWN = "^", "v"
+
+-- preset buttons ask where the entry belongs rather than guessing a scope.
+-- StaticPopup only wires two safe buttons, and escape must not pick a scope.
+local function AskScope(title, subtitle, apply)
+    local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
+    if not AceGUI then apply("global") return end
+
+    local f = AceGUI:Create("Frame")
+    f:SetTitle("Add " .. title)
+    f:SetStatusText(subtitle)
+    f:SetLayout("Flow")
+    f:SetWidth(380)
+    f:SetHeight(180)
+    f:EnableResize(false)
+
+    local head = AceGUI:Create("Label")
+    head:SetFullWidth(true)
+    head:SetFontObject(GameFontHighlight)
+    head:SetText("\nWhich characters should it show for?\n")
+    f:AddChild(head)
+
+    local _, classFile = UnitClass("player")
+    local className = (classFile and LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[classFile]) or classFile or "Class"
+    local choices = {
+        { scope = "global", label = "All Characters" },
+        { scope = "class",  label = "This Class (" .. className .. ")" },
+        { scope = "spec",   label = "This Spec" },
+    }
+    for _, c in ipairs(choices) do
+        local b = AceGUI:Create("Button")
+        b:SetText(c.label)
+        b:SetWidth(115)
+        b:SetCallback("OnClick", function()
+            apply(c.scope)
+            AceGUI:Release(f)
+        end)
+        f:AddChild(b)
+    end
+end
+-- an aura row stays as narrow as every other row; the per-aura knobs live here
+local function EditAura(def, title, onChange)
+    local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
+    if not (AceGUI and def) then return end
+
+    local f = AceGUI:Create("Frame")
+    f:SetTitle(title or "Buff")
+    f:SetStatusText("Applies to this entry only")
+    f:SetLayout("Flow")
+    f:SetWidth(400)
+    f:SetHeight(300)
+    f:EnableResize(false)
+
+    local on = AceGUI:Create("CheckBox")
+    on:SetLabel("Enabled")
+    on:SetWidth(170)
+    on:SetValue(def.enabled ~= false)
+    on:SetCallback("OnValueChanged", function(_, _, v) def.enabled = v; onChange() end)
+    f:AddChild(on)
+
+    local spacer = AceGUI:Create("Label")
+    spacer:SetWidth(170)
+    spacer:SetText(" ")
+    f:AddChild(spacer)
+
+    local kind = AceGUI:Create("Dropdown")
+    kind:SetLabel("Type")
+    kind:SetWidth(170)
+    kind:SetList({ HELPFUL = "Buff", HARMFUL = "Debuff" }, { "HELPFUL", "HARMFUL" })
+    kind:SetValue(def.kind or "HELPFUL")
+    kind:SetCallback("OnValueChanged", function(_, _, v) def.kind = v; onChange() end)
+    f:AddChild(kind)
+
+    local unit = AceGUI:Create("Dropdown")
+    unit:SetLabel("Unit")
+    unit:SetWidth(170)
+    unit:SetList({ player = "Player", target = "Target", focus = "Focus", pet = "Pet" },
+        { "player", "target", "focus", "pet" })
+    unit:SetValue(def.unit or "player")
+    unit:SetCallback("OnValueChanged", function(_, _, v) def.unit = v; onChange() end)
+    f:AddChild(unit)
+
+    local mine = AceGUI:Create("CheckBox")
+    mine:SetLabel("Only Mine")
+    mine:SetWidth(170)
+    mine:SetValue(def.onlyMine and true or false)
+    mine:SetCallback("OnValueChanged", function(_, _, v) def.onlyMine = v; onChange() end)
+    f:AddChild(mine)
+
+    -- stored now, rendered the moment Blizzard hands out the sink
+    local AL = ns.AuraLane
+    local caster = AceGUI:Create("CheckBox")
+    caster:SetLabel("Show Caster Name")
+    caster:SetWidth(170)
+    caster:SetValue(def.showSource and true or false)
+    caster:SetCallback("OnValueChanged", function(_, _, v) def.showSource = v; onChange() end)
+    f:AddChild(caster)
+    if AL.SourceProbed() and not AL.CanShowSource() then
+        local note = AceGUI:Create("Label")
+        note:SetFullWidth(true)
+        note:SetText("|cff888888Caster names arrive with Blizzard patch 12.1.5 - the setting applies automatically once it ships.|r")
+        f:AddChild(note)
+    end
+
+    local max = AceGUI:Create("Slider")
+    max:SetLabel("Max Icons")
+    max:SetWidth(170)
+    max:SetSliderValues(1, 10, 1)
+    max:SetValue(def.max or 1)
+    max:SetCallback("OnValueChanged", function(_, _, v) def.max = v; onChange() end)
+    f:AddChild(max)
+end
+
+local CG_UP   = "|TInterface\\Buttons\\Arrow-Up-Up:16:16:0:2|t"
+local CG_DOWN = "|TInterface\\Buttons\\Arrow-Up-Up:16:16:0:-2:32:32:0:32:32:0|t"
+local CG_X    = "|TInterface\\RaidFrame\\ReadyCheck-NotReady:13|t"
 local CURATED_ITEMS = {
     5512, 241304, 241308, 241300, 241294, 241288, 241292,
 }
@@ -146,6 +260,39 @@ function TUI:CustomGroupsOptions()
         for _, id in ipairs(CURATED_ITEMS) do out[#out + 1] = tostring(id) end
         return out
     end
+    local function auraPresetByKey(key)
+        for _, p in ipairs(ns.AURA_PRESETS or {}) do
+            if p.key == key then return p end
+        end
+    end
+    local function auraCommonOrdered()
+        local list = {}
+        for _, id in ipairs(ns.AURA_COMMON or {}) do
+            local nm = C_Spell.GetSpellName and C_Spell.GetSpellName(id)
+            if not nm and C_Spell.RequestLoadSpellData then C_Spell.RequestLoadSpellData(id) end
+            list[#list + 1] = { key = tostring(id), id = id, nm = nm }
+        end
+        local lust = auraPresetByKey("bloodlust")
+        if lust then
+            list[#list + 1] = { key = "p:bloodlust", id = lust.spells[1],
+                nm = "Bloodlust & Heroism", suffix = " |cff888888" .. #lust.spells .. " spells|r" }
+        end
+        table.sort(list, function(a, b) return (a.nm or tostring(a.id)) < (b.nm or tostring(b.id)) end)
+        return list
+    end
+    local function auraCommonValues()
+        local out = {}
+        for _, e in ipairs(auraCommonOrdered()) do
+            local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(e.id)) or 0
+            out[e.key] = ("|T%d:14:14|t %s%s"):format(tex, e.nm or ("Spell " .. e.id), e.suffix or "")
+        end
+        return out
+    end
+    local function auraCommonSorting()
+        local out = {}
+        for _, e in ipairs(auraCommonOrdered()) do out[#out + 1] = e.key end
+        return out
+    end
     local function entriesFor(group, scope, key)
         local out, itemSeen = {}, {}
         local root = CG and CG.GetScopeRoot(group, scope, key, false)
@@ -160,6 +307,15 @@ function TUI:CustomGroupsOptions()
                 out[#out + 1] = { kind = "item", id = id, li = d.layoutIndex or 999, uid = "item:" .. id,
                     name = (C_Item.GetItemInfo(id)) or ("Item " .. id),
                     tex  = (C_Item.GetItemIconByID and C_Item.GetItemIconByID(id)) or select(10, C_Item.GetItemInfo(id)) or 134400 }
+            end
+            for uid, d in pairs(root.auras or {}) do
+                local spells = ns.AuraLane.SpellList(d)
+                local first = spells[1]
+                out[#out + 1] = { kind = "aura", id = first or 0, auraUID = tostring(uid),
+                    li = d.layoutIndex or 999, uid = "aura:" .. tostring(uid),
+                    setCount = (#spells > 1) and #spells or nil,
+                    name = d.name or (first and C_Spell.GetSpellName and C_Spell.GetSpellName(first)) or "Aura",
+                    tex  = (first and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(first)) or 134400 }
             end
         end
 
@@ -214,7 +370,14 @@ function TUI:CustomGroupsOptions()
         local idShown = (e.kind == "timer" and e.realID) or e.id
         if e.kind == "timer" then extra = extra .. " |cFF8AC8FF(Timer)|r" end
         if e.kind == "specialicon" then extra = extra .. " |cFFFF80C0(Special Icon)|r" end
-        return ("|T%d:18:18:0:0|t %s |cFF888888(%d)|r%s"):format(e.tex or 134400, name, idShown, extra)
+        if e.kind == "aura" then
+            extra = extra .. " |cFF60E0A0(Buff)|r"
+            if e.setCount then
+                return ("|T%d:14:14:0:0|t %s |cFF888888(%d spells)|r%s")
+                    :format(e.tex or 134400, name, e.setCount, extra)
+            end
+        end
+        return ("|T%d:14:14:0:0|t %s |cFF888888(%d)|r%s"):format(e.tex or 134400, name, idShown, extra)
     end
 
     local function scopeArgs(group, scope, getKey)
@@ -320,6 +483,39 @@ function TUI:CustomGroupsOptions()
                 values = commonItemValues, sorting = commonItemSorting,
                 get = function() return "" end,
                 set = function(_, v) local id = tonumber(v); if id and CG then CG.AddItem(group, scope, getKey(), id); NotifyChange() end end,
+            },
+            addAura = {
+                order = 11.5, type = "select", name = "|cFF60E0A0Add Buff|r", width = "double",   -- auras = green
+                values = auraCommonValues, sorting = auraCommonSorting,
+                get = function() return "" end,
+                set = function(_, v)
+                    if not CG then return end
+                    local pkey = v:match("^p:(.+)")
+                    if pkey then
+                        local p = auraPresetByKey(pkey)
+                        if p then CG.AddAuraSet(group, scope, getKey(), "preset:" .. pkey, p) end
+                    else
+                        local id = tonumber(v)
+                        if id then CG.AddAura(group, scope, getKey(), id) end
+                    end
+                    TUI:UpdateCustomGroups(); NotifyChange()
+                end,
+            },
+            addAuraID = {
+                order = 11.6, type = "input", name = "|cFF60E0A0...or Buff by ID or name|r",
+                get = function() return "" end,
+                set = function(_, v)
+                    v = (v or ""):gsub("^%s+", ""):gsub("%s+$", "")
+                    if v == "" or not CG then return end
+                    local id = tonumber(v)
+                    if not id then
+                        local info = C_Spell.GetSpellInfo(v)
+                        id = info and info.spellID
+                    end
+                    if not (id and C_Spell.GetSpellInfo(id)) then return end
+                    CG.AddAura(group, scope, getKey(), id)
+                    TUI:UpdateCustomGroups(); NotifyChange()
+                end,
             },
             addTimer = {
                 order = 12, type = "select", name = "|cFF8AC8FFAdd Timer|r", width = "double",   -- timers = light blue
@@ -460,25 +656,39 @@ function TUI:CustomGroupsOptions()
                             order = base + 2, type = "execute", name = CG_DOWN, width = 0.3, hidden = gone, disabled = reorderLocked,
                             func = function() local e = entry(); if e and CG then CG.MoveEntry(group, scope, getKey(), e.uid, 1); NotifyChange() end end,
                         }
+                        -- no fontSize: a taller font sets the row height for the
+                        -- whole line, and the buttons are already 24px
                         box["r" .. i .. "_label"] = {
-                            order = base + 3, type = "description", width = 2.0, fontSize = "medium", hidden = gone,
+                            order = base + 3, type = "description", width = 1.55, hidden = gone,
                             name = function() local e = entry(); return e and entryLabel(e) or "" end,
                         }
 
                         box["r" .. i .. "_link"] = {
-                            order = base + 3.5, type = "execute", width = 0.8,
+                            order = base + 3.5, type = "execute", width = 0.6,
                             name = function()
                                 local e = entry(); if not e then return "" end
                                 if e.kind == "timer" then return "|cFF8AC8FFEdit Timer|r" end
+                                if e.kind == "aura" then return "|cFF60E0A0Settings|r" end
                                 if e.kind ~= "specialicon" then return "" end
                                 if e.live then return "|cFFFF80C0Edit Icon|r" end
                                 if e.existsKey then return "|cFF999999Exists|r" end
                                 return "|cFF40D080Copy Icon|r"
                             end,
-                            hidden = function() local e = entry(); return not (e and (e.kind == "timer" or e.kind == "specialicon")) end,
+                            hidden = function()
+                                local e = entry()
+                                return not (e and (e.kind == "timer" or e.kind == "specialicon" or e.kind == "aura"))
+                            end,
                             func = function()
                                 local e = entry(); if not e then return end
-                                if e.kind == "timer" then
+                                if e.kind == "aura" then
+                                    local root = CG and CG.GetScopeRoot(group, scope, getKey(), false)
+                                    local def = root and root.auras and root.auras[e.auraUID]
+                                    if def then
+                                        EditAura(def, e.name, function()
+                                            TUI:UpdateCustomGroups(); NotifyChange()
+                                        end)
+                                    end
+                                elseif e.kind == "timer" then
                                     if E.ToggleOptions then E:ToggleOptions("thingsUI,modulesTab,timers,tmr" .. e.id) end
                                 elseif e.live then
                                     if ns.SB_OpenIconEditor then ns.SB_OpenIconEditor(e.iconKey) end
@@ -490,7 +700,7 @@ function TUI:CustomGroupsOptions()
                             end,
                         }
                         box["r" .. i .. "_remove"] = {
-                            order = base + 4, type = "execute", name = "X", width = 0.3, hidden = gone,
+                            order = base + 4, type = "execute", name = CG_X, width = 0.3, hidden = gone,
                             func = function()
                                 local e = entry(); if not e then return end
                                 if e.kind == "timer" then
@@ -508,7 +718,10 @@ function TUI:CustomGroupsOptions()
                                     end
                                     TUI:UpdateSpecialBars(); TUI:UpdateCustomGroups()
                                 elseif CG then
-                                    if e.kind == "item" then CG.RemoveItem(group, scope, getKey(), e.id) else CG.RemoveSpell(group, scope, getKey(), e.id) end
+                                    if e.kind == "item" then CG.RemoveItem(group, scope, getKey(), e.id)
+                                    elseif e.kind == "aura" then CG.RemoveAura(group, scope, getKey(), e.auraUID)
+                                    else CG.RemoveSpell(group, scope, getKey(), e.id) end
+                                    TUI:UpdateCustomGroups()
                                 end
                                 NotifyChange()
                             end,
@@ -686,6 +899,90 @@ function TUI:CustomGroupsOptions()
                 },
             }
         end
+        -- auras always render last: the block grows with the aura count, which
+        -- is a secret value, so nothing can be placed after it
+        orderArgs.auraBlock = {
+            order = 14, type = "group", inline = true, name = "",
+            hidden = function()
+                return not (ns.AuraLane and ns.AuraLane.HasSets(group))
+            end,
+            args = {
+                pad = { order = 1, type = "description", width = 0.6, name = " " },
+                label = { order = 2, type = "description", width = 2, fontSize = "medium",
+                    name = "4.  Auras  |cff888888(always last)|r" },
+            },
+        }
+
+        local AL = ns.AuraLane
+
+        local aurasArgs = {
+            desc = {
+                order = 1, type = "description",
+                name = "Buffs and debuffs drawn at the end of this group, using its icon size, spacing, growth, font and border.\n|cff888888Add single auras with Add Buff in the Spec, Class or Global tab. They appear in that tab's list. The buttons below add a whole set at once.|r\n",
+            },
+            presets = {
+                order = 20, type = "group", inline = true, name = "Ready-Made Sets",
+                args = {},
+            },
+            display = {
+                order = 30, type = "group", inline = true, name = "Display",
+                args = {
+                    swipe = {
+                        order = 1, type = "toggle", name = "Cooldown Swipe",
+                        get = function() return AL.DB(group).swipe ~= false end,
+                        set = function(_, v) AL.DB(group).swipe = v; TUI:UpdateCustomGroups() end,
+                    },
+                    swipeInverse = {
+                        order = 2, type = "toggle", name = "Invert Swipe",
+                        disabled = function() return AL.DB(group).swipe == false end,
+                        get = function() return AL.DB(group).swipeInverse end,
+                        set = function(_, v) AL.DB(group).swipeInverse = v; TUI:UpdateCustomGroups() end,
+                    },
+                    tooltips = {
+                        order = 3, type = "toggle", name = "Tooltips",
+                        get = function() return AL.DB(group).tooltips end,
+                        set = function(_, v) AL.DB(group).tooltips = v; TUI:UpdateCustomGroups() end,
+                    },
+                    colorThreshold = {
+                        order = 4, type = "toggle", name = "Color When Low",
+                        get = function() return AL.DB(group).colorThreshold ~= false end,
+                        set = function(_, v) AL.DB(group).colorThreshold = v; TUI:UpdateCustomGroups() end,
+                    },
+                    thresholdSeconds = {
+                        order = 5, type = "range", name = "Below", min = 1, max = 30, step = 1,
+                        disabled = function() return AL.DB(group).colorThreshold == false end,
+                        get = function() return AL.DB(group).thresholdSeconds or 3 end,
+                        set = function(_, v) AL.DB(group).thresholdSeconds = v; TUI:UpdateCustomGroups() end,
+                    },
+                    thresholdColor = {
+                        order = 6, type = "color", name = "Low Color",
+                        disabled = function() return AL.DB(group).colorThreshold == false end,
+                        get = function()
+                            local c = AL.DB(group).thresholdColor or {}
+                            return c.r or 1, c.g or 0.3, c.b or 0.3
+                        end,
+                        set = function(_, r, g, b)
+                            AL.DB(group).thresholdColor = { r = r, g = g, b = b }
+                            TUI:UpdateCustomGroups()
+                        end,
+                    },
+                },
+            },
+        }
+
+        for pi, preset in ipairs(ns.AURA_PRESETS or {}) do
+            local p = preset
+            aurasArgs.presets.args[p.key] = {
+                order = pi, type = "execute", name = p.name, width = 1.1,
+                func = function()
+                    AskScope(p.name, group.name or ("Group " .. group.id), function(sc)
+                        CG.AddAuraSet(group, sc, nil, "preset:" .. p.key, p)
+                        if CG._rebuildOptions then CG._rebuildOptions() end
+                        TUI:UpdateCustomGroups(); NotifyChange()
+                    end)
+                end,
+            }
+        end
 
         return {
             order = 10 + index, type = "group", childGroups = "tab",
@@ -721,7 +1018,7 @@ function TUI:CustomGroupsOptions()
                 classTab  = { order = 11, type = "group", name = "Class",  args = classArgs },
                 globalTab = { order = 12, type = "group", name = "Global", args = globalArgs },
                 itemsTab = {
-                    order = 13, type = "group", name = "Items",
+                    order = 14.5, type = "group", name = "Items",
                     hidden = function() return not hasItems() end,
                     args = {
                         hideZero = { order = 1, type = "toggle", name = "Hide When Empty", width = "full",
@@ -772,22 +1069,82 @@ function TUI:CustomGroupsOptions()
                         },
                     },
                 },
+                aurasTab = {
+                    order = 12.7, type = "group", childGroups = "tab", name = "Auras",
+                    args = aurasArgs,
+                },
                 orderTab  = { order = 14, type = "group", name = "Order", args = orderArgs },
+                visibilityTab = {
+                    order = 16.5, type = "group", name = "Visibility",
+                    args = {
+                        enabled = {
+                            order = 1, type = "toggle", name = "Limit Visibility", width = "full",
+                            desc = "When off the group follows its normal rules and shows everywhere.",
+                            get = function() return group.visibility and group.visibility.enabled or false end,
+                            set = function(_, v)
+                                group.visibility = group.visibility or {}
+                                group.visibility.enabled = v
+                                TUI:UpdateCustomGroups()
+                            end,
+                        },
+                        desc = {
+                            order = 2, type = "description",
+                            name = "Pick the group sizes the group is allowed to show in.\n",
+                            hidden = function() return not (group.visibility and group.visibility.enabled) end,
+                        },
+                        solo = {
+                            order = 3, type = "toggle", name = "Solo",
+                            hidden = function() return not (group.visibility and group.visibility.enabled) end,
+                            get = function() return group.visibility.solo ~= false end,
+                            set = function(_, v) group.visibility.solo = v; TUI:UpdateCustomGroups() end,
+                        },
+                        party = {
+                            order = 4, type = "toggle", name = "Party",
+                            hidden = function() return not (group.visibility and group.visibility.enabled) end,
+                            get = function() return group.visibility.party ~= false end,
+                            set = function(_, v) group.visibility.party = v; TUI:UpdateCustomGroups() end,
+                        },
+                        raid = {
+                            order = 5, type = "toggle", name = "Raid",
+                            hidden = function() return not (group.visibility and group.visibility.enabled) end,
+                            get = function() return group.visibility.raid ~= false end,
+                            set = function(_, v) group.visibility.raid = v; TUI:UpdateCustomGroups() end,
+                        },
+                    },
+                },
                 layoutTab = {
                     order = 15, type = "group", name = "Layout & Position",
                     args = {
+                        matchAnchor = { order = 0.5, type = "toggle", width = 1.5,
+                            name = "Match Anchored CDM Icons",
+                            desc = "Copy icon size, spacing and scale from the CDM viewer this group is anchored to, pixel-perfectly.",
+                            hidden = function()
+                                local af = group.anchorFrame or ""
+                                return not (af:find("^CDMTAIL_") or af:find("CooldownViewer$"))
+                            end,
+                            get = function() return group.matchAnchorIcons end,
+                            set = function(_, v) gset("matchAnchorIcons", v) end },
                         iconWidth = { order = 1, type = "range", min = 8, max = 80, step = 0.01, bigStep = 1,
                             name = function() return (group.squareIcon ~= false) and "Icon Size" or "Icon Width" end,
+                            disabled = function() return group.matchAnchorIcons end,
                             get = function() return group.iconWidth or group.iconSize or 36 end,
                             set = function(_, v) gset("iconWidth", v) end },
                         iconHeight = { order = 1.2, type = "range", name = "Icon Height", min = 8, max = 80, step = 0.01, bigStep = 1,
                             hidden = function() return group.squareIcon ~= false end,
+                            disabled = function() return group.matchAnchorIcons end,
                             get = function() return group.iconHeight or group.iconWidth or group.iconSize or 36 end,
                             set = function(_, v) gset("iconHeight", v) end },
                         squareIcon = { order = 1.4, type = "toggle", name = "Square Icons", width = 1.2,
+                            disabled = function() return group.matchAnchorIcons end,
                             get = function() return group.squareIcon ~= false end,
                             set = function(_, v) gset("squareIcon", v) end },
+                        iconZoom = { order = 1.6, type = "range", name = "Icon Zoom",
+                            min = 0, max = 0.3, step = 0.01, isPercent = true,
+                            disabled = function() return group.matchAnchorIcons end,
+                            get = function() return group.iconZoom or 0 end,
+                            set = function(_, v) gset("iconZoom", v) end },
                         spacing = { order = 2, type = "range", name = "Spacing", min = -10, max = 10, step = 0.01, bigStep = 1,
+                            disabled = function() return group.matchAnchorIcons end,
                             get = function() return (group.spacing or 2) - (ns.CDM_SPACING_INSET or 2) end,
                             set = function(_, v) gset("spacing", v + (ns.CDM_SPACING_INSET or 2)) end },
                         growth = { order = 3, type = "select", name = "Growth Direction", values = ns.GROWTH.DIRECTIONAL, sorting = ns.GROWTH.DIRECTIONAL_ORDER,
@@ -843,9 +1200,9 @@ function TUI:CustomGroupsOptions()
                                     hidden = isUIParent, get = function() return group.anchorPoint end, set = function(_, v) gset("anchorPoint", v) end },
                                 anchorRelativePoint = { order = 3, type = "select", name = "Anchor To (target)", values = ns.POINTS.VALUES, sorting = ns.POINTS.ORDER,
                                     hidden = isUIParent, get = function() return group.anchorRelativePoint end, set = function(_, v) gset("anchorRelativePoint", v) end },
-                                anchorXOffset = { order = 4, type = "range", name = "X Offset", min = -400, max = 400, step = 1,
+                                anchorXOffset = { order = 4, type = "range", name = "X Offset", min = -400, max = 400, step = 0.5, bigStep = 0.5,
                                     hidden = isUIParent, get = function() return group.anchorXOffset end, set = function(_, v) gset("anchorXOffset", v) end },
-                                anchorYOffset = { order = 5, type = "range", name = "Y Offset", min = -400, max = 400, step = 1,
+                                anchorYOffset = { order = 5, type = "range", name = "Y Offset", min = -400, max = 400, step = 0.5, bigStep = 0.5,
                                     hidden = isUIParent, get = function() return group.anchorYOffset end, set = function(_, v) gset("anchorYOffset", v) end },
                             },
                         },
@@ -853,6 +1210,7 @@ function TUI:CustomGroupsOptions()
                 },
                 textTab = {
                     order = 17, type = "group", name = "Text",
+                    disabled = function() return group.matchAnchorIcons end,
                     args = {
                         cdGroup = {
                             order = 1, type = "group", name = "Cooldown Text", inline = true,
