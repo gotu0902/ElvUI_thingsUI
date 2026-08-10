@@ -992,7 +992,6 @@ function TUI:CustomGroupsOptions()
                     set = function(_, v)
                         group.enabled = v
                         TUI:UpdateCustomGroups()
-                        if TUI.UpdateTrinketsCDM then TUI:UpdateTrinketsCDM() end
                         if CG._rebuildOptions then CG._rebuildOptions() end
                         NotifyChange()
                     end,
@@ -1008,7 +1007,7 @@ function TUI:CustomGroupsOptions()
                     order = 2, type = "execute", name = "Delete Group", confirm = true,
                     confirmText = "Delete this Custom Group?",
                     func = function()
-                        if CG then CG.RemoveGroup(index); if TUI.UpdateTrinketsCDM then TUI:UpdateTrinketsCDM() end; if CG._rebuildOptions then CG._rebuildOptions() end; NotifyChange() end
+                        if CG then CG.RemoveGroup(index); if CG._rebuildOptions then CG._rebuildOptions() end; NotifyChange() end
                     end,
                 },
 

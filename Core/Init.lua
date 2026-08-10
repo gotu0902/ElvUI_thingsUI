@@ -132,7 +132,6 @@ function TUI:Initialize()
     self:UpdateBarSetup()
     self:UpdateClassbarMode()
     self:UpdateChargeBar()
-    self:UpdateTrinketsCDM()
     self:UpdateEditModeLock()
     self:UpdateCDMIcons()
     self:UpdateCDMText()
@@ -162,7 +161,6 @@ function TUI:Initialize()
                 end)
             end
             
-            TUI:UpdateTrinketsCDM()
         end)
     end)
 
@@ -196,7 +194,6 @@ function TUI:ProfileUpdate()
     self:UpdateBarSetup()
     self:UpdateClassbarMode()
     self:UpdateChargeBar()
-    self:UpdateTrinketsCDM()
     self:UpdateEditModeLock()
     self:UpdateCDMIcons()
     self:UpdateCDMText()
@@ -212,6 +209,11 @@ function TUI:ProfileUpdate()
         if ns.Timers.DropLustTimers then ns.Timers.DropLustTimers() end
         if ns.Timers.Update then ns.Timers.Update() end
     end
+    -- module removed: Blizzard's CDM tracks trinkets natively since 12.1
+    if E.db.thingsUI then E.db.thingsUI.trinketsCDM = nil end
+    -- global icons folded into per-group aura entries
+    local sb = E.db.thingsUI and E.db.thingsUI.specialBars
+    if sb then sb.globalIcons = nil end
     self:UpdateMoverSync()
 end
 

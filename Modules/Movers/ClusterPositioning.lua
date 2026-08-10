@@ -88,7 +88,7 @@ function TUI:QueueClusterUpdate()
     end)
 end
 
-local INLINE_SOURCES = { "TrinketsCDM", "TimersCDM", "RacialsCDM" }
+local INLINE_SOURCES = { "TimersCDM", "RacialsCDM" }
 
 local function CountClusterIcons()
     local essentialCount = EssentialCooldownViewer and CountVisibleChildren(EssentialCooldownViewer) or 0
@@ -194,18 +194,7 @@ local function UpdateClusterPositioning()
     local yOffset = 0
     local viewerW = proxy:GetWidth() or 0
     local parityNudge = (math.floor(viewerW + 0.5) % 2 == 1) and 0.5 or 0
-    local trinketExt, trinketSide = 0, "RIGHT"
-
-    if ns.TrinketsCDM and ns.TrinketsCDM.GetTrinketExtent then
-        local onEssential = (not ns.TrinketsCDM.GetTrinketAttachKey)
-            or ns.TrinketsCDM.GetTrinketAttachKey() == "essential"
-        if onEssential then
-            trinketExt, trinketSide = ns.TrinketsCDM.GetTrinketExtent()
-            trinketExt = trinketExt or 0
-        end
-    end
-    local leftExtra  = (trinketSide == "LEFT")  and trinketExt or 0
-    local rightExtra = (trinketSide == "RIGHT") and trinketExt or 0
+    local leftExtra, rightExtra = 0, 0
 
     if db.playerFrame.enabled then
         local playerFrame = _G["ElvUF_Player"]

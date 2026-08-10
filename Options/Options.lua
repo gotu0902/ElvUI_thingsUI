@@ -97,7 +97,6 @@ function TUI.ConfigTable()
             specialBars  = WithSentinel(withOrder(Colorize(TUI:SpecialBarsOptions(),  "80FF80"), 7), "specialBars"),
             specialIcons = WithSentinel(withOrder(Colorize(TUI:SpecialIconsOptions(), "FF80C0"), 8), "specialIcons"),
             timers       = WithSentinel(withOrder(Colorize(TUI:TimersOptions(),       "FFC04D"), 9), "timers"),
-            trinkets     = WithSentinel(withOrder(Colorize(TUI:TrinketsOptions(),     "40D0B0"), 10), "trinkets"),
         },
     }
     E.Options.args.thingsUI = {

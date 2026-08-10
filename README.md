@@ -4,7 +4,7 @@
 
 
 ## Installer
-One-time setup: import a preset (NHT/FHT), set UI scale, pick unitframe coloring, move the minimap/auras, anchor Details!, pick an action bar layout, and choose ElvUI UnitFrames or Grid2. Auto-opens once, re-run it from the Share tab. /tuialt for, alts. Yeeees, alts.
+One-time setup: import a preset (NHT/FHT), set UI scale, pick unitframe coloring, move the minimap/auras if you want, choose dmg meter, pick an action bar layout if you want, and choose ElvUI UnitFrames or Grid2. Should pop-up on first time install, re-run it from the Share tab, use /tuialt for, alts. Yeeees, alts.
 
 ## Modules
 - **Bar Setup** - arrange and stack your bars into one cluster.
@@ -16,7 +16,6 @@ One-time setup: import a preset (NHT/FHT), set UI scale, pick unitframe coloring
 - **Special Bars** - put a tracked buff on its own movable bar, anchor it anywhere, or put in the bar setup.
 - **Special Icons** - same but icons; restyle, glow, fold into a Custom Group.
 - **Timers** - cast-triggered static-icon timers with auto & manual durations.
-- **Trinkets** - trinkets as its own trinket bar, into Essential/Utility or in a custom group, blacklist what you don't want.
 
 ## Grid2
 Apply bundled raid-frame profiles (NHT, FHT Icons/Squares) from the Grid2 tab.

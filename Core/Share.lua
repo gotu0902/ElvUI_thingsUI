@@ -17,7 +17,6 @@ M.SECTIONS = {
     { name = "Special Bars & Icons", keys = { "specialBars" },  collection = "specialBars",   color = "80FF80" },
     { name = "Special Styles",       keys = { "specialStyles" }, collection = "specialStyles", color = "FF80C0" },
     { name = "Timers",               keys = { "timers" },                                     color = "FFC04D" },
-    { name = "Trinkets",             keys = { "trinketsCDM" },                                color = "40D0B0" },
     { name = "Racials",              keys = { "racialsCDM" } },
     { name = "Cluster Positioning",  keys = { "clusterPositioning" } },
     { name = "Movers & General",     keys = { "essentialMover", "autoSetAudioChannels", "rightChatAsBackground", "rightChatWidthOffset", "rightChatHeightOffset" } },

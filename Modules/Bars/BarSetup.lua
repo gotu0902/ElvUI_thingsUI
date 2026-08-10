@@ -436,14 +436,6 @@ function M.GetInheritedWidth()
     local setup = M.GetActiveSetup()
     if not setup or not setup.inheritWidth then return nil end
     local w = GetClusterWidth()
-    local TR = ns.TrinketsCDM
-    if TR and TR.GetTrinketExtent then
-        local onEssential = (not TR.GetTrinketAttachKey)
-            or TR.GetTrinketAttachKey() == "essential"
-        if onEssential then
-            w = w + (TR.GetTrinketExtent() or 0)
-        end
-    end
     if setup.minWidth and setup.minWidth > w then w = setup.minWidth end
     w = w + (setup.widthOffset or 0)
     if w <= 1 then return nil end
@@ -698,18 +690,6 @@ function M.PositionStack(positionOnly)
     local gap  = setup.gap or 1
     local xOff = setup.xOffset or 0
     local trinketShift = 0
-    if baseWidth and anchorName == "EssentialCooldownViewer" then
-        local TR = ns.TrinketsCDM
-        local onEssential = (not TR) or (not TR.GetTrinketAttachKey)
-            or TR.GetTrinketAttachKey() == "essential"
-        if TR and TR.GetTrinketExtent and onEssential then
-            local ext, side = TR.GetTrinketExtent()
-            ext = ext or 0
-            if ext > 0 then
-                trinketShift = (side == "LEFT") and -(ext / 2) or (ext / 2)
-            end
-        end
-    end
     if stackAnchor then
         for _, key in ipairs(setup.order) do
             local b = setup.bars[key]

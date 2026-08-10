@@ -122,22 +122,6 @@ local TARGETS = {
     },
 
     {
-        moverName = "TUI_TrinketBarMover",
-        frame     = function() return _G.TUI_TrinketBar end,
-        baseLabel = "thingsUI Trinket Bar",
-        tag       = function()
-            local td = E.db.thingsUI and E.db.thingsUI.trinketsCDM
-            local af = td and td.bar and td.bar.anchorFrame
-            if af and af ~= "UIParent" and af ~= "" then
-                return "|cFFFFAA00(Anchor: " .. ShortAnchor(af) .. ")|r"
-            end
-        end,
-        hide = function()
-            local td = E.db.thingsUI and E.db.thingsUI.trinketsCDM
-            return not (td and td.enabled and (td.mode or "EMBEDDED") == "BAR")
-        end,
-    },
-    {
         moverName = "TUI_UtilityMover",
         frame     = function()
             local v = _G.UtilityCooldownViewer
@@ -573,7 +557,6 @@ function M.SyncAll()
 
     ColorMover("TUI_EssentialMover")
     ColorMover("TUI_UtilityMover")
-    ColorMover("TUI_TrinketBarMover")
     ColorMover("ElvUI_thingsUI_ChargeBarMover")
     for i = 1, barCount do ColorMover("TUI_SpecialBarMover_bar" .. i) end
     for i = 1, iconCount do ColorMover("TUI_SpecialIconMover_icon" .. i) end

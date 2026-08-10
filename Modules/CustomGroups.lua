@@ -704,13 +704,6 @@ local function CollectEntries(group, shown)
     end
 end
 
-function M.GetTrinketOwnerGroup()
-    local db = E.db.thingsUI and E.db.thingsUI.trinketsCDM
-    if not (db and db.enabled and db.mode == "GROUP" and db.group) then return nil end
-    local g = GroupByID(db.group)
-    return (g and g.enabled) and g or nil
-end
-
 local function ApplyGroup(group)
     local gs = EnsureContainer(group)
     local frame = gs.container
@@ -819,21 +812,6 @@ local function ApplyGroup(group)
                 btn.count:SetShown(t.showCount ~= false)
             end
             btns[#btns + 1] = btn
-        end
-    end
-
-    if M.GetTrinketOwnerGroup() == group and ns.TrinketsCDM and ns.TrinketsCDM.GetGroupButtons then
-        local tb = ns.TrinketsCDM.GetGroupButtons()
-        if tb then
-            local tcdb = E.db.thingsUI.trinketsCDM
-            local atStart = (tcdb and tcdb.groupPosition == "START")
-            for i = 1, #tb do
-                local b = tb[i]
-                if b:GetParent() ~= frame then b:SetParent(frame) end
-                b:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
-                ns.Pixel.SetSize(b, iw, ih)
-                if atStart then table.insert(btns, i, b) else btns[#btns + 1] = b end
-            end
         end
     end
 

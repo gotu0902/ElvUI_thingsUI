@@ -156,12 +156,6 @@ local function ApplyToViewer(viewerName)
         end
     end
 
-    local TR = ns.TrinketsCDM
-    if TR and TR.GetInlineButtonsFor then
-        local tb = TR.GetInlineButtonsFor(viewer)
-        if tb then for i = 1, #tb do StyleChild(tb[i], t) end end
-    end
-
     local TM = ns.TimersCDM
     if TM and TM.GetInlineButtonsFor then
         local tmb = TM.GetInlineButtonsFor(viewer)

@@ -29,76 +29,6 @@ function A.DB(group)
     return group.auras
 end
 
-function A.Library()
-    local db = E.db.thingsUI and E.db.thingsUI.specialBars
-    if not db then return nil end
-    db.globalIcons = db.globalIcons or { icons = {}, nextID = 1 }
-    local lib = db.globalIcons
-    lib.icons = lib.icons or {}
-    lib.nextID = lib.nextID or 1
-    return lib
-end
-
-function A.NewGlobalIcon(name)
-    local lib = A.Library(); if not lib then return nil end
-    local id = lib.nextID
-    lib.nextID = id + 1
-    local icon = {
-        id = id, name = name or ("Icon " .. id), enabled = true,
-        spells = {}, unit = "player", kind = "HELPFUL", onlyMine = false,
-        max = 1, sort = "instance", order = 100 + id, group = nil,
-        showSource = false, sourceShortened = true,
-    }
-    lib.icons[#lib.icons + 1] = icon
-    return icon
-end
-
-function A.RemoveGlobalIcon(id)
-    local lib = A.Library(); if not lib then return end
-    for i, icon in ipairs(lib.icons) do
-        if icon.id == id then table.remove(lib.icons, i) break end
-    end
-end
-
-function A.GlobalIconByID(id)
-    local lib = A.Library(); if not lib then return nil end
-    for _, icon in ipairs(lib.icons) do
-        if icon.id == id then return icon end
-    end
-end
-
-function A.MoveGlobalIcon(id, dir)
-    local lib = A.Library(); if not lib then return end
-    local sorted = {}
-    for _, icon in ipairs(lib.icons) do sorted[#sorted + 1] = icon end
-    table.sort(sorted, function(x, y) return (x.order or 100) < (y.order or 100) end)
-    for i, icon in ipairs(sorted) do
-        if icon.id == id then
-            local other = sorted[i + dir]
-            if not other then return end
-            icon.order, other.order = other.order or 100, icon.order or 100
-            return
-        end
-    end
-end
-
-function A.AddPreset(presetKey, groupID)
-    local lib = A.Library(); if not lib then return nil end
-    for _, p in ipairs(ns.AURA_PRESETS or {}) do
-        if p.key == presetKey then
-            local icon = A.NewGlobalIcon(p.name)
-            if not icon then return nil end
-            for _, id in ipairs(p.spells) do icon.spells[id] = true end
-            icon.kind = p.kind or "HELPFUL"
-            icon.unit = p.unit or "player"
-            icon.max = p.max or 1
-            icon.showSource = p.showSource or false
-            icon.group = groupID
-            return icon
-        end
-    end
-end
-
 function A.SpellList(def)
     local out = {}
     for id in pairs((def and def.spells) or {}) do
@@ -125,17 +55,6 @@ function A.Entries(group)
                     rank = si * 100000 + (def.layoutIndex or 999),
                 }
             end
-        end
-    end
-
-    local lib = A.Library()
-    for _, icon in ipairs((lib and lib.icons) or {}) do
-        if icon.enabled ~= false and icon.group == group.id and next(icon.spells or {}) then
-            out[#out + 1] = {
-                key = ("TUIAuraLib%d"):format(icon.id),
-                def = icon,
-                rank = 900000 + (icon.order or 100),
-            }
         end
     end
 

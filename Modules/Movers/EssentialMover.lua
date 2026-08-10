@@ -61,30 +61,6 @@ function M.OnGrowthDirectionChanged()
     M.Apply()
 end
 
-local function GetTrinketCompX()
-    if not (ns.TrinketsCDM and ns.TrinketsCDM.GetTrinketExtent) then return 0 end
-    if ns.TrinketsCDM.GetTrinketAttachKey
-       and ns.TrinketsCDM.GetTrinketAttachKey() ~= "essential" then
-        return 0
-    end
-    local extent, side = ns.TrinketsCDM.GetTrinketExtent()
-    extent = extent or 0
-    if extent <= 0 then return 0 end
-    if side == "LEFT" then return extent / 2 else return -extent / 2 end
-end
-
-local function GetTrinketCompY()
-    if not (ns.TrinketsCDM and ns.TrinketsCDM.GetTrinketExtentY) then return 0 end
-    if ns.TrinketsCDM.GetTrinketAttachKey
-       and ns.TrinketsCDM.GetTrinketAttachKey() ~= "essential" then
-        return 0
-    end
-    local extent, side = ns.TrinketsCDM.GetTrinketExtentY()
-    extent = extent or 0
-    if extent <= 0 then return 0 end
-    if side == "TOP" then return -extent / 2 else return extent / 2 end
-end
-
 local function AnchorMover()
     local ev = _G.EssentialCooldownViewer
     if not (mover and ev) then return end
@@ -109,8 +85,8 @@ local function ApplyAnchor()
 
     applying = true
     local point = db.point or DEFAULT_POINT
-    local x = (db.x or 0) + GetTrinketCompX()
-    local y = (db.y or 0) + GetTrinketCompY()
+    local x = db.x or 0
+    local y = db.y or 0
 
     proxy:SetScale((ev:GetEffectiveScale() or 1) / (_G.UIParent:GetEffectiveScale() or 1))
     proxy:ClearAllPoints()
@@ -184,9 +160,6 @@ local function OnDragStop(self)
     db.x = x
     db.y = y
 
-    if ns.TrinketsCDM and ns.TrinketsCDM.ResetEssentialSavedPoint then
-        ns.TrinketsCDM.ResetEssentialSavedPoint()
-    end
     ApplyAnchor()
 end
 

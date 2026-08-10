@@ -482,45 +482,6 @@ local function AnchorRequired(viewerName, vdb)
     return vdb.anchorEnabled == true
 end
 
-local function TrinketAnchorShift(viewer, vdb)
-    local TR = ns.TrinketsCDM
-    if not (TR and TR.GetTrinketExtent) then return 0 end
-    local ext, side = TR.GetTrinketExtent()
-    ext = ext or 0
-    if ext <= 0 then return 0 end
-    local attachKey = (TR.GetTrinketAttachKey and TR.GetTrinketAttachKey()) or "essential"
-    local centre = (side == "LEFT") and (ext / 2) or -(ext / 2)
-    local viewerKey = VIEWERS[viewer:GetName()]
-    local shift = 0
-    if attachKey == "utility" and viewerKey == "utility" then
-        shift = shift + centre
-    end
-    if vdb.anchorFrame == "EssentialCooldownViewer" and attachKey == "essential" then
-        shift = shift - centre
-    end
-    return shift
-end
-
-
-local function TrinketAnchorShiftY(viewer, vdb)
-    local TR = ns.TrinketsCDM
-    if not (TR and TR.GetTrinketExtentY) then return 0 end
-    local ext, side = TR.GetTrinketExtentY()
-    ext = ext or 0
-    if ext <= 0 then return 0 end
-    local attachKey = (TR.GetTrinketAttachKey and TR.GetTrinketAttachKey()) or "essential"
-    local centre = (side == "TOP") and -(ext / 2) or (ext / 2)
-    local viewerKey = VIEWERS[viewer:GetName()]
-    local shift = 0
-    if attachKey == "utility" and viewerKey == "utility" then
-        shift = shift + centre
-    end
-    if vdb.anchorFrame == "EssentialCooldownViewer" and attachKey == "essential" then
-        shift = shift - centre
-    end
-    return shift
-end
-
 local function ReapplyViewerAnchor(viewer)
     local proxy = GetProxy(viewer)
     if applyingViewerAnchor[proxy] then return end
@@ -534,17 +495,14 @@ local function ReapplyViewerAnchor(viewer)
     local tname = target.GetName and target:GetName()
     if tname and VIEWERS[tname] then target = GetProxy(target) end
 
-    local xShift = TrinketAnchorShift(viewer, vdb)
-    local yShift = TrinketAnchorShiftY(viewer, vdb)
-
     applyingViewerAnchor[proxy] = true
     proxy:ClearAllPoints()
     proxy:SetPoint(
         vdb.anchorPoint or "CENTER",
         target,
         vdb.anchorRelativePoint or "CENTER",
-        (vdb.anchorXOffset or 0) + xShift,
-        (vdb.anchorYOffset or 0) + yShift
+        vdb.anchorXOffset or 0,
+        vdb.anchorYOffset or 0
     )
     applyingViewerAnchor[proxy] = nil
 end
@@ -676,11 +634,6 @@ LayoutViewer = function(viewer)
 
     viewer._tuiVisible = viewer._tuiVisible or {}
     local visible = CollectAndHook(viewer, viewer._tuiVisible, HookChild)
-    local TR = ns.TrinketsCDM
-    if TR and TR.GetInlineButtonsFor then
-        local tb = TR.GetInlineButtonsFor(viewer)
-        if tb then for i = 1, #tb do visible[#visible + 1] = tb[i] end end
-    end
     local TM = ns.TimersCDM
     if TM and TM.GetInlineButtonsFor then
         local tmb = TM.GetInlineButtonsFor(viewer)

@@ -2,7 +2,7 @@
 	<Script file="SpecialOptions.lua"/>
 	<Script file="GeneralOptions.lua"/>
 	<Script file="BuffBarsOptions.lua"/>
-	<Script file="TrinketsClusterOptions.lua"/>
+	<Script file="ClusterPositioningOptions.lua"/>
 	<Script file="CDMSpecialsOptions.lua"/>
 	<Script file="ClassbarModeOptions.lua"/>
 	<Script file="ChargeBarOptions.lua"/>
