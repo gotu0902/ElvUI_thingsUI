@@ -71,19 +71,19 @@ local function GetCurrentSpecID()
     return (id and id ~= 0) and id or 1
 end
 
-function M.GetScopeRoot(group, scope, create)
+function M.GetScopeRoot(group, scope, key, create)
     if not group then return nil end
     local root
     if scope == "class" then
         group.classes = group.classes or {}
-        local key = GetCurrentClassFile()
-        if create then group.classes[key] = group.classes[key] or {} end
-        root = group.classes[key]
+        local k = key or GetCurrentClassFile()
+        if create then group.classes[k] = group.classes[k] or {} end
+        root = group.classes[k]
     elseif scope == "spec" then
         group.specs = group.specs or {}
-        local key = tostring(GetCurrentSpecID())
-        if create then group.specs[key] = group.specs[key] or {} end
-        root = group.specs[key]
+        local k = tostring(key or GetCurrentSpecID())
+        if create then group.specs[k] = group.specs[k] or {} end
+        root = group.specs[k]
     else
         root = group
     end
@@ -91,55 +91,67 @@ function M.GetScopeRoot(group, scope, create)
     return root
 end
 
-local function NextIndex(group, scope)
+local function NextIndex(group, scope, key)
     local n = 0
-    for _, e in ipairs(M.ScopeEntries(group, scope)) do
+    for _, e in ipairs(M.ScopeEntries(group, scope, key)) do
         if e.li > n and e.li < 90000 then n = e.li end
     end
     return n + 1
 end
 
-function M.AddAura(group, scope, spellID)
+function M.AddAura(group, scope, spellID, key)
     spellID = tonumber(spellID)
     if not (group and spellID) then return end
-    local root = M.GetScopeRoot(group, scope, true)
+    local root = M.GetScopeRoot(group, scope, key, true)
     local uid = "spell:" .. spellID
     if root.auras[uid] then return end
     root.auras[uid] = { spells = { [spellID] = true }, kind = "HELPFUL", max = 1,
-        layoutIndex = NextIndex(group, scope) }
+        layoutIndex = NextIndex(group, scope, key) }
 end
 
-function M.AddAuraSet(group, scope, uid, def)
+function M.AddAuraSet(group, scope, uid, def, key)
     if not (group and uid and def) then return end
-    local root = M.GetScopeRoot(group, scope, true)
+    local root = M.GetScopeRoot(group, scope, key, true)
     if root.auras[uid] then return end
     local spells = {}
     for _, id in ipairs(def.spells or {}) do spells[id] = true end
     root.auras[uid] = {
-        enabled = true, layoutIndex = NextIndex(group, scope),
+        enabled = true, layoutIndex = NextIndex(group, scope, key),
         name = def.name, spells = spells,
         kind = def.kind or "HELPFUL", max = def.max or 1,
     }
 end
 
-function M.RemoveAura(group, scope, uid)
-    local root = M.GetScopeRoot(group, scope, false)
+function M.RemoveAura(group, scope, uid, key)
+    local root = M.GetScopeRoot(group, scope, key, false)
     if root and root.auras then root.auras[uid] = nil end
 end
 
-function M.ScopeEntries(group, scope)
+function M.ScopeEntries(group, scope, key)
     local out = {}
-    local root = M.GetScopeRoot(group, scope, false)
+    local root = M.GetScopeRoot(group, scope, key, false)
     for uid, def in pairs((root and root.auras) or {}) do
         out[#out + 1] = { kind = "aura", uid = uid, def = def, li = def.layoutIndex or 999 }
     end
     if scope == "spec" then
         local SBm = ns.SpecialBars
-        if SBm and SBm.GetBarCount and SBm.GetBarDB then
-            for i = 1, SBm.GetBarCount() do
-                local bkey = "bar" .. i
-                local bdb = SBm.GetBarDB(bkey)
-                if bdb and bdb.enabled and bdb.spellID and bdb.customGroup == group.id then
+        local skey = tostring(key or GetCurrentSpecID())
+        if skey == tostring(GetCurrentSpecID()) then
+            if SBm and SBm.GetBarCount and SBm.GetBarDB then
+                for i = 1, SBm.GetBarCount() do
+                    local bkey = "bar" .. i
+                    local bdb = SBm.GetBarDB(bkey)
+                    if bdb and bdb.enabled and bdb.spellID and bdb.customGroup == group.id then
+                        out[#out + 1] = { kind = "specialbar", uid = "sb:" .. bkey, barKey = bkey,
+                            def = bdb, li = bdb.customGroupOrder or 20000 }
+                    end
+                end
+            end
+        else
+            local sb = E.db.thingsUI and E.db.thingsUI.specialBars
+            local bars = sb and sb.specs and sb.specs[skey] and sb.specs[skey].bars
+            for bkey, bdb in pairs(bars or {}) do
+                if type(bdb) == "table" and bdb.enabled and bdb.spellID and bdb.customGroup == group.id then
                     out[#out + 1] = { kind = "specialbar", uid = "sb:" .. bkey, barKey = bkey,
                         def = bdb, li = bdb.customGroupOrder or 20000 }
                 end
@@ -209,8 +221,8 @@ function M.Entries(group)
     return out
 end
 
-function M.MoveEntry(group, scope, uid, dir)
-    local list = M.ScopeEntries(group, scope)
+function M.MoveEntry(group, scope, uid, dir, key)
+    local list = M.ScopeEntries(group, scope, key)
     local idx
     for i, e in ipairs(list) do
         if e.uid == uid then idx = i break end

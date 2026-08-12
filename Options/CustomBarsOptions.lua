@@ -18,6 +18,20 @@ local function Refresh()
     NotifyChange()
 end
 
+local editSpec, editClass
+local function curSpecID()
+    local idx = GetSpecialization()
+    return tostring((idx and GetSpecializationInfo(idx)) or 1)
+end
+local function curClassFile() local _, cf = UnitClass("player"); return cf end
+local function getEditSpec()  return editSpec  or curSpecID()  end
+local function getEditClass() return editClass or curClassFile() end
+local function keyFor(scope)
+    if scope == "spec" then return getEditSpec() end
+    if scope == "class" then return getEditClass() end
+    return nil
+end
+
 local editBarFrame
 local function EditBarAura(def, title, group)
     local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
@@ -187,7 +201,7 @@ local function EntryRow(gi, scope, ri)
     local function entry()
         local g = CB() and CB().GetGroups()[gi]
         if not g then return nil end
-        return CB().ScopeEntries(g, scope)[ri], g
+        return CB().ScopeEntries(g, scope, keyFor(scope))[ri], g
     end
     local hidden = function() return select(1, entry()) == nil end
     local pfx = "r" .. scope .. ri
@@ -196,14 +210,14 @@ local function EntryRow(gi, scope, ri)
             order = ri * 10 + 1, type = "execute", name = CB_UP, width = 0.3, hidden = hidden,
             func = function()
                 local e, g = entry()
-                if e then CB().MoveEntry(g, scope, e.uid, -1); Refresh() end
+                if e then CB().MoveEntry(g, scope, e.uid, -1, keyFor(scope)); Refresh() end
             end,
         },
         [pfx .. "_down"] = {
             order = ri * 10 + 2, type = "execute", name = CB_DOWN, width = 0.3, hidden = hidden,
             func = function()
                 local e, g = entry()
-                if e then CB().MoveEntry(g, scope, e.uid, 1); Refresh() end
+                if e then CB().MoveEntry(g, scope, e.uid, 1, keyFor(scope)); Refresh() end
             end,
         },
         [pfx .. "_label"] = {
@@ -224,6 +238,10 @@ local function EntryRow(gi, scope, ri)
                 local e, g = entry()
                 if not e then return end
                 if e.kind == "specialbar" then
+                    local SBm = ns.SpecialBars
+                    if SBm and scope == "spec" then
+                        SBm.editingSpec = (getEditSpec() ~= curSpecID()) and tonumber(getEditSpec()) or nil
+                    end
                     E:ToggleOptions("thingsUI,modulesTab,specialBars," .. e.barKey .. "Group")
                     return
                 end
@@ -241,7 +259,7 @@ local function EntryRow(gi, scope, ri)
                     TUI:UpdateSpecialBars()
                     Refresh()
                 else
-                    CB().RemoveAura(g, scope, e.uid)
+                    CB().RemoveAura(g, scope, e.uid, keyFor(scope))
                     Refresh()
                 end
             end,
@@ -297,7 +315,10 @@ local function GroupTab(gi)
         local maxRows = (scope == "spec") and (MAX_ROWS + 12) or MAX_ROWS
         local function full()
             local g = grp()
-            return not g or (CB() and #CB().ScopeEntries(g, scope) >= maxRows)
+            return not g or (CB() and #CB().ScopeEntries(g, scope, keyFor(scope)) >= maxRows)
+        end
+        local function editingOtherSpec()
+            return scope == "spec" and getEditSpec() ~= curSpecID()
         end
         local args = {
             addAura = {
@@ -309,7 +330,7 @@ local function GroupTab(gi)
                 set = function(_, v)
                     local g = grp()
                     local id = tonumber(v)
-                    if g and id then CB().AddAura(g, scope, id); Refresh() end
+                    if g and id then CB().AddAura(g, scope, id, keyFor(scope)); Refresh() end
                 end,
             },
             addAuraID = {
@@ -325,7 +346,7 @@ local function GroupTab(gi)
                         id = info and info.spellID
                     end
                     local g = grp()
-                    if g and id and C_Spell.GetSpellInfo(id) then CB().AddAura(g, scope, id); Refresh() end
+                    if g and id and C_Spell.GetSpellInfo(id) then CB().AddAura(g, scope, id, keyFor(scope)); Refresh() end
                 end,
             },
         }
@@ -334,6 +355,7 @@ local function GroupTab(gi)
                 order = 3, type = "select", name = "|cFF80FF80Add Special Bar|r", width = 1.2,
                 disabled = full,
                 hidden = function()
+                    if editingOtherSpec() then return true end
                     local SBm = ns.SpecialBars
                     if not (SBm and SBm.GetBarCount and SBm.GetBarDB) then return true end
                     for i = 1, SBm.GetBarCount() do
@@ -380,6 +402,7 @@ local function GroupTab(gi)
             args.newSpecialBar = {
                 order = 4, type = "select", name = "|cFF80FF80New Special Bar (from spell)|r", width = "double",
                 disabled = full,
+                hidden = editingOtherSpec,
                 values = function()
                     return (ns.SB_SpellChoices and ns.SB_SpellChoices(nil, true)) or {}
                 end,
@@ -432,7 +455,30 @@ local function GroupTab(gi)
 
     local function scopeCount(scope)
         local g = grp()
-        return (g and CB()) and #CB().ScopeEntries(g, scope) or 0
+        return (g and CB()) and #CB().ScopeEntries(g, scope, keyFor(scope)) or 0
+    end
+
+    local function cbSpecCount(g, specID)
+        local n = 0
+        local root = CB() and CB().GetScopeRoot(g, "spec", specID, false)
+        for _, d in pairs((root and root.auras) or {}) do
+            if type(d) == "table" and d.enabled ~= false then n = n + 1 end
+        end
+        local sb = E.db.thingsUI and E.db.thingsUI.specialBars
+        local bars = sb and sb.specs and sb.specs[tostring(specID)] and sb.specs[tostring(specID)].bars
+        for _, bdb in pairs(bars or {}) do
+            if type(bdb) == "table" and bdb.spellID and bdb.customGroup == g.id then n = n + 1 end
+        end
+        return n
+    end
+
+    local function cbClassCount(g, cf)
+        local n = 0
+        local root = CB() and CB().GetScopeRoot(g, "class", cf, false)
+        for _, d in pairs((root and root.auras) or {}) do
+            if type(d) == "table" and d.enabled ~= false then n = n + 1 end
+        end
+        return n
     end
 
     local presetArgs = {
@@ -449,7 +495,7 @@ local function GroupTab(gi)
                 local g = grp()
                 if not g then return end
                 AskScope(p.name or tostring(p.key), function(scope)
-                    CB().AddAuraSet(g, scope, "preset:" .. tostring(p.key), p)
+                    CB().AddAuraSet(g, scope, "preset:" .. tostring(p.key), p, keyFor(scope))
                     Refresh()
                 end)
             end,
@@ -540,11 +586,82 @@ local function GroupTab(gi)
                 end,
             },
             specTab = {
-                order = 10, type = "group", args = ScopeTabArgs("spec"),
+                order = 10, type = "group",
+                args = (function()
+                    local a = ScopeTabArgs("spec")
+                    a.picker = {
+                        order = 0.1, type = "select", name = "Editing Spec", width = "double",
+                        dialogControl = "TUI_CascadeDropdown",
+                        values = function()
+                            local g = grp()
+                            local counts = {}
+                            if g then
+                                for _, r in ipairs(ns.AllSpecs()) do counts[r.id] = cbSpecCount(g, r.id) end
+                            end
+                            return ns.CascadeDropdown.AllSpecsWithCounts(counts)
+                        end,
+                        get = function()
+                            local sid = tonumber(getEditSpec())
+                            local m = sid and ns.SpecMeta(sid)
+                            return m and (m.classToken .. ":" .. sid) or nil
+                        end,
+                        set = function(_, value)
+                            local sid = value and value:match("^[A-Z_]+:(%d+)$")
+                            if sid then editSpec = sid; NotifyChange() end
+                        end,
+                    }
+                    a.gotoCurSpec = {
+                        order = 0.2, type = "execute", width = 1.2,
+                        hidden = function() return getEditSpec() == curSpecID() end,
+                        name = function()
+                            local m = ns.SpecMeta(tonumber(curSpecID()))
+                            if not m then return "Go to Current Spec" end
+                            local icon = m.icon and ("|T" .. m.icon .. ":14:14|t ") or ""
+                            return "Go to " .. icon .. ns.ClassColor(m.classToken) .. (m.name or "?") .. "|r"
+                        end,
+                        func = function() editSpec = nil; NotifyChange() end,
+                    }
+                    a.pickerGap = { order = 0.3, type = "description", width = "full", name = " " }
+                    return a
+                end)(),
                 name = function() return "Spec (" .. scopeCount("spec") .. ")" end,
             },
             classTab = {
-                order = 11, type = "group", args = ScopeTabArgs("class"),
+                order = 11, type = "group",
+                args = (function()
+                    local a = ScopeTabArgs("class")
+                    a.picker = {
+                        order = 0.1, type = "select", name = "Editing Class", width = "double",
+                        values = function()
+                            local g = grp()
+                            local out = {}
+                            for cid = 1, GetNumClasses() do
+                                local className, classFile = GetClassInfo(cid)
+                                if classFile then
+                                    local label = ns.ClassColor(classFile) .. (className or classFile) .. "|r"
+                                    local n = g and cbClassCount(g, classFile) or 0
+                                    if n > 0 then label = label .. " |cFFFFD200(" .. n .. ")|r" end
+                                    out[classFile] = label
+                                end
+                            end
+                            return out
+                        end,
+                        get = function() return getEditClass() end,
+                        set = function(_, v) editClass = v; NotifyChange() end,
+                    }
+                    a.gotoCurClass = {
+                        order = 0.2, type = "execute", width = 1.2,
+                        hidden = function() return getEditClass() == curClassFile() end,
+                        name = function()
+                            local cf = curClassFile()
+                            local nm = cf and LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[cf]
+                            return "Go to " .. ns.ClassColor(cf) .. (nm or cf or "Current Class") .. "|r"
+                        end,
+                        func = function() editClass = nil; NotifyChange() end,
+                    }
+                    a.pickerGap = { order = 0.3, type = "description", width = "full", name = " " }
+                    return a
+                end)(),
                 name = function() return "Class (" .. scopeCount("class") .. ")" end,
             },
             globalTab = {

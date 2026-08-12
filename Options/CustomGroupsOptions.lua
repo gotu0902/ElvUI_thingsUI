@@ -214,6 +214,7 @@ local function SpecEntryCount(group, specID)
     if root then
         for _, d in pairs(root.spells or {}) do if d and d.enabled ~= false then n = n + 1 end end
         for _, d in pairs(root.items  or {}) do if d and d.enabled ~= false then n = n + 1 end end
+        for _, d in pairs(root.auras  or {}) do if d and d.enabled ~= false then n = n + 1 end end
     end
     if ns.Timers and ns.Timers.GetTimers then
         for _, t in ipairs(ns.Timers.GetTimers()) do
@@ -230,6 +231,7 @@ local function GroupClassCount(group, classFile)
     if root then
         for _ in pairs(root.spells or {}) do n = n + 1 end
         for _ in pairs(root.items  or {}) do n = n + 1 end
+        for _ in pairs(root.auras  or {}) do n = n + 1 end
     end
     if ns.Timers then
         for _, t in ipairs(ns.Timers.GetTimers()) do
