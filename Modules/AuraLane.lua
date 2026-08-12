@@ -428,12 +428,10 @@ local function StyleButton(button, group, lane)
         if r.count then r.count:SetText("") r.count:Hide() end
     end
 
+    -- grouped specials follow the group's swipe; their own fields only apply
+    -- standalone (and stay grayed out in options while grouped)
     local swipeOn = au.swipe ~= false
     local swipeRev = au.swipeInverse and true or false
-    if idb then
-        swipeOn = idb.showCooldown and true or false
-        swipeRev = idb.invertSwipe and true or false
-    end
 
     if swipeOn then
         if not r.cd then

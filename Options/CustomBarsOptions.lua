@@ -217,6 +217,38 @@ local function EntryRow(gi, scope, ri)
                 end
             end,
         },
+        [pfx .. "_style"] = {
+            order = ri * 10 + 5.5, type = "select", name = "", width = 1.2,
+            hidden = function()
+                local e = entry()
+                return not (e and e.kind == "specialbar")
+            end,
+            values = function()
+                local SBm = ns.SpecialBars
+                return (SBm and SBm.Styles and SBm.Styles.DropdownValues("bars", "|cFF888888- No Style -|r")) or {}
+            end,
+            sorting = function()
+                local SBm = ns.SpecialBars
+                return SBm and SBm.Styles and SBm.Styles.DropdownSorting("bars", true) or nil
+            end,
+            get = function()
+                local e = entry()
+                return (e and e.def.styleName) or ""
+            end,
+            set = function(_, v)
+                local e = entry()
+                if not e then return end
+                local SBm = ns.SpecialBars
+                e.def._styleDriftAck = nil
+                if v == "" then
+                    e.def.styleName = nil
+                else
+                    SBm.Styles.ApplyToDB("bars", v, e.def)
+                end
+                TUI:UpdateSpecialBars()
+                Refresh()
+            end,
+        },
         [pfx .. "_brk"] = {
             order = ri * 10 + 6, type = "description", name = "", width = "full", hidden = hidden,
         },
@@ -269,7 +301,7 @@ local function GroupTab(gi)
         }
         if scope == "spec" then
             args.addSpecialBar = {
-                order = 3, type = "select", name = "|cFF80FF80Add Special Bar|r",
+                order = 3, type = "select", name = "|cFF80FF80Add Special Bar|r", width = 1.2,
                 hidden = function()
                     local SBm = ns.SpecialBars
                     if not (SBm and SBm.GetBarCount and SBm.GetBarDB) then return true end
@@ -290,10 +322,11 @@ local function GroupTab(gi)
                             if bdb and bdb.enabled and bdb.spellID then
                                 local nm = bdb.spellName
                                     or (C_Spell.GetSpellName and C_Spell.GetSpellName(bdb.spellID)) or bkey
+                                local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(bdb.spellID)) or 134400
                                 local tag = ""
                                 if g and bdb.customGroup == g.id then tag = " |cff888888(here)|r"
                                 elseif bdb.customGroup then tag = " |cff888888(in another group)|r" end
-                                out[bkey] = nm .. tag
+                                out[bkey] = ("|T%d:16:16|t %s%s"):format(tex, nm, tag)
                             end
                         end
                     end
@@ -314,7 +347,7 @@ local function GroupTab(gi)
                 end,
             }
             args.newSpecialBar = {
-                order = 4, type = "select", name = "|cFF80FF80New Special Bar (from spell)|r",
+                order = 4, type = "select", name = "|cFF80FF80New Special Bar (from spell)|r", width = "double",
                 values = function()
                     return (ns.SB_SpellChoices and ns.SB_SpellChoices(nil, true)) or {}
                 end,
@@ -457,6 +490,8 @@ local function GroupTab(gi)
                     growth = { order = 4, type = "select", name = "Growth Direction",
                         values = { DOWN = "Grow Down", UP = "Grow Up" }, sorting = { "DOWN", "UP" },
                         get = function() return gget("growth") or "DOWN" end, set = function(_, v) gset("growth", v) end },
+                    maxBars = { order = 4.2, type = "range", name = "Max Bars (0 = Off)", min = 0, max = 30, step = 1,
+                        get = function() return gget("maxBars") or 0 end, set = function(_, v) gset("maxBars", v) end },
                     unit = { order = 4.5, type = "select", name = "Unit",
                         values = { player = "Player", target = "Target", focus = "Focus", pet = "Pet" },
                         sorting = { "player", "target", "focus", "pet" },
@@ -525,6 +560,11 @@ local function GroupTab(gi)
                         args = {
                             showStacks = { order = 1, type = "toggle", name = "Show Stacks",
                                 get = function() return gget("showStacks") ~= false end, set = function(_, v) gset("showStacks", v) end },
+                            stackAnchor = { order = 1.5, type = "select", name = "Anchor To",
+                                values = { ICON = "Icon", BAR = "Bar" }, sorting = { "ICON", "BAR" },
+                                disabled = function() return gget("iconEnabled") == false end,
+                                get = function() return gget("stackAnchor") or "ICON" end,
+                                set = function(_, v) gset("stackAnchor", v) end },
                             stackFontSize = { order = 2, type = "range", name = "Font Size", min = 6, max = 36, step = 1,
                                 get = function() return gget("stackFontSize") or 12 end, set = function(_, v) gset("stackFontSize", v) end },
                             stackPoint = { order = 3, type = "select", name = "Position",

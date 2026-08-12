@@ -474,17 +474,21 @@ local function OpenStyleUsePicker(kind, name)
     rebuild()
 end
 
--- Bar Setup owns these on its bars; they must not count as style drift
+-- Bar Setup / the Custom Group owns these; they must not count as style drift
 local BARSETUP_OWNED = { showBackdrop = true, backdropColor = true, width = true, height = true }
+local GROUPED_ICON_OWNED = {
+    showCooldown = true, invertSwipe = true, width = true, height = true,
+    keepAspectRatio = true, zoom = true, iconLockAspectRatio = true,
+    frameStrata = true, desaturateWhenInactive = true,
+}
 
-local function StyleArgs(kind, db, inSetup)
+local function StyleArgs(kind, db, ignoreFn)
     local function styleName() return db().styleName end
     local function ackd() return db()._styleDriftAck == true end
     local function isDirty()
         local n = styleName()
         if not (n and SB.Styles) then return false end
-        local ignore = (inSetup and inSetup()) and BARSETUP_OWNED or nil
-        return SB.Styles.IsDirty(kind, n, db(), ignore)
+        return SB.Styles.IsDirty(kind, n, db(), ignoreFn and ignoreFn() or nil)
     end
     local function warnShown() return isDirty() and not ackd() end
     local noun = (kind == "bars") and "bar" or "icon"
@@ -686,6 +690,13 @@ function TUI:SpecialBarOptions(barKey, ctx)
         end
     end
 
+    local function IsGrouped()
+        if styleMode then return false end
+        local gid = db().customGroup
+        local g = gid and ns.CustomBars and ns.CustomBars.GroupByID and ns.CustomBars.GroupByID(gid)
+        return (g and g.enabled) and true or false
+    end
+
     local function IsInBarSetup()
         if styleMode then return false end
         local bs = ns.BarSetup
@@ -736,6 +747,52 @@ function TUI:SpecialBarOptions(barKey, ctx)
         set = function(_, v) if not v and not ESpec() then SB.ReleaseBar(barKey) end; db().enabled = v; QueueUpdate() end,
         hidden = function() return not db().spellID end,
     }
+    commonArgs.customGroup = {
+        order = 3.5, type = "select", name = "|cFFF27D2ABar Group|r",
+        hidden = function()
+            if not db().spellID then return true end
+            local CBm = ns.CustomBars
+            return not (CBm and CBm.GetGroups and #CBm.GetGroups() > 0)
+        end,
+        values = function()
+            local out = { [0] = "|cFF888888Standalone|r" }
+            for _, g in ipairs((ns.CustomBars and ns.CustomBars.GetGroups and ns.CustomBars.GetGroups()) or {}) do
+                out[g.id] = g.name or ("Bar Group " .. g.id)
+            end
+            return out
+        end,
+        sorting = function()
+            local out = { 0 }
+            local groups = (ns.CustomBars and ns.CustomBars.GetGroups and ns.CustomBars.GetGroups()) or {}
+            local ids = {}
+            for _, g in ipairs(groups) do ids[#ids + 1] = g.id end
+            table.sort(ids, function(a, b)
+                local ga = ns.CustomBars.GroupByID(a)
+                local gb = ns.CustomBars.GroupByID(b)
+                return (ga and ga.name or "") < (gb and gb.name or "")
+            end)
+            for _, id in ipairs(ids) do out[#out + 1] = id end
+            return out
+        end,
+        get = function() return db().customGroup or 0 end,
+        set = function(_, v)
+            db().customGroup = (v ~= 0) and v or nil
+            if not ESpec() then SB.ReleaseBar(barKey) end
+            QueueUpdate()
+            if TUI.QueueCustomBarsUpdate then TUI:QueueCustomBarsUpdate() end
+            NotifyChange()
+        end,
+    }
+    commonArgs.customGroupLink = {
+        order = 3.6, type = "execute", name = "Go to Bar Group", width = 0.9,
+        hidden = function()
+            local gid = db().customGroup
+            return not (gid and ns.CustomBars and ns.CustomBars.GroupByID and ns.CustomBars.GroupByID(gid))
+        end,
+        func = function()
+            if E.ToggleOptions then E:ToggleOptions("thingsUI,modulesTab,customBars") end
+        end,
+    }
     commonArgs.restoreDefaults = {
         order = 4.5, type = "execute", name = "Restore Defaults",
         confirm = function() return "Reset this bar's settings to defaults? Spell selection will be kept." end,
@@ -766,7 +823,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
     commonArgs.styleBlock = {
         order = 5.05, type = "group", name = "Style", inline = true,
         hidden = function() return not db().spellID end,
-        args = StyleArgs("bars", db, IsInBarSetup),
+        args = StyleArgs("bars", db, function() return IsInBarSetup() and BARSETUP_OWNED or nil end),
     }
     commonArgs.styleSpacer = {
         order = 5.9, type = "description", width = "full", fontSize = "large", name = " ",
@@ -797,6 +854,11 @@ function TUI:SpecialBarOptions(barKey, ctx)
                             order = 0, type = "description", width = "full", fontSize = "medium",
                             hidden = function() return not IsInBarSetup() end,
                             name = "|cFFFF4040Active in Bar Setup - width is owned by the Bar Setup tab.|r\n",
+                        },
+                        groupedHint = {
+                            order = 0.1, type = "description", width = "full", fontSize = "medium",
+                            hidden = function() return not IsGrouped() end,
+                            name = "|cFFF27D2AIn a Bar Group - the group owns size, position and bar style.|r\n",
                         },
                         width = {
                             order = 1, type = "range", name = "Width", min = 50, max = 600, step = 1,
@@ -902,7 +964,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
         },
         anchorGroup = {
             order = 30, type = "group", name = "Anchor & Position",
-            hidden = function() return styleMode end,
+            hidden = function() return styleMode or IsGrouped() end,
             args = merge({
                 anchorSettingsGroup = {
                     order = 50, type = "group", name = "Anchor & Position", inline = true,
@@ -1102,7 +1164,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
     commonArgs.styleBlock = {
         order = 5.05, type = "group", name = "Style", inline = true,
         hidden = function() return not db().spellID end,
-        args = StyleArgs("icons", db),
+        args = StyleArgs("icons", db, function() return isGrouped() and GROUPED_ICON_OWNED or nil end),
     }
     commonArgs.styleSpacer = {
         order = 5.9, type = "description", width = "full", fontSize = "large", name = " ",
@@ -1174,10 +1236,15 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                 cooldownGroup = {
                     order = 11, type = "group", name = "Cooldown", inline = true,
                     args = {
-                        showCooldown = { order = 1, type = "toggle", name = "Show Cooldown Sweep", get = function() return get("showCooldown") end, set = function(_, v) set("showCooldown", v) end },
+                        showCooldown = { order = 1, type = "toggle", name = "Show Cooldown Sweep",
+                            disabled = function() return isGrouped() end,
+                            get = function() return get("showCooldown") end, set = function(_, v) set("showCooldown", v) end },
                         invertSwipe = { order = 2, type = "toggle", name = "Invert Sweep",
-                            disabled = function() return not get("showCooldown") end,
+                            disabled = function() return not get("showCooldown") or isGrouped() end,
                             get = function() return get("invertSwipe") end, set = function(_, v) set("invertSwipe", v) end },
+                        groupSwipeHint = { order = 3, type = "description", width = "full",
+                            hidden = function() return not isGrouped() end,
+                            name = "|cff888888The Custom Group's aura settings control the sweep while grouped.|r" },
                         showPandemic = { order = 3, type = "toggle", name = "Pandemic Indicator",
                             get = function() return get("showPandemic") end,
                             set = function(_, v) set("showPandemic", v) end },

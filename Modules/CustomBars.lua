@@ -333,7 +333,8 @@ local function StyleBar(button, r, group, def)
     if group.showStacks ~= false then
         r.count = r.count or r.overlay:CreateFontString(nil, "OVERLAY")
         r.count:ClearAllPoints()
-        local anchorTo = (group.iconEnabled ~= false and r.iconBD) and r.iconBD or r.bar
+        local anchorTo = (group.stackAnchor == "BAR" or group.iconEnabled == false or not r.iconBD)
+            and r.bar or r.iconBD
         r.count:SetPoint(group.stackPoint or "CENTER", anchorTo, group.stackPoint or "CENTER",
             group.stackXOffset or 0, group.stackYOffset or 0)
         E:SetFont(r.count, font, group.stackFontSize or 12, group.fontOutline or "OUTLINE")
@@ -363,8 +364,23 @@ local function RenderTestBars(st, group)
     local font = LSM:Fetch("font", group.font or "Expressway")
     local lineX, row, idx = 0, 0, 0
 
-    for _, e in ipairs(M.Entries(group)) do
-        for _ = 1, math.max(1, e.def.max or 1) do
+    -- mirror the live Max Bars budget and preview the set's k-th spell
+    local entries = M.Entries(group)
+    local cap = tonumber(group.maxBars) or 0
+    local remaining = (cap > 0) and cap or nil
+    local counts = {}
+    for i, e in ipairs(entries) do
+        local n = math.max(1, e.def.max or 1)
+        if remaining then
+            n = math.min(n, remaining)
+            remaining = remaining - n
+        end
+        counts[i] = n
+    end
+
+    for ei, e in ipairs(entries) do
+        local spells = (ns.AuraLane and ns.AuraLane.SpellList and ns.AuraLane.SpellList(e.def)) or {}
+        for k = 1, counts[ei] do
             idx = idx + 1
             local f = pool[idx]
             if not f then
@@ -396,7 +412,7 @@ local function RenderTestBars(st, group)
             else f:SetPoint("TOPLEFT", st.frame, "TOPLEFT", x, -y) end
             lineX = lineX + w + sp
 
-            local sid = M.FirstSpell(e.def)
+            local sid = spells[((k - 1) % math.max(1, #spells)) + 1] or M.FirstSpell(e.def)
             local off = 0
             if group.iconEnabled ~= false then
                 f.iconBD:ClearAllPoints()
@@ -446,6 +462,18 @@ local function RenderTestBars(st, group)
                 f.dur:Show()
             else
                 f.dur:Hide()
+            end
+            f.stacks = f.stacks or f.bar:CreateFontString(nil, "OVERLAY")
+            if group.showStacks ~= false then
+                E:SetFont(f.stacks, font, group.stackFontSize or 12, group.fontOutline or "OUTLINE")
+                f.stacks:ClearAllPoints()
+                local anchorTo = (group.stackAnchor == "BAR" or group.iconEnabled == false) and f.bar or f.iconBD
+                f.stacks:SetPoint(group.stackPoint or "CENTER", anchorTo, group.stackPoint or "CENTER",
+                    group.stackXOffset or 0, group.stackYOffset or 0)
+                f.stacks:SetText("3")
+                f.stacks:Show()
+            else
+                f.stacks:Hide()
             end
             f:Show()
         end
@@ -516,9 +544,10 @@ local function ApplyEntryTo(st, group, entry, ord)
         layoutIndex = ord,
     }
 
+    local maxCount = entry.capCount or math.max(1, def.max or 1)
     st.defByKey[key] = def
     if st.container:HasAuraGroup(key) then
-        st.container:SetAuraGroupMaxFrameCount(key, math.max(1, def.max or 1))
+        st.container:SetAuraGroupMaxFrameCount(key, maxCount)
         st.container:SetAuraGroupFilterString(key, filter)
         st.container:SetAuraGroupCandidateFilters(key, { includeSpellIDs = map })
         st.container:SetAuraGroupLayout(key, layout)
@@ -599,9 +628,23 @@ local function SyncGroup(group)
     if c.SetFlowLayoutPadding then c:SetFlowLayoutPadding(0, 0, 0, 0) end
     c:SetFlowLayoutMaximumLineSize(effW)
 
+    -- Max Bars is a budget distributed over entries in order
+    local cap = tonumber(group.maxBars) or 0
+    local remaining = (cap > 0) and cap or nil
+    for _, entry in ipairs(entries) do
+        local n = math.max(1, entry.def.max or 1)
+        if remaining then
+            n = math.min(n, remaining)
+            remaining = remaining - n
+        end
+        entry.capCount = n
+    end
+
     local wanted = {}
     for i, entry in ipairs(entries) do
-        wanted[ApplyEntryTo(st, group, entry, i)] = true
+        if entry.capCount > 0 then
+            wanted[ApplyEntryTo(st, group, entry, i)] = true
+        end
     end
     for key in pairs(st.keys) do
         if not wanted[key] then c:SetAuraGroupMaxFrameCount(key, 0) end
