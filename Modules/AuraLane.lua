@@ -92,6 +92,15 @@ function A.HasSets(group)
     return #A.Entries(group) > 0
 end
 
+-- Blizzard skips spell filters for debuffs on ASSISTABLE units (anti-cheat),
+-- so a pure-harmful lane on a friendly unit would show random debuffs
+local function LaneVisOK(lane)
+    if lane.unit and lane.unit ~= "player" and lane.pureHarmful then
+        return not (UnitExists(lane.unit) and UnitCanAssist("player", lane.unit))
+    end
+    return true
+end
+
 local durFormatter
 local function Formatter()
     if durFormatter then return durFormatter end
@@ -660,20 +669,46 @@ function A.Sync(group, frame)
         if lane.container.UpdateAllAuras then lane.container:UpdateAllAuras() end
     end
 
+    lane.pureHarmful = true
+    for _, entry in ipairs(entries) do
+        if entry.def.kind ~= "HARMFUL" then lane.pureHarmful = false break end
+    end
+
     for button in pairs(lane.regions) do StyleButton(button, group, lane) end
-    lane.container:Show()
+    lane.container:SetShown(LaneVisOK(lane))
 end
 
 function A.Release(groupID)
     Teardown(groupID)
 end
 
+-- auras parsed during a loading screen/cinematic skip the includeSpellIDs
+-- gate (UnitCanAssist is false mid-load) and the wrong result sticks; force
+-- a re-parse once the world settles
+function A.ReparseAll()
+    for _, lane in pairs(lanes) do
+        if lane.container.UpdateAllAuras then lane.container:UpdateAllAuras() end
+    end
+end
+
+local function ReparseSoon()
+    C_Timer.After(2, A.ReparseAll)
+    C_Timer.After(5, A.ReparseAll)
+end
+
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_REGEN_ENABLED")
 ev:RegisterEvent("PLAYER_TARGET_CHANGED")
 ev:RegisterEvent("PLAYER_FOCUS_CHANGED")
+ev:RegisterEvent("PLAYER_ENTERING_WORLD")
+ev:RegisterEvent("CINEMATIC_STOP")
+ev:RegisterEvent("STOP_MOVIE")
 ev:RegisterUnitEvent("UNIT_PET", "player")
 ev:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_ENTERING_WORLD" or event == "CINEMATIC_STOP" or event == "STOP_MOVIE" then
+        ReparseSoon()
+        return
+    end
     if event == "PLAYER_REGEN_ENABLED" then
         if not pendingSync then return end
         pendingSync = false
@@ -685,6 +720,7 @@ ev:SetScript("OnEvent", function(_, event)
         or (event == "UNIT_PET") and "pet" or "target"
     for _, lane in pairs(lanes) do
         if lane.unit == want then
+            lane.container:SetShown(LaneVisOK(lane))
             lane.container:SetUnit(want)
             if lane.container.UpdateAllAuras then lane.container:UpdateAllAuras() end
         end

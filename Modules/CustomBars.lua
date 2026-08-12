@@ -614,12 +614,23 @@ local function SyncGroup(group)
         if c.UpdateAllAuras then c:UpdateAllAuras() end
     end
 
+    -- Blizzard skips spell filters for debuffs on ASSISTABLE units, so a
+    -- pure-harmful group on a friendly unit would show random debuffs
+    st.pureHarmful = true
+    for _, entry in ipairs(entries) do
+        if entry.def.kind ~= "HARMFUL" then st.pureHarmful = false break end
+    end
+
     for button, r in pairs(st.regions) do
         local key = st.keyByButton[button]
         local def = key and st.defByKey[key]
         if def then StyleBar(button, r, group, def) end
     end
-    c:Show()
+    if unit ~= "player" and st.pureHarmful then
+        c:SetShown(not (UnitExists(unit) and UnitCanAssist("player", unit)))
+    else
+        c:Show()
+    end
 end
 
 local cbUpdateQueued = false
@@ -657,9 +668,22 @@ ev:RegisterEvent("PLAYER_REGEN_ENABLED")
 ev:RegisterEvent("PLAYER_TARGET_CHANGED")
 ev:RegisterEvent("PLAYER_FOCUS_CHANGED")
 ev:RegisterUnitEvent("UNIT_PET", "player")
+ev:RegisterEvent("CINEMATIC_STOP")
+ev:RegisterEvent("STOP_MOVIE")
 ev:SetScript("OnEvent", function(_, event)
-    if event == "PLAYER_ENTERING_WORLD" then
-        C_Timer.After(1, function() TUI:UpdateCustomBars() end)
+    -- auras parsed during a loading screen/cinematic skip the includeSpellIDs
+    -- gate (UnitCanAssist is false mid-load); re-parse once the world settles
+    if event == "PLAYER_ENTERING_WORLD" or event == "CINEMATIC_STOP" or event == "STOP_MOVIE" then
+        if event == "PLAYER_ENTERING_WORLD" then
+            C_Timer.After(1, function() TUI:UpdateCustomBars() end)
+        end
+        local function reparse()
+            for _, st in pairs(state) do
+                if st.container.UpdateAllAuras then st.container:UpdateAllAuras() end
+            end
+        end
+        C_Timer.After(2, reparse)
+        C_Timer.After(5, reparse)
         return
     end
     if event == "PLAYER_REGEN_ENABLED" then
@@ -672,6 +696,9 @@ ev:SetScript("OnEvent", function(_, event)
         or (event == "UNIT_PET") and "pet" or "target"
     for _, st in pairs(state) do
         if st.unit == want then
+            if st.pureHarmful then
+                st.container:SetShown(not (UnitExists(want) and UnitCanAssist("player", want)))
+            end
             st.container:SetUnit(want)
             if st.container.UpdateAllAuras then st.container:UpdateAllAuras() end
         end

@@ -1,5 +1,8 @@
 # Changelog
 
+## 4.1.0-beta4
+- 
+
 ## 4.1.0-beta3
 - Fixed minimum width not doing shit when CDM is empty (when leveling etc)
 - Custom Groups can quick add Special Icons, or add\move existing ones.

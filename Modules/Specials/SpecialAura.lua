@@ -100,6 +100,12 @@ local function SetUnitLast(c, unit)
     end
 end
 
+-- Blizzard skips spell filters for debuffs on ASSISTABLE units (anti-cheat),
+-- so a harmful container on a friendly target would show random debuffs
+local function HarmfulTargetOK()
+    return not (UnitExists("target") and UnitCanAssist("player", "target"))
+end
+
 local function ApplyGroupTo(c, key, filter, spells, w, h, styler)
     local layout = { elementWidth = w, elementHeight = h, elementSpacing = 0, lineSpacing = 0 }
     if c:HasAuraGroup(key) then
@@ -375,6 +381,7 @@ local function Attach(wrapper, key, spellID, w, h, styler)
     ConfigureContainer(ct, wrapper, w, h)
     ApplyGroupTo(ct, gkey, "HARMFUL|PLAYER", spells, w, h, styler)
     SetUnitLast(ct, "target")
+    ct:SetShown(HarmfulTargetOK())
 
     attached[key] = wrapper
 end
@@ -401,19 +408,44 @@ function SA.Detach(wrapper, key)
     attached[key] = nil
 end
 
+-- auras parsed during a loading screen/cinematic skip the includeSpellIDs
+-- gate (UnitCanAssist is false mid-load) and the wrong result sticks; force
+-- a re-parse once the world settles
+function SA.ReparseAll()
+    for _, wrapper in pairs(attached) do
+        for _, c in ipairs({ wrapper._tuiAuraP, wrapper._tuiAuraT }) do
+            if c and c.UpdateAllAuras then c:UpdateAllAuras() end
+        end
+    end
+end
+
+local function ReparseSoon()
+    C_Timer.After(2, SA.ReparseAll)
+    C_Timer.After(5, SA.ReparseAll)
+end
+
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_REGEN_ENABLED")
 ev:RegisterEvent("PLAYER_TARGET_CHANGED")
+ev:RegisterEvent("PLAYER_ENTERING_WORLD")
+ev:RegisterEvent("CINEMATIC_STOP")
+ev:RegisterEvent("STOP_MOVIE")
 ev:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_ENTERING_WORLD" or event == "CINEMATIC_STOP" or event == "STOP_MOVIE" then
+        ReparseSoon()
+        return
+    end
     if event == "PLAYER_REGEN_ENABLED" then
         if not pending then return end
         pending = false
         if TUI and TUI.QueueSpecialBarsUpdate then TUI:QueueSpecialBarsUpdate() end
         return
     end
+    local tOK = HarmfulTargetOK()
     for _, wrapper in pairs(attached) do
         local ct = wrapper._tuiAuraT
         if ct and ct._tuiUnit == "target" then
+            ct:SetShown(tOK)
             ct:SetUnit("target")
             if ct.UpdateAllAuras then ct:UpdateAllAuras() end
         end
