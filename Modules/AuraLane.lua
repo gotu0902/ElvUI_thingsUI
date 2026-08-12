@@ -523,7 +523,7 @@ end
 local function ApplyFlow(lane, group, entries)
     local S = lane.slot
     local total = 0
-    for _, e in ipairs(entries) do total = total + math.max(1, e.def.max or 1) end
+    for _, e in ipairs(entries) do total = total + (e.capCount or math.max(1, e.def.max or 1)) end
     local perLine = (S.perLine > 0) and S.perLine or math.max(total, 1)
     local axis, hDir, vDir = FlowFor(S)
 
@@ -575,7 +575,7 @@ local function ApplyEntry(lane, group, entry, ord)
         layoutIndex = ord,
     }
     local sortMethod, sortDir = SortFor(def)
-    local maxCount = math.max(1, def.max or 1)
+    local maxCount = entry.capCount or math.max(1, def.max or 1)
 
     lane.defByKey[key] = def
     if lane.container:HasAuraGroup(key) then
@@ -643,6 +643,18 @@ function A.Sync(group, frame)
     ns.Pixel.SetPoint(lane.tail, pt, frame, pt, tx, ty)
     lane.tail:Show()
 
+    -- Max Icons is a budget: native members first, then entries in order
+    local cap = tonumber(group.maxIcons) or 0
+    local remaining = (cap > 0) and math.max(0, cap - slotIndex) or nil
+    for _, entry in ipairs(entries) do
+        local n = math.max(1, entry.def.max or 1)
+        if remaining then
+            n = math.min(n, remaining)
+            remaining = remaining - n
+        end
+        entry.capCount = n
+    end
+
     local unit = "player"
     for _, e in ipairs(entries) do
         if e.def.unit then unit = e.def.unit break end
@@ -656,8 +668,10 @@ function A.Sync(group, frame)
 
     local wanted = {}
     for i, entry in ipairs(entries) do
-        ApplyEntry(lane, group, entry, i)
-        wanted[entry.key] = true
+        if (entry.capCount or 1) > 0 then
+            ApplyEntry(lane, group, entry, i)
+            wanted[entry.key] = true
+        end
     end
     for key in pairs(lane.keys) do
         if not wanted[key] then lane.container:SetAuraGroupMaxFrameCount(key, 0) end

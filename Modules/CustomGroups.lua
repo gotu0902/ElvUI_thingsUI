@@ -602,13 +602,25 @@ local function RenderTestLane(gs, group, frame)
     if not (S and ns.AuraLane) then return end
 
     local entries = ns.AuraLane.Entries(group)
-    local total = 0
-    for _, entry in ipairs(entries) do total = total + math.max(1, entry.def.max or 1) end
+    -- mirror the live lane's Max Icons budget: natives first, then in order
+    local startSlot = M.NextFreeSlot(group, frame)
+    local cap = tonumber(group.maxIcons) or 0
+    local remaining = (cap > 0) and math.max(0, cap - startSlot) or nil
+    local counts, total = {}, 0
+    for ei, entry in ipairs(entries) do
+        local n = math.max(1, entry.def.max or 1)
+        if remaining then
+            n = math.min(n, remaining)
+            remaining = remaining - n
+        end
+        counts[ei] = n
+        total = total + n
+    end
 
-    local idx, slot = 0, M.NextFreeSlot(group, frame)
-    for _, entry in ipairs(entries) do
+    local idx, slot = 0, startSlot
+    for ei, entry in ipairs(entries) do
         local spells = ns.AuraLane.SpellList(entry.def)
-        for k = 1, math.max(1, entry.def.max or 1) do
+        for k = 1, counts[ei] do
             idx = idx + 1
             local f = pool[idx]
             if not f then
