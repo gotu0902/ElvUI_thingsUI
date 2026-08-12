@@ -1025,6 +1025,7 @@ local function ApplyAll()
         if not live[id] and gs.container then
             HideGroupIcons(gs)
             gs.container:Hide()
+            if ns.AuraLane and ns.AuraLane.Release then ns.AuraLane.Release(id) end
         end
     end
     for _, g in ipairs(groups) do ApplyGroup(g) end
@@ -1319,6 +1320,7 @@ function M.RemoveGroup(index)
         HideGroupIcons(gs)
         if gs.container then gs.container:Hide() end
     end
+    if ns.AuraLane and ns.AuraLane.Release then ns.AuraLane.Release(g.id) end
     if ns.MoverSync and ns.MoverSync.RemoveManaged then
         ns.MoverSync.RemoveManaged("TUI_CustomGroupMover" .. g.id)
     end

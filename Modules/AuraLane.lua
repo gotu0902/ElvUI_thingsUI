@@ -41,7 +41,6 @@ function A.SpellList(def)
     return out
 end
 
--- test previews only: multi-ID spells (form variants) collapse to one stand-in
 function A.SpellListUnique(def)
     local out, seen = {}, {}
     for _, id in ipairs(A.SpellList(def)) do
@@ -111,16 +110,24 @@ function A.PlayerAssistOK()
     return playerAssistOK
 end
 
-local function LaneVisOK(lane)
-    local unit = lane.unit or "player"
+local function SideVisOK(unit, pureHarm, hasHarm)
     if unit == "player" then
-        return lane.pureHarmful or playerAssistOK
+        return pureHarm or playerAssistOK
     end
 
     local assist = (UnitExists(unit) and UnitCanAssist("player", unit)) and true or false
-    if not lane.pureHarmful and not assist then return false end
-    if lane.hasHarmful and assist then return false end
+    if not pureHarm and not assist then return false end
+    if hasHarm and assist then return false end
     return true
+end
+
+local function LaneVisOK(lane)
+    return SideVisOK(lane.unit or "player", lane.pureHarmful, lane.hasHarmful)
+end
+
+local function LaneVisOKT(lane)
+    if not lane.unitT then return false end
+    return SideVisOK(lane.unitT, lane.pureHarmfulT, lane.hasHarmfulT)
 end
 
 local durFormatter
@@ -515,6 +522,7 @@ local function LaneFor(group, frame)
         if lane.frame ~= frame then
             lane.tail:SetParent(frame)
             lane.container:SetParent(frame)
+            if lane.containerT then lane.containerT:SetParent(frame) end
             lane.frame = frame
         end
         return lane
@@ -538,12 +546,24 @@ local function FlowFor(S)
         (S.alongSign == 1) and FLOW_UP or FLOW_DOWN
 end
 
-local function ApplyFlow(lane, group, entries)
-    local S = lane.slot
+local function ApplyFlowTo(container, S, entries, anchor, hDir, vDir)
     local total = 0
     for _, e in ipairs(entries) do total = total + math.max(1, e.def.max or 1) end
     local perLine = (S.perLine > 0) and S.perLine or math.max(total, 1)
-    local axis, hDir, vDir = FlowFor(S)
+
+    container:SetFlowLayoutAxis(S.horizontal and AXIS_H or AXIS_V)
+    container:SetFlowLayoutAnchorPoint(anchor)
+    container:SetFlowLayoutGrowthDirection(hDir, vDir)
+    container:SetFlowLayoutMaximumLineSize(perLine * S.alongDim + (perLine - 1) * S.sp)
+
+    if container.SetFlowLayoutPadding then
+        container:SetFlowLayoutPadding(0, 0, 0, 0)
+    end
+end
+
+local function ApplyFlow(lane, group, entries)
+    local S = lane.slot
+    local _, hDir, vDir = FlowFor(S)
 
     local anchor = S.pt
     if S.center then
@@ -551,14 +571,49 @@ local function ApplyFlow(lane, group, entries)
             .. ((hDir == FLOW_LEFT) and "RIGHT" or "LEFT")
     end
 
-    lane.container:SetFlowLayoutAxis(axis)
-    lane.container:SetFlowLayoutAnchorPoint(anchor)
-    lane.container:SetFlowLayoutGrowthDirection(hDir, vDir)
-    lane.container:SetFlowLayoutMaximumLineSize(perLine * S.alongDim + (perLine - 1) * S.sp)
+    ApplyFlowTo(lane.container, S, entries, anchor, hDir, vDir)
+    return hDir, vDir
+end
 
-    if lane.container.SetFlowLayoutPadding then
-        lane.container:SetFlowLayoutPadding(0, 0, 0, 0)
+local function AttachSideFor(group, S)
+    local side = group.attachSide
+    if side and side ~= "AUTO" then return side end
+    if S.horizontal then
+        return (S.alongSign == 1) and "RIGHT" or "LEFT"
     end
+    return (S.alongSign == 1) and "TOP" or "BOTTOM"
+end
+
+local function AttachLayout(side, sp, hDir, vDir, centered)
+    local tH, tV = hDir, vDir
+    local tPt, cPt, ox, oy
+    if side == "TOP" then
+        tV = FLOW_UP
+        local h = (hDir == FLOW_LEFT) and "RIGHT" or "LEFT"
+        tPt, cPt, ox, oy = "BOTTOM" .. h, "TOP" .. h, 0, sp
+        if centered then tPt, cPt = "BOTTOM", "TOP" end
+    elseif side == "BOTTOM" then
+        tV = FLOW_DOWN
+        local h = (hDir == FLOW_LEFT) and "RIGHT" or "LEFT"
+        tPt, cPt, ox, oy = "TOP" .. h, "BOTTOM" .. h, 0, -sp
+        if centered then tPt, cPt = "TOP", "BOTTOM" end
+    elseif side == "LEFT" then
+        tH = FLOW_LEFT
+        local v = (vDir == FLOW_UP) and "BOTTOM" or "TOP"
+        tPt, cPt, ox, oy = v .. "RIGHT", v .. "LEFT", -sp, 0
+        if centered then tPt, cPt = "RIGHT", "LEFT" end
+    else
+        tH = FLOW_RIGHT
+        local v = (vDir == FLOW_UP) and "BOTTOM" or "TOP"
+        tPt, cPt, ox, oy = v .. "LEFT", v .. "RIGHT", sp, 0
+        if centered then tPt, cPt = "LEFT", "RIGHT" end
+    end
+    local flowAnchor = tPt
+    if centered then
+        flowAnchor = ((tV == FLOW_UP) and "BOTTOM" or "TOP")
+            .. ((tH == FLOW_LEFT) and "RIGHT" or "LEFT")
+    end
+    return tPt, cPt, ox, oy, tH, tV, flowAnchor
 end
 
 local function SortFor(def)
@@ -573,8 +628,11 @@ end
 
 A.SortFor = SortFor
 
-local function ApplyEntry(lane, group, entry, ord)
+local function ApplyEntry(lane, group, entry, ord, c)
+    c = c or lane.container
     local key, def = entry.key, entry.def
+    local prev = lane.keys[key]
+    if prev and prev ~= true and prev ~= c then prev:SetAuraGroupMaxFrameCount(key, 0) end
     local filter
     if def.kind == "HARMFUL" then
         filter = "HARMFUL|PLAYER"
@@ -599,14 +657,14 @@ local function ApplyEntry(lane, group, entry, ord)
     local maxCount = math.max(1, def.max or 1)
 
     lane.defByKey[key] = def
-    if lane.container:HasAuraGroup(key) then
-        lane.container:SetAuraGroupMaxFrameCount(key, maxCount)
-        lane.container:SetAuraGroupFilterString(key, filter)
-        lane.container:SetAuraGroupCandidateFilters(key, { includeSpellIDs = map })
-        lane.container:SetAuraGroupLayout(key, layout)
-        if sortMethod then lane.container:SetAuraGroupSortMethod(key, sortMethod, sortDir) end
+    if c:HasAuraGroup(key) then
+        c:SetAuraGroupMaxFrameCount(key, maxCount)
+        c:SetAuraGroupFilterString(key, filter)
+        c:SetAuraGroupCandidateFilters(key, { includeSpellIDs = map })
+        c:SetAuraGroupLayout(key, layout)
+        if sortMethod then c:SetAuraGroupSortMethod(key, sortMethod, sortDir) end
     else
-        lane.container:AddAuraGroup(key, filter, {
+        c:AddAuraGroup(key, filter, {
             maxFrameCount = maxCount,
             sortMethod = sortMethod,
             sortDirection = sortDir,
@@ -614,19 +672,23 @@ local function ApplyEntry(lane, group, entry, ord)
             layout = layout,
             initializeFrame = function(button)
                 lane.keyByButton[button] = key
-                StyleButton(button, group, lane)
+                StyleButton(button, lane.group or group, lane)
             end,
         })
     end
-    lane.keys[key] = true
+    lane.keys[key] = c
 end
 
 function Teardown(groupID)
     local lane = lanes[groupID]
     if not lane then return end
     if InCombatLockdown() then pendingSync = true return end
-    for key in pairs(lane.keys) do lane.container:SetAuraGroupMaxFrameCount(key, 0) end
+    for key, owner in pairs(lane.keys) do
+        if owner == true then owner = lane.container end
+        owner:SetAuraGroupMaxFrameCount(key, 0)
+    end
     lane.container:Hide()
+    if lane.containerT then lane.containerT:Hide() end
     lane.tail:Hide()
 end
 
@@ -634,7 +696,10 @@ function A.Sync(group, frame)
     if not (group and frame and frame._tuiSlot) then return end
     if ns.CustomGroups.testMode then
         local lane = lanes[group.id]
-        if lane then lane.container:Hide() end
+        if lane then
+            lane.container:Hide()
+            if lane.containerT then lane.containerT:Hide() end
+        end
         return
     end
     if InCombatLockdown() then
@@ -646,8 +711,12 @@ function A.Sync(group, frame)
     if #entries == 0 then
         local lane = lanes[group.id]
         if lane then
-            for key in pairs(lane.keys) do lane.container:SetAuraGroupMaxFrameCount(key, 0) end
+            for key, owner in pairs(lane.keys) do
+                if owner == true then owner = lane.container end
+                owner:SetAuraGroupMaxFrameCount(key, 0)
+            end
             lane.container:Hide()
+            if lane.containerT then lane.containerT:Hide() end
         end
         return
     end
@@ -656,36 +725,43 @@ function A.Sync(group, frame)
     local au0 = group.auras or {}
     local sortMode = au0.sortMode or "manual"
     if sortMode ~= "manual" then
-        local unionH, unionD, anyH, anyD = {}, {}, false, false
-        local mUnit
+        local altU
+        for _, e in ipairs(entries) do
+            local u = e.def.unit
+            if u and u ~= "player" then altU = altU or u break end
+        end
+        local buckets = {
+            { tag = "H",  kind = nil,       unit = nil,  spells = {}, any = false },
+            { tag = "D",  kind = "HARMFUL", unit = nil,  spells = {}, any = false },
+            { tag = "HT", kind = nil,       unit = altU, spells = {}, any = false },
+            { tag = "DT", kind = "HARMFUL", unit = altU, spells = {}, any = false },
+        }
         for _, e in ipairs(entries) do
             local d = e.def
-            if not mUnit and d.unit then mUnit = d.unit end
-            local dst = (d.kind == "HARMFUL") and unionD or unionH
-            for id in pairs(d.spells or {}) do dst[id] = true end
-            if d.kind == "HARMFUL" then anyD = true else anyH = true end
+            local isAlt = altU ~= nil and d.unit == altU
+            local b
+            if d.kind == "HARMFUL" then b = isAlt and buckets[4] or buckets[2]
+            else b = isAlt and buckets[3] or buckets[1] end
+            b.any = true
+            for id in pairs(d.spells or {}) do b.spells[id] = true end
         end
         local cap = tonumber(group.maxIcons) or 0
         local maxN = (cap > 0) and cap or 40
         local merged = {}
-        if anyH then
-            merged[#merged + 1] = {
-                key = ("TUIAura%d_mergedH"):format(group.id or 0),
-                def = { spells = unionH, max = maxN, sort = sortMode, unit = mUnit },
-                rank = 1,
-            }
-        end
-        if anyD then
-            merged[#merged + 1] = {
-                key = ("TUIAura%d_mergedD"):format(group.id or 0),
-                def = { spells = unionD, max = maxN, sort = sortMode, kind = "HARMFUL", unit = mUnit },
-                rank = 2,
-            }
+        for i, b in ipairs(buckets) do
+            if b.any then
+                merged[#merged + 1] = {
+                    key = ("TUIAura%d_merged%s"):format(group.id or 0, b.tag),
+                    def = { spells = b.spells, max = maxN, sort = sortMode, kind = b.kind, unit = b.unit },
+                    rank = i,
+                }
+            end
         end
         entries = merged
     end
 
     local lane = LaneFor(group, frame)
+    lane.group = group
     lane.slot = frame._tuiSlot
     local S = lane.slot
 
@@ -696,25 +772,70 @@ function A.Sync(group, frame)
     ns.Pixel.SetPoint(lane.tail, pt, frame, pt, tx, ty)
     lane.tail:Show()
 
+    local mainEntries, altEntries, altUnit = {}, {}, nil
+    for _, e in ipairs(entries) do
+        local u = e.def.unit
+        if u and u ~= "player" then altUnit = altUnit or u end
+    end
+    for _, e in ipairs(entries) do
+        if altUnit and e.def.unit == altUnit then
+            altEntries[#altEntries + 1] = e
+        else
+            mainEntries[#mainEntries + 1] = e
+        end
+    end
+    local split = #mainEntries > 0 and #altEntries > 0
+    if not split then
+        mainEntries, altEntries, altUnit = entries, {}, nil
+    end
 
     local unit = "player"
-    for _, e in ipairs(entries) do
-        if e.def.unit then unit = e.def.unit break end
+    local hasPlayerSide = false
+    for _, e in ipairs(mainEntries) do
+        local u = e.def.unit
+        if not u or u == "player" then hasPlayerSide = true break end
     end
+    if not hasPlayerSide then
+        for _, e in ipairs(mainEntries) do
+            if e.def.unit then unit = e.def.unit break end
+        end
+    end
+
     lane.container:ClearAllPoints()
     lane.container:SetSize(S.iw, S.ih)
     lane.container:SetPoint(S.pt, lane.tail, S.pt, 0, 0)
     lane.container:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
 
-    ApplyFlow(lane, group, entries)
+    local hDir, vDir = ApplyFlow(lane, group, mainEntries)
+
+    if split and not lane.containerT then
+        lane.containerT = CreateFrame("AuraContainer", nil, frame, "CustomAuraContainerTemplate")
+    end
+    local cT = lane.containerT
+    if split then
+        local side = AttachSideFor(group, S)
+        local tPt, cPt, ox, oy, tH, tV, tAnchor = AttachLayout(side, S.sp, hDir, vDir, S.center)
+        cT:ClearAllPoints()
+        cT:SetSize(S.iw, S.ih)
+        cT:SetPoint(tPt, lane.container, cPt, ox, oy)
+        cT:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
+        ApplyFlowTo(cT, S, altEntries, tAnchor, tH, tV)
+    end
 
     local wanted = {}
-    for i, entry in ipairs(entries) do
-        ApplyEntry(lane, group, entry, i)
+    for i, entry in ipairs(mainEntries) do
+        ApplyEntry(lane, group, entry, i, lane.container)
         wanted[entry.key] = true
     end
-    for key in pairs(lane.keys) do
-        if not wanted[key] then lane.container:SetAuraGroupMaxFrameCount(key, 0) end
+    for i, entry in ipairs(altEntries) do
+        ApplyEntry(lane, group, entry, i, cT)
+        wanted[entry.key] = true
+    end
+    for key, owner in pairs(lane.keys) do
+        if not wanted[key] then
+            if owner == true then owner = lane.container end
+            owner:SetAuraGroupMaxFrameCount(key, 0)
+        end
     end
 
     if lane.unit ~= unit then
@@ -722,14 +843,26 @@ function A.Sync(group, frame)
         lane.unit = unit
         if lane.container.UpdateAllAuras then lane.container:UpdateAllAuras() end
     end
-
-    lane.pureHarmful, lane.hasHarmful = true, false
-    for _, entry in ipairs(entries) do
-        if entry.def.kind == "HARMFUL" then lane.hasHarmful = true else lane.pureHarmful = false end
+    if split and lane.unitT ~= altUnit then
+        cT:SetUnit(altUnit)
+        lane.unitT = altUnit
+        if cT.UpdateAllAuras then cT:UpdateAllAuras() end
     end
+    if not split then lane.unitT = nil end
+
+    local function Flags(list)
+        local pure, has = true, false
+        for _, entry in ipairs(list) do
+            if entry.def.kind == "HARMFUL" then has = true else pure = false end
+        end
+        return pure, has
+    end
+    lane.pureHarmful, lane.hasHarmful = Flags(mainEntries)
+    lane.pureHarmfulT, lane.hasHarmfulT = Flags(altEntries)
 
     for button in pairs(lane.regions) do StyleButton(button, group, lane) end
     lane.container:SetShown(LaneVisOK(lane))
+    if cT then cT:SetShown(split and LaneVisOKT(lane) or false) end
 end
 
 function A.Release(groupID)
@@ -739,6 +872,7 @@ end
 function A.ReparseAll()
     for _, lane in pairs(lanes) do
         if lane.container.UpdateAllAuras then lane.container:UpdateAllAuras() end
+        if lane.containerT and lane.containerT.UpdateAllAuras then lane.containerT:UpdateAllAuras() end
     end
 end
 
@@ -746,6 +880,7 @@ local function RefreshHelpfulVis()
     if not (ns.CustomGroups and ns.CustomGroups.testMode) then
         for _, lane in pairs(lanes) do
             lane.container:SetShown(LaneVisOK(lane))
+            if lane.containerT then lane.containerT:SetShown(LaneVisOKT(lane)) end
         end
     end
     if ns.SpecialAura and ns.SpecialAura.RefreshVisibility then ns.SpecialAura.RefreshVisibility() end
@@ -827,6 +962,13 @@ ev:SetScript("OnEvent", function(_, event)
             end
             lane.container:SetUnit(want)
             if lane.container.UpdateAllAuras then lane.container:UpdateAllAuras() end
+        end
+        if lane.unitT == want and lane.containerT then
+            if not (ns.CustomGroups and ns.CustomGroups.testMode) then
+                lane.containerT:SetShown(LaneVisOKT(lane))
+            end
+            lane.containerT:SetUnit(want)
+            if lane.containerT.UpdateAllAuras then lane.containerT:UpdateAllAuras() end
         end
     end
 end)

@@ -130,7 +130,6 @@ local function BuildCopySpecsTree(kind, onlySpecStr, destSpecID)
         classEntry.children = filteredSpecs
     end
 
-    -- Prune empty classes.
     local pruned = {}
     for _, ce in ipairs(classTree) do
         if #ce.children > 0 then pruned[#pruned+1] = ce end
@@ -189,7 +188,7 @@ local function ApplyCopy(kind, leafID, mode, destSpecID)
             destSlots[k] = DeepCopy(entry.data)
             written[#written + 1] = k
         end
-    else -- "add"
+    else
 
         local function isFree(k)
             local s = destSlots[k]
@@ -260,6 +259,7 @@ local function ShowChoicePopup(kind, leafLabel, leafID, destSpec)
     local AceGUI = LibStub("AceGUI-3.0", true)
     if not AceGUI then return end
     local f = AceGUI:Create("Frame")
+    ns.SolidDialog(f)
     f:SetTitle("Copy " .. kind)
     f:SetStatusText("")
     f:SetWidth(440)
@@ -360,8 +360,6 @@ local function IconTabName(iconKey, index)
     return SpecialTabName("Icon", index, SB.GetIconDB(iconKey, SB.EditingSpec()) or {})
 end
 
--- pages are built for the highest slot count actually in use (any spec), not
--- MAX_SLOTS: every prebuilt page bloats ElvUI's config search
 local barPages, iconPages
 
 local function MaxCountOver(field)
@@ -544,6 +542,7 @@ local function BuildStylesTab(kind)
             disabled = function() return SB.Styles.EffectiveDefault(kind) == sel() end,
             func = function() SB.Styles.SetDefault(kind, sel()); NotifyChange() end,
         },
+        useRow = ns.SB_StyleUseRow and ns.SB_StyleUseRow(kind, sel, 6) or nil,
         copyHeader = {
             order = 10, type = "description", width = "full", fontSize = "medium",
             name = function() return ("\n|cFFFFD200Overwrite|r %s |cFFFFD200from...|r"):format(SB.Styles.ColoredName(sel())) end,

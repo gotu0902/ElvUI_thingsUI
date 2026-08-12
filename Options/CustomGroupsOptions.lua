@@ -12,6 +12,7 @@ local function AskScope(title, subtitle, apply)
     if askScopeFrame then askScopeFrame:Hide() end
 
     local f = AceGUI:Create("Frame")
+    ns.SolidDialog(f)
     askScopeFrame = f
     f:SetTitle("Add " .. title)
     f:SetStatusText(subtitle)
@@ -57,6 +58,7 @@ local function EditAura(def, title, onChange, group)
     if editAuraFrame then editAuraFrame:Hide() end
 
     local f = AceGUI:Create("Frame")
+    ns.SolidDialog(f)
     editAuraFrame = f
     f:SetCallback("OnClose", function(w)
         if editAuraFrame == w then editAuraFrame = nil end
@@ -365,12 +367,6 @@ function TUI:CustomGroupsOptions()
     end
     local function entriesFor(group, scope, key)
         local out, itemSeen = {}, {}
-        local laneHasHelp, laneHasHarm = false, false
-        if ns.AuraLane and ns.AuraLane.Entries then
-            for _, le in ipairs(ns.AuraLane.Entries(group)) do
-                if (le.def.kind or "HELPFUL") == "HARMFUL" then laneHasHarm = true else laneHasHelp = true end
-            end
-        end
         local root = CG and CG.GetScopeRoot(group, scope, key, false)
         if root then
             for id, d in pairs(root.spells or {}) do
@@ -388,7 +384,6 @@ function TUI:CustomGroupsOptions()
                 local spells = ns.AuraLane.SpellList(d)
                 local first = spells[1]
                 out[#out + 1] = { kind = "aura", id = first or 0, auraUID = tostring(uid), def = d,
-                    unitClash = (d.unit and d.unit ~= "player" and laneHasHelp and laneHasHarm) or nil,
                     li = d.layoutIndex or 999, uid = "aura:" .. tostring(uid),
                     setCount = (#spells > 1) and #spells or nil,
                     name = d.name or (first and C_Spell.GetSpellName and C_Spell.GetSpellName(first)) or "Aura",
@@ -464,14 +459,11 @@ function TUI:CustomGroupsOptions()
         end
         if e.kind == "aura" then
             local d = e.def
+            local u = (d and d.unit and d.unit ~= "player") and (" @ " .. d.unit) or ""
             if d and d.kind == "HARMFUL" then
-                local u = (d.unit and d.unit ~= "player") and (" @ " .. d.unit) or ""
                 extra = extra .. " |cFFFF6060(Debuff" .. u .. ")|r"
             else
-                extra = extra .. " |cFF60E0A0(Buff)|r"
-            end
-            if e.unitClash then
-                extra = extra .. " |cFFFF3030- hidden, needs its own group|r"
+                extra = extra .. " |cFF60E0A0(Buff" .. u .. ")|r"
             end
             if e.setCount then
                 return ("|T%d:14:14:0:0|t %s |cFF888888(%d spells)|r%s")
@@ -1297,6 +1289,27 @@ function TUI:CustomGroupsOptions()
                             get = function() return group.growth end, set = function(_, v) gset("growth", v) end },
                         columns = { order = 4, type = "range", name = "Wrap After (0 = no wrap)", min = 0, max = 20, step = 1,
                             get = function() return group.columns end, set = function(_, v) gset("columns", v) end },
+                        attachSide = {
+                            order = 4.5, type = "select", name = "Debuff Side",
+                            hidden = function()
+                                if not (ns.AuraLane and ns.AuraLane.Entries) then return true end
+                                local list = ns.AuraLane.Entries(group)
+                                local altU
+                                for _, e in ipairs(list) do
+                                    local u = e.def.unit
+                                    if u and u ~= "player" then altU = altU or u end
+                                end
+                                if not altU then return true end
+                                local altN, mainN = 0, 0
+                                for _, e in ipairs(list) do
+                                    if e.def.unit == altU then altN = altN + 1 else mainN = mainN + 1 end
+                                end
+                                return not (altN > 0 and mainN > 0)
+                            end,
+                            values = { AUTO = "Auto (end of growth)", TOP = "Top", BOTTOM = "Bottom", LEFT = "Left", RIGHT = "Right" },
+                            sorting = { "AUTO", "TOP", "BOTTOM", "LEFT", "RIGHT" },
+                            get = function() return group.attachSide or "AUTO" end,
+                            set = function(_, v) gset("attachSide", v) end },
                         wrapDir = {
                             order = 5, type = "select", name = "Wrap Direction",
                             disabled = function() return (group.columns or 0) <= 0 end,

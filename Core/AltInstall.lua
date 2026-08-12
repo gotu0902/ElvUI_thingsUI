@@ -46,7 +46,6 @@ local PROVIDERS = {
         current = function() return _G.Grid2.db:GetCurrentProfile() end,
         set = function(name)
             local G2 = _G.Grid2
-            -- SetProfile silently CREATES unknown names; only switch to existing
             if G2.db.profiles and G2.db.profiles[name] == nil then return end
             G2.db:SetProfile(name)
         end,
@@ -102,7 +101,6 @@ local function ClassSpecs()
     return out
 end
 
--- GetLayouts omits Blizzard's presets, but every index counts them
 local function EditModeLayouts()
     if not (C_EditMode and C_EditMode.GetLayouts and C_EditMode.SetActiveLayout) then return nil end
     if not (EditModeManagerFrame and EditModeManagerFrame.accountSettings) then return nil end
@@ -161,7 +159,6 @@ function M.ImportPresets(str)
     return n
 end
 
--- captures the EFFECTIVE visible state: untouched dropdowns fall back to current
 local function CapturePreset(sel, emSel)
     local p = { providers = {} }
     for _, prov in ipairs(PROVIDERS) do
@@ -185,7 +182,6 @@ local function CapturePreset(sel, emSel)
     return p
 end
 
--- fills sel from a preset; only profiles that exist locally are picked
 local function ApplyPresetToSel(preset, sel, specs)
     for _, prov in ipairs(PROVIDERS) do
         local pp = preset.providers and preset.providers[prov.key]
@@ -217,6 +213,7 @@ local function ShowTextPopup(title, text, onAccept)
     local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
     if not AceGUI then return end
     local f = AceGUI:Create("Frame")
+    ns.SolidDialog(f)
     f:SetTitle(title)
     f:SetWidth(480)
     f:SetHeight(340)
@@ -287,6 +284,7 @@ function M.Open()
     local specs = ClassSpecs()
 
     local f = AceGUI:Create("Frame")
+    ns.SolidDialog(f)
     frame = f
     f:SetTitle("|cFF8080FFthingsUI|r Alt Setup")
     f:SetWidth(560)

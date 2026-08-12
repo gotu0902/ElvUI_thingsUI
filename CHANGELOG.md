@@ -19,6 +19,10 @@
 - Fixed newly added buffs landing mid-list after reordering
 - Fixed scope-picker popup leaking frames when closed with X
 - Share export/import rewritten for ElvUI's new data format (!TUI2!) - old strings and the built-in presets must be re-exported
+- Mixed groups: buffs and target debuffs can live in one icon group - debuffs attach to the group's edge (new Debuff Side option: Auto/Top/Bottom/Left/Right)
+- Style "Use style on" links moved to the Styles tab
+- Popups don't inherit configs transparency if any
+- Fixed deleted groups leaving their aura containers running in the background
 
 
 ## 4.1.0-beta3

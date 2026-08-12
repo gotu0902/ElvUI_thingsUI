@@ -31,6 +31,7 @@ function W.ShowExport(str)
     local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
     if not (AceGUI and str and str ~= "") then return end
     local f = AceGUI:Create("Frame")
+    ns.SolidDialog(f)
     f:SetTitle("|cFF8080FFthingsUI|r Export")
     f:SetWidth(560)
     f:SetHeight(380)
@@ -82,6 +83,7 @@ function W.Open(str)
     end
 
     local f = AceGUI:Create("Frame")
+    ns.SolidDialog(f)
     f:SetTitle("|cFF8080FFthingsUI|r Import")
     f:SetWidth(680)
     f:SetHeight(640)

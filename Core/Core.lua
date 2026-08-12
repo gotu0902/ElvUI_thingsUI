@@ -36,6 +36,22 @@ function ns.DeepCopy(src)
     return out
 end
 
+function ns.SolidDialog(f)
+    local fr = f and f.frame
+    if not fr then return end
+    if not fr._tuiSolid then
+        local t = fr:CreateTexture(nil, "BACKGROUND", nil, -7)
+        t:SetPoint("TOPLEFT", 1, -1)
+        t:SetPoint("BOTTOMRIGHT", -1, 1)
+        fr._tuiSolid = t
+        fr:HookScript("OnHide", function() t:Hide() end)
+    end
+    local E = ns.E
+    local c = E and E.media and E.media.backdropcolor
+    fr._tuiSolid:SetColorTexture(c and c[1] or 0.08, c and c[2] or 0.08, c and c[3] or 0.08, 1)
+    fr._tuiSolid:Show()
+end
+
 function ns.FontValues()
     local out = {}
     if ns.LSM then for _, n in ipairs(ns.LSM:List("font")) do out[n] = n end end

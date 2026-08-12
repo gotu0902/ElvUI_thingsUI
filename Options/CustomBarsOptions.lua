@@ -26,6 +26,7 @@ local function EditBarAura(def, title, group)
     if editBarFrame then editBarFrame:Hide() end
 
     local f = AceGUI:Create("Frame")
+    ns.SolidDialog(f)
     editBarFrame = f
     f:SetCallback("OnClose", function(w)
         if editBarFrame == w then editBarFrame = nil end
@@ -109,6 +110,7 @@ local function AskScope(title, apply)
     if askScopeFrame then askScopeFrame:Hide() end
 
     local f = AceGUI:Create("Frame")
+    ns.SolidDialog(f)
     askScopeFrame = f
     f:SetTitle("Add " .. (title or "Set"))
     f:SetStatusText("Which characters should it show for?")

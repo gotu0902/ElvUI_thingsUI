@@ -346,6 +346,7 @@ local function OpenStyleUsePicker(kind, name)
     local filterClass, sortByStyle = nil, false
 
     local f = AceGUI:Create("Frame")
+    ns.SolidDialog(f)
     f:SetTitle(("Apply Style: %s"):format(name))
     f:SetWidth(500)
     f:SetHeight(580)
@@ -475,6 +476,58 @@ local function OpenStyleUsePicker(kind, name)
     rebuild()
 end
 
+function ns.SB_StyleUseRow(kind, nameFn, orderNum, withGoto)
+    local field = (kind == "bars") and "bars" or "icons"
+    local function specLink(targetID)
+        local m = ns.SpecMeta and ns.SpecMeta(targetID)
+        local specName = m and m.name or "spec"
+        local specIcon = m and m.icon and ("|T" .. m.icon .. ":14:14|t ") or ""
+        local s = SB.GetSpecRoot(targetID)
+        local specCount = 0
+        for _, d in pairs((s and s[field]) or {}) do
+            if type(d) == "table" and d.spellID then specCount = specCount + 1 end
+        end
+        return {
+            label = ("%sAll %s %s (%d)"):format(specIcon, specName, kind, specCount),
+            color = { 0.4, 0.85, 1 },
+            onClick = function()
+                local dialog = StaticPopup_Show("TUI_STYLE_USE_SPEC", nameFn(), specName, kind)
+                if dialog then dialog.data = { kind = kind, name = nameFn(), specID = targetID } end
+            end,
+        }
+    end
+    local row = ns.OptionLinkRowDynamic(orderNum, function()
+        local n = nameFn()
+        local count, mine = 0, 0
+        SB.Styles.EachSpecial(kind, function(d)
+            if d.spellID then
+                count = count + 1
+                if d.styleName == n then mine = mine + 1 end
+            end
+        end)
+        local links = {
+            { label = "Use style on:  ", color = { 1, 0.82, 0 } },
+            { label = ("All %s (%d)"):format(kind, count), color = { 0.4, 1, 0.4 },
+              onClick = function()
+                  local dialog = StaticPopup_Show("TUI_STYLE_USE_ALL", n, kind)
+                  if dialog then dialog.data = { kind = kind, name = n } end
+              end },
+        }
+        local es = ESpec()
+        if es then links[#links + 1] = specLink(es) end
+        links[#links + 1] = specLink(CurSpecID())
+        links[#links + 1] = { label = ("Choose...  (%d using now)"):format(mine), color = { 0.54, 0.78, 1 },
+            onClick = function() OpenStyleUsePicker(kind, n) end }
+        if withGoto then
+            links[#links + 1] = { label = "Go to Style", color = { 1, 0.82, 0 },
+                onClick = function() if ns.SB_OpenStyleTab then ns.SB_OpenStyleTab(kind, nameFn()) end end }
+        end
+        return links
+    end)
+    row.hidden = function() return not nameFn() end
+    return row
+end
+
 -- Bar Setup / the Custom Group owns these; they must not count as style drift
 local BARSETUP_OWNED = { showBackdrop = true, backdropColor = true, width = true, height = true }
 local GROUPED_ICON_OWNED = {
@@ -573,50 +626,11 @@ local function StyleArgs(kind, db, ignoreFn)
             func = function() db()._styleDriftAck = nil; NotifyChange() end,
         },
         styleUseRow = (function()
-            local field = (kind == "bars") and "bars" or "icons"
-            local function specLink(targetID)
-                local m = ns.SpecMeta and ns.SpecMeta(targetID)
-                local specName = m and m.name or "spec"
-                local specIcon = m and m.icon and ("|T" .. m.icon .. ":14:14|t ") or ""
-                local s = SB.GetSpecRoot(targetID)
-                local specCount = 0
-                for _, d in pairs((s and s[field]) or {}) do
-                    if type(d) == "table" and d.spellID then specCount = specCount + 1 end
-                end
-                return {
-                    label = ("%sAll %s %s (%d)"):format(specIcon, specName, kind, specCount),
-                    color = { 0.4, 0.85, 1 },
-                    onClick = function()
-                        local dialog = StaticPopup_Show("TUI_STYLE_USE_SPEC", styleName(), specName, kind)
-                        if dialog then dialog.data = { kind = kind, name = styleName(), specID = targetID } end
-                    end,
-                }
-            end
             local row = ns.OptionLinkRowDynamic(5.6, function()
-                local n = styleName()
-                local count, mine = 0, 0
-                SB.Styles.EachSpecial(kind, function(d)
-                    if d.spellID then
-                        count = count + 1
-                        if d.styleName == n then mine = mine + 1 end
-                    end
-                end)
-                local links = {
-                    { label = "Use style on:  ", color = { 1, 0.82, 0 } },
-                    { label = ("All %s (%d)"):format(kind, count), color = { 0.4, 1, 0.4 },
-                      onClick = function()
-                          local dialog = StaticPopup_Show("TUI_STYLE_USE_ALL", n, kind)
-                          if dialog then dialog.data = { kind = kind, name = n } end
-                      end },
+                return {
+                    { label = "Go to Style", color = { 1, 0.82, 0 },
+                      onClick = function() if ns.SB_OpenStyleTab then ns.SB_OpenStyleTab(kind, styleName()) end end },
                 }
-                local es = ESpec()
-                if es then links[#links + 1] = specLink(es) end
-                links[#links + 1] = specLink(CurSpecID())
-                links[#links + 1] = { label = ("Choose...  (%d using now)"):format(mine), color = { 0.54, 0.78, 1 },
-                    onClick = function() OpenStyleUsePicker(kind, n) end }
-                links[#links + 1] = { label = "Go to Style", color = { 1, 0.82, 0 },
-                    onClick = function() if ns.SB_OpenStyleTab then ns.SB_OpenStyleTab(kind, n) end end }
-                return links
             end)
             row.hidden = function() return not styleName() end
             return row

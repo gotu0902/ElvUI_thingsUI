@@ -10,6 +10,7 @@ ns.Cascade = Cascade
 -- Open aceGUI tree
 local function CreateWindow(title, width, height)
     local f = AceGUI:Create("Frame")
+    ns.SolidDialog(f)
     f:SetTitle(title or "Select")
     f:SetStatusText("")
     f:SetWidth(width or 420)

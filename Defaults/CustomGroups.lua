@@ -41,6 +41,7 @@ function ns.Defaults.Group(id, name)
         borderColor          = { r = 0, g = 0, b = 0, a = 1 },
         borderStroke         = false,
         scopeOrder           = { "global", "class", "spec" },
+        attachSide           = "AUTO",
         auras = {
             swipe            = true,
             swipeInverse     = false,
