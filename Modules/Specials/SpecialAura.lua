@@ -100,8 +100,6 @@ local function SetUnitLast(c, unit)
     end
 end
 
--- Blizzard skips spell filters for debuffs on ASSISTABLE units (anti-cheat),
--- so a harmful container on a friendly target would show random debuffs
 local function HarmfulTargetOK()
     return not (UnitExists("target") and UnitCanAssist("player", "target"))
 end
@@ -408,9 +406,6 @@ function SA.Detach(wrapper, key)
     attached[key] = nil
 end
 
--- auras parsed during a loading screen/cinematic skip the includeSpellIDs
--- gate (UnitCanAssist is false mid-load) and the wrong result sticks; force
--- a re-parse once the world settles
 function SA.ReparseAll()
     for _, wrapper in pairs(attached) do
         for _, c in ipairs({ wrapper._tuiAuraP, wrapper._tuiAuraT }) do
@@ -420,6 +415,7 @@ function SA.ReparseAll()
 end
 
 local function ReparseSoon()
+    C_Timer.After(0.1, SA.ReparseAll)
     C_Timer.After(2, SA.ReparseAll)
     C_Timer.After(5, SA.ReparseAll)
 end

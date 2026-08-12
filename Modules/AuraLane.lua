@@ -92,8 +92,6 @@ function A.HasSets(group)
     return #A.Entries(group) > 0
 end
 
--- Blizzard skips spell filters for debuffs on ASSISTABLE units (anti-cheat),
--- so a pure-harmful lane on a friendly unit would show random debuffs
 local function LaneVisOK(lane)
     if lane.unit and lane.unit ~= "player" and lane.pureHarmful then
         return not (UnitExists(lane.unit) and UnitCanAssist("player", lane.unit))
@@ -428,8 +426,6 @@ local function StyleButton(button, group, lane)
         if r.count then r.count:SetText("") r.count:Hide() end
     end
 
-    -- grouped specials follow the group's swipe; their own fields only apply
-    -- standalone (and stay grayed out in options while grouped)
     local swipeOn = au.swipe ~= false
     local swipeRev = au.swipeInverse and true or false
 
@@ -684,9 +680,6 @@ function A.Release(groupID)
     Teardown(groupID)
 end
 
--- auras parsed during a loading screen/cinematic skip the includeSpellIDs
--- gate (UnitCanAssist is false mid-load) and the wrong result sticks; force
--- a re-parse once the world settles
 function A.ReparseAll()
     for _, lane in pairs(lanes) do
         if lane.container.UpdateAllAuras then lane.container:UpdateAllAuras() end
@@ -694,6 +687,7 @@ function A.ReparseAll()
 end
 
 local function ReparseSoon()
+    C_Timer.After(0.1, A.ReparseAll)
     C_Timer.After(2, A.ReparseAll)
     C_Timer.After(5, A.ReparseAll)
 end

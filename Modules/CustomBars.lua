@@ -363,8 +363,6 @@ local function RenderTestBars(st, group)
     local up = group.growth == "UP"
     local font = LSM:Fetch("font", group.font or "Expressway")
     local lineX, row, idx = 0, 0, 0
-
-    -- preview the set's k-th spell
     local entries = M.Entries(group)
     local counts = {}
     for i, e in ipairs(entries) do
@@ -643,8 +641,6 @@ local function SyncGroup(group)
         if c.UpdateAllAuras then c:UpdateAllAuras() end
     end
 
-    -- Blizzard skips spell filters for debuffs on ASSISTABLE units, so a
-    -- pure-harmful group on a friendly unit would show random debuffs
     st.pureHarmful = true
     for _, entry in ipairs(entries) do
         if entry.def.kind ~= "HARMFUL" then st.pureHarmful = false break end
@@ -700,8 +696,7 @@ ev:RegisterUnitEvent("UNIT_PET", "player")
 ev:RegisterEvent("CINEMATIC_STOP")
 ev:RegisterEvent("STOP_MOVIE")
 ev:SetScript("OnEvent", function(_, event)
-    -- auras parsed during a loading screen/cinematic skip the includeSpellIDs
-    -- gate (UnitCanAssist is false mid-load); re-parse once the world settles
+
     if event == "PLAYER_ENTERING_WORLD" or event == "CINEMATIC_STOP" or event == "STOP_MOVIE" then
         if event == "PLAYER_ENTERING_WORLD" then
             C_Timer.After(1, function() TUI:UpdateCustomBars() end)
@@ -711,6 +706,7 @@ ev:SetScript("OnEvent", function(_, event)
                 if st.container.UpdateAllAuras then st.container:UpdateAllAuras() end
             end
         end
+        C_Timer.After(0.1, reparse)
         C_Timer.After(2, reparse)
         C_Timer.After(5, reparse)
         return
