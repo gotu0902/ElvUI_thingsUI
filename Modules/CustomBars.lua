@@ -401,9 +401,12 @@ local function RenderTestBars(st, group)
     local sorted = (group.sortMode or "manual") ~= "manual"
     local cap = tonumber(group.maxBars) or 0
     local remaining = (sorted and cap > 0) and cap or nil
-    local counts = {}
+    local counts, lists = {}, {}
     for i, e in ipairs(entries) do
+        local sl = (ns.AuraLane and ns.AuraLane.SpellListUnique and ns.AuraLane.SpellListUnique(e.def)) or {}
+        lists[i] = sl
         local n = math.max(1, e.def.max or 1)
+        if #sl > 1 then n = math.min(n, #sl) end
         if remaining then
             n = math.min(n, remaining)
             remaining = remaining - n
@@ -415,7 +418,7 @@ local function RenderTestBars(st, group)
     local capped = false
     for ei, e in ipairs(entries) do
         if capped then break end
-        local spells = (ns.AuraLane and ns.AuraLane.SpellList and ns.AuraLane.SpellList(e.def)) or {}
+        local spells = lists[ei]
         for k = 1, counts[ei] do
             local wNext = e.def.halfWidth and math.floor((W - sp) / 2) or W
             local willRow = (lineX > 0 and lineX + wNext > W) and (row + 1) or row

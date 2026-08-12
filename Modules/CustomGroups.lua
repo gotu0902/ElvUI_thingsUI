@@ -605,9 +605,12 @@ local function RenderTestLane(gs, group, frame)
     local sorted = ((group.auras and group.auras.sortMode) or "manual") ~= "manual"
     local cap = tonumber(group.maxIcons) or 0
     local remaining = (sorted and cap > 0) and cap or nil
-    local counts, total = {}, 0
+    local counts, lists, total = {}, {}, 0
     for ei, entry in ipairs(entries) do
+        local sl = ns.AuraLane.SpellListUnique(entry.def)
+        lists[ei] = sl
         local n = math.max(1, entry.def.max or 1)
+        if #sl > 1 then n = math.min(n, #sl) end
         if remaining then
             n = math.min(n, remaining)
             remaining = remaining - n
@@ -618,7 +621,7 @@ local function RenderTestLane(gs, group, frame)
 
     local idx, slot = 0, M.NextFreeSlot(group, frame)
     for ei, entry in ipairs(entries) do
-        local spells = ns.AuraLane.SpellList(entry.def)
+        local spells = lists[ei]
         for k = 1, counts[ei] do
             idx = idx + 1
             local f = pool[idx]

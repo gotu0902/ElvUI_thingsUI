@@ -19,9 +19,10 @@ local function Refresh()
 end
 
 local editBarFrame
-local function EditBarAura(def, title)
+local function EditBarAura(def, title, group)
     local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
     if not (AceGUI and def) then return end
+    local sorted = (group and (group.sortMode or "manual") ~= "manual") and true or false
     if editBarFrame then editBarFrame:Hide() end
 
     local f = AceGUI:Create("Frame")
@@ -78,18 +79,27 @@ local function EditBarAura(def, title)
     max:SetWidth(170)
     max:SetSliderValues(1, 10, 1)
     max:SetValue(def.max or 1)
+    max:SetDisabled(sorted)
     max:SetCallback("OnValueChanged", function(_, _, v) def.max = v; Refresh() end)
     f:AddChild(max)
 
+    local S = ns.SORTING
     local sort = AceGUI:Create("Dropdown")
     sort:SetLabel("Sort Active By")
     sort:SetWidth(170)
-    sort:SetList({ instance = "Oldest First", new = "Newest First",
-        short = "Shortest Remaining", long = "Longest Remaining" },
-        { "instance", "new", "short", "long" })
+    sort:SetList((S and S.ENTRY_VALUES) or { instance = "Oldest First" },
+        (S and S.ENTRY_ORDER) or { "instance" })
     sort:SetValue(def.sort or "instance")
+    sort:SetDisabled(sorted)
     sort:SetCallback("OnValueChanged", function(_, _, v) def.sort = v; Refresh() end)
     f:AddChild(sort)
+
+    if sorted then
+        local note = AceGUI:Create("Label")
+        note:SetFullWidth(true)
+        note:SetText("|cffFFD200Group is time-sorted - Max Bars and Sort Active By apply in Manual order only.|r")
+        f:AddChild(note)
+    end
 end
 
 local askScopeFrame
@@ -209,14 +219,14 @@ local function EntryRow(gi, scope, ri)
                 return (e and e.kind == "specialbar") and "Edit Bar" or "Settings"
             end,
             func = function()
-                local e = entry()
+                local e, g = entry()
                 if not e then return end
                 if e.kind == "specialbar" then
                     E:ToggleOptions("thingsUI,modulesTab,specialBars," .. e.barKey .. "Group")
                     return
                 end
                 local sid = CB().FirstSpell(e.def)
-                EditBarAura(e.def, e.def.name or (sid and C_Spell.GetSpellName and C_Spell.GetSpellName(sid)) or "Buff")
+                EditBarAura(e.def, e.def.name or (sid and C_Spell.GetSpellName and C_Spell.GetSpellName(sid)) or "Buff", g)
             end,
         },
         [pfx .. "_del"] = {

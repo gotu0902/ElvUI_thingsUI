@@ -41,6 +41,19 @@ function A.SpellList(def)
     return out
 end
 
+-- test previews only: multi-ID spells (form variants) collapse to one stand-in
+function A.SpellListUnique(def)
+    local out, seen = {}, {}
+    for _, id in ipairs(A.SpellList(def)) do
+        local nm = (C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or id
+        if not seen[nm] then
+            seen[nm] = true
+            out[#out + 1] = id
+        end
+    end
+    return out
+end
+
 function A.Entries(group)
     if not group then return {} end
     local out = {}

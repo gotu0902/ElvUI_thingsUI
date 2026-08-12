@@ -224,3 +224,10 @@ ns.SORTING = {
   },
   ORDER = { "manual", "long", "short", "new", "instance" },
 }
+ns.SORTING.ENTRY_VALUES, ns.SORTING.ENTRY_ORDER = {}, {}
+for _, k in ipairs(ns.SORTING.ORDER) do
+    if k ~= "manual" then
+        ns.SORTING.ENTRY_VALUES[k] = ns.SORTING.VALUES[k]
+        ns.SORTING.ENTRY_ORDER[#ns.SORTING.ENTRY_ORDER + 1] = k
+    end
+end

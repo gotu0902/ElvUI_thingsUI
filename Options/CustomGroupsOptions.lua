@@ -50,9 +50,10 @@ local function AskScope(title, subtitle, apply)
 end
 
 local editAuraFrame
-local function EditAura(def, title, onChange)
+local function EditAura(def, title, onChange, group)
     local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
     if not (AceGUI and def) then return end
+    local sorted = (group and ((group.auras and group.auras.sortMode) or "manual") ~= "manual") and true or false
     if editAuraFrame then editAuraFrame:Hide() end
 
     local f = AceGUI:Create("Frame")
@@ -131,18 +132,27 @@ local function EditAura(def, title, onChange)
     max:SetWidth(170)
     max:SetSliderValues(1, 10, 1)
     max:SetValue(def.max or 1)
+    max:SetDisabled(sorted)
     max:SetCallback("OnValueChanged", function(_, _, v) def.max = v; onChange() end)
     f:AddChild(max)
 
+    local S = ns.SORTING
     local sort = AceGUI:Create("Dropdown")
     sort:SetLabel("Sort Active By")
     sort:SetWidth(170)
-    sort:SetList({ instance = "Oldest First", new = "Newest First",
-        short = "Shortest Remaining", long = "Longest Remaining" },
-        { "instance", "new", "short", "long" })
+    sort:SetList((S and S.ENTRY_VALUES) or { instance = "Oldest First" },
+        (S and S.ENTRY_ORDER) or { "instance" })
     sort:SetValue(def.sort or "instance")
+    sort:SetDisabled(sorted)
     sort:SetCallback("OnValueChanged", function(_, _, v) def.sort = v; onChange() end)
     f:AddChild(sort)
+
+    if sorted then
+        local note = AceGUI:Create("Label")
+        note:SetFullWidth(true)
+        note:SetText("|cffFFD200Group is time-sorted - Max Icons and Sort Active By apply in Manual order only.|r")
+        f:AddChild(note)
+    end
 
     local gstyle
 
@@ -355,6 +365,12 @@ function TUI:CustomGroupsOptions()
     end
     local function entriesFor(group, scope, key)
         local out, itemSeen = {}, {}
+        local laneHasHelp, laneHasHarm = false, false
+        if ns.AuraLane and ns.AuraLane.Entries then
+            for _, le in ipairs(ns.AuraLane.Entries(group)) do
+                if (le.def.kind or "HELPFUL") == "HARMFUL" then laneHasHarm = true else laneHasHelp = true end
+            end
+        end
         local root = CG and CG.GetScopeRoot(group, scope, key, false)
         if root then
             for id, d in pairs(root.spells or {}) do
@@ -371,7 +387,8 @@ function TUI:CustomGroupsOptions()
             for uid, d in pairs(root.auras or {}) do
                 local spells = ns.AuraLane.SpellList(d)
                 local first = spells[1]
-                out[#out + 1] = { kind = "aura", id = first or 0, auraUID = tostring(uid),
+                out[#out + 1] = { kind = "aura", id = first or 0, auraUID = tostring(uid), def = d,
+                    unitClash = (d.unit and d.unit ~= "player" and laneHasHelp and laneHasHarm) or nil,
                     li = d.layoutIndex or 999, uid = "aura:" .. tostring(uid),
                     setCount = (#spells > 1) and #spells or nil,
                     name = d.name or (first and C_Spell.GetSpellName and C_Spell.GetSpellName(first)) or "Aura",
@@ -446,7 +463,16 @@ function TUI:CustomGroupsOptions()
             return ("|T%d:14:14:0:0|t %s |cFFFFD200(Trinket %d)|r"):format(e.tex or 134400, name, e.id == 13 and 1 or 2)
         end
         if e.kind == "aura" then
-            extra = extra .. " |cFF60E0A0(Buff)|r"
+            local d = e.def
+            if d and d.kind == "HARMFUL" then
+                local u = (d.unit and d.unit ~= "player") and (" @ " .. d.unit) or ""
+                extra = extra .. " |cFFFF6060(Debuff" .. u .. ")|r"
+            else
+                extra = extra .. " |cFF60E0A0(Buff)|r"
+            end
+            if e.unitClash then
+                extra = extra .. " |cFFFF3030- hidden, needs its own group|r"
+            end
             if e.setCount then
                 return ("|T%d:14:14:0:0|t %s |cFF888888(%d spells)|r%s")
                     :format(e.tex or 134400, name, e.setCount, extra)
@@ -766,7 +792,7 @@ function TUI:CustomGroupsOptions()
                                     if def then
                                         EditAura(def, e.name, function()
                                             TUI:UpdateCustomGroups(); NotifyChange()
-                                        end)
+                                        end, group)
                                     end
                                 elseif e.kind == "timer" then
                                     if E.ToggleOptions then E:ToggleOptions("thingsUI,modulesTab,timers,tmr" .. e.id) end

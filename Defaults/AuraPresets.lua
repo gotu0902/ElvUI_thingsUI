@@ -66,6 +66,8 @@ ns.AURA_PRESETS = {
         key = "movement", name = "Movement Speed", kind = "HELPFUL", unit = "player", max = 10,
         spells = {
             106898, -- Stampeding Roar
+            77764,  -- Stampeding Roar (Cat)
+            77761,  -- Stampeding Roar (Bear)
             68992,  -- Darkflight
             116841, -- Tiger's Lust
             192082, -- WRT
