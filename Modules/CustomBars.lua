@@ -364,18 +364,11 @@ local function RenderTestBars(st, group)
     local font = LSM:Fetch("font", group.font or "Expressway")
     local lineX, row, idx = 0, 0, 0
 
-    -- mirror the live Max Bars budget and preview the set's k-th spell
+    -- preview the set's k-th spell
     local entries = M.Entries(group)
-    local cap = tonumber(group.maxBars) or 0
-    local remaining = (cap > 0) and cap or nil
     local counts = {}
     for i, e in ipairs(entries) do
-        local n = math.max(1, e.def.max or 1)
-        if remaining then
-            n = math.min(n, remaining)
-            remaining = remaining - n
-        end
-        counts[i] = n
+        counts[i] = math.max(1, e.def.max or 1)
     end
 
     for ei, e in ipairs(entries) do
@@ -544,16 +537,23 @@ local function ApplyEntryTo(st, group, entry, ord)
         layoutIndex = ord,
     }
 
-    local maxCount = entry.capCount or math.max(1, def.max or 1)
+    local maxCount = math.max(1, def.max or 1)
+    local sortMethod, sortDir
+    if ns.AuraLane and ns.AuraLane.SortFor then
+        sortMethod, sortDir = ns.AuraLane.SortFor(def)
+    end
     st.defByKey[key] = def
     if st.container:HasAuraGroup(key) then
         st.container:SetAuraGroupMaxFrameCount(key, maxCount)
         st.container:SetAuraGroupFilterString(key, filter)
         st.container:SetAuraGroupCandidateFilters(key, { includeSpellIDs = map })
         st.container:SetAuraGroupLayout(key, layout)
+        if sortMethod then st.container:SetAuraGroupSortMethod(key, sortMethod, sortDir) end
     else
         st.container:AddAuraGroup(key, filter, {
-            maxFrameCount = math.max(1, def.max or 1),
+            maxFrameCount = maxCount,
+            sortMethod = sortMethod,
+            sortDirection = sortDir,
             candidateFilters = { includeSpellIDs = map },
             layout = layout,
             initializeFrame = function(button)
@@ -628,23 +628,9 @@ local function SyncGroup(group)
     if c.SetFlowLayoutPadding then c:SetFlowLayoutPadding(0, 0, 0, 0) end
     c:SetFlowLayoutMaximumLineSize(effW)
 
-    -- Max Bars is a budget distributed over entries in order
-    local cap = tonumber(group.maxBars) or 0
-    local remaining = (cap > 0) and cap or nil
-    for _, entry in ipairs(entries) do
-        local n = math.max(1, entry.def.max or 1)
-        if remaining then
-            n = math.min(n, remaining)
-            remaining = remaining - n
-        end
-        entry.capCount = n
-    end
-
     local wanted = {}
     for i, entry in ipairs(entries) do
-        if entry.capCount > 0 then
-            wanted[ApplyEntryTo(st, group, entry, i)] = true
-        end
+        wanted[ApplyEntryTo(st, group, entry, i)] = true
     end
     for key in pairs(st.keys) do
         if not wanted[key] then c:SetAuraGroupMaxFrameCount(key, 0) end

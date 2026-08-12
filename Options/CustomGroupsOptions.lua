@@ -61,7 +61,7 @@ local function EditAura(def, title, onChange)
     f:SetStatusText("Applies to this entry only")
     f:SetLayout("Flow")
     f:SetWidth(400)
-    f:SetHeight(380)
+    f:SetHeight(420)
     f:EnableResize(false)
 
     local on = AceGUI:Create("CheckBox")
@@ -130,6 +130,16 @@ local function EditAura(def, title, onChange)
     max:SetValue(def.max or 1)
     max:SetCallback("OnValueChanged", function(_, _, v) def.max = v; onChange() end)
     f:AddChild(max)
+
+    local sort = AceGUI:Create("Dropdown")
+    sort:SetLabel("Sort Active By")
+    sort:SetWidth(170)
+    sort:SetList({ instance = "Oldest First", new = "Newest First",
+        short = "Shortest Remaining", long = "Longest Remaining" },
+        { "instance", "new", "short", "long" })
+    sort:SetValue(def.sort or "instance")
+    sort:SetCallback("OnValueChanged", function(_, _, v) def.sort = v; onChange() end)
+    f:AddChild(sort)
 
     local gstyle
 

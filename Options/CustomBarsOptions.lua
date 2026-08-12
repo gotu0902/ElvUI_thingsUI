@@ -34,7 +34,7 @@ local function EditBarAura(def, title)
     f:SetStatusText("Applies to this bar only")
     f:SetLayout("Flow")
     f:SetWidth(400)
-    f:SetHeight(280)
+    f:SetHeight(320)
     f:EnableResize(false)
 
     local on = AceGUI:Create("CheckBox")
@@ -80,6 +80,16 @@ local function EditBarAura(def, title)
     max:SetValue(def.max or 1)
     max:SetCallback("OnValueChanged", function(_, _, v) def.max = v; Refresh() end)
     f:AddChild(max)
+
+    local sort = AceGUI:Create("Dropdown")
+    sort:SetLabel("Sort Active By")
+    sort:SetWidth(170)
+    sort:SetList({ instance = "Oldest First", new = "Newest First",
+        short = "Shortest Remaining", long = "Longest Remaining" },
+        { "instance", "new", "short", "long" })
+    sort:SetValue(def.sort or "instance")
+    sort:SetCallback("OnValueChanged", function(_, _, v) def.sort = v; Refresh() end)
+    f:AddChild(sort)
 end
 
 local function AskScope(title, apply)
@@ -490,8 +500,6 @@ local function GroupTab(gi)
                     growth = { order = 4, type = "select", name = "Growth Direction",
                         values = { DOWN = "Grow Down", UP = "Grow Up" }, sorting = { "DOWN", "UP" },
                         get = function() return gget("growth") or "DOWN" end, set = function(_, v) gset("growth", v) end },
-                    maxBars = { order = 4.2, type = "range", name = "Max Bars (0 = Off)", min = 0, max = 30, step = 1,
-                        get = function() return gget("maxBars") or 0 end, set = function(_, v) gset("maxBars", v) end },
                     unit = { order = 4.5, type = "select", name = "Unit",
                         values = { player = "Player", target = "Target", focus = "Focus", pet = "Pet" },
                         sorting = { "player", "target", "focus", "pet" },
