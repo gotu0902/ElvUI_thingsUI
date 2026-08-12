@@ -62,6 +62,7 @@ local function ReleaseBar(barKey)
     if wrapper then
         if ns.SpecialAura then ns.SpecialAura.Detach(wrapper, barKey) end
         wrapper.backdrop:Hide()
+        if wrapper.testFX then wrapper.testFX:Hide() end
         wrapper:Hide()
     end
     specialBarState[barKey] = nil
@@ -70,6 +71,96 @@ local function ReleaseBar(barKey)
     if E and E.CreatedMovers and E.CreatedMovers[moverName] and E.DisableMover then
         E:DisableMover(moverName)
     end
+end
+
+local function RenderTestBar(wrapper, db, w, h)
+    local fx = wrapper.testFX
+    if not fx then
+        fx = CreateFrame("Frame", nil, wrapper, "BackdropTemplate")
+        fx:SetAllPoints(wrapper)
+        fx:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
+        fx:SetBackdropColor(0, 0, 0, 0.6)
+        fx:SetBackdropBorderColor(0, 0, 0, 1)
+        fx.iconBD = CreateFrame("Frame", nil, fx, "BackdropTemplate")
+        fx.iconBD:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
+        fx.iconBD:SetBackdropColor(0, 0, 0, 1)
+        fx.iconBD:SetBackdropBorderColor(0, 0, 0, 1)
+        fx.icon = fx.iconBD:CreateTexture(nil, "ARTWORK")
+        fx.bar = CreateFrame("StatusBar", nil, fx)
+        fx.bar:SetMinMaxValues(0, 1)
+        fx.name = fx.bar:CreateFontString(nil, "OVERLAY")
+        fx.dur = fx.bar:CreateFontString(nil, "OVERLAY")
+        fx.stacks = fx.bar:CreateFontString(nil, "OVERLAY")
+        wrapper.testFX = fx
+    end
+    fx:SetFrameLevel(wrapper:GetFrameLevel() + 2)
+
+    local LSM = ns.LSM
+    local off = 0
+    if db.iconEnabled then
+        fx.iconBD:ClearAllPoints()
+        fx.iconBD:SetPoint("LEFT", fx, "LEFT", 0, 0)
+        fx.iconBD:SetSize(h, h)
+        local raw = SB.GetRawSpellList and SB.GetRawSpellList()[db.spellID]
+        fx.icon:SetTexture((raw and raw.icon)
+            or (db.spellID and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(db.spellID)) or 134400)
+        local z = db.iconZoom or 0.1
+        fx.icon:SetTexCoord(z, 1 - z, z, 1 - z)
+        fx.icon:ClearAllPoints()
+        fx.icon:SetPoint("TOPLEFT", fx.iconBD, "TOPLEFT", 1, -1)
+        fx.icon:SetPoint("BOTTOMRIGHT", fx.iconBD, "BOTTOMRIGHT", -1, 1)
+        fx.iconBD:Show()
+        off = h + (db.iconSpacing or 1)
+    else
+        fx.iconBD:Hide()
+    end
+
+    fx.bar:ClearAllPoints()
+    fx.bar:SetPoint("TOPLEFT", fx, "TOPLEFT", off + 1, -1)
+    fx.bar:SetPoint("BOTTOMRIGHT", fx, "BOTTOMRIGHT", -1, 1)
+    fx.bar:SetStatusBarTexture(LSM:Fetch("statusbar", db.statusBarTexture))
+    if db.useClassColor then
+        local c = E:ClassColor(E.myclass, true)
+        fx.bar:SetStatusBarColor(c.r, c.g, c.b)
+    else
+        local c = db.customColor or { r = 0.2, g = 0.6, b = 1 }
+        fx.bar:SetStatusBarColor(c.r, c.g, c.b)
+    end
+    fx.bar:SetValue(0.7)
+
+    local font = LSM:Fetch("font", db.font or "Expressway")
+    if db.showName then
+        E:SetFont(fx.name, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
+        fx.name:ClearAllPoints()
+        fx.name:SetPoint(db.namePoint or "LEFT", fx.bar, db.namePoint or "LEFT",
+            db.nameXOffset or 2, db.nameYOffset or 0)
+        fx.name:SetText(db.spellName or "Bar")
+        fx.name:Show()
+    else
+        fx.name:Hide()
+    end
+    if db.showDuration then
+        E:SetFont(fx.dur, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
+        fx.dur:ClearAllPoints()
+        fx.dur:SetPoint(db.durationPoint or "RIGHT", fx.bar, db.durationPoint or "RIGHT",
+            db.durationXOffset or -4, db.durationYOffset or 0)
+        fx.dur:SetText("12")
+        fx.dur:Show()
+    else
+        fx.dur:Hide()
+    end
+    if db.showStacks then
+        E:SetFont(fx.stacks, font, db.stackFontSize or 14, db.stackFontOutline or "OUTLINE")
+        fx.stacks:ClearAllPoints()
+        local anchorTo = (db.stackAnchor == "BAR" or not db.iconEnabled) and fx.bar or fx.iconBD
+        fx.stacks:SetPoint(db.stackPoint or "CENTER", anchorTo, db.stackPoint or "CENTER",
+            db.stackXOffset or 0, db.stackYOffset or 0)
+        fx.stacks:SetText("3")
+        fx.stacks:Show()
+    else
+        fx.stacks:Hide()
+    end
+    fx:Show()
 end
 
 local function IsManagedByBarSetup(barKey)
@@ -203,6 +294,11 @@ local function UpdateBarSlot(barKey)
     state.wrapper = wrapper
 
     local test = ns.CustomGroups and ns.CustomGroups.testMode
+    if test then
+        RenderTestBar(wrapper, db, effectiveWidth, effectiveHeight)
+    elseif wrapper.testFX then
+        wrapper.testFX:Hide()
+    end
     if db.showBackdrop or managedByBS or test then
         local bc = db.backdropColor
         wrapper.backdrop:SetBackdropColor(

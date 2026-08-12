@@ -72,11 +72,11 @@ function M.ApplyToDB(kind, name, db)
     return true
 end
 
-function M.IsDirty(kind, name, db)
+function M.IsDirty(kind, name, db, ignore)
     local style = M.Get(kind, name)
     if not (style and db) then return false end
     for k, v in pairs(style) do
-        if not DeepEqual(v, db[k]) then return true end
+        if not (ignore and ignore[k]) and not DeepEqual(v, db[k]) then return true end
     end
     return false
 end

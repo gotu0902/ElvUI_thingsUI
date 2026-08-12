@@ -504,13 +504,13 @@ function TUI:CustomGroupsOptions()
                     local label
                     if scope == "spec" then
                         local m = ns.SpecMeta(tonumber(getKey()))
-                        label = "Add Spell - " .. ((m and m.name) or "Spec")
+                        label = "Add Spell CD - " .. ((m and m.name) or "Spec")
                     elseif scope == "class" then
                         local cf = editedClassFile()
                         local nm = cf and LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[cf]
-                        label = "Add Spell - " .. (nm or cf or "Class")
+                        label = "Add Spell CD - " .. (nm or cf or "Class")
                     else
-                        label = "Add Spell"
+                        label = "Add Spell CD"
                     end
                     return "|cFF8AC8FF" .. label .. "|r"   -- spells = light blue
                 end,
@@ -519,7 +519,7 @@ function TUI:CustomGroupsOptions()
                 set = function(_, v) local id = tonumber(v); if id and CG then CG.AddSpell(group, scope, getKey(), id); NotifyChange() end end,
             },
             addSpellID = {
-                order = 6, type = "input", name = "|cFFFFD200...or Spell by ID|r",   -- gold
+                order = 6, type = "input", name = "|cFFFFD200...or Spell CD by ID|r",   -- gold
                 get = function() return "" end,
                 set = function(_, v) local id = tonumber(((v or ""):gsub("%s", ""))); if id and CG then CG.AddSpell(group, scope, getKey(), id); NotifyChange() end end,
             },

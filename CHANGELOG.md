@@ -1,7 +1,10 @@
 # Changelog
 
 ## 4.1.0-beta4
-- 
+- Fixed max group icons not working
+- Small rename for clarification that spells are cd, not buff (request)
+- Not show style warning if bar is part of a bar setup
+- Fixed bars not previewing correctly
 
 ## 4.1.0-beta3
 - Fixed minimum width not doing shit when CDM is empty (when leveling etc)

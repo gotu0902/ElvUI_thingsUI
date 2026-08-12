@@ -474,12 +474,17 @@ local function OpenStyleUsePicker(kind, name)
     rebuild()
 end
 
-local function StyleArgs(kind, db)
+-- Bar Setup owns these on its bars; they must not count as style drift
+local BARSETUP_OWNED = { showBackdrop = true, backdropColor = true, width = true, height = true }
+
+local function StyleArgs(kind, db, inSetup)
     local function styleName() return db().styleName end
     local function ackd() return db()._styleDriftAck == true end
     local function isDirty()
         local n = styleName()
-        return n and SB.Styles and SB.Styles.IsDirty(kind, n, db()) or false
+        if not (n and SB.Styles) then return false end
+        local ignore = (inSetup and inSetup()) and BARSETUP_OWNED or nil
+        return SB.Styles.IsDirty(kind, n, db(), ignore)
     end
     local function warnShown() return isDirty() and not ackd() end
     local noun = (kind == "bars") and "bar" or "icon"
@@ -761,7 +766,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
     commonArgs.styleBlock = {
         order = 5.05, type = "group", name = "Style", inline = true,
         hidden = function() return not db().spellID end,
-        args = StyleArgs("bars", db),
+        args = StyleArgs("bars", db, IsInBarSetup),
     }
     commonArgs.styleSpacer = {
         order = 5.9, type = "description", width = "full", fontSize = "large", name = " ",
