@@ -5,7 +5,8 @@ local DeepCopy = ns.DeepCopy
 ns.Share = ns.Share or {}
 local M = ns.Share
 
-local PREFIX = "!TUI1!"
+local PREFIX = "!TUI2!"
+local OLD_PREFIX = "!TUI1!"
 
 M.SECTIONS = {
     { name = "Bar Setup",            keys = { "barSetup" },     collection = "barSetup",      color = "FFB060" },
@@ -23,15 +24,20 @@ M.SECTIONS = {
     { name = "Movers & General",     keys = { "essentialMover", "autoSetAudioChannels", "rightChatAsBackground", "rightChatWidthOffset", "rightChatHeightOffset" } },
 }
 
+local COMPRESS = Enum.CompressionMethod and Enum.CompressionMethod.Deflate or 0
+local OPTIMIZE = Enum.CompressionLevel and Enum.CompressionLevel.Default or 0
+
 local function Tools()
-    local Deflate = E.Libs and E.Libs.Deflate
-    local D = E.GetModule and E:GetModule("Distributor", true)
-    if Deflate and D and D.Serialize and D.Deserialize then return Deflate, D end
+    local CE = C_EncodingUtil
+    if CE and CE.SerializeCBOR and CE.CompressString and CE.EncodeBase64
+        and CE.DeserializeCBOR and CE.DecompressString and CE.DecodeBase64 then
+        return CE
+    end
 end
 
 function M.Export(selected)
-    local Deflate, D = Tools()
-    if not Deflate then return nil end
+    local CE = Tools()
+    if not CE then return nil end
     local data = {}
     for i, sec in ipairs(M.SECTIONS) do
         if (not selected) or selected[i] ~= false then
@@ -41,21 +47,24 @@ function M.Export(selected)
         end
     end
     if next(data) == nil then return nil end
-    local serialized = D:Serialize(data)
-    local compressed = serialized and Deflate:CompressDeflate(serialized, { level = 9 })
-    if not compressed then return nil end
-    return PREFIX .. Deflate:EncodeForPrint(compressed)
+    local serialized = CE.SerializeCBOR(data)
+    local compressed = serialized and CE.CompressString(serialized, COMPRESS, OPTIMIZE)
+    local printable = compressed and CE.EncodeBase64(compressed)
+    if not printable then return nil end
+    return PREFIX .. printable
 end
 
 local function Decode(str)
-    local Deflate, D = Tools()
-    if not Deflate then return nil end
+    local CE = Tools()
+    if not CE then return nil end
     str = tostring(str or ""):gsub("%s", "")
     if str == "" or str:sub(1, #PREFIX) ~= PREFIX then return nil end
-    local compressed = Deflate:DecodeForPrint(str:sub(#PREFIX + 1))
-    local serialized = compressed and Deflate:DecompressDeflate(compressed)
-    if not serialized then return nil end
-    local ok, data = D:Deserialize(serialized)
+    -- pasted garbage can throw inside the C decoders
+    local ok, data = pcall(function()
+        local decoded = CE.DecodeBase64(str:sub(#PREFIX + 1))
+        local decompressed = decoded and CE.DecompressString(decoded, COMPRESS)
+        return decompressed and CE.DeserializeCBOR(decompressed) or nil
+    end)
     if ok and type(data) == "table" then return data end
 end
 M.Decode = Decode
@@ -76,6 +85,7 @@ function M.Import(str)
     if not Tools() then return false, "Serialization unavailable." end
     local s = tostring(str or ""):gsub("%s", "")
     if s == "" then return false, "Paste an export string first." end
+    if s:sub(1, #OLD_PREFIX) == OLD_PREFIX then return false, "Old export format - generate a new string with this version." end
     if s:sub(1, #PREFIX) ~= PREFIX then return false, "Not a thingsUI export string." end
     local data = Decode(s)
     if not data then return false, "Could not decode the string." end

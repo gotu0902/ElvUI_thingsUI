@@ -16,6 +16,7 @@ local function CurSpecID()
 end
 
 local function SettleAfterSlotChange()
+    if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end
     TUI:UpdateSpecialBars()
     if ns.CustomGroups and ns.CustomGroups.QueueLayout then ns.CustomGroups.QueueLayout() end
     C_Timer.After(0.25, function()
@@ -793,6 +794,22 @@ function TUI:SpecialBarOptions(barKey, ctx)
             if E.ToggleOptions then E:ToggleOptions("thingsUI,modulesTab,customBars") end
         end,
     }
+    commonArgs.auraKind = {
+        order = 3.7, type = "select", name = "Aura Type",
+        hidden = function() return not IsGrouped() end,
+        values = { HELPFUL = "Buff (on you)", HARMFUL = "Debuff (on target)" },
+        sorting = { "HELPFUL", "HARMFUL" },
+        get = function() return db().auraKind or "HELPFUL" end,
+        set = function(_, v)
+            db().auraKind = (v == "HARMFUL") and v or nil
+            if TUI.QueueCustomBarsUpdate then TUI:QueueCustomBarsUpdate() end
+        end,
+    }
+    commonArgs.auraKindHint = {
+        order = 3.8, type = "description", width = "full",
+        hidden = function() return not (IsGrouped() and db().auraKind == "HARMFUL") end,
+        name = "|cFF888888Debuff bars need the group's Unit set to Target.|r",
+    }
     commonArgs.restoreDefaults = {
         order = 4.5, type = "execute", name = "Restore Defaults",
         confirm = function() return "Reset this bar's settings to defaults? Spell selection will be kept." end,
@@ -1135,10 +1152,10 @@ function TUI:SpecialIconOptions(keyArg, ctx)
     commonArgs.copyIcon = {
         order = 4.4, type = "execute", name = "|cFF8AC8FFCopy Icon|r",
         hidden = function() return not db().spellID end,
-        disabled = function() local s = SB.GetSpecRoot(ESpec()); return (s.iconCount or 3) >= 12 end,
+        disabled = function() local s = SB.GetSpecRoot(ESpec()); return (s.iconCount or 3) >= (SB.MAX_SLOTS or 12) end,
         func = function()
             local s = SB.GetSpecRoot(ESpec()); local c = s.iconCount or 3
-            if c >= 12 then return end
+            if c >= (SB.MAX_SLOTS or 12) then return end
             local copy = ns.DeepCopy(db())
             copy.spellID, copy.spellName = nil, nil   -- can't track one spell twice; keep the style, pick a new spell
             copy.enabled = false

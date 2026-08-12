@@ -5,20 +5,24 @@ local E = ns.E
 local NotifyChange = ns.NotifyChange
 
 local SCOPE_LABEL = { global = "|cFFFFCF40Global|r", class = "|cFF80C0FFClass|r", spec = "|cFFFFD200Spec|r" }
-
--- preset buttons ask where the entry belongs rather than guessing a scope.
--- StaticPopup only wires two safe buttons, and escape must not pick a scope.
+local askScopeFrame
 local function AskScope(title, subtitle, apply)
     local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
     if not AceGUI then apply("global") return end
+    if askScopeFrame then askScopeFrame:Hide() end
 
     local f = AceGUI:Create("Frame")
+    askScopeFrame = f
     f:SetTitle("Add " .. title)
     f:SetStatusText(subtitle)
     f:SetLayout("Flow")
     f:SetWidth(380)
     f:SetHeight(180)
     f:EnableResize(false)
+    f:SetCallback("OnClose", function(w)
+        if askScopeFrame == w then askScopeFrame = nil end
+        AceGUI:Release(w)
+    end)
 
     local head = AceGUI:Create("Label")
     head:SetFullWidth(true)
@@ -39,12 +43,12 @@ local function AskScope(title, subtitle, apply)
         b:SetWidth(115)
         b:SetCallback("OnClick", function()
             apply(c.scope)
-            AceGUI:Release(f)
+            f:Hide()
         end)
         f:AddChild(b)
     end
 end
--- an aura row stays as narrow as every other row; the per-aura knobs live here
+
 local editAuraFrame
 local function EditAura(def, title, onChange)
     local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
@@ -85,7 +89,6 @@ local function EditAura(def, title, onChange)
     kind:SetValue(def.kind or "HELPFUL")
     kind:SetCallback("OnValueChanged", function(_, _, v)
         def.kind = v
-        -- enemy debuffs are always yours; the toggle only means something for buffs
         if mine then mine:SetDisabled(v == "HARMFUL") end
         if pand then pand:SetDisabled(v ~= "HARMFUL") end
         onChange()
@@ -242,7 +245,8 @@ local function CopySpecialToLive(srcSpec, srcIconKey, groupID)
     local s = SB.GetSpecRoot()
     if not s then return end
     local c = s.iconCount or 3
-    if c >= 12 then E:Print("All 12 Special Icon slots are in use on this spec.") return end
+    if c >= (SB.MAX_SLOTS or 12) then E:Print(("All %d Special Icon slots are in use on this spec."):format(SB.MAX_SLOTS or 12)) return end
+    if ns.SB_RebuildSlotPages then C_Timer.After(0, ns.SB_RebuildSlotPages) end
     local copy = ns.DeepCopy(src)
     copy.customGroup = groupID
     s.icons = s.icons or {}
@@ -689,7 +693,8 @@ function TUI:CustomGroupsOptions()
                     if usage then E:Print("This spell is already used by " .. usage .. "!") return end
                     local s = SB.GetSpecRoot()
                     local c = s.iconCount or 3
-                    if c >= 12 then E:Print("All 12 Special Icon slots are in use on this spec.") return end
+                    if c >= (SB.MAX_SLOTS or 12) then E:Print(("All %d Special Icon slots are in use on this spec."):format(SB.MAX_SLOTS or 12)) return end
+    if ns.SB_RebuildSlotPages then C_Timer.After(0, ns.SB_RebuildSlotPages) end
                     s.iconCount = c + 1
                     local idb = SB.GetIconDB("icon" .. (c + 1))
                     if SB.Styles and SB.Styles.ApplyToDB then
@@ -727,8 +732,6 @@ function TUI:CustomGroupsOptions()
                             order = base + 2, type = "execute", name = CG_DOWN, width = 0.3, hidden = gone, disabled = reorderLocked,
                             func = function() local e = entry(); if e and CG then CG.MoveEntry(group, scope, getKey(), e.uid, 1); NotifyChange() end end,
                         }
-                        -- no fontSize: a taller font sets the row height for the
-                        -- whole line, and the buttons are already 24px
                         box["r" .. i .. "_label"] = {
                             order = base + 3, type = "description", width = 1.55, hidden = gone,
                             name = function() local e = entry(); return e and entryLabel(e) or "" end,
@@ -772,7 +775,7 @@ function TUI:CustomGroupsOptions()
                                 elseif e.existsKey then
                                     if ns.SB_OpenIconEditor then ns.SB_OpenIconEditor(e.existsKey) end  -- jump to the one you already have
                                 else
-                                    CopySpecialToLive(e.srcSpec, e.iconKey, group.id)   -- replicate onto your live spec
+                                    CopySpecialToLive(e.srcSpec, e.iconKey, group.id)
                                 end
                             end,
                         }
@@ -963,13 +966,37 @@ function TUI:CustomGroupsOptions()
         }
 
         local orderArgs = {
-            desc = { order = 0, type = "description", name = "Order of the entry blocks (^/v). Each block keeps its own internal order.\n" },
+            maxIcons = { order = 1.5, type = "range", name = "Max Icons (0 = Off)", min = 0, max = 30, step = 1,
+                get = function() return group.maxIcons or 0 end, set = function(_, v) gset("maxIcons", v) end },
+            sortMode = {
+                order = 1, type = "select", name = "Aura Order", width = 1.3,
+                values = ns.SORTING and ns.SORTING.VALUES, sorting = ns.SORTING and ns.SORTING.ORDER,
+                get = function() return (group.auras and group.auras.sortMode) or "manual" end,
+                set = function(_, v)
+                    group.auras = group.auras or {}
+                    group.auras.sortMode = v
+                    TUI:UpdateCustomGroups(); NotifyChange()
+                end,
+            },
+            sortDesc = {
+                order = 2, type = "description",
+                name = function()
+                    local m = (group.auras and group.auras.sortMode) or "manual"
+                    if m == "manual" then
+                        return "|cff888888Manual: blocks keep the order below, each entry keeps its own max & sort.|r\n"
+                    end
+                    return "|cFFFFD200Sorted: manual order disabled. Spec, class and global order won't matter shit now be-te-dubs.|r\n"
+                end,
+            },
+            desc = { order = 3, type = "description", name = "Order of the entry blocks (^/v). Each block keeps its own internal order.\n",
+                hidden = function() return ((group.auras and group.auras.sortMode) or "manual") ~= "manual" end },
         }
         for i = 1, 3 do
             local idx = i
             local function sc() local o = group.scopeOrder or { "global", "class", "spec" }; return o[idx] end
             orderArgs["block" .. i] = {
                 order = 10 + i, type = "group", inline = true, name = "",
+                hidden = function() return ((group.auras and group.auras.sortMode) or "manual") ~= "manual" end,
                 args = {
                     up = { order = 1, type = "execute", name = CG_UP, width = 0.3,
                         func = function() local s = sc(); if s and CG then CG.MoveScope(group, s, -1); NotifyChange() end end },
@@ -980,11 +1007,11 @@ function TUI:CustomGroupsOptions()
                 },
             }
         end
-        -- auras always render last: the block grows with the aura count, which
-        -- is a secret value, so nothing can be placed after it
+        -- auras always render last, prob good idea
         orderArgs.auraBlock = {
             order = 14, type = "group", inline = true, name = "",
             hidden = function()
+                if ((group.auras and group.auras.sortMode) or "manual") ~= "manual" then return true end
                 return not (ns.AuraLane and ns.AuraLane.HasSets(group))
             end,
             args = {
@@ -1244,8 +1271,6 @@ function TUI:CustomGroupsOptions()
                             get = function() return group.growth end, set = function(_, v) gset("growth", v) end },
                         columns = { order = 4, type = "range", name = "Wrap After (0 = no wrap)", min = 0, max = 20, step = 1,
                             get = function() return group.columns end, set = function(_, v) gset("columns", v) end },
-                        maxIcons = { order = 4.5, type = "range", name = "Max Icons (0 = Off)", min = 0, max = 30, step = 1,
-                            get = function() return group.maxIcons or 0 end, set = function(_, v) gset("maxIcons", v) end },
                         wrapDir = {
                             order = 5, type = "select", name = "Wrap Direction",
                             disabled = function() return (group.columns or 0) <= 0 end,

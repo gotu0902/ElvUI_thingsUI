@@ -104,6 +104,12 @@ local function HarmfulTargetOK()
     return not (UnitExists("target") and UnitCanAssist("player", "target"))
 end
 
+local function PlayerAssistOK()
+    local AL = ns.AuraLane
+    if AL and AL.PlayerAssistOK then return AL.PlayerAssistOK() end
+    return true
+end
+
 local function ApplyGroupTo(c, key, filter, spells, w, h, styler)
     local layout = { elementWidth = w, elementHeight = h, elementSpacing = 0, lineSpacing = 0 }
     if c:HasAuraGroup(key) then
@@ -374,6 +380,7 @@ local function Attach(wrapper, key, spellID, w, h, styler)
     ConfigureContainer(cp, wrapper, w, h)
     ApplyGroupTo(cp, gkey, "HELPFUL", spells, w, h, styler)
     SetUnitLast(cp, "player")
+    cp:SetShown(PlayerAssistOK())
 
     local ct = EnsureContainer(wrapper, "_tuiAuraT")
     ConfigureContainer(ct, wrapper, w, h)
@@ -411,6 +418,15 @@ function SA.ReparseAll()
         for _, c in ipairs({ wrapper._tuiAuraP, wrapper._tuiAuraT }) do
             if c and c.UpdateAllAuras then c:UpdateAllAuras() end
         end
+    end
+end
+
+function SA.RefreshVisibility()
+    local pOK, tOK = PlayerAssistOK(), HarmfulTargetOK()
+    for _, wrapper in pairs(attached) do
+        local cp, ct = wrapper._tuiAuraP, wrapper._tuiAuraT
+        if cp then cp:SetShown(pOK) end
+        if ct and ct._tuiUnit == "target" then ct:SetShown(tOK) end
     end
 end
 

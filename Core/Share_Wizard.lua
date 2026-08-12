@@ -133,7 +133,6 @@ function W.Open(str)
         ReloadUI()
     end
 
-    -- Paste ----------------------------------------------------------------
     local function BuildPaste(c)
         Heading(c, "Paste an export string")
         Add(c, "MultiLineEditBox", function(w)
@@ -162,7 +161,6 @@ function W.Open(str)
         end)
     end
 
-    -- Start ----------------------------------------------------------------
     local function BuildStart(c)
         Heading(c, "What's in this import")
         for _, sec in ipairs(A.sections) do
@@ -189,7 +187,6 @@ function W.Open(str)
         end)
     end
 
-    -- Modules ----------------------------------------------------------------
     local function BuildModules(c)
         Heading(c, "Choose modules")
         Label(c, "Only ticked modules are imported.")
@@ -232,7 +229,6 @@ function W.Open(str)
         end)
     end
 
-    -- Config ----------------------------------------------------------------
     local function SecByIndex(idx)
         for _, s in ipairs(A.sections) do if s.index == idx then return s end end
     end

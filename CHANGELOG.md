@@ -1,10 +1,25 @@
 # Changelog
 
-## 4.1.0-beta4
+## 4.1.0
 - Fixed max group icons not working
 - Small rename for clarification that spells are cd, not buff (request)
 - Not show style warning if bar is part of a bar setup
 - Fixed bars not previewing correctly
+- Style picker for groups, custom group picker
+- Option pages build on demand so it doesn't lags out the whole config (mybad)
+- New Aura Order / Bar Order in the Order tab for groups - manual or time-sorted (longest/shortest/newest/oldest)
+- Sorted order makes Max Icons / Max Bars actually cap live auras
+- Max Bars works in manual order too (cuts everything past the first N lines)
+- Bar groups: Order tab matches icon groups - Global/Class/Spec blocks reorder with arrows, live order preview
+- Bar groups: Layout and Position merged into one tab, Max Icons moved to Order tab
+- Special bars in a bar group can be set to Buff/Debuff - target DoTs render again
+- Fixed random buff icons in vehicles, mind control and loading screens - untrusted groups hide and shouuuld recover automatically
+- Fixed random enemy buffs when tracking buffs with unit target/focus
+- Fixed live bars/icons popping up on top of test mode previews
+- Fixed newly added buffs landing mid-list after reordering
+- Fixed scope-picker popup leaking frames when closed with X
+- Share export/import rewritten for ElvUI's new data format (!TUI2!) - old strings and the built-in presets must be re-exported
+
 
 ## 4.1.0-beta3
 - Fixed minimum width not doing shit when CDM is empty (when leveling etc)

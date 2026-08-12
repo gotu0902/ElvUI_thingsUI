@@ -360,6 +360,61 @@ local function IconTabName(iconKey, index)
     return SpecialTabName("Icon", index, SB.GetIconDB(iconKey, SB.EditingSpec()) or {})
 end
 
+-- pages are built for the highest slot count actually in use (any spec), not
+-- MAX_SLOTS: every prebuilt page bloats ElvUI's config search
+local barPages, iconPages
+
+local function MaxCountOver(field)
+    local m = 3
+    local sb = E.db.thingsUI and E.db.thingsUI.specialBars
+    for _, s in pairs((sb and sb.specs) or {}) do
+        local c = s[field] or 3
+        if c > m then m = c end
+    end
+    local cap = (SB and SB.MAX_SLOTS) or 12
+    if m > cap then m = cap end
+    return m
+end
+
+local function RebuildBarPages()
+    if not barPages then return end
+    for k in pairs(barPages) do
+        if k:match("^bar%d+Group$") then barPages[k] = nil end
+    end
+    for i = 1, MaxCountOver("barCount") do
+        local key = "bar" .. i
+        local n = i
+        barPages[key .. "Group"] = {
+            order = i * 10, type = "group", childGroups = "tab",
+            name = function() return BarTabName(key, n) end,
+            hidden = function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) < n end,
+            args = TUI:SpecialBarOptions(key),
+        }
+    end
+end
+
+local function RebuildIconPages()
+    if not iconPages then return end
+    for k in pairs(iconPages) do
+        if k:match("^icon%d+Group$") then iconPages[k] = nil end
+    end
+    for i = 1, MaxCountOver("iconCount") do
+        local ikey, idx = "icon" .. i, i
+        iconPages[ikey .. "Group"] = {
+            type = "group", childGroups = "tab",
+            order  = function() local di, ii = IconSlot(ikey); return (di and ii) and (di * 1000 + ii * 10) or 99999 end,
+            name   = function() return IconTabName(ikey, idx) end,
+            hidden = function() return IconSlot(ikey) == nil end,
+            args   = TUI:SpecialIconOptions(ikey),
+        }
+    end
+end
+
+ns.SB_RebuildSlotPages = function()
+    RebuildBarPages()
+    RebuildIconPages()
+end
+
 local function BuildIconTreeArgs()
     local box = {}
     for k = 1, 13 do
@@ -370,16 +425,8 @@ local function BuildIconTreeArgs()
             hidden = function() return not ComputeIconLayout()[kk] end,
         }
     end
-    for i = 1, 12 do
-        local ikey, idx = "icon" .. i, i
-        box[ikey .. "Group"] = {
-            type = "group", childGroups = "tab",
-            order  = function() local di, ii = IconSlot(ikey); return (di and ii) and (di * 1000 + ii * 10) or 99999 end,
-            name   = function() return IconTabName(ikey, idx) end,
-            hidden = function() return IconSlot(ikey) == nil end,
-            args   = TUI:SpecialIconOptions(ikey),
-        }
-    end
+    iconPages = box
+    RebuildIconPages()
     return box
 end
 
@@ -574,27 +621,27 @@ local function BuildSpecialBarsGroup()
                 order = 0.5, type = "execute", width = "double",
                 hidden = function() return not (SB and SB.EditingSpec()) end,
                 name = function() return "|cFF40FF40+ New Special Bar for |r" .. SpecTag(SB.EditingSpec()) end,
-                disabled = function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) >= 12 end,
+                disabled = function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) >= (SB.MAX_SLOTS or 12) end,
                 func = function()
                     local s = SB.GetSpecRoot(SB.EditingSpec()); local c = s.barCount or 3
-                    if c < 12 then
+                    if c < (SB.MAX_SLOTS or 12) then
                         s.barCount = c + 1
                         SB.Styles.ApplyToDB("bars", SB.Styles.EffectiveDefault("bars"), SB.GetBarDB("bar" .. (c + 1), SB.EditingSpec()))
-                        TUI:UpdateSpecialBars(); NotifyChange()
+                        if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end; TUI:UpdateSpecialBars(); NotifyChange()
                     end
                 end,
             },
             addBar = {
                 order = 1, type = "execute", width = "double",
                 name = function() return "|cFF40FF40+ New Special Bar for |r" .. SpecTag(CurSpecNum()) end,
-                disabled = function() return not SB or (SB.GetSpecRoot().barCount or 3) >= 12 end,
+                disabled = function() return not SB or (SB.GetSpecRoot().barCount or 3) >= (SB.MAX_SLOTS or 12) end,
                 func = function()
                     if not SB then return end
                     local s = SB.GetSpecRoot(); local c = s.barCount or 3
-                    if c < 12 then
+                    if c < (SB.MAX_SLOTS or 12) then
                         s.barCount = c + 1
                         SB.Styles.ApplyToDB("bars", SB.Styles.EffectiveDefault("bars"), SB.GetBarDB("bar" .. (c + 1)))
-                        TUI:UpdateSpecialBars(); NotifyChange()
+                        if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end; TUI:UpdateSpecialBars(); NotifyChange()
                     end
                 end,
             },
@@ -615,24 +662,15 @@ local function BuildSpecialBarsGroup()
             end),
             barCountHint = {
                 order = 3, type = "description", fontSize = "medium",
-                name = function() return ("|cFF888888%d / 12 bars - delete a bar from its own page.|r"):format((SB and SB.GetSpecRoot(SB.EditingSpec()).barCount) or 3) end,
+                name = function() return ("|cFF888888%d / %d bars - delete a bar from its own page.|r"):format((SB and SB.GetSpecRoot(SB.EditingSpec()).barCount) or 3, (SB and SB.MAX_SLOTS) or 12) end,
             },
             barsTab = {
                 order = 10, type = "group", name = "Bars", childGroups = "tree",
-                args = {
-                    bar1Group  = { order=10,  type="group", childGroups="tab", name=function() return BarTabName("bar1",1)   end, hidden=function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) < 1  end, args=TUI:SpecialBarOptions("bar1")  },
-                    bar2Group  = { order=20,  type="group", childGroups="tab", name=function() return BarTabName("bar2",2)   end, hidden=function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) < 2  end, args=TUI:SpecialBarOptions("bar2")  },
-                    bar3Group  = { order=30,  type="group", childGroups="tab", name=function() return BarTabName("bar3",3)   end, hidden=function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) < 3  end, args=TUI:SpecialBarOptions("bar3")  },
-                    bar4Group  = { order=40,  type="group", childGroups="tab", name=function() return BarTabName("bar4",4)   end, hidden=function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) < 4  end, args=TUI:SpecialBarOptions("bar4")  },
-                    bar5Group  = { order=50,  type="group", childGroups="tab", name=function() return BarTabName("bar5",5)   end, hidden=function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) < 5  end, args=TUI:SpecialBarOptions("bar5")  },
-                    bar6Group  = { order=60,  type="group", childGroups="tab", name=function() return BarTabName("bar6",6)   end, hidden=function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) < 6  end, args=TUI:SpecialBarOptions("bar6")  },
-                    bar7Group  = { order=70,  type="group", childGroups="tab", name=function() return BarTabName("bar7",7)   end, hidden=function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) < 7  end, args=TUI:SpecialBarOptions("bar7")  },
-                    bar8Group  = { order=80,  type="group", childGroups="tab", name=function() return BarTabName("bar8",8)   end, hidden=function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) < 8  end, args=TUI:SpecialBarOptions("bar8")  },
-                    bar9Group  = { order=90,  type="group", childGroups="tab", name=function() return BarTabName("bar9",9)   end, hidden=function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) < 9  end, args=TUI:SpecialBarOptions("bar9")  },
-                    bar10Group = { order=100, type="group", childGroups="tab", name=function() return BarTabName("bar10",10) end, hidden=function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) < 10 end, args=TUI:SpecialBarOptions("bar10") },
-                    bar11Group = { order=110, type="group", childGroups="tab", name=function() return BarTabName("bar11",11) end, hidden=function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) < 11 end, args=TUI:SpecialBarOptions("bar11") },
-                    bar12Group = { order=120, type="group", childGroups="tab", name=function() return BarTabName("bar12",12) end, hidden=function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) < 12 end, args=TUI:SpecialBarOptions("bar12") },
-                },
+                args = (function()
+                    barPages = {}
+                    RebuildBarPages()
+                    return barPages
+                end)(),
             },
             stylesTab = BuildStylesTab("bars"),
         },
@@ -650,13 +688,13 @@ local function BuildSpecialIconsGroup()
                 order = 0.5, type = "execute", width = "double",
                 hidden = function() return not (SB and SB.EditingSpec()) end,
                 name = function() return "|cFF40FF40+ New Special Icon for |r" .. SpecTag(SB.EditingSpec()) end,
-                disabled = function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).iconCount or 3) >= 12 end,
+                disabled = function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).iconCount or 3) >= (SB.MAX_SLOTS or 12) end,
                 func = function()
                     local s = SB.GetSpecRoot(SB.EditingSpec()); local c = s.iconCount or 3
-                    if c < 12 then
+                    if c < (SB.MAX_SLOTS or 12) then
                         s.iconCount = c + 1
                         SB.Styles.ApplyToDB("icons", SB.Styles.EffectiveDefault("icons"), SB.GetIconDB("icon" .. (c + 1), SB.EditingSpec()))
-                        TUI:UpdateSpecialBars(); NotifyChange()
+                        if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end; TUI:UpdateSpecialBars(); NotifyChange()
                         if ns.SB_OpenIconEditor then ns.SB_OpenIconEditor("icon" .. (c + 1)) end
                     end
                 end,
@@ -664,14 +702,14 @@ local function BuildSpecialIconsGroup()
             addIcon = {
                 order = 1, type = "execute", width = "double",
                 name = function() return "|cFF40FF40+ New Special Icon for |r" .. SpecTag(CurSpecNum()) end,
-                disabled = function() return not SB or (SB.GetSpecRoot().iconCount or 3) >= 12 end,
+                disabled = function() return not SB or (SB.GetSpecRoot().iconCount or 3) >= (SB.MAX_SLOTS or 12) end,
                 func = function()
                     if not SB then return end
                     local s = SB.GetSpecRoot(); local c = s.iconCount or 3
-                    if c < 12 then
+                    if c < (SB.MAX_SLOTS or 12) then
                         s.iconCount = c + 1
                         SB.Styles.ApplyToDB("icons", SB.Styles.EffectiveDefault("icons"), SB.GetIconDB("icon" .. (c + 1)))
-                        TUI:UpdateSpecialBars(); NotifyChange()
+                        if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end; TUI:UpdateSpecialBars(); NotifyChange()
                         if not SB.EditingSpec() and ns.SB_OpenIconEditor then ns.SB_OpenIconEditor("icon" .. (c + 1)) end
                     end
                 end,
@@ -693,7 +731,7 @@ local function BuildSpecialIconsGroup()
             end),
             iconCountHint = {
                 order = 3, type = "description", fontSize = "medium",
-                name = function() return ("|cFF888888%d / 12 icons - delete an icon from its own page.|r"):format((SB and SB.GetSpecRoot(SB.EditingSpec()).iconCount) or 3) end,
+                name = function() return ("|cFF888888%d / %d icons - delete an icon from its own page.|r"):format((SB and SB.GetSpecRoot(SB.EditingSpec()).iconCount) or 3, (SB and SB.MAX_SLOTS) or 12) end,
             },
             iconsTab = {
                 order = 10, type = "group", name = "Icons", childGroups = "tree",

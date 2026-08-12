@@ -4,6 +4,8 @@ local E = ns.E
 ns.SpecialBars = ns.SpecialBars or {}
 local SB = ns.SpecialBars
 
+SB.MAX_SLOTS = 30
+
 local SPECIAL_BAR_DEFAULTS  = ns.SPECIAL_BAR_DEFAULTS
 local SPECIAL_ICON_DEFAULTS = ns.SPECIAL_ICON_DEFAULTS
 local DeepCopy = ns.DeepCopy

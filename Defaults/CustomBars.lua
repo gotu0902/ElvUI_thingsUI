@@ -12,6 +12,8 @@ ns.CUSTOM_BAR_GROUP_DEFAULTS = {
     spacing = 2,
     growth = "DOWN",
     unit = "player",
+    sortMode = "manual",
+    scopeOrder = { "global", "class", "spec" },
     statusBarTexture = "ElvUI Norm",
     useClassColor = true,
     customColor = { r = 0.2, g = 0.6, b = 1 },

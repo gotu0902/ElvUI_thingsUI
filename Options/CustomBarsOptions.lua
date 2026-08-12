@@ -92,17 +92,24 @@ local function EditBarAura(def, title)
     f:AddChild(sort)
 end
 
+local askScopeFrame
 local function AskScope(title, apply)
     local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
     if not AceGUI then apply("global") return end
+    if askScopeFrame then askScopeFrame:Hide() end
 
     local f = AceGUI:Create("Frame")
+    askScopeFrame = f
     f:SetTitle("Add " .. (title or "Set"))
     f:SetStatusText("Which characters should it show for?")
     f:SetLayout("Flow")
     f:SetWidth(380)
     f:SetHeight(160)
     f:EnableResize(false)
+    f:SetCallback("OnClose", function(w)
+        if askScopeFrame == w then askScopeFrame = nil end
+        AceGUI:Release(w)
+    end)
 
     local _, classFile = UnitClass("player")
     local className = (classFile and LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[classFile]) or classFile or "Class"
@@ -116,7 +123,7 @@ local function AskScope(title, apply)
         b:SetWidth(115)
         b:SetCallback("OnClick", function()
             apply(c.scope)
-            AceGUI:Release(f)
+            f:Hide()
         end)
         f:AddChild(b)
     end
@@ -275,9 +282,10 @@ local function GroupTab(gi)
     end
 
     local function ScopeTabArgs(scope)
+        local maxRows = (scope == "spec") and (MAX_ROWS + 12) or MAX_ROWS
         local function full()
             local g = grp()
-            return not g or (CB() and #CB().ScopeEntries(g, scope) >= MAX_ROWS)
+            return not g or (CB() and #CB().ScopeEntries(g, scope) >= maxRows)
         end
         local args = {
             addAura = {
@@ -312,6 +320,7 @@ local function GroupTab(gi)
         if scope == "spec" then
             args.addSpecialBar = {
                 order = 3, type = "select", name = "|cFF80FF80Add Special Bar|r", width = 1.2,
+                disabled = full,
                 hidden = function()
                     local SBm = ns.SpecialBars
                     if not (SBm and SBm.GetBarCount and SBm.GetBarDB) then return true end
@@ -358,6 +367,7 @@ local function GroupTab(gi)
             }
             args.newSpecialBar = {
                 order = 4, type = "select", name = "|cFF80FF80New Special Bar (from spell)|r", width = "double",
+                disabled = full,
                 values = function()
                     return (ns.SB_SpellChoices and ns.SB_SpellChoices(nil, true)) or {}
                 end,
@@ -378,10 +388,12 @@ local function GroupTab(gi)
                     end
                     local s = SBm.GetSpecRoot()
                     local c = s.barCount or 3
-                    if c >= 12 then
-                        E:Print("All 12 Special Bar slots are in use.")
+                    local maxSlots = SBm.MAX_SLOTS or 12
+                    if c >= maxSlots then
+                        E:Print(("All %d Special Bar slots are in use."):format(maxSlots))
                         return
                     end
+                    if ns.SB_RebuildSlotPages then C_Timer.After(0, ns.SB_RebuildSlotPages) end
                     s.barCount = c + 1
                     local bdb = SBm.GetBarDB("bar" .. (c + 1))
                     if SBm.Styles and SBm.Styles.ApplyToDB and SBm.Styles.EffectiveDefault then
@@ -399,7 +411,7 @@ local function GroupTab(gi)
             }
         end
         local rows = {}
-        for ri = 1, MAX_ROWS do
+        for ri = 1, maxRows do
             for k, v in pairs(EntryRow(gi, scope, ri)) do rows[k] = v end
         end
         args.rowsGrp = { order = 10, type = "group", inline = true, name = "Bars", args = rows }
@@ -432,6 +444,63 @@ local function GroupTab(gi)
         }
     end
 
+    local SCOPE_LABEL = { global = "Global", class = "Class", spec = "Spec" }
+    local orderArgs = {
+        sortMode = { order = 1, type = "select", name = "Bar Order", width = 1.3,
+            values = ns.SORTING and ns.SORTING.VALUES, sorting = ns.SORTING and ns.SORTING.ORDER,
+            get = function() return gget("sortMode") or "manual" end,
+            set = function(_, v) gset("sortMode", v) end },
+        maxBars = { order = 2, type = "range", name = "Max Bars (0 = Off)", min = 0, max = 30, step = 1,
+            get = function() return gget("maxBars") or 0 end, set = function(_, v) gset("maxBars", v) end },
+        sortDesc = { order = 3, type = "description", name = function()
+            if (gget("sortMode") or "manual") == "manual" then
+                return "\nManual: bars follow the arrow order in each list, lists stacked by the block order below (^/v). Max Bars cuts off everything past the first N lines.\n"
+            end
+            return "|cFFFFD200Sorted: manual order disabled. Spec, class and global order won't matter shit now be-te-dubs.|r\n"
+        end },
+    }
+    for i = 1, 3 do
+        local idx = i
+        local function sc()
+            local g = grp()
+            local o = g and CB() and CB().ScopeOrderFor(g)
+            return o and o[idx]
+        end
+        orderArgs["block" .. i] = {
+            order = 10 + i, type = "group", inline = true, name = "",
+            hidden = function() return (gget("sortMode") or "manual") ~= "manual" end,
+            args = {
+                up = { order = 1, type = "execute", name = CB_UP, width = 0.3,
+                    func = function() local g, s = grp(), sc(); if g and s then CB().MoveScope(g, s, -1); Refresh() end end },
+                down = { order = 2, type = "execute", name = CB_DOWN, width = 0.3,
+                    func = function() local g, s = grp(), sc(); if g and s then CB().MoveScope(g, s, 1); Refresh() end end },
+                label = { order = 3, type = "description", width = 2, fontSize = "medium",
+                    name = function() local s = sc(); return idx .. ".  " .. (SCOPE_LABEL[s] or tostring(s)) end },
+            },
+        }
+    end
+    orderArgs.previewGrp = {
+        order = 20, type = "group", inline = true, name = "Current Order",
+        hidden = function() return (gget("sortMode") or "manual") ~= "manual" end,
+        args = {
+            list = { order = 1, type = "description", fontSize = "medium", name = function()
+                local g = grp()
+                if not (g and CB()) then return "" end
+                local lines, n = {}, 0
+                for _, scope in ipairs(CB().ScopeOrderFor(g)) do
+                    for _, e in ipairs(CB().ScopeEntries(g, scope)) do
+                        if e.def.enabled ~= false then
+                            n = n + 1
+                            lines[#lines + 1] = ("%d.  %s  |cff888888%s|r"):format(n, EntryLabel(e), scope)
+                        end
+                    end
+                end
+                if n == 0 then return "No bars yet." end
+                return table.concat(lines, "\n")
+            end },
+        },
+    }
+
     return {
         order = 10 + gi, type = "group", childGroups = "tab",
         name = function() local g = grp(); return g and g.name or ("Group " .. gi) end,
@@ -451,7 +520,11 @@ local function GroupTab(gi)
                 order = 3, type = "execute", name = "Delete Group", confirm = true,
                 confirmText = "Delete this Bar Group?",
                 func = function()
-                    if CB() then CB().RemoveGroup(gi); Refresh() end
+                    if CB() then
+                        CB().RemoveGroup(gi)
+                        if ns.CustomBars and ns.CustomBars._rebuildOptions then ns.CustomBars._rebuildOptions() end
+                        Refresh()
+                    end
                 end,
             },
             specTab = {
@@ -470,58 +543,104 @@ local function GroupTab(gi)
                 order = 13, type = "group", name = "Auras",
                 args = presetArgs,
             },
+            orderTab = { order = 14, type = "group", name = "Order", args = orderArgs },
             layoutTab = {
-                order = 20, type = "group", name = "Layout",
+                order = 20, type = "group", name = "Layout & Position",
                 args = {
-                    width = { order = 1, type = "range", name = "Width", min = 60, max = 600, step = 1,
-                        disabled = function() return gget("inheritWidth") and (gget("anchorFrame") or "UIParent") ~= "UIParent" end,
-                        get = function() return gget("width") or 220 end, set = function(_, v) gset("width", v) end },
-                    inheritWidth = { order = 1.1, type = "toggle", name = "Inherit Width from Anchor",
-                        disabled = function() return (gget("anchorFrame") or "UIParent") == "UIParent" end,
-                        get = function() return gget("inheritWidth") and true or false end,
-                        set = function(_, v) gset("inheritWidth", v) end },
-                    inheritWidthOffset = { order = 1.2, type = "range", name = "Width Nudge", min = -200, max = 200, step = 0.5, bigStep = 1,
-                        disabled = function() return not gget("inheritWidth") or (gget("anchorFrame") or "UIParent") == "UIParent" end,
-                        get = function() return gget("inheritWidthOffset") or 0 end,
-                        set = function(_, v) gset("inheritWidthOffset", v) end },
-                    height = { order = 2, type = "range", name = "Height", min = 8, max = 60, step = 1,
-                        disabled = function() return gget("inheritHeight") and (gget("anchorFrame") or "UIParent") ~= "UIParent" end,
-                        get = function() return gget("height") or 22 end, set = function(_, v) gset("height", v) end },
-                    inheritHeight = { order = 2.1, type = "toggle", name = "Inherit Height from Anchor",
-                        disabled = function() return (gget("anchorFrame") or "UIParent") == "UIParent" end,
-                        get = function() return gget("inheritHeight") and true or false end,
-                        set = function(_, v) gset("inheritHeight", v) end },
-                    inheritHeightOffset = { order = 2.2, type = "range", name = "Height Nudge", min = -50, max = 50, step = 0.5, bigStep = 1,
-                        disabled = function() return not gget("inheritHeight") or (gget("anchorFrame") or "UIParent") == "UIParent" end,
-                        get = function() return gget("inheritHeightOffset") or 0 end,
-                        set = function(_, v) gset("inheritHeightOffset", v) end },
-                    spacing = { order = 3, type = "range", name = "Spacing", min = 0, max = 20, step = 1,
-                        get = function() return gget("spacing") or 2 end, set = function(_, v) gset("spacing", v) end },
-                    growth = { order = 4, type = "select", name = "Growth Direction",
-                        values = { DOWN = "Grow Down", UP = "Grow Up" }, sorting = { "DOWN", "UP" },
-                        get = function() return gget("growth") or "DOWN" end, set = function(_, v) gset("growth", v) end },
-                    unit = { order = 4.5, type = "select", name = "Unit",
-                        values = { player = "Player", target = "Target", focus = "Focus", pet = "Pet" },
-                        sorting = { "player", "target", "focus", "pet" },
-                        get = function() return gget("unit") or "player" end,
-                        set = function(_, v) gset("unit", v) end },
-                    statusBarTexture = { order = 5, type = "select", dialogControl = "LSM30_Statusbar", name = "Bar Texture",
-                        values = function() return ns.LSM and ns.LSM:HashTable("statusbar") or {} end,
-                        get = function() return gget("statusBarTexture") end, set = function(_, v) gset("statusBarTexture", v) end },
-                    useClassColor = { order = 6, type = "toggle", name = "Class Color",
-                        get = function() return gget("useClassColor") ~= false end, set = function(_, v) gset("useClassColor", v) end },
-                    customColor = { order = 7, type = "color", name = "Custom Color",
-                        disabled = function() return gget("useClassColor") ~= false end,
-                        get = function() return unpackColor(gget("customColor")) end,
-                        set = function(_, r, g, b) gset("customColor", { r = r, g = g, b = b }) end },
-                    iconEnabled = { order = 8, type = "toggle", name = "Show Icon",
-                        get = function() return gget("iconEnabled") ~= false end, set = function(_, v) gset("iconEnabled", v) end },
-                    iconSpacing = { order = 9, type = "range", name = "Icon Spacing", min = 0, max = 20, step = 1,
-                        disabled = function() return gget("iconEnabled") == false end,
-                        get = function() return gget("iconSpacing") or 1 end, set = function(_, v) gset("iconSpacing", v) end },
-                    iconZoom = { order = 10, type = "range", name = "Icon Zoom", min = 0, max = 0.45, step = 0.01, isPercent = true,
-                        disabled = function() return gget("iconEnabled") == false end,
-                        get = function() return gget("iconZoom") or 0.1 end, set = function(_, v) gset("iconZoom", v) end },
+                    sizeGrp = {
+                        order = 1, type = "group", inline = true, name = "Size",
+                        args = {
+                            width = { order = 1, type = "range", name = "Width", min = 60, max = 600, step = 1,
+                                disabled = function() return gget("inheritWidth") and (gget("anchorFrame") or "UIParent") ~= "UIParent" end,
+                                get = function() return gget("width") or 220 end, set = function(_, v) gset("width", v) end },
+                            inheritWidth = { order = 1.1, type = "toggle", name = "Inherit Width from Anchor",
+                                disabled = function() return (gget("anchorFrame") or "UIParent") == "UIParent" end,
+                                get = function() return gget("inheritWidth") and true or false end,
+                                set = function(_, v) gset("inheritWidth", v) end },
+                            inheritWidthOffset = { order = 1.2, type = "range", name = "Width Nudge", min = -200, max = 200, step = 0.5, bigStep = 1,
+                                disabled = function() return not gget("inheritWidth") or (gget("anchorFrame") or "UIParent") == "UIParent" end,
+                                get = function() return gget("inheritWidthOffset") or 0 end,
+                                set = function(_, v) gset("inheritWidthOffset", v) end },
+                            height = { order = 2, type = "range", name = "Height", min = 8, max = 60, step = 1,
+                                disabled = function() return gget("inheritHeight") and (gget("anchorFrame") or "UIParent") ~= "UIParent" end,
+                                get = function() return gget("height") or 22 end, set = function(_, v) gset("height", v) end },
+                            inheritHeight = { order = 2.1, type = "toggle", name = "Inherit Height from Anchor",
+                                disabled = function() return (gget("anchorFrame") or "UIParent") == "UIParent" end,
+                                get = function() return gget("inheritHeight") and true or false end,
+                                set = function(_, v) gset("inheritHeight", v) end },
+                            inheritHeightOffset = { order = 2.2, type = "range", name = "Height Nudge", min = -50, max = 50, step = 0.5, bigStep = 1,
+                                disabled = function() return not gget("inheritHeight") or (gget("anchorFrame") or "UIParent") == "UIParent" end,
+                                get = function() return gget("inheritHeightOffset") or 0 end,
+                                set = function(_, v) gset("inheritHeightOffset", v) end },
+                        },
+                    },
+                    barGrp = {
+                        order = 2, type = "group", inline = true, name = "Bar",
+                        args = {
+                            spacing = { order = 1, type = "range", name = "Spacing", min = 0, max = 20, step = 1,
+                                get = function() return gget("spacing") or 2 end, set = function(_, v) gset("spacing", v) end },
+                            growth = { order = 2, type = "select", name = "Growth Direction",
+                                values = { DOWN = "Grow Down", UP = "Grow Up" }, sorting = { "DOWN", "UP" },
+                                get = function() return gget("growth") or "DOWN" end, set = function(_, v) gset("growth", v) end },
+                            unit = { order = 3, type = "select", name = "Unit",
+                                values = { player = "Player", target = "Target", focus = "Focus", pet = "Pet" },
+                                sorting = { "player", "target", "focus", "pet" },
+                                get = function() return gget("unit") or "player" end,
+                                set = function(_, v) gset("unit", v) end },
+                            statusBarTexture = { order = 4, type = "select", dialogControl = "LSM30_Statusbar", name = "Bar Texture",
+                                values = function() return ns.LSM and ns.LSM:HashTable("statusbar") or {} end,
+                                get = function() return gget("statusBarTexture") end, set = function(_, v) gset("statusBarTexture", v) end },
+                            useClassColor = { order = 5, type = "toggle", name = "Class Color",
+                                get = function() return gget("useClassColor") ~= false end, set = function(_, v) gset("useClassColor", v) end },
+                            customColor = { order = 6, type = "color", name = "Custom Color",
+                                disabled = function() return gget("useClassColor") ~= false end,
+                                get = function() return unpackColor(gget("customColor")) end,
+                                set = function(_, r, g, b) gset("customColor", { r = r, g = g, b = b }) end },
+                        },
+                    },
+                    iconGrp = {
+                        order = 3, type = "group", inline = true, name = "Icon",
+                        args = {
+                            iconEnabled = { order = 1, type = "toggle", name = "Show Icon",
+                                get = function() return gget("iconEnabled") ~= false end, set = function(_, v) gset("iconEnabled", v) end },
+                            iconSpacing = { order = 2, type = "range", name = "Icon Spacing", min = 0, max = 20, step = 1,
+                                disabled = function() return gget("iconEnabled") == false end,
+                                get = function() return gget("iconSpacing") or 1 end, set = function(_, v) gset("iconSpacing", v) end },
+                            iconZoom = { order = 3, type = "range", name = "Icon Zoom", min = 0, max = 0.45, step = 0.01, isPercent = true,
+                                disabled = function() return gget("iconEnabled") == false end,
+                                get = function() return gget("iconZoom") or 0.1 end, set = function(_, v) gset("iconZoom", v) end },
+                        },
+                    },
+                    posGrp = {
+                        order = 4, type = "group", inline = true, name = "Position",
+                        args = {
+                            toggleMovers = { order = 1, type = "execute", name = "Toggle thingsUI Movers", width = 1.2,
+                                func = function() E:ToggleMoveMode("THINGSUI") end },
+                            anchorFrame = { order = 2, type = "select", name = "Anchor To", width = "double",
+                                values = function() return ns.ANCHORS and ns.ANCHORS.FilteredValues and ns.ANCHORS.FilteredValues() or { UIParent = "UIParent" } end,
+                                sorting = function() return ns.ANCHORS and ns.ANCHORS.FilteredOrder and ns.ANCHORS.FilteredOrder() or nil end,
+                                get = function() return gget("anchorFrame") or "UIParent" end,
+                                set = function(_, v) gset("anchorFrame", v) end },
+                            anchorFrameCustom = { order = 3, type = "input", name = "Custom Frame Name",
+                                hidden = function() return gget("anchorFrame") ~= "CUSTOM" end,
+                                get = function() return gget("anchorFrameCustom") or "" end,
+                                set = function(_, v) gset("anchorFrameCustom", v) end },
+                            anchorPoint = { order = 4, type = "select", name = "Anchor From (self)",
+                                values = ns.POINTS and ns.POINTS.VALUES, sorting = ns.POINTS and ns.POINTS.ORDER,
+                                get = function() return gget("anchorPoint") or "CENTER" end,
+                                set = function(_, v) gset("anchorPoint", v) end },
+                            anchorRelativePoint = { order = 5, type = "select", name = "Anchor To (target)",
+                                values = ns.POINTS and ns.POINTS.VALUES, sorting = ns.POINTS and ns.POINTS.ORDER,
+                                get = function() return gget("anchorRelativePoint") or "CENTER" end,
+                                set = function(_, v) gset("anchorRelativePoint", v) end },
+                            anchorXOffset = { order = 6, type = "range", name = "X Offset", min = -800, max = 800, step = 0.5, bigStep = 1,
+                                get = function() return gget("anchorXOffset") or 0 end,
+                                set = function(_, v) gset("anchorXOffset", v) end },
+                            anchorYOffset = { order = 7, type = "range", name = "Y Offset", min = -800, max = 800, step = 0.5, bigStep = 1,
+                                get = function() return gget("anchorYOffset") or 0 end,
+                                set = function(_, v) gset("anchorYOffset", v) end },
+                        },
+                    },
                 },
             },
             textTab = {
@@ -586,47 +705,34 @@ local function GroupTab(gi)
                     },
                 },
             },
-            positionTab = {
-                order = 40, type = "group", name = "Position",
-                args = {
-                    toggleMovers = { order = 1, type = "execute", name = "Toggle thingsUI Movers", width = 1.2,
-                        func = function() E:ToggleMoveMode("THINGSUI") end },
-                    anchorFrame = { order = 2, type = "select", name = "Anchor To", width = "double",
-                        values = function() return ns.ANCHORS and ns.ANCHORS.FilteredValues and ns.ANCHORS.FilteredValues() or { UIParent = "UIParent" } end,
-                        sorting = function() return ns.ANCHORS and ns.ANCHORS.FilteredOrder and ns.ANCHORS.FilteredOrder() or nil end,
-                        get = function() return gget("anchorFrame") or "UIParent" end,
-                        set = function(_, v) gset("anchorFrame", v) end },
-                    anchorFrameCustom = { order = 3, type = "input", name = "Custom Frame Name",
-                        hidden = function() return gget("anchorFrame") ~= "CUSTOM" end,
-                        get = function() return gget("anchorFrameCustom") or "" end,
-                        set = function(_, v) gset("anchorFrameCustom", v) end },
-                    anchorPoint = { order = 4, type = "select", name = "Anchor From (self)",
-                        values = ns.POINTS and ns.POINTS.VALUES, sorting = ns.POINTS and ns.POINTS.ORDER,
-                        get = function() return gget("anchorPoint") or "CENTER" end,
-                        set = function(_, v) gset("anchorPoint", v) end },
-                    anchorRelativePoint = { order = 5, type = "select", name = "Anchor To (target)",
-                        values = ns.POINTS and ns.POINTS.VALUES, sorting = ns.POINTS and ns.POINTS.ORDER,
-                        get = function() return gget("anchorRelativePoint") or "CENTER" end,
-                        set = function(_, v) gset("anchorRelativePoint", v) end },
-                    anchorXOffset = { order = 6, type = "range", name = "X Offset", min = -800, max = 800, step = 0.5, bigStep = 1,
-                        get = function() return gget("anchorXOffset") or 0 end,
-                        set = function(_, v) gset("anchorXOffset", v) end },
-                    anchorYOffset = { order = 7, type = "range", name = "Y Offset", min = -800, max = 800, step = 0.5, bigStep = 1,
-                        get = function() return gget("anchorYOffset") or 0 end,
-                        set = function(_, v) gset("anchorYOffset", v) end },
-                },
-            },
         },
     }
 end
 
+local cbArgs
+
+local function RebuildGroupTabs()
+    if not cbArgs then return end
+    for k in pairs(cbArgs) do
+        if k:match("^group%d+$") then cbArgs[k] = nil end
+    end
+    local n = math.min(#((CB() and CB().GetGroups()) or {}), MAX_GROUPS)
+    for gi = 1, n do
+        cbArgs["group" .. gi] = GroupTab(gi)
+    end
+end
+
 function TUI:CustomBarsOptions()
-    local args = {
+    cbArgs = {
         newGroup = {
             order = 1, type = "execute", name = "+ New Bar Group", width = 1.2,
             disabled = function() return CB() and #CB().GetGroups() >= MAX_GROUPS end,
             func = function()
-                if CB() then CB().NewGroup(); Refresh() end
+                if CB() then
+                    CB().NewGroup()
+                    RebuildGroupTabs()
+                    Refresh()
+                end
             end,
         },
         desc = {
@@ -634,14 +740,13 @@ function TUI:CustomBarsOptions()
             name = "Buff and debuff BARS driven by the aura engine. Bars appear while the aura runs and the stack packs itself. Half-width bars share a line.\n",
         },
     }
-    for gi = 1, MAX_GROUPS do
-        args["group" .. gi] = GroupTab(gi)
-    end
+    RebuildGroupTabs()
+    if ns.CustomBars then ns.CustomBars._rebuildOptions = RebuildGroupTabs end
     return {
         order = 31,
         type = "group",
         name = "Groups - Bars",
         childGroups = "tab",
-        args = args,
+        args = cbArgs,
     }
 end

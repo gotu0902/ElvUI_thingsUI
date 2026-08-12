@@ -213,3 +213,14 @@ ns.GROWTH.DIRECTIONAL = {
   RIGHT = "Grow Right", LEFT = "Grow Left", DOWN = "Grow Down", UP = "Grow Up",
 }
 ns.GROWTH.DIRECTIONAL_ORDER = { "RIGHT", "LEFT", "DOWN", "UP" }
+
+ns.SORTING = {
+  VALUES = {
+    manual   = "Manual",
+    long     = "Longest Remaining First",
+    short    = "Shortest Remaining First",
+    new      = "Newest First",
+    instance = "Oldest First",
+  },
+  ORDER = { "manual", "long", "short", "new", "instance" },
+}

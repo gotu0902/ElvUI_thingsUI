@@ -91,11 +91,10 @@ function M.GetScopeRoot(group, scope, create)
     return root
 end
 
-local function NextIndex(root)
+local function NextIndex(group, scope)
     local n = 0
-    for _, d in pairs((root and root.auras) or {}) do
-        local li = d.layoutIndex or 0
-        if li > n and li < 90000 then n = li end
+    for _, e in ipairs(M.ScopeEntries(group, scope)) do
+        if e.li > n and e.li < 90000 then n = e.li end
     end
     return n + 1
 end
@@ -107,7 +106,7 @@ function M.AddAura(group, scope, spellID)
     local uid = "spell:" .. spellID
     if root.auras[uid] then return end
     root.auras[uid] = { spells = { [spellID] = true }, kind = "HELPFUL", max = 1,
-        layoutIndex = NextIndex(root) }
+        layoutIndex = NextIndex(group, scope) }
 end
 
 function M.AddAuraSet(group, scope, uid, def)
@@ -117,7 +116,7 @@ function M.AddAuraSet(group, scope, uid, def)
     local spells = {}
     for _, id in ipairs(def.spells or {}) do spells[id] = true end
     root.auras[uid] = {
-        enabled = true, layoutIndex = NextIndex(root),
+        enabled = true, layoutIndex = NextIndex(group, scope),
         name = def.name, spells = spells,
         kind = def.kind or "HELPFUL", max = def.max or 1,
     }
@@ -154,19 +153,41 @@ function M.ScopeEntries(group, scope)
     return out
 end
 
-local SCOPE_BAND = { global = 1, class = 2, spec = 3 }
-local SCOPES = { "global", "class", "spec" }
+local SCOPE_LETTER = { G = "global", C = "class", S = "spec" }
+
+function M.ScopeOrderFor(group)
+    local o = group and group.scopeOrder
+    if type(o) == "string" then
+        local t = {}
+        for l in o:gmatch("%a") do t[#t + 1] = SCOPE_LETTER[l] end
+        o = (#t == 3) and t or nil
+        group.scopeOrder = o
+    end
+    if type(o) ~= "table" or #o ~= 3 then return { "global", "class", "spec" } end
+    return o
+end
+
+function M.MoveScope(group, scope, dir)
+    if type(group.scopeOrder) ~= "table" then group.scopeOrder = M.ScopeOrderFor(group) end
+    local ord = group.scopeOrder
+    local pos
+    for i, s in ipairs(ord) do if s == scope then pos = i break end end
+    if not pos then return end
+    local swap = pos + dir
+    if swap < 1 or swap > #ord then return end
+    ord[pos], ord[swap] = ord[swap], ord[pos]
+end
 
 function M.Entries(group)
     local out = {}
-    for _, scope in ipairs(SCOPES) do
+    for band, scope in ipairs(M.ScopeOrderFor(group)) do
         for _, e in ipairs(M.ScopeEntries(group, scope)) do
             if e.kind == "aura" then
                 if e.def.enabled ~= false and next(e.def.spells or {}) then
                     out[#out + 1] = {
                         uid = scope .. "_" .. e.uid,
                         def = e.def,
-                        rank = SCOPE_BAND[scope] * 100000 + e.li,
+                        rank = band * 100000 + e.li,
                     }
                 end
             else
@@ -174,8 +195,9 @@ function M.Entries(group)
                     and ns.SpecialAura.ExpandSpellIDs(e.def.spellID)) or { [e.def.spellID] = true }
                 out[#out + 1] = {
                     uid = scope .. "_" .. e.uid:gsub(":", ""),
-                    def = { spells = spells, max = 1 },
-                    rank = SCOPE_BAND[scope] * 100000 + e.li,
+                    def = { spells = spells, max = 1,
+                        kind = (e.def.auraKind == "HARMFUL") and "HARMFUL" or nil },
+                    rank = band * 100000 + e.li,
                 }
             end
         end
@@ -348,6 +370,18 @@ local function StyleBar(button, r, group, def)
     button:SetMouseMotionEnabled(true)
 end
 
+local function GroupVisOK(st, unit)
+    if unit == "player" then
+        if st.pureHarmful then return true end
+        local AL = ns.AuraLane
+        return not (AL and AL.PlayerAssistOK) or AL.PlayerAssistOK()
+    end
+    local assist = (UnitExists(unit) and UnitCanAssist("player", unit)) and true or false
+    if not st.pureHarmful and not assist then return false end
+    if st.hasHarmful and assist then return false end
+    return true
+end
+
 local function RenderTestBars(st, group)
     local pool = st.testBars
     if not (ns.CustomGroups and ns.CustomGroups.testMode) then
@@ -364,14 +398,28 @@ local function RenderTestBars(st, group)
     local font = LSM:Fetch("font", group.font or "Expressway")
     local lineX, row, idx = 0, 0, 0
     local entries = M.Entries(group)
+    local sorted = (group.sortMode or "manual") ~= "manual"
+    local cap = tonumber(group.maxBars) or 0
+    local remaining = (sorted and cap > 0) and cap or nil
     local counts = {}
     for i, e in ipairs(entries) do
-        counts[i] = math.max(1, e.def.max or 1)
+        local n = math.max(1, e.def.max or 1)
+        if remaining then
+            n = math.min(n, remaining)
+            remaining = remaining - n
+        end
+        counts[i] = n
     end
 
+    local rowCap = (not sorted and cap > 0) and cap or nil
+    local capped = false
     for ei, e in ipairs(entries) do
+        if capped then break end
         local spells = (ns.AuraLane and ns.AuraLane.SpellList and ns.AuraLane.SpellList(e.def)) or {}
         for k = 1, counts[ei] do
+            local wNext = e.def.halfWidth and math.floor((W - sp) / 2) or W
+            local willRow = (lineX > 0 and lineX + wNext > W) and (row + 1) or row
+            if rowCap and willRow >= rowCap then capped = true break end
             idx = idx + 1
             local f = pool[idx]
             if not f then
@@ -478,8 +526,9 @@ local function EnsureState(group)
     if st then return st end
     local frame = CreateFrame("Frame", "TUI_CustomBars" .. group.id, UIParent)
     frame:SetFrameStrata("MEDIUM")
-    local container = CreateFrame("AuraContainer", nil, frame, "CustomAuraContainerTemplate")
-    st = { frame = frame, container = container,
+    local clip = CreateFrame("Frame", nil, frame)
+    local container = CreateFrame("AuraContainer", nil, clip, "CustomAuraContainerTemplate")
+    st = { frame = frame, clip = clip, container = container,
            regions = {}, keys = {}, defByKey = {}, keyByButton = {} }
     state[group.id] = st
     return st
@@ -613,11 +662,42 @@ local function SyncGroup(group)
         return
     end
 
+    local sortMode = group.sortMode or "manual"
+    if sortMode ~= "manual" then
+        local unionH, unionD, anyH, anyD = {}, {}, false, false
+        for _, e in ipairs(entries) do
+            local d = e.def
+            local dst = (d.kind == "HARMFUL") and unionD or unionH
+            for id in pairs(d.spells or {}) do dst[id] = true end
+            if d.kind == "HARMFUL" then anyD = true else anyH = true end
+        end
+        local cap = tonumber(group.maxBars) or 0
+        local maxN = (cap > 0) and cap or 40
+        local merged = {}
+        if anyH then
+            merged[#merged + 1] = { uid = "mergedH",
+                def = { spells = unionH, max = maxN, sort = sortMode } }
+        end
+        if anyD then
+            merged[#merged + 1] = { uid = "mergedD",
+                def = { spells = unionD, max = maxN, sort = sortMode, kind = "HARMFUL" } }
+        end
+        entries = merged
+    end
+
     local up = group.growth == "UP"
     local pt = up and "BOTTOMLEFT" or "TOPLEFT"
+    local capBars = tonumber(group.maxBars) or 0
+    local sp = group.spacing or 2
+    local clipOn = capBars > 0
+    local clip = st.clip
+    clip:ClearAllPoints()
+    clip:SetPoint(pt, frame, pt, 0, 0)
+    clip:SetSize(effW, clipOn and (capBars * effH + (capBars - 1) * sp) or effH)
+    clip:SetClipsChildren(clipOn)
     c:ClearAllPoints()
     c:SetSize(effW, effH)
-    c:SetPoint(pt, frame, pt, 0, 0)
+    c:SetPoint(pt, clip, pt, 0, 0)
     c:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
     c:SetFlowLayoutAxis(AnchorUtil.FlowLayoutAxis.Horizontal)
     c:SetFlowLayoutAnchorPoint(pt)
@@ -641,9 +721,9 @@ local function SyncGroup(group)
         if c.UpdateAllAuras then c:UpdateAllAuras() end
     end
 
-    st.pureHarmful = true
+    st.pureHarmful, st.hasHarmful = true, false
     for _, entry in ipairs(entries) do
-        if entry.def.kind ~= "HARMFUL" then st.pureHarmful = false break end
+        if entry.def.kind == "HARMFUL" then st.hasHarmful = true else st.pureHarmful = false end
     end
 
     for button, r in pairs(st.regions) do
@@ -651,11 +731,7 @@ local function SyncGroup(group)
         local def = key and st.defByKey[key]
         if def then StyleBar(button, r, group, def) end
     end
-    if unit ~= "player" and st.pureHarmful then
-        c:SetShown(not (UnitExists(unit) and UnitCanAssist("player", unit)))
-    else
-        c:Show()
-    end
+    c:SetShown(GroupVisOK(st, unit))
 end
 
 local cbUpdateQueued = false
@@ -687,6 +763,21 @@ function TUI:UpdateCustomBars()
     end
 end
 
+function M.ReparseAll()
+    for _, st in pairs(state) do
+        if st.container.UpdateAllAuras then st.container:UpdateAllAuras() end
+    end
+end
+
+function M.RefreshVisibility()
+    if ns.CustomGroups and ns.CustomGroups.testMode then return end
+    for _, st in pairs(state) do
+        if st.frame:IsShown() then
+            st.container:SetShown(GroupVisOK(st, st.unit or "player"))
+        end
+    end
+end
+
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")
 ev:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -701,14 +792,9 @@ ev:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_ENTERING_WORLD" then
             C_Timer.After(1, function() TUI:UpdateCustomBars() end)
         end
-        local function reparse()
-            for _, st in pairs(state) do
-                if st.container.UpdateAllAuras then st.container:UpdateAllAuras() end
-            end
-        end
-        C_Timer.After(0.1, reparse)
-        C_Timer.After(2, reparse)
-        C_Timer.After(5, reparse)
+        C_Timer.After(0.1, M.ReparseAll)
+        C_Timer.After(2, M.ReparseAll)
+        C_Timer.After(5, M.ReparseAll)
         return
     end
     if event == "PLAYER_REGEN_ENABLED" then
@@ -721,8 +807,8 @@ ev:SetScript("OnEvent", function(_, event)
         or (event == "UNIT_PET") and "pet" or "target"
     for _, st in pairs(state) do
         if st.unit == want then
-            if st.pureHarmful then
-                st.container:SetShown(not (UnitExists(want) and UnitCanAssist("player", want)))
+            if not (ns.CustomGroups and ns.CustomGroups.testMode) then
+                st.container:SetShown(GroupVisOK(st, want))
             end
             st.container:SetUnit(want)
             if st.container.UpdateAllAuras then st.container:UpdateAllAuras() end

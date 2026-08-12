@@ -103,7 +103,7 @@ function TUI:UpdateSpecialBars()
         if not idx or idx > barCount then if releaseBar then releaseBar(key) end end
     end
     if hideBarMover then
-        for i = barCount + 1, 12 do hideBarMover("bar" .. i) end
+        for i = barCount + 1, (SB.MAX_SLOTS or 12) do hideBarMover("bar" .. i) end
     end
     EnsureSlotKeys(barCount, 0)
     local updateBar = SB.UpdateBarSlot
@@ -117,7 +117,7 @@ function TUI:UpdateSpecialBars()
         if not idx or idx > iconCount then if releaseIcon then releaseIcon(key) end end
     end
     if hideIconMover then
-        for i = iconCount + 1, 12 do hideIconMover("icon" .. i) end
+        for i = iconCount + 1, (SB.MAX_SLOTS or 12) do hideIconMover("icon" .. i) end
     end
     EnsureSlotKeys(0, iconCount)
     local updateIcon = SB.UpdateIconSlot

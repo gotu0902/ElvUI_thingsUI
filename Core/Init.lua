@@ -206,6 +206,8 @@ function TUI:ProfileUpdate()
     if self.UpdateMBB then self:UpdateMBB() end
     if self.UpdateInstanceDifficulty then self:UpdateInstanceDifficulty() end
     if ns.CustomGroups and ns.CustomGroups._rebuildOptions then ns.CustomGroups._rebuildOptions() end
+    if ns.CustomBars and ns.CustomBars._rebuildOptions then ns.CustomBars._rebuildOptions() end
+    if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end
     if ns.BarSetup and ns.BarSetup._rebuildSetupOptions then ns.BarSetup._rebuildSetupOptions() end
     if ns.Timers then
         if ns.Timers.DropLustTimers then ns.Timers.DropLustTimers() end

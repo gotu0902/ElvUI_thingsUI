@@ -92,10 +92,21 @@ function A.HasSets(group)
     return #A.Entries(group) > 0
 end
 
+local playerAssistOK = true
+
+function A.PlayerAssistOK()
+    return playerAssistOK
+end
+
 local function LaneVisOK(lane)
-    if lane.unit and lane.unit ~= "player" and lane.pureHarmful then
-        return not (UnitExists(lane.unit) and UnitCanAssist("player", lane.unit))
+    local unit = lane.unit or "player"
+    if unit == "player" then
+        return lane.pureHarmful or playerAssistOK
     end
+
+    local assist = (UnitExists(unit) and UnitCanAssist("player", unit)) and true or false
+    if not lane.pureHarmful and not assist then return false end
+    if lane.hasHarmful and assist then return false end
     return true
 end
 
@@ -629,6 +640,38 @@ function A.Sync(group, frame)
     end
     if not Ready() then return end
 
+    local au0 = group.auras or {}
+    local sortMode = au0.sortMode or "manual"
+    if sortMode ~= "manual" then
+        local unionH, unionD, anyH, anyD = {}, {}, false, false
+        local mUnit
+        for _, e in ipairs(entries) do
+            local d = e.def
+            if not mUnit and d.unit then mUnit = d.unit end
+            local dst = (d.kind == "HARMFUL") and unionD or unionH
+            for id in pairs(d.spells or {}) do dst[id] = true end
+            if d.kind == "HARMFUL" then anyD = true else anyH = true end
+        end
+        local cap = tonumber(group.maxIcons) or 0
+        local maxN = (cap > 0) and cap or 40
+        local merged = {}
+        if anyH then
+            merged[#merged + 1] = {
+                key = ("TUIAura%d_mergedH"):format(group.id or 0),
+                def = { spells = unionH, max = maxN, sort = sortMode, unit = mUnit },
+                rank = 1,
+            }
+        end
+        if anyD then
+            merged[#merged + 1] = {
+                key = ("TUIAura%d_mergedD"):format(group.id or 0),
+                def = { spells = unionD, max = maxN, sort = sortMode, kind = "HARMFUL", unit = mUnit },
+                rank = 2,
+            }
+        end
+        entries = merged
+    end
+
     local lane = LaneFor(group, frame)
     lane.slot = frame._tuiSlot
     local S = lane.slot
@@ -667,9 +710,9 @@ function A.Sync(group, frame)
         if lane.container.UpdateAllAuras then lane.container:UpdateAllAuras() end
     end
 
-    lane.pureHarmful = true
+    lane.pureHarmful, lane.hasHarmful = true, false
     for _, entry in ipairs(entries) do
-        if entry.def.kind ~= "HARMFUL" then lane.pureHarmful = false break end
+        if entry.def.kind == "HARMFUL" then lane.hasHarmful = true else lane.pureHarmful = false end
     end
 
     for button in pairs(lane.regions) do StyleButton(button, group, lane) end
@@ -686,10 +729,46 @@ function A.ReparseAll()
     end
 end
 
+local function RefreshHelpfulVis()
+    if not (ns.CustomGroups and ns.CustomGroups.testMode) then
+        for _, lane in pairs(lanes) do
+            lane.container:SetShown(LaneVisOK(lane))
+        end
+    end
+    if ns.SpecialAura and ns.SpecialAura.RefreshVisibility then ns.SpecialAura.RefreshVisibility() end
+    if ns.CustomBars and ns.CustomBars.RefreshVisibility then ns.CustomBars.RefreshVisibility() end
+end
+
+local function ReparseEverything()
+    A.ReparseAll()
+    if ns.SpecialAura and ns.SpecialAura.ReparseAll then ns.SpecialAura.ReparseAll() end
+    if ns.CustomBars and ns.CustomBars.ReparseAll then ns.CustomBars.ReparseAll() end
+end
+
+local assistTicker
+local function CheckPlayerAssist()
+    local ok = not not UnitCanAssist("player", "player")
+    if ok ~= playerAssistOK then
+        playerAssistOK = ok
+        RefreshHelpfulVis()
+        if ok then ReparseEverything() end
+    end
+    if not ok then
+        if not assistTicker then assistTicker = C_Timer.NewTicker(1, CheckPlayerAssist) end
+    elseif assistTicker then
+        assistTicker:Cancel()
+        assistTicker = nil
+    end
+end
+
 local function ReparseSoon()
-    C_Timer.After(0.1, A.ReparseAll)
-    C_Timer.After(2, A.ReparseAll)
-    C_Timer.After(5, A.ReparseAll)
+    local function sweep()
+        CheckPlayerAssist()
+        A.ReparseAll()
+    end
+    C_Timer.After(0.1, sweep)
+    C_Timer.After(2, sweep)
+    C_Timer.After(5, sweep)
 end
 
 local ev = CreateFrame("Frame")
@@ -700,9 +779,23 @@ ev:RegisterEvent("PLAYER_ENTERING_WORLD")
 ev:RegisterEvent("CINEMATIC_STOP")
 ev:RegisterEvent("STOP_MOVIE")
 ev:RegisterUnitEvent("UNIT_PET", "player")
+ev:RegisterUnitEvent("UNIT_ENTERED_VEHICLE", "player")
+ev:RegisterUnitEvent("UNIT_EXITED_VEHICLE", "player")
+ev:RegisterUnitEvent("UNIT_FLAGS", "player")
+ev:RegisterEvent("PLAYER_CONTROL_LOST")
+ev:RegisterEvent("PLAYER_CONTROL_GAINED")
 ev:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_ENTERING_WORLD" or event == "CINEMATIC_STOP" or event == "STOP_MOVIE" then
         ReparseSoon()
+        return
+    end
+    if event == "UNIT_EXITED_VEHICLE" or event == "PLAYER_CONTROL_GAINED" then
+        CheckPlayerAssist()
+        C_Timer.After(0.5, ReparseEverything)
+        return
+    end
+    if event == "UNIT_ENTERED_VEHICLE" or event == "PLAYER_CONTROL_LOST" or event == "UNIT_FLAGS" then
+        CheckPlayerAssist()
         return
     end
     if event == "PLAYER_REGEN_ENABLED" then
@@ -716,7 +809,9 @@ ev:SetScript("OnEvent", function(_, event)
         or (event == "UNIT_PET") and "pet" or "target"
     for _, lane in pairs(lanes) do
         if lane.unit == want then
-            lane.container:SetShown(LaneVisOK(lane))
+            if not (ns.CustomGroups and ns.CustomGroups.testMode) then
+                lane.container:SetShown(LaneVisOK(lane))
+            end
             lane.container:SetUnit(want)
             if lane.container.UpdateAllAuras then lane.container:UpdateAllAuras() end
         end

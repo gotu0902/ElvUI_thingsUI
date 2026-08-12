@@ -602,10 +602,18 @@ local function RenderTestLane(gs, group, frame)
     if not (S and ns.AuraLane) then return end
 
     local entries = ns.AuraLane.Entries(group)
+    local sorted = ((group.auras and group.auras.sortMode) or "manual") ~= "manual"
+    local cap = tonumber(group.maxIcons) or 0
+    local remaining = (sorted and cap > 0) and cap or nil
     local counts, total = {}, 0
     for ei, entry in ipairs(entries) do
-        counts[ei] = math.max(1, entry.def.max or 1)
-        total = total + counts[ei]
+        local n = math.max(1, entry.def.max or 1)
+        if remaining then
+            n = math.min(n, remaining)
+            remaining = remaining - n
+        end
+        counts[ei] = n
+        total = total + n
     end
 
     local idx, slot = 0, M.NextFreeSlot(group, frame)

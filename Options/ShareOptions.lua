@@ -59,11 +59,18 @@ function TUI:ShareOptions()
             exportButton = {
                 order = 12, type = "execute", name = "Generate Export String",
                 func = function()
-                    local sel = {}
-                    for i in ipairs(ns.Share.SECTIONS) do sel[i] = selected[i] == true end
+                    local sel, any = {}, false
+                    for i in ipairs(ns.Share.SECTIONS) do
+                        sel[i] = selected[i] == true
+                        if sel[i] then any = true end
+                    end
+                    if not any then
+                        print("|cFF8080FFthingsUI|r: nothing to export - pick at least one section.")
+                        return
+                    end
                     local s = (ns.Share and ns.Share.Export(sel)) or ""
                     if s == "" then
-                        print("|cFF8080FFthingsUI|r: nothing to export - pick at least one section.")
+                        print("|cFF8080FFthingsUI|r: export failed - the picked sections have no saved settings yet.")
                     elseif ns.ShareWizard and ns.ShareWizard.ShowExport then
                         ns.ShareWizard.ShowExport(s)
                     end
