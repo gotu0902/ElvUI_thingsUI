@@ -234,53 +234,90 @@ function A.ApplyButtonFX(button, r, opts)
     local style = opts.style
     local gc = opts.color
 
-    -- own pixel impl: LCG's pooled frames may not anchor to aura buttons
-    -- (forbidden-aspect inheritance); translation anims run without Lua
+    -- own pixel impl (LCG's pooled frames may not anchor to aura buttons):
+    -- Path-animated dots orbit the full perimeter, no Lua per frame
     if style == "pixel" then
         local px = r.glowPixel
         if not px then
             px = CreateFrame("Frame", nil, button)
             px:SetAllPoints(button)
             px.tex = {}
-            for i = 1, 4 do
-                local t = px:CreateTexture(nil, "OVERLAY", nil, 7)
-                local ag = t:CreateAnimationGroup()
-                ag:SetLooping("REPEAT")
-                t.move = ag:CreateAnimation("Translation")
-                t.anim = ag
-                px.tex[i] = t
-            end
             r.glowPixel = px
         end
-        local w, h = opts.w or 36, opts.h or 36
-        local th = opts.thickness or 2
+        local th = math.max(1, opts.thickness or 2)
+        local N = math.min(12, math.max(1, opts.lines or 8))
+        local T = math.min(6, math.max(1, opts.length or 3))
+        local off = opts.offset or 0
+        local M = 12
+        local w = (opts.w or 36) + 2 * off
+        local h = (opts.h or 36) + 2 * off
         local c = gc or {}
-        local segW = math.max(6, math.floor(w * 0.35))
-        local segH = math.max(6, math.floor(h * 0.35))
-        local defs = {
-            { p = "TOPLEFT",     w = segW, h = th,   dx = w - segW,    dy = 0 },
-            { p = "BOTTOMRIGHT", w = segW, h = th,   dx = -(w - segW), dy = 0 },
-            { p = "TOPRIGHT",    w = th,   h = segH, dx = 0,           dy = -(h - segH) },
-            { p = "BOTTOMLEFT",  w = th,   h = segH, dx = 0,           dy = h - segH },
-        }
-        local dur = 1 / math.max(0.05, opts.frequency or 0.25) * 0.25
-        for i, d in ipairs(defs) do
-            local t = px.tex[i]
-            t:SetColorTexture(c.r or 1, c.g or 1, c.b or 0.25, c.a or 1)
-            t:ClearAllPoints()
-            t:SetPoint(d.p, button, d.p, 0, 0)
-            t:SetSize(d.w, d.h)
-            t.anim:Stop()
-            t.move:SetOffset(d.dx, d.dy)
-            t.move:SetDuration(dur)
-            t:Show()
+        local P = 2 * (w + h)
+        local function posAt(d)
+            d = d % P
+            if d < w then return d, 0 end
+            d = d - w
+            if d < h then return w, -d end
+            d = d - h
+            if d < w then return w - d, -h end
+            d = d - w
+            return 0, -(h - d)
+        end
+        local dur = 1 / math.max(0.05, opts.frequency or 0.25)
+        local sig = table.concat({ w, h, th, dur, N, T, off }, ":")
+        local idx = 0
+        for i = 1, N do
+            for j = 0, T - 1 do
+                idx = idx + 1
+                local t = px.tex[idx]
+                if t and not t.path then
+                    t.anim:Stop()
+                    t:Hide()
+                    t = nil
+                end
+                if not t then
+                    t = px:CreateTexture(nil, "OVERLAY", nil, 7)
+                    local ag = t:CreateAnimationGroup()
+                    ag:SetLooping("REPEAT")
+                    local path = ag:CreateAnimation("Path")
+                    path:SetCurveType("NONE")
+                    t.cps = {}
+                    for k = 1, M do
+                        local cp = path:CreateControlPoint()
+                        cp:SetOrder(k)
+                        t.cps[k] = cp
+                    end
+                    t.anim, t.path = ag, path
+                    px.tex[idx] = t
+                end
+                t:SetColorTexture(c.r or 1, c.g or 1, c.b or 0.25, c.a or 1)
+                t:SetSize(th + 1, th + 1)
+                if t._sig ~= sig then
+                    t._sig = sig
+                    t.anim:Stop()
+                    local d0 = (i - 1) / N * P - j * (th + 1)
+                    local x0, y0 = posAt(d0)
+                    t:ClearAllPoints()
+                    t:SetPoint("CENTER", px, "TOPLEFT", x0 - off, y0 + off)
+                    for k = 1, M do
+                        local xk, yk = posAt(d0 + k / M * P)
+                        t.cps[k]:SetOffset(xk - x0, yk - y0)
+                    end
+                    t.path:SetDuration(dur)
+                end
+                t:Show()
+            end
+        end
+        for k = idx + 1, #px.tex do
+            px.tex[k].anim:Stop()
+            px.tex[k]:Hide()
         end
         px:Show()
-        for i = 1, 4 do
-            if not px.tex[i].anim:IsPlaying() then px.tex[i].anim:Play() end
+        for k = 1, idx do
+            if not px.tex[k].anim:IsPlaying() then px.tex[k].anim:Play() end
         end
     elseif r.glowPixel then
-        for i = 1, 4 do r.glowPixel.tex[i].anim:Stop() end
+        for _, t in ipairs(r.glowPixel.tex) do t.anim:Stop() end
         r.glowPixel:Hide()
     end
 
@@ -525,19 +562,24 @@ local function StyleButton(button, group, lane)
         if r.cd then r.cd:Hide() end
     end
 
-    local style, gColor, gTh
+    local style, gColor, gTh, gSrc
     if idb then
         if idb.showGlow then
             style = A.MapGlowStyle(idb.glowType)
             gColor = idb.glowColor
             gTh = idb.glowThickness
+            gSrc = idb
         end
     elseif def and def.showGlow then
         style = def.glowStyle or "pulse"
         gColor = def.glowColor
+        gTh = def.glowThickness
+        gSrc = def
     end
     A.ApplyButtonFX(button, r, {
         style = style, color = gColor, thickness = gTh,
+        lines = gSrc and gSrc.glowLines, length = gSrc and gSrc.glowLength,
+        offset = gSrc and gSrc.glowOffset, frequency = gSrc and gSrc.glowSpeed,
         w = S.iw, h = S.ih,
         pandemic = (idb and idb.showPandemic) or (def and def.showPandemic) or false,
         pandemicColor = def and def.pandemicColor,
@@ -811,6 +853,11 @@ function A.Sync(group, frame)
                 m.def.showGlow = true
                 m.def.glowStyle = au0.sortGlowStyle or "pulse"
                 m.def.glowColor = au0.sortGlowColor
+                m.def.glowThickness = au0.sortGlowThickness
+                m.def.glowLines = au0.sortGlowLines
+                m.def.glowLength = au0.sortGlowLength
+                m.def.glowOffset = au0.sortGlowOffset
+                m.def.glowSpeed = au0.sortGlowSpeed
             end
         end
         entries = merged

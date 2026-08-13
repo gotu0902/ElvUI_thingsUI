@@ -170,6 +170,14 @@ local function EditAura(def, title, onChange, group)
     end)
     f:AddChild(glow)
 
+    local pxWidgets = {}
+    local function PixelOn()
+        return not sorted and def.showGlow and (def.glowStyle or "pulse") == "pixel"
+    end
+    local function UpdatePixelState()
+        for _, wdg in ipairs(pxWidgets) do wdg:SetDisabled(not PixelOn()) end
+    end
+
     gstyle = AceGUI:Create("Dropdown")
     gstyle:SetLabel("Glow Style")
     gstyle:SetWidth(170)
@@ -177,8 +185,29 @@ local function EditAura(def, title, onChange, group)
         { "pulse", "pixel", "proc", "ants" })
     gstyle:SetValue(def.glowStyle or "pulse")
     gstyle:SetDisabled(sorted or not def.showGlow)
-    gstyle:SetCallback("OnValueChanged", function(_, _, v) def.glowStyle = v; onChange() end)
+    gstyle:SetCallback("OnValueChanged", function(_, _, v)
+        def.glowStyle = v
+        UpdatePixelState()
+        onChange()
+    end)
     f:AddChild(gstyle)
+
+    local function AddPixelSlider(label, field, mn, mx, step, dflt)
+        local s = AceGUI:Create("Slider")
+        s:SetLabel(label)
+        s:SetWidth(170)
+        s:SetSliderValues(mn, mx, step)
+        s:SetValue(def[field] or dflt)
+        s:SetDisabled(not PixelOn())
+        s:SetCallback("OnValueChanged", function(_, _, v) def[field] = v; onChange() end)
+        f:AddChild(s)
+        pxWidgets[#pxWidgets + 1] = s
+    end
+    AddPixelSlider("Thickness", "glowThickness", 1, 6, 1, 2)
+    AddPixelSlider("Particles", "glowLines", 1, 12, 1, 8)
+    AddPixelSlider("Line Length", "glowLength", 1, 6, 1, 3)
+    AddPixelSlider("Offset", "glowOffset", -6, 8, 1, 0)
+    AddPixelSlider("Speed", "glowSpeed", 0.05, 1, 0.05, 0.25)
 
     pand = AceGUI:Create("CheckBox")
     pand:SetLabel("Pandemic Indicator")
@@ -1047,6 +1076,32 @@ function TUI:CustomGroupsOptions()
                 end,
             },
         }
+        do
+            local function pxHidden()
+                local au = group.auras
+                if ((au and au.sortMode) or "manual") == "manual" then return true end
+                return ((au and au.sortGlowStyle) or "pulse") ~= "pixel"
+            end
+            local function pxDisabled() return not (group.auras and group.auras.sortGlow) end
+            local defs = {
+                { f = "sortGlowThickness", n = "Thickness",   mn = 1,    mx = 6,  st = 1,    d = 2,    o = 2.4 },
+                { f = "sortGlowLines",     n = "Particles",   mn = 1,    mx = 12, st = 1,    d = 8,    o = 2.5 },
+                { f = "sortGlowLength",    n = "Line Length", mn = 1,    mx = 6,  st = 1,    d = 3,    o = 2.6 },
+                { f = "sortGlowOffset",    n = "Offset",      mn = -6,   mx = 8,  st = 1,    d = 0,    o = 2.7 },
+                { f = "sortGlowSpeed",     n = "Speed",       mn = 0.05, mx = 1,  st = 0.05, d = 0.25, o = 2.8 },
+            }
+            for _, e in ipairs(defs) do
+                orderArgs[e.f] = {
+                    order = e.o, type = "range", name = e.n, min = e.mn, max = e.mx, step = e.st,
+                    hidden = pxHidden, disabled = pxDisabled,
+                    get = function() return (group.auras and group.auras[e.f]) or e.d end,
+                    set = function(_, v)
+                        group.auras[e.f] = v
+                        TUI:UpdateCustomGroups(); NotifyChange()
+                    end,
+                }
+            end
+        end
         for i = 1, 3 do
             local idx = i
             local function sc() local o = group.scopeOrder or { "global", "class", "spec" }; return o[idx] end

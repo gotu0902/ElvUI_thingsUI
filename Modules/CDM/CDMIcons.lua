@@ -261,7 +261,16 @@ local function OverlayEligible(child)
     local v = child._tuiViewer
     local vn = v and v.GetName and v:GetName()
     if vn ~= "EssentialCooldownViewer" and vn ~= "UtilityCooldownViewer" then return false end
-    if not child.cooldownInfo then return false end
+    local info = child.cooldownInfo
+    if not info then return false end
+    -- equipment keeps Blizzard's native item-CD display: their use-SPELL
+    -- cooldown API reports the 20s shared CD, not the real item cooldown
+    if type(child.GetEquipSlot) == "function" then
+        local slot = child:GetEquipSlot()
+        if not (issecretvalue and issecretvalue(slot)) and slot then return false end
+    end
+    local sid = PlainID(info.overrideSpellID) or PlainID(info.spellID)
+    if not (type(sid) == "number" and sid > 0) then return false end
     return true
 end
 
@@ -400,18 +409,8 @@ local function ProcessCooldownFrame(child)
     if spellID and type(spellID) == "number" and spellID > 0 and C_Spell then
         ApplyAuraState(child, cd, spellID)
     else
-        -- equipment entries have no spellID; drive the item cooldown instead
-        local slot = info and NotSecret(info.equipSlot) and info.equipSlot or nil
-        local itemID = slot and GetInventoryItemID and GetInventoryItemID("player", slot)
-        local start, dur
-        if itemID and C_Item.GetItemCooldown then start, dur = C_Item.GetItemCooldown(itemID) end
-        if start and dur and dur > 0 then
-            cd:SetCooldown(start, dur)
-            SetDesat(child.Icon, 1)
-        else
-            if cd.Clear then cd:Clear() end
-            SetDesat(child.Icon, 0)
-        end
+        if cd.Clear then cd:Clear() end
+        SetDesat(child.Icon, 0)
     end
     applyingOverlay[cd] = nil
 end
@@ -1267,6 +1266,40 @@ SlashCmdList.TUICDM = function()
                     tostring(pt), tostring(rel and rel.GetName and rel:GetName() or rel), tostring(rp),
                     DumpVal(x), DumpVal(y)))
             end
+            for _, c in ipairs(vis) do
+                local slot
+                if type(c.GetEquipSlot) == "function" then
+                    slot = c:GetEquipSlot()
+                    if issecretvalue and issecretvalue(slot) then slot = "secret" end
+                end
+                if slot then
+                    local info = c.cooldownInfo
+                    local cd = c.Cooldown
+                    local s, d
+                    if cd and cd.GetCooldownTimes then s, d = cd:GetCooldownTimes() end
+                    local uadt
+                    if cd and cd.GetUseAuraDisplayTime then uadt = cd:GetUseAuraDisplayTime() end
+                    print(("    TRINKET slot=%s cid=%s info=%s sid=%s hooked=%s txtCfg=%s uadt=%s cdShown=%s times=%s/%s alpha=%s"):format(
+                        DumpVal(slot),
+                        DumpVal(c.GetCooldownID and c:GetCooldownID() or nil),
+                        tostring(info ~= nil),
+                        DumpVal(info and info.spellID),
+                        tostring(cd and cd._tuiOverlayHooked or false),
+                        tostring(c._tuiTextConfig ~= nil),
+                        DumpVal(uadt),
+                        tostring(cd and cd:IsShown()),
+                        DumpVal(s), DumpVal(d),
+                        DumpVal(c.GetAlpha and c:GetAlpha() or nil)))
+                end
+            end
+        end
+    end
+    if GetInventoryItemCooldown then
+        for _, slot in ipairs({ 13, 14 }) do
+            local s, d, en = GetInventoryItemCooldown("player", slot)
+            print(("  inv slot %d item=%s start=%s dur=%s enable=%s"):format(
+                slot, tostring(GetInventoryItemID and GetInventoryItemID("player", slot)),
+                DumpVal(s), DumpVal(d), DumpVal(en)))
         end
     end
 end

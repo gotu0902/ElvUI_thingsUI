@@ -253,6 +253,8 @@ function SA.StyleIconButton(button, r, wrapper, key)
             style = db.showGlow and AL.MapGlowStyle(db.glowType) or nil,
             color = db.glowColor,
             thickness = db.glowThickness,
+            lines = db.glowLines, length = db.glowLength,
+            offset = db.glowOffset, frequency = db.glowSpeed,
             w = w, h = h,
             pandemic = db.showPandemic and true or false,
         })

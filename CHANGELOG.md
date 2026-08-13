@@ -5,7 +5,7 @@
 - Edit Mode layouts can be assigned to other specs in /tuialt, auto-switches on spec change.
 - LibCustomGlow for Essential\Utility viewers (CDM -> Glow)
 - AuraContainer glow for group icons when sorted
-- Fixed trinket blacklisting mixing it up, showing wrong cooldown
+- Fixed trinket blacklisting fucking things up, showing wrong cooldown\not showing CD at all
 - Fixed error when removing a special icon
 - Added a temu Pixel Glow that works on aura containers
 

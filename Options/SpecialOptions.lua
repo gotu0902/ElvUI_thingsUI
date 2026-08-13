@@ -1331,6 +1331,38 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             end,
                             get = function() return get("glowThickness") or 2 end,
                             set = function(_, v) set("glowThickness", v) end },
+                        glowLines = { order = 5, type = "range", name = "Particles", min = 1, max = 12, step = 1,
+                            hidden = function()
+                                local AL = ns.AuraLane
+                                return (AL and AL.MapGlowStyle(get("glowType")) or "pulse") ~= "pixel"
+                            end,
+                            disabled = function() return not get("showGlow") end,
+                            get = function() return get("glowLines") or 8 end,
+                            set = function(_, v) set("glowLines", v) end },
+                        glowLength = { order = 6, type = "range", name = "Line Length", min = 1, max = 6, step = 1,
+                            hidden = function()
+                                local AL = ns.AuraLane
+                                return (AL and AL.MapGlowStyle(get("glowType")) or "pulse") ~= "pixel"
+                            end,
+                            disabled = function() return not get("showGlow") end,
+                            get = function() return get("glowLength") or 3 end,
+                            set = function(_, v) set("glowLength", v) end },
+                        glowOffset = { order = 7, type = "range", name = "Offset", min = -6, max = 8, step = 1,
+                            hidden = function()
+                                local AL = ns.AuraLane
+                                return (AL and AL.MapGlowStyle(get("glowType")) or "pulse") ~= "pixel"
+                            end,
+                            disabled = function() return not get("showGlow") end,
+                            get = function() return get("glowOffset") or 0 end,
+                            set = function(_, v) set("glowOffset", v) end },
+                        glowSpeed = { order = 8, type = "range", name = "Speed", min = 0.05, max = 1, step = 0.05,
+                            hidden = function()
+                                local AL = ns.AuraLane
+                                return (AL and AL.MapGlowStyle(get("glowType")) or "pulse") ~= "pixel"
+                            end,
+                            disabled = function() return not get("showGlow") end,
+                            get = function() return get("glowSpeed") or 0.25 end,
+                            set = function(_, v) set("glowSpeed", v) end },
                     },
                 },
             }),
