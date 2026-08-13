@@ -230,54 +230,6 @@ local function LayoutRing(g, th)
     g.tex[4]:SetPoint("BOTTOMRIGHT", g, "BOTTOMRIGHT", th, 0)
 end
 
--- waypoints snapped to rect corners (equal-distance sampling cuts corners)
-local function PixelWaypoints(d0, P, w, h, M)
-    local corners = { w, w + h, 2 * w + h, P }
-    local marks = {}
-    for _, cd in ipairs(corners) do
-        local rel = (cd - d0) % P
-        if rel > 0.5 then marks[#marks + 1] = rel end
-    end
-    table.sort(marks)
-    marks[#marks + 1] = P
-
-    local spans, prev = {}, 0
-    for _, m in ipairs(marks) do
-        spans[#spans + 1] = m - prev
-        prev = m
-    end
-
-    local alloc, total = {}, 0
-    for i, s in ipairs(spans) do
-        alloc[i] = math.max(1, math.floor(M * s / P + 0.5))
-        total = total + alloc[i]
-    end
-    while total < M do
-        local bi = 1
-        for i = 2, #spans do if spans[i] / alloc[i] > spans[bi] / alloc[bi] then bi = i end end
-        alloc[bi] = alloc[bi] + 1
-        total = total + 1
-    end
-    while total > M do
-        local ri
-        for i = 1, #alloc do
-            if alloc[i] > 1 and (not ri or spans[i] / alloc[i] < spans[ri] / alloc[ri]) then ri = i end
-        end
-        if not ri then break end
-        alloc[ri] = alloc[ri] - 1
-        total = total - 1
-    end
-
-    local out, base = {}, 0
-    for i, s in ipairs(spans) do
-        for k = 1, alloc[i] do
-            out[#out + 1] = base + s * k / alloc[i]
-        end
-        base = base + s
-    end
-    return out
-end
-
 function A.ApplyButtonFX(button, r, opts)
     local style = opts.style
     local gc = opts.color
@@ -295,10 +247,10 @@ function A.ApplyButtonFX(button, r, opts)
         local th = math.max(1, opts.thickness or 2)
         local N = math.min(12, math.max(1, opts.lines or 8))
         local T = math.min(6, math.max(1, opts.length or 3))
-        local off = opts.offset or 0
-        local M = 24
-        local w = (opts.w or 36) + 2 * off
-        local h = (opts.h or 36) + 2 * off
+        -- 1px inside the icon edge by default; the Offset knob pushes outward
+        local off = (opts.offset or 0) - (th / 2 + 1)
+        local w = math.max(8, (opts.w or 36) + 2 * off)
+        local h = math.max(8, (opts.h or 36) + 2 * off)
         local c = gc or {}
         local P = 2 * (w + h)
         local function posAt(d)
@@ -312,13 +264,40 @@ function A.ApplyButtonFX(button, r, opts)
             return 0, -(h - d)
         end
         local dur = 1 / math.max(0.05, opts.frequency or 0.25)
-        local sig = table.concat({ w, h, th, dur, N, T, off }, ":")
+
+        -- one shared corner-snapped waypoint ring; every dot starts on a ring
+        -- index so trains are index-locked (never drift) and all turn 90deg
+        -- exactly at the corners, head first, tail following
+        local edges = { w, h, w, h }
+        local counts, total = {}, 0
+        for e = 1, 4 do
+            counts[e] = math.max(1, math.floor(edges[e] / (th + 1) + 0.5))
+            total = total + counts[e]
+        end
+        while total > 64 do
+            local bi = 1
+            for e = 2, 4 do if counts[e] > counts[bi] then bi = e end end
+            counts[bi] = counts[bi] - 1
+            total = total - 1
+        end
+        local pts, base = { 0 }, 0
+        for e = 1, 4 do
+            for k = 1, counts[e] do
+                pts[#pts + 1] = base + edges[e] * k / counts[e]
+            end
+            base = base + edges[e]
+        end
+        pts[#pts] = nil
+        local RM = #pts
+
+        local sig = table.concat({ w, h, th, dur, N, T, off, RM }, ":")
         local idx = 0
         for i = 1, N do
+            local headIdx = math.floor((i - 1) * RM / N + 0.5)
             for j = 0, T - 1 do
                 idx = idx + 1
                 local t = px.tex[idx]
-                if t and (not t.path or #t.cps ~= M) then
+                if t and (not t.path or #t.cps ~= RM) then
                     t.anim:Stop()
                     t:Hide()
                     t = nil
@@ -330,7 +309,7 @@ function A.ApplyButtonFX(button, r, opts)
                     local path = ag:CreateAnimation("Path")
                     path:SetCurveType("NONE")
                     t.cps = {}
-                    for k = 1, M do
+                    for k = 1, RM do
                         local cp = path:CreateControlPoint()
                         cp:SetOrder(k)
                         t.cps[k] = cp
@@ -343,24 +322,20 @@ function A.ApplyButtonFX(button, r, opts)
                 if t._sig ~= sig then
                     t._sig = sig
                     t.anim:Stop()
-                    local d0 = ((i - 1) / N * P - j * (th + 1)) % P
+                    local s = ((headIdx - j) % RM) + 1
+                    local d0 = pts[s]
                     local x0, y0 = posAt(d0)
                     t:ClearAllPoints()
                     t:SetPoint("CENTER", px, "TOPLEFT", x0 - off, y0 + off)
-                    -- equal TIME per path segment: trains need the phase-invariant
-                    -- uniform profile or the dots drift apart; lone dots get
-                    -- corner-snapped waypoints for sharp turns
-                    if T == 1 then
-                        local wps = PixelWaypoints(d0, P, w, h, M)
-                        for k = 1, M do
-                            local xk, yk = posAt(d0 + (wps[k] or P))
-                            t.cps[k]:SetOffset(xk - x0, yk - y0)
+                    for k = 1, RM do
+                        local rel
+                        if k == RM then
+                            rel = P
+                        else
+                            rel = (pts[((s - 1 + k) % RM) + 1] - d0) % P
                         end
-                    else
-                        for k = 1, M do
-                            local xk, yk = posAt(d0 + k / M * P)
-                            t.cps[k]:SetOffset(xk - x0, yk - y0)
-                        end
+                        local xk, yk = posAt(d0 + rel)
+                        t.cps[k]:SetOffset(xk - x0, yk - y0)
                     end
                     t.path:SetDuration(dur)
                 end
