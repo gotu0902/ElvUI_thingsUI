@@ -192,8 +192,7 @@ function A.CanPandemic(button)
 end
 
 function A.MapGlowStyle(v)
-    if v == "pulse" or v == "proc" or v == "ants" then return v end
-    if v == "pixel" then return "ants" end
+    if v == "pulse" or v == "proc" or v == "ants" or v == "pixel" then return v end
     if v == "button" then return "proc" end
     return "pulse"
 end
@@ -234,6 +233,56 @@ end
 function A.ApplyButtonFX(button, r, opts)
     local style = opts.style
     local gc = opts.color
+
+    -- own pixel impl: LCG's pooled frames may not anchor to aura buttons
+    -- (forbidden-aspect inheritance); translation anims run without Lua
+    if style == "pixel" then
+        local px = r.glowPixel
+        if not px then
+            px = CreateFrame("Frame", nil, button)
+            px:SetAllPoints(button)
+            px.tex = {}
+            for i = 1, 4 do
+                local t = px:CreateTexture(nil, "OVERLAY", nil, 7)
+                local ag = t:CreateAnimationGroup()
+                ag:SetLooping("REPEAT")
+                t.move = ag:CreateAnimation("Translation")
+                t.anim = ag
+                px.tex[i] = t
+            end
+            r.glowPixel = px
+        end
+        local w, h = opts.w or 36, opts.h or 36
+        local th = opts.thickness or 2
+        local c = gc or {}
+        local segW = math.max(6, math.floor(w * 0.35))
+        local segH = math.max(6, math.floor(h * 0.35))
+        local defs = {
+            { p = "TOPLEFT",     w = segW, h = th,   dx = w - segW,    dy = 0 },
+            { p = "BOTTOMRIGHT", w = segW, h = th,   dx = -(w - segW), dy = 0 },
+            { p = "TOPRIGHT",    w = th,   h = segH, dx = 0,           dy = -(h - segH) },
+            { p = "BOTTOMLEFT",  w = th,   h = segH, dx = 0,           dy = h - segH },
+        }
+        local dur = 1 / math.max(0.05, opts.frequency or 0.25) * 0.25
+        for i, d in ipairs(defs) do
+            local t = px.tex[i]
+            t:SetColorTexture(c.r or 1, c.g or 1, c.b or 0.25, c.a or 1)
+            t:ClearAllPoints()
+            t:SetPoint(d.p, button, d.p, 0, 0)
+            t:SetSize(d.w, d.h)
+            t.anim:Stop()
+            t.move:SetOffset(d.dx, d.dy)
+            t.move:SetDuration(dur)
+            t:Show()
+        end
+        px:Show()
+        for i = 1, 4 do
+            if not px.tex[i].anim:IsPlaying() then px.tex[i].anim:Play() end
+        end
+    elseif r.glowPixel then
+        for i = 1, 4 do r.glowPixel.tex[i].anim:Stop() end
+        r.glowPixel:Hide()
+    end
 
     if style == "pulse" then
         local g = r.glow

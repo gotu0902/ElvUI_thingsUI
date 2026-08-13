@@ -3,6 +3,11 @@
 ## 4.1.1
 - Forgot to update alt preset export for ElvUI's new data format, woops.
 - Edit Mode layouts can be assigned to other specs in /tuialt, auto-switches on spec change.
+- LibCustomGlow for Essential\Utility viewers (CDM -> Glow)
+- AuraContainer glow for group icons when sorted
+- Fixed trinket blacklisting mixing it up, showing wrong cooldown
+- Fixed error when removing a special icon
+- Added a temu Pixel Glow that works on aura containers
 
 ## 4.1.0
 - Fixed max group icons not working

@@ -400,8 +400,18 @@ local function ProcessCooldownFrame(child)
     if spellID and type(spellID) == "number" and spellID > 0 and C_Spell then
         ApplyAuraState(child, cd, spellID)
     else
-        if cd.Clear then cd:Clear() end
-        SetDesat(child.Icon, 0)
+        -- equipment entries have no spellID; drive the item cooldown instead
+        local slot = info and NotSecret(info.equipSlot) and info.equipSlot or nil
+        local itemID = slot and GetInventoryItemID and GetInventoryItemID("player", slot)
+        local start, dur
+        if itemID and C_Item.GetItemCooldown then start, dur = C_Item.GetItemCooldown(itemID) end
+        if start and dur and dur > 0 then
+            cd:SetCooldown(start, dur)
+            SetDesat(child.Icon, 1)
+        else
+            if cd.Clear then cd:Clear() end
+            SetDesat(child.Icon, 0)
+        end
     end
     applyingOverlay[cd] = nil
 end

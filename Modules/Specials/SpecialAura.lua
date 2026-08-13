@@ -71,9 +71,21 @@ end
 local function EnsureContainer(wrapper, field)
     local c = wrapper[field]
     if not c then
-        c = CreateFrame("AuraContainer", nil, wrapper, "CustomAuraContainerTemplate")
+        -- parented OUTSIDE the wrapper: the interactive wrapper's input aspects
+        -- must not reach the aura frame pool (SetParent forbidden-aspect error)
+        c = CreateFrame("AuraContainer", nil, UIParent, "CustomAuraContainerTemplate")
         c._tuiRegions = {}
         wrapper[field] = c
+        if not wrapper._tuiAuraVisHooked then
+            wrapper._tuiAuraVisHooked = true
+            wrapper:HookScript("OnHide", function(w)
+                if w._tuiAuraP and w._tuiAuraP:GetParent() ~= w then w._tuiAuraP:Hide() end
+                if w._tuiAuraT and w._tuiAuraT:GetParent() ~= w then w._tuiAuraT:Hide() end
+            end)
+            wrapper:HookScript("OnShow", function()
+                if TUI and TUI.QueueSpecialBarsUpdate then TUI:QueueSpecialBarsUpdate() end
+            end)
+        end
     end
     return c
 end
@@ -83,6 +95,7 @@ local function ConfigureContainer(c, wrapper, w, h)
     c:SetPoint("TOPLEFT", wrapper, "TOPLEFT", 0, 0)
     c:SetSize(w, h)
     c:SetFrameStrata(wrapper:GetFrameStrata() or "MEDIUM")
+    c:SetFrameLevel((wrapper.GetFrameLevel and wrapper:GetFrameLevel() or 1) + 1)
     if AnchorUtil and AnchorUtil.FlowLayoutAxis and AnchorUtil.FlowDirection then
         c:SetFlowLayoutAxis(AnchorUtil.FlowLayoutAxis.Horizontal)
         c:SetFlowLayoutAnchorPoint("TOPLEFT")

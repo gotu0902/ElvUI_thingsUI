@@ -1313,7 +1313,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             set = function(_, v) set("showGlow", v) end },
                         glowType = { order = 2, type = "select", name = "Style",
                             disabled = function() return not get("showGlow") end,
-                            values = { ["pulse"]="Pulse Ring", ["proc"]="Proc Glow", ["ants"]="Marching Ants" },
+                            values = { ["pulse"]="Pulse Ring", ["pixel"]="Pixel Glow", ["proc"]="Proc Glow", ["ants"]="Marching Ants" },
                             get = function()
                                 local AL = ns.AuraLane
                                 return AL and AL.MapGlowStyle(get("glowType")) or "pulse"
@@ -1327,7 +1327,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             disabled = function()
                                 local AL = ns.AuraLane
                                 local style = AL and AL.MapGlowStyle(get("glowType")) or "pulse"
-                                return not get("showGlow") or style ~= "pulse"
+                                return not get("showGlow") or (style ~= "pulse" and style ~= "pixel")
                             end,
                             get = function() return get("glowThickness") or 2 end,
                             set = function(_, v) set("glowThickness", v) end },

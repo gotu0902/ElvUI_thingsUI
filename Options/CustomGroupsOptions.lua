@@ -173,8 +173,8 @@ local function EditAura(def, title, onChange, group)
     gstyle = AceGUI:Create("Dropdown")
     gstyle:SetLabel("Glow Style")
     gstyle:SetWidth(170)
-    gstyle:SetList({ pulse = "Pulse Ring", proc = "Proc Glow", ants = "Marching Ants" },
-        { "pulse", "proc", "ants" })
+    gstyle:SetList({ pulse = "Pulse Ring", pixel = "Pixel Glow", proc = "Proc Glow", ants = "Marching Ants" },
+        { "pulse", "pixel", "proc", "ants" })
     gstyle:SetValue(def.glowStyle or "pulse")
     gstyle:SetDisabled(sorted or not def.showGlow)
     gstyle:SetCallback("OnValueChanged", function(_, _, v) def.glowStyle = v; onChange() end)
@@ -1025,8 +1025,8 @@ function TUI:CustomGroupsOptions()
                 order = 2.2, type = "select", name = "Glow Style",
                 hidden = function() return ((group.auras and group.auras.sortMode) or "manual") == "manual" end,
                 disabled = function() return not (group.auras and group.auras.sortGlow) end,
-                values = { pulse = "Pulse Ring", proc = "Proc Glow", ants = "Marching Ants" },
-                sorting = { "pulse", "proc", "ants" },
+                values = { pulse = "Pulse Ring", pixel = "Pixel Glow", proc = "Proc Glow", ants = "Marching Ants" },
+                sorting = { "pulse", "pixel", "proc", "ants" },
                 get = function() return (group.auras and group.auras.sortGlowStyle) or "pulse" end,
                 set = function(_, v)
                     group.auras.sortGlowStyle = v
