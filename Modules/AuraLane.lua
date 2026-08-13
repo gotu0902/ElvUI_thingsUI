@@ -230,6 +230,54 @@ local function LayoutRing(g, th)
     g.tex[4]:SetPoint("BOTTOMRIGHT", g, "BOTTOMRIGHT", th, 0)
 end
 
+-- waypoints snapped to rect corners (equal-distance sampling cuts corners)
+local function PixelWaypoints(d0, P, w, h, M)
+    local corners = { w, w + h, 2 * w + h, P }
+    local marks = {}
+    for _, cd in ipairs(corners) do
+        local rel = (cd - d0) % P
+        if rel > 0.5 then marks[#marks + 1] = rel end
+    end
+    table.sort(marks)
+    marks[#marks + 1] = P
+
+    local spans, prev = {}, 0
+    for _, m in ipairs(marks) do
+        spans[#spans + 1] = m - prev
+        prev = m
+    end
+
+    local alloc, total = {}, 0
+    for i, s in ipairs(spans) do
+        alloc[i] = math.max(1, math.floor(M * s / P + 0.5))
+        total = total + alloc[i]
+    end
+    while total < M do
+        local bi = 1
+        for i = 2, #spans do if spans[i] / alloc[i] > spans[bi] / alloc[bi] then bi = i end end
+        alloc[bi] = alloc[bi] + 1
+        total = total + 1
+    end
+    while total > M do
+        local ri
+        for i = 1, #alloc do
+            if alloc[i] > 1 and (not ri or spans[i] / alloc[i] < spans[ri] / alloc[ri]) then ri = i end
+        end
+        if not ri then break end
+        alloc[ri] = alloc[ri] - 1
+        total = total - 1
+    end
+
+    local out, base = {}, 0
+    for i, s in ipairs(spans) do
+        for k = 1, alloc[i] do
+            out[#out + 1] = base + s * k / alloc[i]
+        end
+        base = base + s
+    end
+    return out
+end
+
 function A.ApplyButtonFX(button, r, opts)
     local style = opts.style
     local gc = opts.color
@@ -248,7 +296,7 @@ function A.ApplyButtonFX(button, r, opts)
         local N = math.min(12, math.max(1, opts.lines or 8))
         local T = math.min(6, math.max(1, opts.length or 3))
         local off = opts.offset or 0
-        local M = 12
+        local M = 24
         local w = (opts.w or 36) + 2 * off
         local h = (opts.h or 36) + 2 * off
         local c = gc or {}
@@ -270,7 +318,7 @@ function A.ApplyButtonFX(button, r, opts)
             for j = 0, T - 1 do
                 idx = idx + 1
                 local t = px.tex[idx]
-                if t and not t.path then
+                if t and (not t.path or #t.cps ~= M) then
                     t.anim:Stop()
                     t:Hide()
                     t = nil
@@ -295,13 +343,24 @@ function A.ApplyButtonFX(button, r, opts)
                 if t._sig ~= sig then
                     t._sig = sig
                     t.anim:Stop()
-                    local d0 = (i - 1) / N * P - j * (th + 1)
+                    local d0 = ((i - 1) / N * P - j * (th + 1)) % P
                     local x0, y0 = posAt(d0)
                     t:ClearAllPoints()
                     t:SetPoint("CENTER", px, "TOPLEFT", x0 - off, y0 + off)
-                    for k = 1, M do
-                        local xk, yk = posAt(d0 + k / M * P)
-                        t.cps[k]:SetOffset(xk - x0, yk - y0)
+                    -- equal TIME per path segment: trains need the phase-invariant
+                    -- uniform profile or the dots drift apart; lone dots get
+                    -- corner-snapped waypoints for sharp turns
+                    if T == 1 then
+                        local wps = PixelWaypoints(d0, P, w, h, M)
+                        for k = 1, M do
+                            local xk, yk = posAt(d0 + (wps[k] or P))
+                            t.cps[k]:SetOffset(xk - x0, yk - y0)
+                        end
+                    else
+                        for k = 1, M do
+                            local xk, yk = posAt(d0 + k / M * P)
+                            t.cps[k]:SetOffset(xk - x0, yk - y0)
+                        end
                     end
                     t.path:SetDuration(dur)
                 end
