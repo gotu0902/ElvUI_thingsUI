@@ -8,6 +8,8 @@
 - Fixed trinket blacklisting fucking things up, showing wrong cooldown\not showing CD at all
 - Fixed error when removing a special icon
 - Added a temu Pixel Glow that works on aura containers
+- Fixed sliders only moving one step per drag in most panels
+- Buff Icon count fighting with Elvs skin
 
 ## 4.1.0
 - Fixed max group icons not working

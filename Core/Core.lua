@@ -16,12 +16,31 @@ TUI.name = "thingsUI"
 ns.skinnedBars = ns.skinnedBars or {}
 ns.yoinkedBars = ns.yoinkedBars or {}
 
-function ns.NotifyChange()
+local function FireNotify()
     local E = ns.E
     local reg = (E and E.Libs and E.Libs.AceConfigRegistry)
         or LibStub("AceConfigRegistry-3.0-ElvUI", true)
         or LibStub("AceConfigRegistry-3.0", true)
     if reg and reg.NotifyChange then reg:NotifyChange("ElvUI") end
+end
+
+local notifyPending = false
+function ns.NotifyChange()
+    -- refreshing mid-drag rebuilds the slider under the cursor; defer to release
+    if IsMouseButtonDown and IsMouseButtonDown("LeftButton") then
+        if notifyPending then return end
+        notifyPending = true
+        local t
+        t = C_Timer.NewTicker(0.05, function()
+            if not IsMouseButtonDown("LeftButton") then
+                t:Cancel()
+                notifyPending = false
+                FireNotify()
+            end
+        end)
+        return
+    end
+    FireNotify()
 end
 
 function ns.ClassColor(token)

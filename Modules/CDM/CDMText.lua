@@ -118,11 +118,20 @@ local function ReassertCountText(_, text)
     for _ = 1, 2 do
         if not child then return end
         local t = child._tuiTextConfig
+        if not t then
+            -- fresh pooled children haven't met StyleChild yet; resolve from the viewer
+            local p = child:GetParent()
+            local vn = p and p.GetName and p:GetName()
+            if vn and VIEWERS[vn] then
+                t = GetTextDB(vn)
+                if t then child._tuiTextConfig = t end
+            end
+        end
         if t then
             if child.Applications and child.Applications.Applications == text then
                 ApplyText(text, t.stacksFont, t.stacksFontSize, t.stacksFontOutline,
                     t.stacksColor, t.stacksPoint, t.stacksXOffset, t.stacksYOffset, t.showStacks)
-            elseif child.ChargeCount and child.ChargeCount.Current == text then
+            elseif (child.ChargeCount and child.ChargeCount.Current == text) or child.Count == text then
                 ApplyText(text, t.countFont, t.countFontSize, t.countFontOutline,
                     t.countColor, t.countPoint, t.countXOffset, t.countYOffset, t.showCount)
             end
