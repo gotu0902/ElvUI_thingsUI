@@ -744,7 +744,11 @@ local function SyncGroup(group)
     for button, r in pairs(st.regions) do
         local key = st.keyByButton[button]
         local def = key and st.defByKey[key]
-        if def then StyleBar(button, r, group, def) end
+        if def then
+            -- pool buttons are access-restricted while their aura is secret;
+            -- the combat-lockdown flag can lag that window
+            if not pcall(StyleBar, button, r, group, def) then pendingSync = true end
+        end
     end
     c:SetShown(GroupVisOK(st, unit))
 end

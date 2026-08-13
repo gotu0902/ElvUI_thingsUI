@@ -158,6 +158,14 @@ local function EditAura(def, title, onChange, group)
 
     local gstyle
 
+    local function PixelOn()
+        return not sorted and def.showGlow and (def.glowStyle or "pulse") == "pixel"
+    end
+    -- pixel sliders only exist while Pixel Glow is selected; rebuild to resize
+    local function Reopen()
+        C_Timer.After(0, function() EditAura(def, title, onChange, group) end)
+    end
+
     local glow = AceGUI:Create("CheckBox")
     glow:SetLabel("Glow While Active")
     glow:SetWidth(170)
@@ -167,16 +175,9 @@ local function EditAura(def, title, onChange, group)
         def.showGlow = v
         if gstyle then gstyle:SetDisabled(sorted or not v) end
         onChange()
+        Reopen()
     end)
     f:AddChild(glow)
-
-    local pxWidgets = {}
-    local function PixelOn()
-        return not sorted and def.showGlow and (def.glowStyle or "pulse") == "pixel"
-    end
-    local function UpdatePixelState()
-        for _, wdg in ipairs(pxWidgets) do wdg:SetDisabled(not PixelOn()) end
-    end
 
     gstyle = AceGUI:Create("Dropdown")
     gstyle:SetLabel("Glow Style")
@@ -187,27 +188,28 @@ local function EditAura(def, title, onChange, group)
     gstyle:SetDisabled(sorted or not def.showGlow)
     gstyle:SetCallback("OnValueChanged", function(_, _, v)
         def.glowStyle = v
-        UpdatePixelState()
         onChange()
+        Reopen()
     end)
     f:AddChild(gstyle)
 
-    local function AddPixelSlider(label, field, mn, mx, step, dflt)
-        local s = AceGUI:Create("Slider")
-        s:SetLabel(label)
-        s:SetWidth(170)
-        s:SetSliderValues(mn, mx, step)
-        s:SetValue(def[field] or dflt)
-        s:SetDisabled(not PixelOn())
-        s:SetCallback("OnValueChanged", function(_, _, v) def[field] = v; onChange() end)
-        f:AddChild(s)
-        pxWidgets[#pxWidgets + 1] = s
+    if PixelOn() then
+        f:SetHeight(560)
+        local function AddPixelSlider(label, field, mn, mx, step, dflt)
+            local s = AceGUI:Create("Slider")
+            s:SetLabel(label)
+            s:SetWidth(170)
+            s:SetSliderValues(mn, mx, step)
+            s:SetValue(def[field] or dflt)
+            s:SetCallback("OnValueChanged", function(_, _, v) def[field] = v; onChange() end)
+            f:AddChild(s)
+        end
+        AddPixelSlider("Thickness", "glowThickness", 1, 6, 1, 2)
+        AddPixelSlider("Particles", "glowLines", 1, 12, 1, 8)
+        AddPixelSlider("Line Length", "glowLength", 1, 6, 1, 3)
+        AddPixelSlider("Offset", "glowOffset", -6, 8, 1, 0)
+        AddPixelSlider("Speed", "glowSpeed", 0.05, 1, 0.05, 0.25)
     end
-    AddPixelSlider("Thickness", "glowThickness", 1, 6, 1, 2)
-    AddPixelSlider("Particles", "glowLines", 1, 12, 1, 8)
-    AddPixelSlider("Line Length", "glowLength", 1, 6, 1, 3)
-    AddPixelSlider("Offset", "glowOffset", -6, 8, 1, 0)
-    AddPixelSlider("Speed", "glowSpeed", 0.05, 1, 0.05, 0.25)
 
     pand = AceGUI:Create("CheckBox")
     pand:SetLabel("Pandemic Indicator")

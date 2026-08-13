@@ -997,7 +997,11 @@ function A.Sync(group, frame)
     lane.pureHarmful, lane.hasHarmful = Flags(mainEntries)
     lane.pureHarmfulT, lane.hasHarmfulT = Flags(altEntries)
 
-    for button in pairs(lane.regions) do StyleButton(button, group, lane) end
+    for button in pairs(lane.regions) do
+        -- pool buttons are access-restricted while their aura is secret;
+        -- the combat-lockdown flag can lag that window
+        if not pcall(StyleButton, button, group, lane) then pendingSync = true end
+    end
     lane.container:SetShown(LaneVisOK(lane))
     if cT then cT:SetShown(split and LaneVisOKT(lane) or false) end
 end
