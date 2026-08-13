@@ -450,6 +450,99 @@ local function ViewerGroup(order, key, label, opts)
     }
 end
 
+local function GlowTab(order)
+    local function gdb()
+        local db = E.db.thingsUI.cdmIcons
+        db.glow = db.glow or {}
+        return db.glow
+    end
+    local function Update()
+        if TUI.UpdateCDMGlow then TUI:UpdateCDMGlow() end
+    end
+    return {
+        order = order, type = "group", name = "Glow",
+        args = {
+            desc = {
+                order = 0, type = "description",
+                name = "Replace Blizzard's proc glow on Essential and Utility icons with a thingsUI style.\n",
+            },
+            enabled = {
+                order = 1, type = "toggle", name = "Custom Glow",
+                get = function() return gdb().enabled end,
+                set = function(_, v) gdb().enabled = v; Update() end,
+            },
+            style = {
+                order = 2, type = "select", name = "Style",
+                disabled = function() return not gdb().enabled end,
+                values = { pixel = "Pixel Glow", autocast = "Autocast Shine", proc = "Proc Glow", button = "Action Button Glow" },
+                sorting = { "pixel", "autocast", "proc", "button" },
+                get = function() return gdb().style or "pixel" end,
+                set = function(_, v) gdb().style = v; Update() end,
+            },
+            useColor = {
+                order = 3, type = "toggle", name = "Custom Color",
+                disabled = function() return not gdb().enabled end,
+                get = function() return gdb().useColor end,
+                set = function(_, v) gdb().useColor = v; Update() end,
+            },
+            customColor = {
+                order = 4, type = "color", name = "Color",
+                disabled = function() return not (gdb().enabled and gdb().useColor) end,
+                get = function()
+                    local c = gdb().customColor or { r = 1, g = 0.85, b = 0.1 }
+                    return c.r, c.g, c.b
+                end,
+                set = function(_, r, g, b) gdb().customColor = { r = r, g = g, b = b }; Update() end,
+            },
+            lines = {
+                order = 5, type = "range", name = "Lines", min = 4, max = 16, step = 1,
+                hidden = function() return (gdb().style or "pixel") ~= "pixel" end,
+                disabled = function() return not gdb().enabled end,
+                get = function() return gdb().lines or 8 end,
+                set = function(_, v) gdb().lines = v; Update() end,
+            },
+            thickness = {
+                order = 6, type = "range", name = "Thickness", min = 1, max = 4, step = 1,
+                hidden = function() return (gdb().style or "pixel") ~= "pixel" end,
+                disabled = function() return not gdb().enabled end,
+                get = function() return gdb().thickness or 2 end,
+                set = function(_, v) gdb().thickness = v; Update() end,
+            },
+            particles = {
+                order = 7, type = "range", name = "Particles", min = 1, max = 8, step = 1,
+                hidden = function() return (gdb().style or "pixel") ~= "autocast" end,
+                disabled = function() return not gdb().enabled end,
+                get = function() return gdb().particles or 4 end,
+                set = function(_, v) gdb().particles = v; Update() end,
+            },
+            scale = {
+                order = 8, type = "range", name = "Scale", min = 0.5, max = 2, step = 0.05,
+                hidden = function() return (gdb().style or "pixel") ~= "autocast" end,
+                disabled = function() return not gdb().enabled end,
+                get = function() return gdb().scale or 1 end,
+                set = function(_, v) gdb().scale = v; Update() end,
+            },
+            frequency = {
+                order = 9, type = "range", name = "Speed", min = 0.05, max = 0.5, step = 0.01,
+                hidden = function()
+                    local s = gdb().style or "pixel"
+                    return s == "proc"
+                end,
+                disabled = function() return not gdb().enabled end,
+                get = function() return gdb().frequency or 0.25 end,
+                set = function(_, v) gdb().frequency = v; Update() end,
+            },
+            offset = {
+                order = 10, type = "range", name = "Offset", min = -8, max = 8, step = 1,
+                hidden = function() return (gdb().style or "pixel") == "button" end,
+                disabled = function() return not gdb().enabled end,
+                get = function() return gdb().offset or 0 end,
+                set = function(_, v) gdb().offset = v; Update() end,
+            },
+        },
+    }
+end
+
 -- Racials -> CDM
 local RACIAL_DEST_TAG = {
     essential = "|cFFFFD27F(Essential)|r",
@@ -791,6 +884,7 @@ function TUI:CDMIconsOptions()
                                     { includeAnchor = true, alwaysOnAnchor = true,
                                       minIconSize = 10, maxIconSize = 60 }),
             racialsToCDMSubTab = RacialsToCDMTab(45),
+            glowSubTab = GlowTab(46),
             trinketBlacklistSubTab = TrinketsTab(47),
             clusterPositioningSubTab = (function()
                 local g = TUI.ClusterPositioningSubTab and TUI:ClusterPositioningSubTab() or nil

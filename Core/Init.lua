@@ -134,6 +134,7 @@ function TUI:Initialize()
     self:UpdateEditModeLock()
     self:UpdateCDMIcons()
     self:UpdateCDMText()
+    if self.UpdateCDMGlow then self:UpdateCDMGlow() end
     if self.UpdateRacialsCDM then self:UpdateRacialsCDM() end
     self:UpdateEssentialMover()
     self:UpdateCustomGroups()
@@ -198,6 +199,7 @@ function TUI:ProfileUpdate()
     self:UpdateEditModeLock()
     self:UpdateCDMIcons()
     self:UpdateCDMText()
+    if self.UpdateCDMGlow then self:UpdateCDMGlow() end
     if self.UpdateRacialsCDM then self:UpdateRacialsCDM() end
     self:UpdateEssentialMover()
     self:UpdateCustomGroups()

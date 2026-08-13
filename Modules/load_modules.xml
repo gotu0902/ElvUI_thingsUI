@@ -14,6 +14,7 @@
 	<Script file="CDM\EditModeLock.lua"/>
 	<Script file="CDM\CDMIcons.lua"/>
 	<Script file="CDM\CDMText.lua"/>
+	<Script file="CDM\CDMGlow.lua"/>
 	<Script file="Bars\BarSetup.lua"/>
 	<Script file="Movers\EssentialMover.lua"/>
 	<Script file="Timers\Timers.lua"/>

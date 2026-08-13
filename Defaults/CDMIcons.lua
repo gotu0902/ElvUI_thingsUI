@@ -7,6 +7,18 @@ P["thingsUI"].cdmIcons = {
     hideAuraBorder = true,
     hideAuraOverlay = true,
     autoEnableCDM = true,
+    glow = {
+        enabled = true,
+        style = "pixel",
+        useColor = true,
+        customColor = { r = 1, g = 1, b = 1 },
+        lines = 8,
+        frequency = 0.25,
+        thickness = 2,
+        particles = 4,
+        scale = 1,
+        offset = 0,
+    },
     essential = {
         spacing      = 1,
         overrideSize = true,
