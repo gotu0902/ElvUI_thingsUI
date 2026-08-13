@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.1.1
+- Forgot to update alt preset export for ElvUI's new data format, woops.
+- Edit Mode layouts can be assigned to other specs in /tuialt, auto-switches on spec change.
+
 ## 4.1.0
 - Fixed max group icons not working
 - Small rename for clarification that spells are cd, not buff (request)

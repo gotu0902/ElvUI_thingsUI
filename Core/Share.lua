@@ -54,18 +54,32 @@ function M.Export(selected)
     return PREFIX .. printable
 end
 
-local function Decode(str)
+function M.EncodeTable(data, prefix)
+    local CE = Tools()
+    if not (CE and type(data) == "table" and next(data)) then return nil end
+    local s = CE.SerializeCBOR(data)
+    local c = s and CE.CompressString(s, COMPRESS, OPTIMIZE)
+    local p = c and CE.EncodeBase64(c)
+    return p and ((prefix or "") .. p) or nil
+end
+
+function M.DecodeTable(str, prefix)
     local CE = Tools()
     if not CE then return nil end
     str = tostring(str or ""):gsub("%s", "")
-    if str == "" or str:sub(1, #PREFIX) ~= PREFIX then return nil end
+    prefix = prefix or ""
+    if str == "" or str:sub(1, #prefix) ~= prefix then return nil end
     -- pasted garbage can throw inside the C decoders
     local ok, data = pcall(function()
-        local decoded = CE.DecodeBase64(str:sub(#PREFIX + 1))
+        local decoded = CE.DecodeBase64(str:sub(#prefix + 1))
         local decompressed = decoded and CE.DecompressString(decoded, COMPRESS)
         return decompressed and CE.DeserializeCBOR(decompressed) or nil
     end)
     if ok and type(data) == "table" then return data end
+end
+
+local function Decode(str)
+    return M.DecodeTable(str, PREFIX)
 end
 M.Decode = Decode
 

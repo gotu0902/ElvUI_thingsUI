@@ -113,6 +113,51 @@ local function EditModeLayouts()
     return combined, presets, info.activeLayout
 end
 
+-- Blizzard has no spec link for Edit Mode layouts; we keep a per-char
+-- name map and switch the active layout on spec change ourselves
+local function EMSpecStore(create)
+    _G.thingsUIGlobalDB = _G.thingsUIGlobalDB or {}
+    local g = _G.thingsUIGlobalDB
+    if create then g.emSpec = g.emSpec or {} end
+    local t = g.emSpec
+    if not t then return nil end
+    if create then t[CharKey()] = t[CharKey()] or {} end
+    return t[CharKey()]
+end
+
+local pendingEM = false
+function M.ApplyEMForSpec(fromApply)
+    local st = EMSpecStore(false)
+    if not (st and st.enabled and st.spec) then return end
+    if InCombatLockdown() then pendingEM = true return end
+    local idx = GetSpecialization()
+    local want = idx and st.spec[idx]
+    if not want then return end
+    local combined, _, active = EditModeLayouts()
+    if not combined then return end
+    local wantIdx
+    for i, l in ipairs(combined) do
+        if l.layoutName == want then wantIdx = i break end
+    end
+    if not wantIdx or wantIdx == active then return end
+    C_EditMode.SetActiveLayout(wantIdx)
+    print("|cFF8080FFthingsUI|r: Edit Mode layout -> " .. want)
+    if fromApply then E:StaticPopup_Show("TUI_ALT_RELOAD") end
+end
+
+local emEv = CreateFrame("Frame")
+emEv:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+emEv:RegisterEvent("PLAYER_REGEN_ENABLED")
+emEv:SetScript("OnEvent", function(_, event, unit)
+    if event == "PLAYER_SPECIALIZATION_CHANGED" then
+        if unit and unit ~= "player" then return end
+        C_Timer.After(1, function() M.ApplyEMForSpec() end)
+    elseif event == "PLAYER_REGEN_ENABLED" and pendingEM then
+        pendingEM = false
+        C_Timer.After(1, function() M.ApplyEMForSpec() end)
+    end
+end)
+
 local function Presets()
     _G.thingsUIGlobalDB = _G.thingsUIGlobalDB or {}
     local g = _G.thingsUIGlobalDB
@@ -120,34 +165,23 @@ local function Presets()
     return g.altPresets
 end
 
-local PRESET_PREFIX = "!TUIALT1!"
-
-local function ShareTools()
-    local Deflate = E.Libs and E.Libs.Deflate
-    local D = E.GetModule and E:GetModule("Distributor", true)
-    if Deflate and D and D.Serialize and D.Deserialize then return Deflate, D end
-end
+local PRESET_PREFIX = "!TUIALT2!"
+local OLD_PRESET_PREFIX = "!TUIALT1!"
 
 function M.ExportPresets()
-    local Deflate, D = ShareTools()
     local presets = Presets()
-    if not (Deflate and next(presets)) then return nil end
-    local s = D:Serialize(presets)
-    local c = s and Deflate:CompressDeflate(s, { level = 9 })
-    if not c then return nil end
-    return PRESET_PREFIX .. Deflate:EncodeForPrint(c)
+    if not next(presets) then return nil end
+    return ns.Share and ns.Share.EncodeTable and ns.Share.EncodeTable(presets, PRESET_PREFIX)
 end
 
 function M.ImportPresets(str)
-    local Deflate, D = ShareTools()
-    if not Deflate then return 0 end
     str = tostring(str or ""):gsub("%s", "")
-    if str == "" or str:sub(1, #PRESET_PREFIX) ~= PRESET_PREFIX then return 0 end
-    local c = Deflate:DecodeForPrint(str:sub(#PRESET_PREFIX + 1))
-    local s = c and Deflate:DecompressDeflate(c)
-    if not s then return 0 end
-    local ok, data = D:Deserialize(s)
-    if not (ok and type(data) == "table") then return 0 end
+    if str:sub(1, #OLD_PRESET_PREFIX) == OLD_PRESET_PREFIX then
+        print("|cFF8080FFthingsUI|r: old preset format - re-export with this version.")
+        return 0
+    end
+    local data = ns.Share and ns.Share.DecodeTable and ns.Share.DecodeTable(str, PRESET_PREFIX)
+    if type(data) ~= "table" then return 0 end
     local presets = Presets()
     local n = 0
     for name, p in pairs(data) do
@@ -159,8 +193,12 @@ function M.ImportPresets(str)
     return n
 end
 
-local function CapturePreset(sel, emSel)
+local function CapturePreset(sel, emSel, emSpec)
     local p = { providers = {} }
+    if emSpec then
+        p.editModeSpecEnabled = emSpec.enabled or nil
+        if emSpec.spec and next(emSpec.spec) then p.editModeSpec = CopyTable(emSpec.spec) end
+    end
     for _, prov in ipairs(PROVIDERS) do
         if prov.loaded() then
             local s = sel[prov.key]
@@ -182,7 +220,14 @@ local function CapturePreset(sel, emSel)
     return p
 end
 
-local function ApplyPresetToSel(preset, sel, specs)
+local function ApplyPresetToSel(preset, sel, specs, emSpecOut)
+    if emSpecOut then
+        emSpecOut.enabled = preset.editModeSpecEnabled or false
+        emSpecOut.spec = {}
+        for i, nm in pairs(preset.editModeSpec or {}) do
+            if type(i) == "number" and type(nm) == "string" then emSpecOut.spec[i] = nm end
+        end
+    end
     for _, prov in ipairs(PROVIDERS) do
         local pp = preset.providers and preset.providers[prov.key]
         if pp and prov.loaded() then
@@ -242,7 +287,7 @@ E.PopupDialogs["TUI_ALT_RELOAD"] = {
 
 local frame
 
-function M.Apply(sel, emSel)
+function M.Apply(sel, emSel, emSpec)
     if InCombatLockdown() then
         print("|cFF8080FFthingsUI|r - Cannot apply profiles during combat.")
         return
@@ -260,8 +305,18 @@ function M.Apply(sel, emSel)
             end
         end
     end
+    if emSpec then
+        local st = EMSpecStore(true)
+        st.enabled = emSpec.enabled or nil
+        st.spec = {}
+        for i, nm in pairs(emSpec.spec or {}) do
+            if type(i) == "number" and type(nm) == "string" then st.spec[i] = nm end
+        end
+    end
     local reloadNeeded = false
-    if emSel then
+    if emSpec and emSpec.enabled then
+        M.ApplyEMForSpec(true)
+    elseif emSel then
         local combined, _, active = EditModeLayouts()
         if combined and emSel ~= active and combined[emSel] then
             C_EditMode.SetActiveLayout(emSel)
@@ -282,6 +337,11 @@ function M.Open()
     local emSel
     local presetSel
     local specs = ClassSpecs()
+    local emStore = EMSpecStore(false)
+    local emSpec = { enabled = (emStore and emStore.enabled) or false, spec = {} }
+    for i in ipairs(specs) do
+        emSpec.spec[i] = emStore and emStore.spec and emStore.spec[i] or nil
+    end
 
     local f = AceGUI:Create("Frame")
     ns.SolidDialog(f)
@@ -335,7 +395,7 @@ function M.Open()
                     presetSel = v
                     local p = presets[v]
                     if p then
-                        local emIdx = ApplyPresetToSel(p, sel, specs)
+                        local emIdx = ApplyPresetToSel(p, sel, specs, emSpec)
                         if emIdx then emSel = emIdx end
                         render()
                     end
@@ -347,7 +407,7 @@ function M.Open()
                 w:SetDisabled(not (presetSel and presets[presetSel]))
                 w:SetCallback("OnClick", function()
                     if presetSel and presets[presetSel] then
-                        presets[presetSel] = CapturePreset(sel, emSel)
+                        presets[presetSel] = CapturePreset(sel, emSel, emSpec)
                         print("|cFF8080FFthingsUI|r - preset '" .. presetSel .. "' updated.")
                     end
                 end)
@@ -366,7 +426,7 @@ function M.Open()
                 w:SetCallback("OnEnterPressed", function(_, _, v)
                     v = (v or ""):match("^%s*(.-)%s*$")
                     if v ~= "" then
-                        presets[v] = CapturePreset(sel, emSel)
+                        presets[v] = CapturePreset(sel, emSel, emSpec)
                         presetSel = v
                         render()
                     end
@@ -472,19 +532,55 @@ function M.Open()
                 order[#order + 1] = k
             end
             Add(scroll, "Dropdown", function(w)
-                w:SetLabel("Layout (switching prompts a reload)")
+                w:SetLabel(emSpec.enabled and "Layout |cff888888(spec layouts below take over)|r"
+                    or "Layout (switching prompts a reload)")
                 w:SetFullWidth(true)
                 w:SetList(list, order)
                 w:SetValue(tostring(emSel or active))
                 w:SetCallback("OnValueChanged", function(_, _, v) emSel = tonumber(v) end)
             end)
+            Add(scroll, "CheckBox", function(w)
+                w:SetLabel("Spec layouts (auto-switch on spec change)")
+                w:SetFullWidth(true)
+                w:SetValue(emSpec.enabled or false)
+                w:SetCallback("OnValueChanged", function(_, _, v)
+                    emSpec.enabled = v
+                    if v then
+                        local curName = combined[active] and combined[active].layoutName
+                        for i in ipairs(specs) do
+                            if emSpec.spec[i] == nil then emSpec.spec[i] = curName end
+                        end
+                    end
+                    render()
+                end)
+            end)
+            if emSpec.enabled then
+                local function idxForName(nm)
+                    for i, l in ipairs(combined) do
+                        if l.layoutName == nm then return i end
+                    end
+                end
+                for i, specName in ipairs(specs) do
+                    Add(scroll, "Dropdown", function(w)
+                        w:SetLabel(specName)
+                        w:SetRelativeWidth(0.5)
+                        w:SetList(list, order)
+                        local cur = idxForName(emSpec.spec[i])
+                        w:SetValue(tostring(cur or active))
+                        w:SetCallback("OnValueChanged", function(_, _, v)
+                            local l = combined[tonumber(v)]
+                            emSpec.spec[i] = l and l.layoutName or nil
+                        end)
+                    end)
+                end
+            end
         end
 
         Add(scroll, "Label", function(w) w:SetFullWidth(true); w:SetText("\n") end)
         Add(scroll, "Button", function(w)
             w:SetText("Apply")
             w:SetRelativeWidth(0.5)
-            w:SetCallback("OnClick", function() M.Apply(sel, emSel) end)
+            w:SetCallback("OnClick", function() M.Apply(sel, emSel, emSpec) end)
         end)
         Add(scroll, "Button", function(w)
             w:SetText("Skip")
