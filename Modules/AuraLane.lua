@@ -757,6 +757,13 @@ function A.Sync(group, frame)
                 }
             end
         end
+        if au0.sortGlow then
+            for _, m in ipairs(merged) do
+                m.def.showGlow = true
+                m.def.glowStyle = au0.sortGlowStyle or "pulse"
+                m.def.glowColor = au0.sortGlowColor
+            end
+        end
         entries = merged
     end
 

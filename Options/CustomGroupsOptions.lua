@@ -93,7 +93,7 @@ local function EditAura(def, title, onChange, group)
     kind:SetCallback("OnValueChanged", function(_, _, v)
         def.kind = v
         if mine then mine:SetDisabled(v == "HARMFUL") end
-        if pand then pand:SetDisabled(v ~= "HARMFUL") end
+        if pand then pand:SetDisabled(sorted or v ~= "HARMFUL") end
         onChange()
     end)
     f:AddChild(kind)
@@ -152,7 +152,7 @@ local function EditAura(def, title, onChange, group)
     if sorted then
         local note = AceGUI:Create("Label")
         note:SetFullWidth(true)
-        note:SetText("|cffFFD200Group is time-sorted - Max Icons and Sort Active By apply in Manual order only.|r")
+        note:SetText("|cffFFD200Group is time-sorted - Max Icons, Sort, Glow and Pandemic apply in Manual order only. Group-wide glow lives in the Order tab.|r")
         f:AddChild(note)
     end
 
@@ -162,9 +162,10 @@ local function EditAura(def, title, onChange, group)
     glow:SetLabel("Glow While Active")
     glow:SetWidth(170)
     glow:SetValue(def.showGlow and true or false)
+    glow:SetDisabled(sorted)
     glow:SetCallback("OnValueChanged", function(_, _, v)
         def.showGlow = v
-        if gstyle then gstyle:SetDisabled(not v) end
+        if gstyle then gstyle:SetDisabled(sorted or not v) end
         onChange()
     end)
     f:AddChild(glow)
@@ -175,7 +176,7 @@ local function EditAura(def, title, onChange, group)
     gstyle:SetList({ pulse = "Pulse Ring", proc = "Proc Glow", ants = "Marching Ants" },
         { "pulse", "proc", "ants" })
     gstyle:SetValue(def.glowStyle or "pulse")
-    gstyle:SetDisabled(not def.showGlow)
+    gstyle:SetDisabled(sorted or not def.showGlow)
     gstyle:SetCallback("OnValueChanged", function(_, _, v) def.glowStyle = v; onChange() end)
     f:AddChild(gstyle)
 
@@ -183,7 +184,7 @@ local function EditAura(def, title, onChange, group)
     pand:SetLabel("Pandemic Indicator")
     pand:SetWidth(170)
     pand:SetValue(def.showPandemic and true or false)
-    pand:SetDisabled((def.kind or "HELPFUL") ~= "HARMFUL")
+    pand:SetDisabled(sorted or (def.kind or "HELPFUL") ~= "HARMFUL")
     pand:SetCallback("OnValueChanged", function(_, _, v) def.showPandemic = v; onChange() end)
     f:AddChild(pand)
 end
@@ -1010,6 +1011,41 @@ function TUI:CustomGroupsOptions()
             },
             desc = { order = 3, type = "description", name = "Order of the entry blocks (^/v). Each block keeps its own internal order.\n",
                 hidden = function() return ((group.auras and group.auras.sortMode) or "manual") ~= "manual" end },
+            sortGlow = {
+                order = 2.1, type = "toggle", name = "Glow Active Icons",
+                hidden = function() return ((group.auras and group.auras.sortMode) or "manual") == "manual" end,
+                get = function() return group.auras and group.auras.sortGlow end,
+                set = function(_, v)
+                    group.auras = group.auras or {}
+                    group.auras.sortGlow = v
+                    TUI:UpdateCustomGroups(); NotifyChange()
+                end,
+            },
+            sortGlowStyle = {
+                order = 2.2, type = "select", name = "Glow Style",
+                hidden = function() return ((group.auras and group.auras.sortMode) or "manual") == "manual" end,
+                disabled = function() return not (group.auras and group.auras.sortGlow) end,
+                values = { pulse = "Pulse Ring", proc = "Proc Glow", ants = "Marching Ants" },
+                sorting = { "pulse", "proc", "ants" },
+                get = function() return (group.auras and group.auras.sortGlowStyle) or "pulse" end,
+                set = function(_, v)
+                    group.auras.sortGlowStyle = v
+                    TUI:UpdateCustomGroups(); NotifyChange()
+                end,
+            },
+            sortGlowColor = {
+                order = 2.3, type = "color", name = "Glow Color",
+                hidden = function() return ((group.auras and group.auras.sortMode) or "manual") == "manual" end,
+                disabled = function() return not (group.auras and group.auras.sortGlow) end,
+                get = function()
+                    local c = (group.auras and group.auras.sortGlowColor) or { r = 1, g = 1, b = 0.25 }
+                    return c.r, c.g, c.b
+                end,
+                set = function(_, r, g, b)
+                    group.auras.sortGlowColor = { r = r, g = g, b = b }
+                    TUI:UpdateCustomGroups(); NotifyChange()
+                end,
+            },
         }
         for i = 1, 3 do
             local idx = i
