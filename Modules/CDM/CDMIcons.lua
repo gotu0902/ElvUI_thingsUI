@@ -255,6 +255,8 @@ local OVERLAY_ATLAS   = "UI-HUD-CoolDownManager-IconOverlay"
 local OVERLAY_TEX_ID  = 6707800
 local applyingOverlay = {}
 
+-- returns "spell", "equip" or false; equipment must NEVER take the spell
+-- path (the use-spell CD API reports the 20s shared CD, not the item CD)
 local function OverlayEligible(child)
     if not child then return false end
     if ns.yoinkedBars and ns.yoinkedBars[child] then return false end
@@ -263,15 +265,13 @@ local function OverlayEligible(child)
     if vn ~= "EssentialCooldownViewer" and vn ~= "UtilityCooldownViewer" then return false end
     local info = child.cooldownInfo
     if not info then return false end
-    -- equipment keeps Blizzard's native item-CD display: their use-SPELL
-    -- cooldown API reports the 20s shared CD, not the real item cooldown
     if type(child.GetEquipSlot) == "function" then
         local slot = child:GetEquipSlot()
-        if not (issecretvalue and issecretvalue(slot)) and slot then return false end
+        if not (issecretvalue and issecretvalue(slot)) and slot then return "equip" end
     end
     local sid = PlainID(info.overrideSpellID) or PlainID(info.spellID)
     if not (type(sid) == "number" and sid > 0) then return false end
-    return true
+    return "spell"
 end
 
 local SWIPE_TEX = "Interface\\Buttons\\WHITE8X8"
@@ -343,7 +343,7 @@ local function EnforceSpellTexture(child)
     if not (cdm and cdm.hideAuraOverlay) then return end
     local cvs = _G.CooldownViewerSettings
     if cvs and cvs:IsShown() then return end
-    if not OverlayEligible(child) then return end
+    if OverlayEligible(child) ~= "spell" then return end
     local info = child.cooldownInfo
     local base = info and PlainID(info.spellID) or nil
     if not (type(base) == "number" and base > 0) then return end
@@ -395,22 +395,40 @@ local function ProcessCooldownFrame(child)
     if not (cdm and cdm.hideAuraOverlay) then return end
     local cvs = _G.CooldownViewerSettings
     if cvs and cvs:IsShown() then return end
-    if not OverlayEligible(child) then return end
-    EnforceSpellTexture(child)
-    UpdateOverrideGlow(child)
+    local kind = OverlayEligible(child)
+    if not kind then return end
+    if kind == "spell" then
+        EnforceSpellTexture(child)
+        UpdateOverrideGlow(child)
+    end
     local cd = child.Cooldown
     if not cd or applyingOverlay[cd] then return end
 
     applyingOverlay[cd] = true
     StripOverlayTextures(child)
     ApplyCooldownStyle(cd)
-    local info = child.cooldownInfo
-    local spellID = info and (PlainID(info.overrideSpellID) or PlainID(info.spellID)) or nil
-    if spellID and type(spellID) == "number" and spellID > 0 and C_Spell then
-        ApplyAuraState(child, cd, spellID)
+    if kind == "equip" then
+        local slot = child:GetEquipSlot()
+        local start, dur
+        if not (issecretvalue and issecretvalue(slot)) and slot and GetInventoryItemCooldown then
+            start, dur = GetInventoryItemCooldown("player", slot)
+        end
+        if start and dur and dur > 0 then
+            cd:SetCooldown(start, dur)
+            SetDesat(child.Icon, 1)
+        else
+            if cd.Clear then cd:Clear() end
+            SetDesat(child.Icon, 0)
+        end
     else
-        if cd.Clear then cd:Clear() end
-        SetDesat(child.Icon, 0)
+        local info = child.cooldownInfo
+        local spellID = info and (PlainID(info.overrideSpellID) or PlainID(info.spellID)) or nil
+        if spellID and type(spellID) == "number" and spellID > 0 and C_Spell then
+            ApplyAuraState(child, cd, spellID)
+        else
+            if cd.Clear then cd:Clear() end
+            SetDesat(child.Icon, 0)
+        end
     end
     applyingOverlay[cd] = nil
 end

@@ -642,6 +642,16 @@ local function SyncGroup(group)
         and ((ns.ANCHORS and ns.ANCHORS.ResolveAnchorTarget and ns.ANCHORS.ResolveAnchorTarget(af)) or _G[af])
         or nil
 
+    -- inherited sizes are read at sync time; spec-change rebuilds resize the
+    -- anchor AFTER us, so watch it and re-sync when it settles
+    if target and (group.inheritWidth or group.inheritHeight) and target.HookScript
+        and not target._tuiCBSizeHooked then
+        target._tuiCBSizeHooked = true
+        target:HookScript("OnSizeChanged", function()
+            if TUI.QueueCustomBarsUpdate then TUI:QueueCustomBarsUpdate() end
+        end)
+    end
+
     local effW = group.width or 220
     local effH = group.height or 22
     if target then

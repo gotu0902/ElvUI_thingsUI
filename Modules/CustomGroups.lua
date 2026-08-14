@@ -157,14 +157,17 @@ local function ResolveItemID(id)
     return id
 end
 
--- Fleeting-r1, r1, Fleeting-r2, r2.
+-- Fleeting-r1, r1 (gold), Fleeting-r2, r2 (silver).
 local POTION_GROUPS = {
     { 245916, 241300, 245917, 241301 },  -- Lightfused Mana Potion
     { 245904, 241294, 245905, 241295 },  -- Potion of Devoured Dreams
     { 245902, 241288, 245903, 241289 },  -- Potion of Recklessness
     { 245898, 241308, 245897, 241309 },  -- Light's Potential
+    { 271884, 271883 },                  -- Concentrated Silvermoon Health Potion (No fleeting?)
     { 245918, 241304, 245919, 241305 },  -- Silvermoon Health Potion
     { 245910, 241292, 245911, 241293 },  -- Draught of Rampant Abandon
+    { 274764, 271887, 274763, 271886 },  -- Liquid Luster
+    { 274765, 271890, 271889 },          -- Alluring Nostrum (No silver fleeting?)
 }
 local POTION_OF = {}
 local FLEETING  = {}
