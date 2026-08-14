@@ -9,7 +9,8 @@
 - Fixed error when removing a special icon
 - Added a temu Pixel Glow that works on aura containers
 - Fixed sliders only moving one step per drag in most panels
-- Buff Icon count fighting with Elvs skin
+- Buff Icon count fighting with Elvs skinning
+- Fixed inherited-width bar groups sometimes getting the wrong width after spec change
 
 ## 4.1.0
 - Fixed max group icons not working
