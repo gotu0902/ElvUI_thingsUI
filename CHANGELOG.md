@@ -1,5 +1,8 @@
 # Changelog
 
+## 4.1.3
+- New profile presets with new positions
+
 ## 4.1.2
 - Tweaked spec change refresh
 - Glow shows in group previews
