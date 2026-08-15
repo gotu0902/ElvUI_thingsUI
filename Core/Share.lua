@@ -69,7 +69,7 @@ function M.DecodeTable(str, prefix)
     str = tostring(str or ""):gsub("%s", "")
     prefix = prefix or ""
     if str == "" or str:sub(1, #prefix) ~= prefix then return nil end
-    -- pasted garbage can throw inside the C decoders
+
     local ok, data = pcall(function()
         local decoded = CE.DecodeBase64(str:sub(#prefix + 1))
         local decompressed = decoded and CE.DecompressString(decoded, COMPRESS)

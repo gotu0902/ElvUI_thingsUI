@@ -642,8 +642,6 @@ local function SyncGroup(group)
         and ((ns.ANCHORS and ns.ANCHORS.ResolveAnchorTarget and ns.ANCHORS.ResolveAnchorTarget(af)) or _G[af])
         or nil
 
-    -- inherited sizes are read at sync time; spec-change rebuilds resize the
-    -- anchor AFTER us, so watch it and re-sync when it settles
     if target and (group.inheritWidth or group.inheritHeight) and target.HookScript
         and not target._tuiCBSizeHooked then
         target._tuiCBSizeHooked = true
@@ -755,8 +753,6 @@ local function SyncGroup(group)
         local key = st.keyByButton[button]
         local def = key and st.defByKey[key]
         if def then
-            -- pool buttons are access-restricted while their aura is secret;
-            -- the combat-lockdown flag can lag that window
             if not pcall(StyleBar, button, r, group, def) then pendingSync = true end
         end
     end

@@ -24,6 +24,7 @@
 	<Script file="CDM\RacialsCDM.lua"/>
 	<Script file="CustomGroups.lua"/>
 	<Script file="AuraLane.lua"/>
+	<Script file="Glow.lua"/>
 	<Script file="CustomBars.lua"/>
 	<Script file="TUIMeter.lua"/>
 	<Script file="MBB.lua"/>

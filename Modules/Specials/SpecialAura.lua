@@ -71,8 +71,7 @@ end
 local function EnsureContainer(wrapper, field)
     local c = wrapper[field]
     if not c then
-        -- parented OUTSIDE the wrapper: the interactive wrapper's input aspects
-        -- must not reach the aura frame pool (SetParent forbidden-aspect error)
+        -- parent outside the wrapper so its input aspects never reach the aura pool
         c = CreateFrame("AuraContainer", nil, UIParent, "CustomAuraContainerTemplate")
         c._tuiRegions = {}
         wrapper[field] = c
@@ -158,10 +157,11 @@ function SA.StyleIconButton(button, r, wrapper, key)
     local w, h = wrapper:GetSize()
     if not w or w < 1 then w = db.width or 36 end
     if not h or h < 1 then h = w end
-    button:SetSize(w, h)
+    ns.Pixel.SetSize(button, w, h)
 
     if not r.icon then
         r.icon = button:CreateTexture(nil, "ARTWORK")
+        if ns.AuraLane and ns.AuraLane.NoSnap then ns.AuraLane.NoSnap(r.icon) end
         r.icon:SetAllPoints(button)
         button:SetIcon(r.icon)
         r.overlay = CreateFrame("Frame", nil, button)
@@ -177,19 +177,10 @@ function SA.StyleIconButton(button, r, wrapper, key)
             for i = 1, 4 do r.border[i] = button:CreateTexture(nil, "OVERLAY") end
         end
         local bs = db.borderSize or 1
+        if db.glowBorderStroke and db.showGlow and AL0.MapGlowStyle(db.glowType) == "pixel" then bs = db.glowThickness or bs end
         local bi = db.borderInset or 0
         AL0.EdgeRing(button, r.border, bs, bi, db.borderColor or { r = 0, g = 0, b = 0, a = 1 })
-        if db.borderStroke then
-            if not r.borderIn then
-                r.borderIn, r.borderOut = {}, {}
-                for i = 1, 4 do
-                    r.borderIn[i] = button:CreateTexture(nil, "OVERLAY")
-                    r.borderOut[i] = button:CreateTexture(nil, "OVERLAY")
-                end
-            end
-            AL0.EdgeRing(button, r.borderIn, 1, bi + bs, { a = 1 })
-            AL0.EdgeRing(button, r.borderOut, 1, bi - 1, { a = 1 })
-        elseif r.borderIn then
+        if r.borderIn then
             for i = 1, 4 do r.borderIn[i]:Hide() r.borderOut[i]:Hide() end
         end
     else
@@ -252,7 +243,9 @@ function SA.StyleIconButton(button, r, wrapper, key)
         AL.ApplyButtonFX(button, r, {
             style = db.showGlow and AL.MapGlowStyle(db.glowType) or nil,
             color = db.glowColor,
+            anchor = r.icon,
             thickness = db.glowThickness,
+            outline = (db.glowBorderStroke and db.showBorder) and true or false,
             lines = db.glowLines, length = db.glowLength,
             offset = db.glowOffset, frequency = db.glowSpeed,
             w = w, h = h,

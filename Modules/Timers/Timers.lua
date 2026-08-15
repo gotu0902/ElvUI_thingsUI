@@ -35,8 +35,7 @@ end
 
 M.DefaultTimer = ns.Defaults.Timer
 
--- the lust tracker moved to the aura lane (Bloodlust preset); old profiles
--- still carry the builtin timer
+-- lust tracking moved to the aura lane; old profiles still carry this
 function M.DropLustTimers()
     local db = DB()
     if not (db and db.list) then return end

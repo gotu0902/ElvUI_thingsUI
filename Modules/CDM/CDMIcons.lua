@@ -227,6 +227,7 @@ local function SortByCooldownID(children)
 end
 
 local cdmRebuilding = false
+local rebuildFinish
 local lastSpec
 
 local function ReapplyChildAnchor(child)
@@ -255,8 +256,7 @@ local OVERLAY_ATLAS   = "UI-HUD-CoolDownManager-IconOverlay"
 local OVERLAY_TEX_ID  = 6707800
 local applyingOverlay = {}
 
--- returns "spell", "equip" or false; equipment must NEVER take the spell
--- path (the use-spell CD API reports the 20s shared CD, not the item CD)
+-- "spell"/"equip"/false; equipment must never take the spell path
 local function OverlayEligible(child)
     if not child then return false end
     if ns.yoinkedBars and ns.yoinkedBars[child] then return false end
@@ -1026,7 +1026,14 @@ local function HookViewer(name)
     local viewer = _G[name]
     if not viewer or type(viewer.RefreshLayout) ~= "function" then return false end
     hookedViewers[name] = true
-    hooksecurefunc(viewer, "RefreshLayout", QueueLayout)
+    hooksecurefunc(viewer, "RefreshLayout", function(v)
+        if rebuildFinish then
+            local f = rebuildFinish
+            rebuildFinish = nil
+            C_Timer.After(0.1, f)
+        end
+        QueueLayout(v)
+    end)
 
     if type(viewer.OnAcquireItemFrame) == "function" then
         hooksecurefunc(viewer, "OnAcquireItemFrame", function(self, itemFrame)
@@ -1223,7 +1230,19 @@ f:SetScript("OnEvent", function(_, event, arg1)
         local spec = GetSpecialization and GetSpecialization()
         if lastSpec ~= nil and spec ~= lastSpec then
             cdmRebuilding = true
-            C_Timer.After(2.5, function() cdmRebuilding = false end)
+            local function finish()
+                if not cdmRebuilding then return end
+                cdmRebuilding = false
+                RelayoutAllForcedStaggered()
+                M.RefreshAll()
+                if TUI.UpdateClusterPositioning then TUI:UpdateClusterPositioning() end
+                if TUI.UpdateBuffBars then TUI:UpdateBuffBars() end
+            end
+            rebuildFinish = finish
+            C_Timer.After(2.5, function()
+                if rebuildFinish == finish then rebuildFinish = nil end
+                finish()
+            end)
         end
         lastSpec = spec
         C_Timer.After(0.5, M.RefreshAll)

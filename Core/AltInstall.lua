@@ -113,8 +113,7 @@ local function EditModeLayouts()
     return combined, presets, info.activeLayout
 end
 
--- Blizzard has no spec link for Edit Mode layouts; we keep a per-char
--- name map and switch the active layout on spec change ourselves
+-- Edit Mode has no spec link; we switch the active layout ourselves
 local function EMSpecStore(create)
     _G.thingsUIGlobalDB = _G.thingsUIGlobalDB or {}
     local g = _G.thingsUIGlobalDB

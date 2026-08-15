@@ -28,17 +28,49 @@ end
 
 local CDM_SECTIONS = { cdm = true, buffBars = true }
 
+local watchTicker
+local function StopSectionWatch()
+    if watchTicker then
+        watchTicker:Cancel()
+        watchTicker = nil
+    end
+end
+
 local function OnConfigClosed()
     curSection = nil
+    StopSectionWatch()
     if ns.CustomGroups and ns.CustomGroups.SetTestMode then
         ns.CustomGroups.SetTestMode(false)
     end
     CloseCDMSettings()
 end
 
--- ElvUI wires OnHide with a captured function reference at window creation,
--- so hooking E.Config_WindowClosed after the fact would never fire; hook the
--- window itself. AceGUI recycles windows, hence the weak per-frame set.
+local function StillInThingsUI()
+    local ACD = E.Libs and E.Libs.AceConfigDialog
+    local st = ACD and ACD.GetStatusTable and ACD:GetStatusTable("ElvUI")
+    local sel = st and st.groups and st.groups.selected
+    if type(sel) ~= "string" then return true end
+    return sel == "thingsUI" or sel:sub(1, 9) == "thingsUI\001"
+end
+
+local function StartSectionWatch()
+    if watchTicker then return end
+    watchTicker = C_Timer.NewTicker(0.3, function()
+        if not curSection then
+            StopSectionWatch()
+            return
+        end
+        if not StillInThingsUI() then
+            curSection = nil
+            StopSectionWatch()
+            if ns.CustomGroups and ns.CustomGroups.SetTestMode then
+                ns.CustomGroups.SetTestMode(false)
+            end
+            CloseCDMSettings()
+        end
+    end)
+end
+
 local hookedWindows = setmetatable({}, { __mode = "k" })
 local function EnsureCloseHook()
     local frame = E.Config_GetWindow and E:Config_GetWindow()
@@ -52,6 +84,7 @@ local TEST_SECTIONS = { customGroups = true, customBars = true, specialIcons = t
 
 local function SectionShown(key)
     EnsureCloseHook()
+    StartSectionWatch()
     if key == curSection then return end
     local prev = curSection
     curSection = key

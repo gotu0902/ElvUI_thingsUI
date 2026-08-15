@@ -528,7 +528,6 @@ function ns.SB_StyleUseRow(kind, nameFn, orderNum, withGoto)
     return row
 end
 
--- Bar Setup / the Custom Group owns these; they must not count as style drift
 local BARSETUP_OWNED = { showBackdrop = true, backdropColor = true, width = true, height = true }
 local GROUPED_ICON_OWNED = {
     showCooldown = true, invertSwipe = true, width = true, height = true,
@@ -1288,7 +1287,12 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             get = function() return get("showBorder") end,
                             set = function(_, v) set("showBorder", v) end },
                         borderSize  = { order = 2, type = "range", name = "Size",  min = 1, max = 16,  step = 0.01, bigStep = 1,
-                            disabled = function() return not get("showBorder") end,
+                            disabled = function()
+                                if not get("showBorder") then return true end
+                                local AL = ns.AuraLane
+                                local style = AL and AL.MapGlowStyle(get("glowType")) or "pulse"
+                                return get("showGlow") and style == "pixel" and get("glowBorderStroke") and true or false
+                            end,
                             get = function() return get("borderSize") end,
                             set = function(_, v) set("borderSize", v) end },
                         borderColor = { order = 3, type = "color", name = "Color", hasAlpha = true,
@@ -1299,10 +1303,6 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             disabled = function() return not get("showBorder") end,
                             get = function() return get("borderInset") end,
                             set = function(_, v) set("borderInset", v) end },
-                        borderStroke = { order = 5, type = "toggle", name = "Stroke",
-                            disabled = function() return not get("showBorder") end,
-                            get = function() return get("borderStroke") end,
-                            set = function(_, v) set("borderStroke", v) end },
                     },
                 },
                 glowGroup = {
@@ -1323,7 +1323,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             disabled = function() return not get("showGlow") end,
                             get = function() return unpackColor(get("glowColor"), true) end,
                             set = function(_, r, g, b, a) set("glowColor", { r=r, g=g, b=b, a=a }) end },
-                        glowThickness = { order = 4, type = "range", name = "Thickness", min = 0.5, max = 10, step = 0.5,
+                        glowThickness = { order = 4, type = "range", name = "Thickness", min = 1, max = 10, step = 1,
                             disabled = function()
                                 local AL = ns.AuraLane
                                 local style = AL and AL.MapGlowStyle(get("glowType")) or "pulse"
@@ -1331,6 +1331,14 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             end,
                             get = function() return get("glowThickness") or 2 end,
                             set = function(_, v) set("glowThickness", v) end },
+                        glowBorderStroke = { order = 4.5, type = "toggle", name = "Bordered Stroke",
+                            hidden = function()
+                                local AL = ns.AuraLane
+                                return (AL and AL.MapGlowStyle(get("glowType")) or "pulse") ~= "pixel"
+                            end,
+                            disabled = function() return not get("showGlow") or not get("showBorder") end,
+                            get = function() return get("glowBorderStroke") end,
+                            set = function(_, v) set("glowBorderStroke", v) end },
                         glowLines = { order = 5, type = "range", name = "Particles", min = 1, max = 12, step = 1,
                             hidden = function()
                                 local AL = ns.AuraLane
@@ -1347,7 +1355,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             disabled = function() return not get("showGlow") end,
                             get = function() return get("glowLength") or 3 end,
                             set = function(_, v) set("glowLength", v) end },
-                        glowOffset = { order = 7, type = "range", name = "Offset", min = -6, max = 8, step = 1,
+                        glowOffset = { order = 7, type = "range", name = "Offset", min = -6, max = 8, step = 0.01, bigStep = 1,
                             hidden = function()
                                 local AL = ns.AuraLane
                                 return (AL and AL.MapGlowStyle(get("glowType")) or "pulse") ~= "pixel"

@@ -241,33 +241,24 @@ local function ApplyQualityAtlas(btn, id)
     q:Show()
 end
 
-local _bMain  = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
-local _bInner = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
-local _bOuter = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
+local BLACK3 = { r = 0, g = 0, b = 0, a = 1 }
+local function Ring3(f, anchor, sz, ins, c)
+    if not f._tuiRing then
+        f:SetBackdrop(nil)
+        f._tuiRing = {}
+        for i = 1, 4 do f._tuiRing[i] = f:CreateTexture(nil, "OVERLAY") end
+    end
+    f:ClearAllPoints()
+    f:SetAllPoints(anchor)
+    ns.AuraLane.EdgeRing(f, f._tuiRing, sz, ins, c)
+    f:Show()
+end
 local function DrawStroke3(bd, inner, outer, anchor, size, inset, bc, stroke)
-    if not bd then return end
-    _bMain.edgeFile = E.media.blankTex; _bMain.edgeSize = size
-    bd:SetBackdrop(nil); bd:SetBackdrop(_bMain)
-    bd:SetBackdropBorderColor(bc.r, bc.g, bc.b, bc.a or 1)
-    bd:ClearAllPoints()
-    bd:SetPoint("TOPLEFT",     anchor, "TOPLEFT",      inset, -inset)
-    bd:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", -inset,  inset)
-    bd:Show()
+    if not (bd and ns.AuraLane and ns.AuraLane.EdgeRing) then return end
+    Ring3(bd, anchor, size, inset, bc)
     if stroke then
-        _bInner.edgeFile = E.media.blankTex; _bInner.edgeSize = 1
-        inner:SetBackdrop(nil); inner:SetBackdrop(_bInner)
-        inner:SetBackdropBorderColor(0, 0, 0, 1)
-        inner:ClearAllPoints()
-        inner:SetPoint("TOPLEFT",     anchor, "TOPLEFT",      inset + size, -(inset + size))
-        inner:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", -(inset + size),  inset + size)
-        inner:Show()
-        _bOuter.edgeFile = E.media.blankTex; _bOuter.edgeSize = 1
-        outer:SetBackdrop(nil); outer:SetBackdrop(_bOuter)
-        outer:SetBackdropBorderColor(0, 0, 0, 1)
-        outer:ClearAllPoints()
-        outer:SetPoint("TOPLEFT",     anchor, "TOPLEFT",      inset - 1, -(inset - 1))
-        outer:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", -(inset - 1),  inset - 1)
-        outer:Show()
+        Ring3(inner, anchor, 1, inset + size, BLACK3)
+        Ring3(outer, anchor, 1, inset - 1, BLACK3)
     elseif inner then
         inner:Hide(); outer:Hide()
     end
@@ -294,7 +285,7 @@ local function ApplyGroupBorder(btn)
     end
     DrawStroke3(bd, inner, outer, btn,
         g.borderSize or 1, g.borderInset or 0,
-        g.borderColor or { r = 0, g = 0, b = 0, a = 1 }, g.borderStroke)
+        g.borderColor or { r = 0, g = 0, b = 0, a = 1 }, false)
 end
 
 local USES_ITEMS = { [5512] = true, [224464] = true }  -- Healthstone / Demonic (Gluttony) Healthstone
@@ -562,25 +553,19 @@ local function HideGroupIcons(gs)
     if gs.testIcons then for _, b in pairs(gs.testIcons) do b:Hide() end end
 end
 
+-- ElvUI CDM model: icon fills the button, pixel-perfect backdrop outside
 function M.ApplyIconSkin(btn, icon, crop, px)
     if not icon then return end
     if crop then icon:SetTexCoord(crop[1], crop[2], crop[3], crop[4])
     else icon:SetTexCoord(0, 1, 0, 1) end
+    icon:ClearAllPoints()
+    icon:SetAllPoints(btn)
+    if btn._tuiSkinBg then btn._tuiSkinBg:Hide() end
     if px then
-        if not btn._tuiSkinBg then
-            local bg = btn:CreateTexture(nil, "BACKGROUND")
-            bg:SetAllPoints(btn)
-            bg:SetColorTexture(0, 0, 0, 1)
-            btn._tuiSkinBg = bg
-        end
-        btn._tuiSkinBg:Show()
-        icon:ClearAllPoints()
-        icon:SetPoint("TOPLEFT", btn, "TOPLEFT", px, -px)
-        icon:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -px, px)
-    else
-        if btn._tuiSkinBg then btn._tuiSkinBg:Hide() end
-        icon:ClearAllPoints()
-        icon:SetAllPoints(btn)
+        if not icon.backdrop and icon.CreateBackdrop then icon:CreateBackdrop() end
+        if icon.backdrop then icon.backdrop:Show() end
+    elseif icon.backdrop then
+        icon.backdrop:Hide()
     end
 end
 
@@ -606,6 +591,8 @@ local function RenderTestLane(gs, group, frame)
 
     local entries = ns.AuraLane.Entries(group)
     local sorted = ((group.auras and group.auras.sortMode) or "manual") ~= "manual"
+    local sortedGlow = sorted and ns.AuraLane.SortGlowOptsFor
+        and ns.AuraLane.SortGlowOptsFor(group) or nil
     local cap = tonumber(group.maxIcons) or 0
     local remaining = (sorted and cap > 0) and cap or nil
     local counts, lists, total = {}, {}, 0
@@ -631,6 +618,7 @@ local function RenderTestLane(gs, group, frame)
             if not f then
                 f = CreateFrame("Frame", nil, frame)
                 f.tex = f:CreateTexture(nil, "ARTWORK")
+                if ns.AuraLane.NoSnap then ns.AuraLane.NoSnap(f.tex) end
                 f.tex:SetAllPoints(f)
                 pool[idx] = f
             end
@@ -640,14 +628,27 @@ local function RenderTestLane(gs, group, frame)
             M.ApplyIconSkin(f, f.tex, S.crop, S.skin)
 
             local AL = ns.AuraLane
-            if group.showBorder and AL.EdgeRing then
+            -- mirror StyleButton: per-icon border override wins over the group's
+            local idb = entry.def and entry.def.iconDB
+            local bShow, bs, bi, bc, bstk = group.showBorder,
+                group.borderSize or 1, group.borderInset or 0, group.borderColor, false
+            local gau = group.auras
+            if bShow and gau and gau.sortGlow and gau.sortGlowBorderStroke and (gau.sortMode or "manual") ~= "manual"
+                and (gau.sortGlowStyle or "pulse") == "pixel" then
+                bs = gau.sortGlowThickness or bs
+            end
+            if idb and idb.showBorder then
+                bShow, bs, bi, bc, bstk = true,
+                    idb.borderSize or 1, idb.borderInset or 0, idb.borderColor, false
+                if idb.glowBorderStroke and idb.showGlow and AL.MapGlowStyle(idb.glowType) == "pixel" then bs = idb.glowThickness or bs end
+            end
+            if bShow and AL.EdgeRing then
                 if not f.border then
                     f.border = {}
                     for j = 1, 4 do f.border[j] = f:CreateTexture(nil, "OVERLAY") end
                 end
-                local bs, bi = group.borderSize or 1, group.borderInset or 0
-                AL.EdgeRing(f, f.border, bs, bi, group.borderColor or { a = 1 })
-                if group.borderStroke then
+                AL.EdgeRing(f, f.border, bs, bi, bc or { a = 1 })
+                if bstk then
                     if not f.borderIn then
                         f.borderIn, f.borderOut = {}, {}
                         for j = 1, 4 do
@@ -669,13 +670,23 @@ local function RenderTestLane(gs, group, frame)
 
             -- fake numbers
             local tc = S.text or group.text or {}
+            if not f.txtHost then
+                f.txtHost = CreateFrame("Frame", nil, f)
+                f.txtHost:SetAllPoints(f)
+            end
+            f.txtHost:SetFrameLevel(f:GetFrameLevel() + 10)
             local function stamp(key, shown, fontN, size, outline, col, point, xo, yo, txt)
                 local fs = f[key]
+                if fs and fs:GetParent() ~= f.txtHost then
+                    fs:Hide()
+                    fs = nil
+                    f[key] = nil
+                end
                 if shown == false then
                     if fs then fs:Hide() end
                     return
                 end
-                if not fs then fs = f:CreateFontString(nil, "OVERLAY"); f[key] = fs end
+                if not fs then fs = f.txtHost:CreateFontString(nil, "OVERLAY"); f[key] = fs end
                 local fontPath = (LSM and LSM:Fetch("font", fontN or "Expressway")) or STANDARD_TEXT_FONT
                 E:SetFont(fs, fontPath, size or 12, outline or "OUTLINE")
                 local c = col or {}
@@ -692,6 +703,17 @@ local function RenderTestLane(gs, group, frame)
             stamp("stkText", tc.showStacks ~= false, tc.stacksFont, tc.stacksFontSize or 11,
                 tc.stacksFontOutline, tc.stacksColor, tc.stacksPoint or "TOP",
                 tc.stacksXOffset, tc.stacksYOffset, "3")
+
+            local fx = sortedGlow
+            if not fx and not sorted and AL.GlowOptsFor then
+                fx = AL.GlowOptsFor(group, entry.def)
+            end
+            fx = fx or {}
+            fx.w, fx.h = S.iw, S.ih
+            fx.anchor = f.tex
+            f.fxr = f.fxr or {}
+            AL.ApplyButtonFX(f, f.fxr, fx)
+
             ns.Pixel.SetSize(f, S.iw, S.ih)
             f:ClearAllPoints()
             if S.center then

@@ -194,13 +194,25 @@ local function EditAura(def, title, onChange, group)
     f:AddChild(gstyle)
 
     if PixelOn() then
-        f:SetHeight(560)
-        local function AddPixelSlider(label, field, mn, mx, step, dflt)
+        f:SetHeight(590)
+        local bstroke = AceGUI:Create("CheckBox")
+        bstroke:SetLabel("Bordered Stroke")
+        bstroke:SetWidth(170)
+        bstroke:SetValue(def.glowBorderStroke and true or false)
+        bstroke:SetDisabled(not (group and group.showBorder))
+        bstroke:SetCallback("OnValueChanged", function(_, _, v)
+            def.glowBorderStroke = v
+            onChange()
+            Reopen()
+        end)
+        f:AddChild(bstroke)
+        local function AddPixelSlider(label, field, mn, mx, step, dflt, disabled)
             local s = AceGUI:Create("Slider")
             s:SetLabel(label)
             s:SetWidth(170)
             s:SetSliderValues(mn, mx, step)
             s:SetValue(def[field] or dflt)
+            s:SetDisabled(disabled or false)
             s:SetCallback("OnValueChanged", function(_, _, v) def[field] = v; onChange() end)
             f:AddChild(s)
         end
@@ -863,6 +875,26 @@ function TUI:CustomGroupsOptions()
                             end,
                         }
 
+                        box["r" .. i .. "_purge"] = {
+                            order = base + 4.2, type = "execute", name = "|TInterface\\Buttons\\UI-StopButton:12|t", width = 0.3,
+                            hidden = function() local e = entry(); return not (e and e.kind == "specialicon") end,
+                            confirm = function()
+                                local e = entry()
+                                return ("Delete special icon '%s' PERMANENTLY? It is removed from Special Icons too."):format(e and e.name or "?")
+                            end,
+                            func = function()
+                                local e = entry(); if not e then return end
+                                local SB = ns.SpecialBars
+                                local slot = tonumber(e.iconKey and e.iconKey:match("icon(%d+)"))
+                                if SB and SB.RemoveIconSlot and slot then
+                                    SB.RemoveIconSlot(slot, tonumber(e.srcSpec))
+                                    if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end
+                                    TUI:UpdateSpecialBars(); TUI:UpdateCustomGroups()
+                                end
+                                NotifyChange()
+                            end,
+                        }
+
                         box["r" .. i .. "_style"] = {
                             order = base + 4.5, type = "select", name = "", width = 1.2,
                             hidden = function() local e = entry(); return not (e and e.kind == "specialicon" and e.live) end,
@@ -1095,7 +1127,8 @@ function TUI:CustomGroupsOptions()
             for _, e in ipairs(defs) do
                 orderArgs[e.f] = {
                     order = e.o, type = "range", name = e.n, min = e.mn, max = e.mx, step = e.st,
-                    hidden = pxHidden, disabled = pxDisabled,
+                    hidden = pxHidden,
+                    disabled = pxDisabled,
                     get = function() return (group.auras and group.auras[e.f]) or e.d end,
                     set = function(_, v)
                         group.auras[e.f] = v
@@ -1103,6 +1136,16 @@ function TUI:CustomGroupsOptions()
                     end,
                 }
             end
+            orderArgs.sortGlowBorderStroke = {
+                order = 2.45, type = "toggle", name = "Bordered Stroke",
+                hidden = pxHidden,
+                disabled = function() return pxDisabled() or not group.showBorder end,
+                get = function() return group.auras and group.auras.sortGlowBorderStroke end,
+                set = function(_, v)
+                    group.auras.sortGlowBorderStroke = v
+                    TUI:UpdateCustomGroups(); NotifyChange()
+                end,
+            }
         end
         for i = 1, 3 do
             local idx = i
@@ -1425,7 +1468,12 @@ function TUI:CustomGroupsOptions()
                                 showBorder = { order = 1, type = "toggle", name = "Show Border", width = "full",
                                     get = function() return group.showBorder end, set = function(_, v) gset("showBorder", v) end },
                                 size = { order = 2, type = "range", name = "Size", min = 1, max = 16, step = 0.01, bigStep = 1,
-                                    disabled = function() return not group.showBorder end,
+                                    disabled = function()
+                                        if not group.showBorder then return true end
+                                        local au = group.auras
+                                        return (au and au.sortGlow and au.sortGlowBorderStroke and (au.sortMode or "manual") ~= "manual"
+                                            and (au.sortGlowStyle or "pulse") == "pixel") and true or false
+                                    end,
                                     get = function() return group.borderSize or 1 end, set = function(_, v) gset("borderSize", v) end },
                                 color = { order = 3, type = "color", name = "Color", hasAlpha = true,
                                     disabled = function() return not group.showBorder end,
@@ -1434,9 +1482,6 @@ function TUI:CustomGroupsOptions()
                                 inset = { order = 4, type = "range", name = "Inset", min = -10, max = 10, step = 0.01, bigStep = 1,
                                     disabled = function() return not group.showBorder end,
                                     get = function() return group.borderInset or 0 end, set = function(_, v) gset("borderInset", v) end },
-                                stroke = { order = 5, type = "toggle", name = "Stroke",
-                                    disabled = function() return not group.showBorder end,
-                                    get = function() return group.borderStroke end, set = function(_, v) gset("borderStroke", v) end },
                             },
                         },
                         positionGroup = {

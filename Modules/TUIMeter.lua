@@ -352,8 +352,7 @@ local function DeathClockText(src)
     return ""
 end
 
--- one formatter for drill and popout: school-coloured name, source in
--- parens, red amount + orange overkill + absorbed + hp%
+-- shared formatter for drill and popout
 local function RecapHPTop(events)
     local top = 1
     for i = 1, #events do
@@ -385,8 +384,7 @@ local function RecapLine(ev, killing, deathTime, hpTop)
         nm = ("|cFF606060-%.1fs|r  "):format(deathTime - ts) .. nm
     end
 
-    -- no maxHealth in the live payload: normalise against the highest HP
-    -- seen in this recap, the bar reads as the health trajectory
+    -- no maxHealth in the payload; normalise against the recap's highest HP
     local hp = ev.currentHP
     if Secret(hp) or type(hp) ~= "number" then hp = 0 end
     local hpMax = (type(hpTop) == "number" and hpTop > 1) and hpTop or 1

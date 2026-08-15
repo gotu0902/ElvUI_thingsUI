@@ -45,6 +45,7 @@ local function GetOrCreateIconFrame(iconKey)
     wrapper:SetFrameLevel(10)
     if not wrapper.fallback then
         wrapper.fallback = wrapper:CreateTexture(nil, 'ARTWORK')
+        if ns.AuraLane and ns.AuraLane.NoSnap then ns.AuraLane.NoSnap(wrapper.fallback) end
         wrapper.fallback:SetAllPoints()
         wrapper.fallbackBorder = CreateFrame('Frame', nil, wrapper, 'BackdropTemplate')
         wrapper.fallbackBorder:SetAllPoints()
@@ -54,85 +55,35 @@ local function GetOrCreateIconFrame(iconKey)
         wrapper.fallback:Hide()
         wrapper.fallbackBorder:Hide()
     end
-    if not wrapper.tuiBorder then
-        local inner = CreateFrame('Frame', nil, wrapper, 'BackdropTemplate')
-        inner:SetFrameLevel(12)
-        inner:SetBackdrop({ bgFile = nil, edgeFile = E.media.blankTex, edgeSize = 1 })
-        inner:SetBackdropColor(0, 0, 0, 0)
-        inner:SetBackdropBorderColor(0, 0, 0, 1)
-        inner:Hide()
-        wrapper.tuiBorderInner = inner
-        local bd = CreateFrame('Frame', nil, wrapper, 'BackdropTemplate')
-        bd:SetFrameLevel(12)
-        bd:SetBackdrop({ bgFile = nil, edgeFile = E.media.blankTex, edgeSize = 1 })
-        bd:SetBackdropColor(0, 0, 0, 0)
-        bd:SetBackdropBorderColor(0, 0, 0, 1)
-        bd:Hide()
-        wrapper.tuiBorder = bd
-        local outer = CreateFrame('Frame', nil, wrapper, 'BackdropTemplate')
-        outer:SetFrameLevel(12)
-        outer:SetBackdrop({ bgFile = nil, edgeFile = E.media.blankTex, edgeSize = 1 })
-        outer:SetBackdropColor(0, 0, 0, 0)
-        outer:SetBackdropBorderColor(0, 0, 0, 1)
-        outer:Hide()
-        wrapper.tuiBorderOuter = outer
-    end
     return wrapper
 end
 
-local _bdMain   = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
-local _bdInner  = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
-local _bdOuter  = { bgFile = nil, edgeFile = nil, edgeSize = 1 }
-
+-- inward EdgeRing, same growth as group borders and active lane borders
 local function ApplyIconBorder(wrapper, db)
-    local bd    = wrapper.tuiBorder
-    local inner = wrapper.tuiBorderInner
-    local outer = wrapper.tuiBorderOuter
-    if not bd then return end
-
-    if not db.showBorder then
-        bd:Hide(); inner:Hide(); outer:Hide()
+    local AL = ns.AuraLane
+    local host = wrapper.tuiBorderHost
+    if not db.showBorder or not (AL and AL.EdgeRing) then
+        if host then host:Hide() end
         return
     end
 
-    local size   = db.borderSize  or 1
-    local inset  = db.borderInset or 0
-    local bc     = db.borderColor or { r=0, g=0, b=0, a=1 }
-    local stroke = db.borderStroke
+    local size = db.borderSize or 1
+    if db.glowBorderStroke and db.showGlow and AL.MapGlowStyle(db.glowType) == "pixel" then size = db.glowThickness or size end
+    local inset = db.borderInset or 0
+    local bc    = db.borderColor or { r=0, g=0, b=0, a=1 }
 
-    _bdMain.edgeFile = E.media.blankTex
-    _bdMain.edgeSize = size
-    bd:SetBackdrop(nil)
-    bd:SetBackdrop(_bdMain)
-    bd:SetBackdropBorderColor(bc.r, bc.g, bc.b, bc.a)
-    bd:ClearAllPoints()
-    bd:SetPoint('TOPLEFT',     wrapper, 'TOPLEFT',      inset, -inset)
-    bd:SetPoint('BOTTOMRIGHT', wrapper, 'BOTTOMRIGHT', -inset,  inset)
-    bd:Show()
-
-    if stroke then
-        _bdInner.edgeFile = E.media.blankTex
-        _bdInner.edgeSize = 1
-        inner:SetBackdrop(nil)
-        inner:SetBackdrop(_bdInner)
-        inner:SetBackdropBorderColor(0, 0, 0, 1)
-        inner:ClearAllPoints()
-        inner:SetPoint('TOPLEFT',     wrapper, 'TOPLEFT',      inset + size, -(inset + size))
-        inner:SetPoint('BOTTOMRIGHT', wrapper, 'BOTTOMRIGHT', -(inset + size),  inset + size)
-        inner:Show()
-        _bdOuter.edgeFile = E.media.blankTex
-        _bdOuter.edgeSize = 1
-        outer:SetBackdrop(nil)
-        outer:SetBackdrop(_bdOuter)
-        outer:SetBackdropBorderColor(0, 0, 0, 1)
-        outer:ClearAllPoints()
-        outer:SetPoint('TOPLEFT',     wrapper, 'TOPLEFT',      inset - 1, -(inset - 1))
-        outer:SetPoint('BOTTOMRIGHT', wrapper, 'BOTTOMRIGHT', -(inset - 1),  inset - 1)
-        outer:Show()
-    else
-        inner:Hide()
-        outer:Hide()
+    if not host then
+        host = CreateFrame('Frame', nil, wrapper)
+        host:SetAllPoints(wrapper)
+        host:SetFrameLevel(12)
+        host.main = {}
+        for i = 1, 4 do
+            host.main[i] = host:CreateTexture(nil, 'OVERLAY')
+        end
+        wrapper.tuiBorderHost = host
     end
+    host:Show()
+    AL.EdgeRing(host, host.main, size, inset, bc)
 end
 
 local function ComputeIconTexCoord(db)
@@ -166,9 +117,7 @@ SB.ComputeIconTexCoord = ComputeIconTexCoord
 local function HideWrapperVisuals(wrapper)
     wrapper.fallback:Hide()
     wrapper.fallbackBorder:Hide()
-    if wrapper.tuiBorder      then wrapper.tuiBorder:Hide()      end
-    if wrapper.tuiBorderInner then wrapper.tuiBorderInner:Hide() end
-    if wrapper.tuiBorderOuter then wrapper.tuiBorderOuter:Hide() end
+    if wrapper.tuiBorderHost then wrapper.tuiBorderHost:Hide() end
 end
 
 local function ReleaseIcon(iconKey)
@@ -249,7 +198,7 @@ local function UpdateIconSlot(iconKey)
             and cy and math.abs(cy - y) < 0.5
         if not same then
             mover:ClearAllPoints()
-            mover:SetPoint(point, anchorFrame, relPoint, x, y)
+            Pixel.SetPoint(mover, point, anchorFrame, relPoint, x, y)
 
             local anchorHasName = anchorFrame.GetName and anchorFrame:GetName()
             if E.SaveMoverPosition and anchorHasName then
@@ -278,6 +227,18 @@ local function UpdateIconSlot(iconKey)
         ApplyIconBorder(wrapper, db)
     else
         HideWrapperVisuals(wrapper)
+    end
+
+    local AL = ns.AuraLane
+    if AL and AL.GlowOptsFor then
+        local fx = (test and db.showGlow) and AL.GlowOptsFor(nil, { iconDB = db }) or nil
+        if fx or wrapper._tuiTestFXR then
+            wrapper._tuiTestFXR = wrapper._tuiTestFXR or {}
+            fx = fx or {}
+            fx.w, fx.h = w, h
+            fx.anchor = wrapper.fallback
+            AL.ApplyButtonFX(wrapper, wrapper._tuiTestFXR, fx)
+        end
     end
     wrapper:Show()
 

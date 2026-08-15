@@ -93,7 +93,6 @@ function M.RefreshCurrentSpec()
     local store = Store()
     if store then store[specID] = map end
 
-    -- tracked buffs/bars are auras: the registry that feeds Add Buff
     local buffs = {}
     CollectCategory(CAT_BUFF, buffs)
     CollectCategory(CAT_BAR, buffs)

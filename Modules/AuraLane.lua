@@ -191,281 +191,8 @@ function A.CanPandemic(button)
     return pandemicOK == true
 end
 
-function A.MapGlowStyle(v)
-    if v == "pulse" or v == "proc" or v == "ants" or v == "pixel" then return v end
-    if v == "button" then return "proc" end
-    return "pulse"
-end
 
-local RING_BLACK = {}
-local function EdgeRing(host, texs, size, inset, c)
-    for _, tex in ipairs(texs) do
-        tex:SetColorTexture(c.r or 0, c.g or 0, c.b or 0, c.a or 1)
-        tex:ClearAllPoints()
-        tex:Show()
-    end
-    texs[1]:SetPoint("TOPLEFT", host, "TOPLEFT", inset, -inset)
-    texs[1]:SetPoint("BOTTOMRIGHT", host, "TOPRIGHT", -inset, -inset - size)
-    texs[2]:SetPoint("TOPLEFT", host, "BOTTOMLEFT", inset, inset + size)
-    texs[2]:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -inset, inset)
-    texs[3]:SetPoint("TOPLEFT", host, "TOPLEFT", inset, -inset)
-    texs[3]:SetPoint("BOTTOMRIGHT", host, "BOTTOMLEFT", inset + size, inset)
-    texs[4]:SetPoint("TOPLEFT", host, "TOPRIGHT", -inset - size, -inset)
-    texs[4]:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -inset, inset)
-end
-A.EdgeRing = EdgeRing
-
-local function LayoutRing(g, th)
-    for i = 1, 4 do
-        g.tex[i]:ClearAllPoints()
-        g.tex[i]:Show()
-    end
-    g.tex[1]:SetPoint("BOTTOMLEFT", g, "TOPLEFT", -th, 0)
-    g.tex[1]:SetPoint("TOPRIGHT", g, "TOPRIGHT", th, th)
-    g.tex[2]:SetPoint("TOPLEFT", g, "BOTTOMLEFT", -th, 0)
-    g.tex[2]:SetPoint("BOTTOMRIGHT", g, "BOTTOMRIGHT", th, -th)
-    g.tex[3]:SetPoint("TOPRIGHT", g, "TOPLEFT", 0, 0)
-    g.tex[3]:SetPoint("BOTTOMLEFT", g, "BOTTOMLEFT", -th, 0)
-    g.tex[4]:SetPoint("TOPLEFT", g, "TOPRIGHT", 0, 0)
-    g.tex[4]:SetPoint("BOTTOMRIGHT", g, "BOTTOMRIGHT", th, 0)
-end
-
-function A.ApplyButtonFX(button, r, opts)
-    local style = opts.style
-    local gc = opts.color
-
-    -- own pixel impl (LCG's pooled frames may not anchor to aura buttons):
-    -- Path-animated dots orbit the full perimeter, no Lua per frame
-    if style == "pixel" then
-        local px = r.glowPixel
-        if not px then
-            px = CreateFrame("Frame", nil, button)
-            px:SetAllPoints(button)
-            px.tex = {}
-            r.glowPixel = px
-        end
-        local th = math.max(1, opts.thickness or 2)
-        local N = math.min(12, math.max(1, opts.lines or 8))
-        local T = math.min(6, math.max(1, opts.length or 3))
-        -- 1px inside the icon edge by default; the Offset knob pushes outward
-        local off = (opts.offset or 0) - (th / 2 + 1)
-        local w = math.max(8, (opts.w or 36) + 2 * off)
-        local h = math.max(8, (opts.h or 36) + 2 * off)
-        local c = gc or {}
-        local P = 2 * (w + h)
-        local function posAt(d)
-            d = d % P
-            if d < w then return d, 0 end
-            d = d - w
-            if d < h then return w, -d end
-            d = d - h
-            if d < w then return w - d, -h end
-            d = d - w
-            return 0, -(h - d)
-        end
-        local dur = 1 / math.max(0.05, opts.frequency or 0.25)
-
-        -- one shared corner-snapped waypoint ring; every dot starts on a ring
-        -- index so trains are index-locked (never drift) and all turn 90deg
-        -- exactly at the corners, head first, tail following
-        local edges = { w, h, w, h }
-        local counts, total = {}, 0
-        for e = 1, 4 do
-            counts[e] = math.max(1, math.floor(edges[e] / (th + 1) + 0.5))
-            total = total + counts[e]
-        end
-        while total > 64 do
-            local bi = 1
-            for e = 2, 4 do if counts[e] > counts[bi] then bi = e end end
-            counts[bi] = counts[bi] - 1
-            total = total - 1
-        end
-        local pts, base = { 0 }, 0
-        for e = 1, 4 do
-            for k = 1, counts[e] do
-                pts[#pts + 1] = base + edges[e] * k / counts[e]
-            end
-            base = base + edges[e]
-        end
-        pts[#pts] = nil
-        local RM = #pts
-
-        local sig = table.concat({ w, h, th, dur, N, T, off, RM }, ":")
-        local idx = 0
-        for i = 1, N do
-            local headIdx = math.floor((i - 1) * RM / N + 0.5)
-            for j = 0, T - 1 do
-                idx = idx + 1
-                local t = px.tex[idx]
-                if t and (not t.path or #t.cps ~= RM) then
-                    t.anim:Stop()
-                    t:Hide()
-                    t = nil
-                end
-                if not t then
-                    t = px:CreateTexture(nil, "OVERLAY", nil, 7)
-                    local ag = t:CreateAnimationGroup()
-                    ag:SetLooping("REPEAT")
-                    local path = ag:CreateAnimation("Path")
-                    path:SetCurveType("NONE")
-                    t.cps = {}
-                    for k = 1, RM do
-                        local cp = path:CreateControlPoint()
-                        cp:SetOrder(k)
-                        t.cps[k] = cp
-                    end
-                    t.anim, t.path = ag, path
-                    px.tex[idx] = t
-                end
-                t:SetColorTexture(c.r or 1, c.g or 1, c.b or 0.25, c.a or 1)
-                t:SetSize(th + 1, th + 1)
-                if t._sig ~= sig then
-                    t._sig = sig
-                    t.anim:Stop()
-                    local s = ((headIdx - j) % RM) + 1
-                    local d0 = pts[s]
-                    local x0, y0 = posAt(d0)
-                    t:ClearAllPoints()
-                    t:SetPoint("CENTER", px, "TOPLEFT", x0 - off, y0 + off)
-                    for k = 1, RM do
-                        local rel
-                        if k == RM then
-                            rel = P
-                        else
-                            rel = (pts[((s - 1 + k) % RM) + 1] - d0) % P
-                        end
-                        local xk, yk = posAt(d0 + rel)
-                        t.cps[k]:SetOffset(xk - x0, yk - y0)
-                    end
-                    t.path:SetDuration(dur)
-                end
-                t:Show()
-            end
-        end
-        for k = idx + 1, #px.tex do
-            px.tex[k].anim:Stop()
-            px.tex[k]:Hide()
-        end
-        px:Show()
-        for k = 1, idx do
-            if not px.tex[k].anim:IsPlaying() then px.tex[k].anim:Play() end
-        end
-    elseif r.glowPixel then
-        for _, t in ipairs(r.glowPixel.tex) do t.anim:Stop() end
-        r.glowPixel:Hide()
-    end
-
-    if style == "pulse" then
-        local g = r.glow
-        if not g then
-            g = CreateFrame("Frame", nil, button)
-            g:SetAllPoints(button)
-            g.tex = {}
-            for i = 1, 4 do g.tex[i] = g:CreateTexture(nil, "OVERLAY", nil, 7) end
-            local ag = g:CreateAnimationGroup()
-            ag:SetLooping("BOUNCE")
-            local a = ag:CreateAnimation("Alpha")
-            a:SetFromAlpha(1)
-            a:SetToAlpha(0.25)
-            a:SetDuration(0.5)
-            g.anim = ag
-            r.glow = g
-        end
-        local c = gc or {}
-        for i = 1, 4 do
-            g.tex[i]:SetColorTexture(c.r or 1, c.g or 1, c.b or 0.25, c.a or 1)
-        end
-        LayoutRing(g, opts.thickness or 2)
-        g:Show()
-        if not g.anim:IsPlaying() then g.anim:Play() end
-    elseif r.glow then
-        r.glow.anim:Stop()
-        r.glow:Hide()
-    end
-
-    if style == "proc" then
-        local p = r.glowProc
-        if not p then
-            p = CreateFrame("Frame", nil, button)
-            p:SetPoint("CENTER", button, "CENTER", 0, 0)
-            p.tex = p:CreateTexture(nil, "OVERLAY", nil, 7)
-            p.tex:SetAllPoints(p)
-            p.tex:SetAtlas("UI-HUD-ActionBar-Proc-Loop-Flipbook")
-            local ag = p.tex:CreateAnimationGroup()
-            ag:SetLooping("REPEAT")
-            local fb = ag:CreateAnimation("FlipBook")
-            fb:SetDuration(1)
-            fb:SetFlipBookRows(6)
-            fb:SetFlipBookColumns(5)
-            fb:SetFlipBookFrames(30)
-            p.anim = ag
-            r.glowProc = p
-        end
-        p:SetSize((opts.w or 36) * 1.4, (opts.h or 36) * 1.4)
-        if gc then p.tex:SetVertexColor(gc.r or 1, gc.g or 1, gc.b or 1, gc.a or 1)
-        else p.tex:SetVertexColor(1, 1, 1, 1) end
-        p:Show()
-        if not p.anim:IsPlaying() then p.anim:Play() end
-    elseif r.glowProc then
-        r.glowProc.anim:Stop()
-        r.glowProc:Hide()
-    end
-
-    if style == "ants" then
-        local n = r.glowAnts
-        if not n then
-            n = CreateFrame("Frame", nil, button)
-            n:SetPoint("CENTER", button, "CENTER", 0, 0)
-            n.tex = n:CreateTexture(nil, "OVERLAY", nil, 7)
-            n.tex:SetAllPoints(n)
-            n.tex:SetTexture("Interface\\SpellActivationOverlay\\IconAlertAnts")
-            local ag = n.tex:CreateAnimationGroup()
-            ag:SetLooping("REPEAT")
-            local fb = ag:CreateAnimation("FlipBook")
-            fb:SetDuration(0.3)
-            fb:SetFlipBookRows(5)
-            fb:SetFlipBookColumns(5)
-            fb:SetFlipBookFrames(22)
-            fb:SetFlipBookFrameWidth(48)
-            fb:SetFlipBookFrameHeight(48)
-            n.anim = ag
-            r.glowAnts = n
-        end
-        n:SetSize((opts.w or 36) * 1.25, (opts.h or 36) * 1.25)
-        if gc then
-            n.tex:SetDesaturated(true)
-            n.tex:SetVertexColor(gc.r or 1, gc.g or 1, gc.b or 1, gc.a or 1)
-        else
-            n.tex:SetDesaturated(false)
-            n.tex:SetVertexColor(1, 1, 1, 1)
-        end
-        n:Show()
-        if not n.anim:IsPlaying() then n.anim:Play() end
-    elseif r.glowAnts then
-        r.glowAnts.anim:Stop()
-        r.glowAnts:Hide()
-    end
-
-    local wantPand = opts.pandemic and A.CanPandemic(button) or false
-    if wantPand and not r.pand then
-        local pd = CreateFrame("Frame", nil, button)
-        pd:SetAllPoints(button)
-        pd:SetFrameLevel(button:GetFrameLevel() + 4)
-        pd.tex = {}
-        for i = 1, 4 do pd.tex[i] = pd:CreateTexture(nil, "OVERLAY", nil, 6) end
-        r.pand = pd
-        button:AddPandemicRegion(pd)
-    end
-    if r.pand then
-        local pc = opts.pandemicColor or { r = 1, g = 0.35, b = 0.1 }
-        for i = 1, 4 do
-            r.pand.tex[i]:SetColorTexture(pc.r or 1, pc.g or 0.35, pc.b or 0.1, pc.a or 1)
-        end
-        LayoutRing(r.pand, 2)
-        r.pand:SetAlpha(wantPand and 1 or 0)
-    end
-end
-
+local BORDER_BLACK = {}
 local function Font(name, size, outline)
     local path = (LSM and LSM:Fetch("font", name or "Expressway")) or STANDARD_TEXT_FONT
     return path, size, outline
@@ -474,12 +201,13 @@ end
 local function StyleButton(button, group, lane)
     local S = lane.slot
     if not S then return end
-    button:SetSize(S.iw, S.ih)
+    ns.Pixel.SetSize(button, S.iw, S.ih)
 
     local r = lane.regions[button]
     if not r then
         r = {}
         r.icon = button:CreateTexture(nil, "ARTWORK")
+        A.NoSnap(r.icon)
         r.icon:SetAllPoints(button)
         button:SetIcon(r.icon)
         r.overlay = CreateFrame("Frame", nil, button)
@@ -517,11 +245,17 @@ local function StyleButton(button, group, lane)
         }
     end
 
-    local bShow, bSize, bInset, bColor, bStroke = group.showBorder,
-        group.borderSize or 1, group.borderInset or 0, group.borderColor, group.borderStroke
+    local bShow, bSize, bInset, bColor = group.showBorder,
+        group.borderSize or 1, group.borderInset or 0, group.borderColor
+    local gau = group.auras
+    if bShow and gau and gau.sortGlow and gau.sortGlowBorderStroke and (gau.sortMode or "manual") ~= "manual"
+        and (gau.sortGlowStyle or "pulse") == "pixel" then
+        bSize = gau.sortGlowThickness or bSize
+    end
     if idb and idb.showBorder then
-        bShow, bSize, bInset, bColor, bStroke = true,
-            idb.borderSize or 1, idb.borderInset or 0, idb.borderColor, idb.borderStroke
+        bShow, bSize, bInset, bColor = true,
+            idb.borderSize or 1, idb.borderInset or 0, idb.borderColor
+        if idb.glowBorderStroke and idb.showGlow and A.MapGlowStyle(idb.glowType) == "pixel" then bSize = idb.glowThickness or bSize end
     end
 
     if bShow then
@@ -529,21 +263,11 @@ local function StyleButton(button, group, lane)
             r.border = {}
             for i = 1, 4 do r.border[i] = button:CreateTexture(nil, "OVERLAY") end
         end
-        EdgeRing(button, r.border, bSize, bInset, bColor or RING_BLACK)
+        A.EdgeRing(button, r.border, bSize, bInset, bColor or BORDER_BLACK)
     elseif r.border then
         for _, tex in ipairs(r.border) do tex:Hide() end
     end
-    if bShow and bStroke then
-        if not r.borderIn then
-            r.borderIn, r.borderOut = {}, {}
-            for i = 1, 4 do
-                r.borderIn[i] = button:CreateTexture(nil, "OVERLAY")
-                r.borderOut[i] = button:CreateTexture(nil, "OVERLAY")
-            end
-        end
-        EdgeRing(button, r.borderIn, 1, bInset + bSize, RING_BLACK)
-        EdgeRing(button, r.borderOut, 1, bInset - 1, RING_BLACK)
-    elseif r.borderIn then
+    if r.borderIn then
         for i = 1, 4 do r.borderIn[i]:Hide() r.borderOut[i]:Hide() end
     end
 
@@ -596,28 +320,12 @@ local function StyleButton(button, group, lane)
         if r.cd then r.cd:Hide() end
     end
 
-    local style, gColor, gTh, gSrc
-    if idb then
-        if idb.showGlow then
-            style = A.MapGlowStyle(idb.glowType)
-            gColor = idb.glowColor
-            gTh = idb.glowThickness
-            gSrc = idb
-        end
-    elseif def and def.showGlow then
-        style = def.glowStyle or "pulse"
-        gColor = def.glowColor
-        gTh = def.glowThickness
-        gSrc = def
-    end
-    A.ApplyButtonFX(button, r, {
-        style = style, color = gColor, thickness = gTh,
-        lines = gSrc and gSrc.glowLines, length = gSrc and gSrc.glowLength,
-        offset = gSrc and gSrc.glowOffset, frequency = gSrc and gSrc.glowSpeed,
-        w = S.iw, h = S.ih,
-        pandemic = (idb and idb.showPandemic) or (def and def.showPandemic) or false,
-        pandemicColor = def and def.pandemicColor,
-    })
+    local fx = A.GlowOptsFor(group, def) or {}
+    fx.w, fx.h = S.iw, S.ih
+    fx.anchor = r.icon
+    fx.pandemic = (idb and idb.showPandemic) or (def and def.showPandemic) or false
+    fx.pandemicColor = def and def.pandemicColor
+    A.ApplyButtonFX(button, r, fx)
 
     if def and def.showSource and A.CanShowSource(button) then
         r.source = r.source or r.overlay:CreateFontString(nil, "OVERLAY")
@@ -892,6 +600,7 @@ function A.Sync(group, frame)
                 m.def.glowLength = au0.sortGlowLength
                 m.def.glowOffset = au0.sortGlowOffset
                 m.def.glowSpeed = au0.sortGlowSpeed
+                m.def.glowBorderStroke = au0.sortGlowBorderStroke
             end
         end
         entries = merged
@@ -998,8 +707,6 @@ function A.Sync(group, frame)
     lane.pureHarmfulT, lane.hasHarmfulT = Flags(altEntries)
 
     for button in pairs(lane.regions) do
-        -- pool buttons are access-restricted while their aura is secret;
-        -- the combat-lockdown flag can lag that window
         if not pcall(StyleButton, button, group, lane) then pendingSync = true end
     end
     lane.container:SetShown(LaneVisOK(lane))

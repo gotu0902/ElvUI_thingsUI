@@ -167,7 +167,7 @@ function TUI:Initialize()
 
     self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED", function(_, unit)
         if unit ~= "player" then return end
-        C_Timer.After(1.5, function()
+        local function pass()
             wipe(ns.skinnedBars)
             wipe(ns.yoinkedBars)
             PrimeAndScanCDM()
@@ -180,7 +180,9 @@ function TUI:Initialize()
             TUI:UpdateChargeBar()
             TUI:UpdateCustomGroups()
             if TUI.UpdateCustomBars then TUI:UpdateCustomBars() end
-        end)
+        end
+        C_Timer.After(0.5, pass)
+        C_Timer.After(2.5, pass)
     end)
 
     print("|cFF8080FFElvUI_thingsUI|r v" .. self.version .. " loaded")

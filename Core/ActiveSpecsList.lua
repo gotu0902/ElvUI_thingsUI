@@ -1,9 +1,4 @@
--- API:
---   ns.ActiveSpecsList.Build(opts)
---     opts.order       : AceConfig order key
---     opts.selected    : function() returning a { [specID]=true } map
---     opts.onRemove    : function(specID) called when user clicks X
---     opts.emptyText   : string shown when no specs are selected
+-- ns.ActiveSpecsList.Build{ order, selected(), onRemove(specID), emptyText }
 --   Returns: AceConfig group args table.
 
 local _, ns = ...
