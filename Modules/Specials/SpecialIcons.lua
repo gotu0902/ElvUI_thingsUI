@@ -58,7 +58,6 @@ local function GetOrCreateIconFrame(iconKey)
     return wrapper
 end
 
--- inward EdgeRing, same growth as group borders and active lane borders
 local function ApplyIconBorder(wrapper, db)
     local AL = ns.AuraLane
     local host = wrapper.tuiBorderHost

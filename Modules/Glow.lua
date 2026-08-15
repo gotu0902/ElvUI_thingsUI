@@ -17,11 +17,22 @@ function A.GlowOptsFor(group, def)
             gTh = idb.glowThickness
             gSrc = idb
         end
-    elseif def and def.showGlow then
-        style = def.glowStyle or "pulse"
-        gColor = def.glowColor
-        gTh = def.glowThickness
-        gSrc = def
+    elseif def then
+        local SBm = ns.SpecialBars
+        local st = def.styleName and SBm and SBm.Styles and SBm.Styles.Get("icons", def.styleName)
+        if st then
+            if st.showGlow then
+                style = A.MapGlowStyle(st.glowType)
+                gColor = st.glowColor
+                gTh = st.glowThickness
+                gSrc = st
+            end
+        elseif def.showGlow then
+            style = def.glowStyle or "pulse"
+            gColor = def.glowColor
+            gTh = def.glowThickness
+            gSrc = def
+        end
     end
     if not style then return nil end
     local bOn = (idb and idb.showBorder) or (not idb and group and group.showBorder)
@@ -113,8 +124,8 @@ function A.ApplyButtonFX(button, r, opts)
         local off = opts.offset or 0
         local anchorTo = opts.anchor or button
         px:ClearAllPoints()
-        -- x bias user-calibrated: whole ring 0.1 left, right edge 0.1 further in
         px:SetPoint("TOPLEFT", anchorTo, "TOPLEFT", -off, off)
+        -- move pixel glow lilbit to left its prob fine
         px:SetPoint("BOTTOMRIGHT", anchorTo, "BOTTOMRIGHT", off - 1.5, -off)
 
         local th = math.max(1, math.floor((opts.thickness or 2) + 0.5))

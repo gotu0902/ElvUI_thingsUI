@@ -765,6 +765,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
         order = 3.5, type = "select", name = "|cFFF27D2ABar Group|r",
         hidden = function()
             if not db().spellID then return true end
+            if IsInBarSetup() then return true end
             local CBm = ns.CustomBars
             return not (CBm and CBm.GetGroups and #CBm.GetGroups() > 0)
         end,

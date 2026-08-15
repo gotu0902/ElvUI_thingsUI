@@ -37,7 +37,6 @@ local function RetargetPoint(targetPoint)
     if not cx then return end
     local w, h = ref:GetSize()
     if not w or w < 1 then return end
-    -- Integer w/h keeps the center↔edge round-trip lossless
     w, h = math.floor(w + 0.5), math.floor((h or 0) + 0.5)
     local uw = _G.UIParent:GetRight() or _G.UIParent:GetWidth() or 1
     local uh = _G.UIParent:GetTop()   or _G.UIParent:GetHeight() or 1

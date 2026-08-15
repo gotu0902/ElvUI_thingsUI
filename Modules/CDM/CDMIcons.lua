@@ -256,7 +256,6 @@ local OVERLAY_ATLAS   = "UI-HUD-CoolDownManager-IconOverlay"
 local OVERLAY_TEX_ID  = 6707800
 local applyingOverlay = {}
 
--- "spell"/"equip"/false; equipment must never take the spell path
 local function OverlayEligible(child)
     if not child then return false end
     if ns.yoinkedBars and ns.yoinkedBars[child] then return false end

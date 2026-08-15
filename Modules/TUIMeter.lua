@@ -104,7 +104,6 @@ local function Panel() return _G.RightChatPanel end
 
 local frozenCur, frozenOverall = 0, 0
 local combatStart
--- both clocks kept: recap timestamps' epoch is undocumented
 local lastFightStart = 0
 local lastFightStartWall = 0
 local lastCombatEnd = 0
@@ -331,7 +330,6 @@ local function RecapEvents(id)
 
     local ok, events = pcall(C_DeathRecap.GetRecapEvents, id)
     if not ok or type(events) ~= "table" or #events == 0 then return nil end
-    -- secrets stay secret forever once stored; only cache clean reads
     local probe = events[1]
     if not (Secret(probe.amount) or Secret(probe.timestamp) or Secret(probe.currentHP)) then
         recapCache[id] = events
@@ -384,7 +382,6 @@ local function RecapLine(ev, killing, deathTime, hpTop)
         nm = ("|cFF606060-%.1fs|r  "):format(deathTime - ts) .. nm
     end
 
-    -- no maxHealth in the payload; normalise against the recap's highest HP
     local hp = ev.currentHP
     if Secret(hp) or type(hp) ~= "number" then hp = 0 end
     local hpMax = (type(hpTop) == "number" and hpTop > 1) and hpTop or 1

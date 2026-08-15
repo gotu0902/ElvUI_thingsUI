@@ -1349,7 +1349,21 @@ function M.RemoveGroup(index)
     if ns.MoverSync and ns.MoverSync.RemoveManaged then
         ns.MoverSync.RemoveManaged("TUI_CustomGroupMover" .. g.id)
     end
+    local SBS = ns.SpecialBars and ns.SpecialBars.Styles
+    if SBS and SBS.EachSpecial then
+        for _, kind in ipairs({ "icons", "bars" }) do
+            SBS.EachSpecial(kind, function(d)
+                if d.customGroup == g.id then d.customGroup = nil; d.customGroupOrder = nil end
+            end)
+        end
+    end
+    if ns.Timers and ns.Timers.GetTimers then
+        for _, t in ipairs(ns.Timers.GetTimers()) do
+            if t.destination == g.id then t.destination = nil end
+        end
+    end
     table.remove(db.groups, index)
+    if TUI.UpdateSpecialBars then TUI:UpdateSpecialBars() end
     QueueLayout()
 end
 

@@ -719,7 +719,7 @@ function TUI:CustomGroupsOptions()
                             if idb and idb.enabled and idb.spellID then
                                 local nm = (C_Spell.GetSpellName and C_Spell.GetSpellName(idb.spellID)) or ("Spell " .. tostring(idb.spellID))
                                 local where = (idb.customGroup == group.id) and "  |cFF888888(here)|r"
-                                    or (idb.customGroup and "  |cFFFF8040(in another group)|r") or ""
+                                    or (idb.customGroup and ns.CustomGroups.GroupByID(idb.customGroup) and "  |cFFFF8040(in another group)|r") or ""
                                 v[ikey] = ("|T%d:16:16|t %s%s"):format((C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(idb.spellID)) or 134400, nm, where)
                             end
                         end
@@ -896,6 +896,25 @@ function TUI:CustomGroupsOptions()
                                     TUI:UpdateSpecialBars(); TUI:UpdateCustomGroups()
                                 end
                                 NotifyChange()
+                            end,
+                        }
+
+                        box["r" .. i .. "_bstyle"] = {
+                            order = base + 4.5, type = "select", name = "", width = 1.2,
+                            hidden = function() local e = entry(); return not (e and e.kind == "aura") end,
+                            values = function()
+                                local SBm = ns.SpecialBars
+                                return (SBm and SBm.Styles and SBm.Styles.DropdownValues("icons", "|cFF888888- No Style -|r")) or {}
+                            end,
+                            sorting = function()
+                                local SBm = ns.SpecialBars
+                                return (SBm and SBm.Styles and SBm.Styles.DropdownSorting("icons", true)) or {}
+                            end,
+                            get = function() local e = entry(); return (e and e.def and e.def.styleName) or "" end,
+                            set = function(_, v)
+                                local e = entry(); if not (e and e.def) then return end
+                                e.def.styleName = (v ~= "") and v or nil
+                                TUI:UpdateCustomGroups()
                             end,
                         }
 

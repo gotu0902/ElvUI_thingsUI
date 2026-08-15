@@ -71,7 +71,6 @@ end
 local function EnsureContainer(wrapper, field)
     local c = wrapper[field]
     if not c then
-        -- parent outside the wrapper so its input aspects never reach the aura pool
         c = CreateFrame("AuraContainer", nil, UIParent, "CustomAuraContainerTemplate")
         c._tuiRegions = {}
         wrapper[field] = c
