@@ -10,7 +10,7 @@ ns.EP = EP
 ns.TUI = TUI
 ns.LSM = E.Libs.LSM
 
-TUI.version = "4.1.1"
+TUI.version = "4.1.2"
 TUI.name = "thingsUI"
 
 ns.skinnedBars = ns.skinnedBars or {}
@@ -26,7 +26,6 @@ end
 
 local notifyPending = false
 function ns.NotifyChange()
-    -- refreshing mid-drag rebuilds the slider under the cursor; defer to release
     if IsMouseButtonDown and IsMouseButtonDown("LeftButton") then
         if notifyPending then return end
         notifyPending = true
