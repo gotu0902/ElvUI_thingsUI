@@ -228,6 +228,52 @@ local function UpdateIconSlot(iconKey)
         HideWrapperVisuals(wrapper)
     end
 
+    local TM = ns.Timers
+    if db.totemTimer and db.spellID and TM and TM.RegisterTotemSpell then
+        TM.RegisterTotemSpell(db.spellID)
+        if not SB._totemCB and TM.AddTotemCallback then
+            SB._totemCB = true
+            TM.AddTotemCallback(function()
+                local T = ns.TUI
+                if T and T.UpdateSpecialBars then T:UpdateSpecialBars() end
+            end)
+        end
+        local start, dur = TM.GetTotemState(db.spellID)
+        if start then
+            local raw = SB.GetRawSpellList and SB.GetRawSpellList()[db.spellID]
+            local ttex = (raw and raw.icon) or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(db.spellID))
+            if ttex then wrapper.fallback:SetTexture(ttex) end
+            wrapper.fallback:SetTexCoord(ComputeIconTexCoord(db))
+            wrapper.fallback:SetDesaturated(false)
+            wrapper.fallback:Show()
+            wrapper.fallbackBorder:Show()
+            ApplyIconBorder(wrapper, db)
+            if not wrapper.totemCD then
+                wrapper.totemCD = CreateFrame("Cooldown", nil, wrapper, "CooldownFrameTemplate")
+                wrapper.totemCD:SetAllPoints(wrapper)
+                wrapper.totemCD:SetHideCountdownNumbers(not (db.showDuration ~= false))
+            end
+            wrapper.totemCD:SetCooldown(start, dur)
+            local fs = SB.CooldownText and SB.CooldownText(wrapper.totemCD)
+            if fs then
+                local LSM = ns.LSM
+                E:SetFont(fs, LSM and LSM:Fetch("font", db.durationFont or "Expressway"),
+                    db.durationFontSize or 14, db.durationFontOutline or "OUTLINE")
+                local dc = db.durationColor
+                if dc then fs:SetTextColor(dc.r or 1, dc.g or 1, dc.b or 1) end
+                fs:ClearAllPoints()
+                fs:SetPoint(db.durationPoint or "CENTER", wrapper.totemCD, db.durationPoint or "CENTER",
+                    db.durationXOffset or 0, db.durationYOffset or 0)
+            end
+            wrapper.totemCD:Show()
+        elseif wrapper.totemCD then
+            wrapper.totemCD:Clear()
+            wrapper.totemCD:Hide()
+        end
+    elseif wrapper.totemCD then
+        wrapper.totemCD:Hide()
+    end
+
     local AL = ns.AuraLane
     if AL and AL.GlowOptsFor then
         local fx = (test and db.showGlow) and AL.GlowOptsFor(nil, { iconDB = db }) or nil

@@ -63,6 +63,7 @@ local function ReleaseBar(barKey)
         if ns.SpecialAura then ns.SpecialAura.Detach(wrapper, barKey) end
         wrapper.backdrop:Hide()
         if wrapper.testFX then wrapper.testFX:Hide() end
+        if wrapper.totemFX then wrapper.totemFX:Hide() end
         wrapper:Hide()
     end
     specialBarState[barKey] = nil
@@ -159,6 +160,121 @@ local function RenderTestBar(wrapper, db, w, h)
         fx.stacks:Show()
     else
         fx.stacks:Hide()
+    end
+    fx:Show()
+end
+
+local function CooldownText(cd)
+    if cd._tuiText then return cd._tuiText end
+    for _, r in ipairs({ cd:GetRegions() }) do
+        if r:GetObjectType() == "FontString" then cd._tuiText = r; return r end
+    end
+end
+SB.CooldownText = CooldownText
+
+local function RenderTotemBar(wrapper, db, w, h, start, dur)
+    local fx = wrapper.totemFX
+    if not start then
+        if fx then fx:Hide() end
+        return
+    end
+    local remaining = start + dur - GetTime()
+    if remaining <= 0 then
+        if fx then fx:Hide() end
+        return
+    end
+    if not fx then
+        fx = CreateFrame("Frame", nil, wrapper, "BackdropTemplate")
+        fx:SetAllPoints(wrapper)
+        fx:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
+        fx:SetBackdropColor(0, 0, 0, 0.6)
+        fx:SetBackdropBorderColor(0, 0, 0, 1)
+        fx.iconBD = CreateFrame("Frame", nil, fx, "BackdropTemplate")
+        fx.iconBD:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
+        fx.iconBD:SetBackdropColor(0, 0, 0, 1)
+        fx.iconBD:SetBackdropBorderColor(0, 0, 0, 1)
+        fx.icon = fx.iconBD:CreateTexture(nil, "ARTWORK")
+        fx.fill = fx:CreateTexture(nil, "ARTWORK")
+        fx.slide = fx.fill:CreateAnimationGroup()
+        fx.anim = fx.slide:CreateAnimation("Scale")
+        fx.anim:SetOrigin("LEFT", 0, 0)
+        fx.anim:SetScaleFrom(1, 1)
+        fx.anim:SetScaleTo(0, 1)
+        fx.slide:SetScript("OnFinished", function() fx.fill:Hide() end)
+        fx.name = fx:CreateFontString(nil, "OVERLAY")
+        fx.cdText = CreateFrame("Cooldown", nil, fx, "CooldownFrameTemplate")
+        fx.cdText:SetDrawSwipe(false)
+        fx.cdText:SetDrawEdge(false)
+        fx.cdText:SetDrawBling(false)
+        fx.cdText:SetHideCountdownNumbers(false)
+        wrapper.totemFX = fx
+    end
+    fx:SetFrameLevel(wrapper:GetFrameLevel() + 2)
+
+    local LSM = ns.LSM
+    local off = 0
+    if db.iconEnabled then
+        fx.iconBD:ClearAllPoints()
+        fx.iconBD:SetPoint("LEFT", fx, "LEFT", 0, 0)
+        fx.iconBD:SetSize(h, h)
+        local raw = SB.GetRawSpellList and SB.GetRawSpellList()[db.spellID]
+        fx.icon:SetTexture((raw and raw.icon)
+            or (db.spellID and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(db.spellID)) or 134400)
+        local z = db.iconZoom or 0.1
+        fx.icon:SetTexCoord(z, 1 - z, z, 1 - z)
+        fx.icon:ClearAllPoints()
+        fx.icon:SetPoint("TOPLEFT", fx.iconBD, "TOPLEFT", 1, -1)
+        fx.icon:SetPoint("BOTTOMRIGHT", fx.iconBD, "BOTTOMRIGHT", -1, 1)
+        fx.iconBD:Show()
+        off = h + (db.iconSpacing or 1)
+    else
+        fx.iconBD:Hide()
+    end
+
+    local left = off + 1
+    local areaW = math.max(1, w - left - 1)
+    local frac = math.min(1, remaining / dur)
+    fx.fill:SetTexture(LSM:Fetch("statusbar", db.statusBarTexture))
+    if db.useClassColor then
+        local c = E:ClassColor(E.myclass, true)
+        fx.fill:SetVertexColor(c.r, c.g, c.b)
+    else
+        local c = db.customColor or { r = 0.2, g = 0.6, b = 1 }
+        fx.fill:SetVertexColor(c.r, c.g, c.b)
+    end
+    fx.fill:ClearAllPoints()
+    fx.fill:SetPoint("TOPLEFT", fx, "TOPLEFT", left, -1)
+    fx.fill:SetSize(areaW * frac, math.max(1, h - 2))
+    fx.slide:Stop()
+    fx.anim:SetDuration(remaining)
+    fx.fill:Show()
+    fx.slide:Play()
+
+    local font = LSM:Fetch("font", db.font or "Expressway")
+    if db.showName then
+        E:SetFont(fx.name, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
+        fx.name:ClearAllPoints()
+        fx.name:SetPoint(db.namePoint or "LEFT", fx, db.namePoint or "LEFT",
+            (db.nameXOffset or 2) + left, db.nameYOffset or 0)
+        fx.name:SetText(db.spellName or (C_Spell.GetSpellName and C_Spell.GetSpellName(db.spellID)) or "Bar")
+        fx.name:Show()
+    else
+        fx.name:Hide()
+    end
+    if db.showDuration then
+        fx.cdText:ClearAllPoints()
+        fx.cdText:SetAllPoints(fx)
+        fx.cdText:SetCooldown(start, dur)
+        local fs = CooldownText(fx.cdText)
+        if fs then
+            E:SetFont(fs, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
+            fs:ClearAllPoints()
+            fs:SetPoint(db.durationPoint or "RIGHT", fx, db.durationPoint or "RIGHT",
+                db.durationXOffset or -4, db.durationYOffset or 0)
+        end
+        fx.cdText:Show()
+    else
+        fx.cdText:Hide()
     end
     fx:Show()
 end
@@ -312,6 +428,21 @@ local function UpdateBarSlot(barKey)
 
     if ns.SpecialAura then
         ns.SpecialAura.AttachBar(wrapper, barKey, db, effectiveWidth, effectiveHeight)
+    end
+
+    local TM = ns.Timers
+    if db.totemTimer and db.spellID and TM and TM.RegisterTotemSpell and not test then
+        TM.RegisterTotemSpell(db.spellID)
+        if not SB._totemCB and TM.AddTotemCallback then
+            SB._totemCB = true
+            TM.AddTotemCallback(function()
+                local T = ns.TUI
+                if T and T.UpdateSpecialBars then T:UpdateSpecialBars() end
+            end)
+        end
+        RenderTotemBar(wrapper, db, effectiveWidth, effectiveHeight, TM.GetTotemState(db.spellID))
+    elseif wrapper.totemFX then
+        wrapper.totemFX:Hide()
     end
 end
 

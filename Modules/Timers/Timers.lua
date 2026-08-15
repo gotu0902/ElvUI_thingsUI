@@ -154,12 +154,94 @@ function M.GetDuration(timer)
     if not timer.durationAuto then
         return timer.duration
     end
+    local db = DB()
+    local sid = timer.kind == "spell" and timer.spellID
+    local learned = sid and db and db.totemLearn and db.totemLearn[sid]
+    if learned then return learned end
     local id = timer.id
     if not durationCache[id] then
         local d = TooltipDuration(timer)
         if d then durationCache[id] = d end
     end
     return durationCache[id] or timer.duration  -- still nil -> manual fallback
+end
+
+local totemSlot = {}
+local totemSpells = {}
+local totemCast = {}
+local totemCallbacks = {}
+local issecret = issecretvalue
+
+function M.RegisterTotemSpell(sid)
+    if sid then totemSpells[sid] = true end
+end
+
+function M.AddTotemCallback(fn)
+    if type(fn) == "function" then totemCallbacks[#totemCallbacks + 1] = fn end
+end
+
+local function FireTotem()
+    for i = 1, #totemCallbacks do totemCallbacks[i]() end
+end
+
+function M.GetTotemState(sid)
+    local db = DB()
+    local start = totemCast[sid]
+    local dur = db and db.totemLearn and db.totemLearn[sid]
+    if start and dur and dur > 0 and start + dur > GetTime() then return start, dur end
+end
+
+function M.GetLearnedDuration(sid)
+    local db = DB()
+    return db and db.totemLearn and db.totemLearn[sid]
+end
+
+-- values are secret in combat; learn OOC, use event timing only in combat
+function M.TotemUpdate(slot)
+    local db = DB(); if not db then return end
+    if not InCombatLockdown() then
+        for sid, s in pairs(totemSlot) do
+            if s == slot then
+                totemCast[sid] = nil
+                local ids = triggerMap[sid]
+                if ids then for i = 1, #ids do lastCastStart[ids[i]] = nil end end
+            end
+        end
+        for s = 1, 4 do
+            local have, _, start, dur, _, _, sid = GetTotemInfo(s)
+            if not (issecret and (issecret(have) or issecret(sid))) and have and sid then
+                db.totemLearn = db.totemLearn or {}
+                db.totemLearn[sid] = dur
+                totemSlot[sid] = s
+                totemCast[sid] = start
+                local ids = triggerMap[sid]
+                if ids then
+                    for i = 1, #ids do lastCastStart[ids[i]] = start end
+                end
+            end
+        end
+        FireHosts()
+        FireTotem()
+        return
+    end
+    if issecret and issecret(slot) then return end
+    for sid, s in pairs(totemSlot) do
+        if s == slot then
+            local now = GetTime()
+            local st0 = totemCast[sid]
+            if st0 and (now - st0) > 0.5 then totemCast[sid] = nil end
+            local ids = triggerMap[sid]
+            if ids then
+                for i = 1, #ids do
+                    local tid = ids[i]
+                    local st = lastCastStart[tid]
+                    if st and (now - st) > 0.5 then lastCastStart[tid] = nil end
+                end
+            end
+            FireHosts()
+            FireTotem()
+        end
+    end
 end
 
 function M.Rebuild()
@@ -222,8 +304,23 @@ ev:RegisterEvent("PLAYER_REGEN_DISABLED")
 ev:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 ev:RegisterEvent("BAG_UPDATE_COOLDOWN")
 ev:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+ev:RegisterEvent("PLAYER_TOTEM_UPDATE")
 ev:SetScript("OnEvent", function(_, event, a1, a2, spellID)
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
+        if totemSpells[spellID] then
+            local now = GetTime()
+            totemCast[spellID] = now
+            local dur = M.GetLearnedDuration(spellID)
+            if dur and dur > 0 then
+                C_Timer.After(dur + 0.1, function()
+                    if totemCast[spellID] == now then
+                        totemCast[spellID] = nil
+                        FireTotem()
+                    end
+                end)
+            end
+            FireTotem()
+        end
         local ids = triggerMap[spellID]
         if ids then
             local now = GetTime()
@@ -246,6 +343,8 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, spellID)
             end
             FireHosts()   -- relayout: a buff just started
         end
+    elseif event == "PLAYER_TOTEM_UPDATE" then
+        M.TotemUpdate(a1)
     elseif event == "GET_ITEM_INFO_RECEIVED" then
         if a1 and trackedItems[a1] then FireHosts() end
     elseif event == "SPELL_UPDATE_COOLDOWN" then

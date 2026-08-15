@@ -19,4 +19,5 @@
 	<Script file="AltInstall.lua"/>
 	<Script file="Spells\SpellData.lua"/>
 	<Script file="Spells\CDMSpells.lua"/>
+	<Script file="Probe.lua"/>
 </Ui>

@@ -761,6 +761,12 @@ function TUI:SpecialBarOptions(barKey, ctx)
         set = function(_, v) if not v and not ESpec() then SB.ReleaseBar(barKey) end; db().enabled = v; QueueUpdate() end,
         hidden = function() return not db().spellID end,
     }
+    commonArgs.totemTimer = {
+        order = 3.2, type = "toggle", name = "Totem Timer",
+        hidden = function() return not db().spellID end,
+        get = function() return db().totemTimer end,
+        set = function(_, v) db().totemTimer = v and true or nil; QueueUpdate() end,
+    }
     commonArgs.customGroup = {
         order = 3.5, type = "select", name = "|cFFF27D2ABar Group|r",
         hidden = function()
@@ -1099,6 +1105,12 @@ function TUI:SpecialIconOptions(keyArg, ctx)
         hidden = function() return not db().spellID end,
         get = function() return get("enabled") end,
         set = function(_, v) db().enabled = v; if not v and not ESpec() then SB.ReleaseIcon(curKey()) end; QueueUpdate() end,
+    }
+    commonArgs.totemTimer = {
+        order = 3.2, type = "toggle", name = "Totem Timer",
+        hidden = function() return not db().spellID end,
+        get = function() return db().totemTimer end,
+        set = function(_, v) db().totemTimer = v and true or nil; QueueUpdate() end,
     }
     commonArgs.customGroup = {
         order = 3.5, type = "select",
