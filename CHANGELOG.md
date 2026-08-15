@@ -7,7 +7,7 @@
 - Moved border stroke to glow options -> bordered stroke. Takes over the border size (thickness)
 - Pixel glow clean fix #83 and a half
 - Switched all icons over to ElvUI's CDM skin to get rid of some weird stuff I did. Will need to turn on borders for icon groups if their not, and change spacings from f.ex 1 to -1, and offset that were 1-2 px extra cause of my shitty border thing, can go back to normal offsets. (or just reimport plugin presets). 1 pixel should be 1 pixel, as long as the correct UI scale is used.
-
+- Added delete button to groups, remove spec icons\bars from custom group is now a yellow minus, red X perma delete
 
 ## 4.1.1
 - Forgot to update alt preset export for ElvUI's new data format, woops.

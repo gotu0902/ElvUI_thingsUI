@@ -250,7 +250,11 @@ local function EntryRow(gi, scope, ri)
             end,
         },
         [pfx .. "_del"] = {
-            order = ri * 10 + 5, type = "execute", name = CB_X, width = 0.3, hidden = hidden,
+            order = ri * 10 + 5, type = "execute", width = 0.3, hidden = hidden,
+            name = function()
+                local e = entry()
+                return (e and e.kind == "specialbar") and "|cffffd200 - |r" or CB_X
+            end,
             func = function()
                 local e, g = entry()
                 if not e then return end
@@ -262,6 +266,26 @@ local function EntryRow(gi, scope, ri)
                     CB().RemoveAura(g, scope, e.uid, keyFor(scope))
                     Refresh()
                 end
+            end,
+        },
+        [pfx .. "_purge"] = {
+            order = ri * 10 + 5.2, type = "execute", name = CB_X, width = 0.3,
+            hidden = function() local e = entry(); return not (e and e.kind == "specialbar") end,
+            confirm = function()
+                local e = entry()
+                local nm = e and e.def and (e.def.spellName or e.def.spellID) or "?"
+                return ("Delete special bar '%s' PERMANENTLY? It is removed from Special Bars too."):format(nm)
+            end,
+            func = function()
+                local e = entry(); if not e then return end
+                local SBm = ns.SpecialBars
+                local slot = tonumber(e.barKey and e.barKey:match("bar(%d+)"))
+                if SBm and SBm.RemoveBarSlot and slot then
+                    SBm.RemoveBarSlot(slot, (getEditSpec() ~= curSpecID()) and tonumber(getEditSpec()) or nil)
+                    if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end
+                    TUI:UpdateSpecialBars()
+                end
+                Refresh()
             end,
         },
         [pfx .. "_style"] = {

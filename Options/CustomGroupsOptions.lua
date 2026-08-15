@@ -844,7 +844,11 @@ function TUI:CustomGroupsOptions()
                             end,
                         }
                         box["r" .. i .. "_remove"] = {
-                            order = base + 4, type = "execute", name = CG_X, width = 0.3, hidden = gone,
+                            order = base + 4, type = "execute", width = 0.3, hidden = gone,
+                            name = function()
+                                local e = entry()
+                                return (e and e.kind == "specialicon") and "|cffffd200 - |r" or CG_X
+                            end,
                             func = function()
                                 local e = entry(); if not e then return end
                                 if e.kind == "timer" then
@@ -876,7 +880,7 @@ function TUI:CustomGroupsOptions()
                         }
 
                         box["r" .. i .. "_purge"] = {
-                            order = base + 4.2, type = "execute", name = "|TInterface\\Buttons\\UI-StopButton:12|t", width = 0.3,
+                            order = base + 4.2, type = "execute", name = CG_X, width = 0.3,
                             hidden = function() local e = entry(); return not (e and e.kind == "specialicon") end,
                             confirm = function()
                                 local e = entry()

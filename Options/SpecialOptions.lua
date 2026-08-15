@@ -1308,6 +1308,9 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                 glowGroup = {
                     order = 13, type = "group", name = "Glow While Active", inline = true,
                     args = {
+                        glowNote = {
+                            order = 0, type = "description", width = "full", fontSize = "medium",
+                            name = function() return ("|cFFFFD200Makeshift glows, unfortunately LibCustomGlow doesn't work with aura containers yet|r\n"):format(curStyle() or "?") end, },
                         showGlow = { order = 1, type = "toggle", name = "Show Glow",
                             get = function() return get("showGlow") end,
                             set = function(_, v) set("showGlow", v) end },
