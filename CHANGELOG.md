@@ -1,7 +1,12 @@
 # Changelog
 
 ## 4.1.5
-- Skinned mini meter: always show player, don't stop when I die, tooltip test
+- Skinned mini meter: 
+- - always show player
+- - don't sometime stop when player die
+- - custom color bars when not class colored
+- - tooltips
+- - class colored names option
 - Added "Hide Pandemic Glow" toggle in CDM tab.
 - Moved CDM toggles to its own tab.
 
