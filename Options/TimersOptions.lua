@@ -90,6 +90,35 @@ local function TimerTab(t, id, order, Rebuild)
                 T.Update(); Rebuild(); NotifyChange()
             end,
         },
+        talent = {
+            order = 3, type = "input", name = "Required Talent (spellID)", width = 1.0,
+            disabled = function() return not t.enabled end,
+            get = function() return t.talentSpellID and tostring(t.talentSpellID) or "" end,
+            set = function(_, v)
+                t.talentSpellID = tonumber((v or ""):match("%d+"))
+                T.Update(); NotifyChange()
+            end,
+        },
+        iconReplace = {
+            order = 3.05, type = "input", name = "Replace Icon (spellID)", width = 1.0,
+            disabled = function() return not t.enabled end,
+            get = function() return t.iconID and tostring(t.iconID) or "" end,
+            set = function(_, v)
+                t.iconID = tonumber((v or ""):match("%d+"))
+                T.Update(); NotifyChange()
+            end,
+        },
+        talentWarn = {
+            order = 3.1, type = "description", fontSize = "medium", width = "full",
+            name = function()
+                local req = tonumber(t.talentSpellID)
+                if req and req > 0 and not IsPlayerSpell(req) then
+                    local nm = C_Spell.GetSpellName and C_Spell.GetSpellName(req)
+                    return "|cFFFF3030Inactive - talent not selected: " .. (nm or req) .. "|r"
+                end
+                return ""
+            end,
+        },
         styleHeader = { order = 10, type = "header", name = "Behaviour" },
         showCDTimer = {
             order = 11, type = "toggle", name = "Show Buff Swipe", width = 1.2,
@@ -134,9 +163,13 @@ local function TimerTab(t, id, order, Rebuild)
                 glowType = {
                     order = 3, type = "select", name = "Type", width = 1.0,
                     disabled = function() return not t.glowReadyInCombat end,
-                    values = { pixel = "Pixel", autocast = "Autocast", proc = "Proc", button = "Button" },
-                    sorting = { "pixel", "autocast", "proc", "button" },
-                    get = function() return t.glowType or "pixel" end,
+                    values = { pixel = "Pixel", autocast = "Ants", proc = "Proc", pulse = "Pulse" },
+                    sorting = { "pixel", "autocast", "proc", "pulse" },
+                    get = function()
+                        local v = t.glowType or "pixel"
+                        if v == "button" then return "proc" end
+                        return v
+                    end,
                     set = function(_, v) t.glowType = v; T.Update() end,
                 },
                 glowColor = {
@@ -150,39 +183,39 @@ local function TimerTab(t, id, order, Rebuild)
                 },
                 glowThickness = {
                     order = 5, type = "range", name = "Thickness", min = 0.5, max = 10, step = 0.5,
-                    disabled = function() return not t.glowReadyInCombat or t.glowType == "button" or t.glowType == "proc" end,
+                    disabled = function() return not t.glowReadyInCombat or t.glowType == "proc" end,
                     get = function() return t.glowThickness or 2 end,
                     set = function(_, v) t.glowThickness = v; T.Update() end,
                 },
                 glowLength = {
-                    order = 6, type = "range", name = "Length", min = 1, max = 40, step = 1,
+                    order = 6, type = "range", name = "Length", min = 1, max = 6, step = 1,
                     disabled = function() return not t.glowReadyInCombat or (t.glowType or "pixel") ~= "pixel" end,
-                    get = function() return t.glowLength or 10 end,
+                    get = function() return math.min(6, t.glowLength or 3) end,
                     set = function(_, v) t.glowLength = v; T.Update() end,
                 },
                 glowN = {
-                    order = 7, type = "range", name = "Particles", min = 1, max = 32, step = 1,
-                    disabled = function() return not t.glowReadyInCombat or t.glowType == "button" or t.glowType == "proc" end,
-                    get = function() return t.glowN or 8 end,
+                    order = 7, type = "range", name = "Particles", min = 1, max = 12, step = 1,
+                    disabled = function() return not t.glowReadyInCombat or (t.glowType ~= nil and t.glowType ~= "pixel" and t.glowType ~= "autocast") end,
+                    get = function() return math.min(12, t.glowN or 8) end,
                     set = function(_, v) t.glowN = v; T.Update() end,
                 },
                 glowFrequency = {
-                    order = 8, type = "range", name = "Speed", min = -2, max = 2, step = 0.05, bigStep = 0.25,
-                    disabled = function() return not t.glowReadyInCombat or t.glowType == "button" end,
-                    get = function() return t.glowFrequency or 0.25 end,
+                    order = 8, type = "range", name = "Speed", min = 0.05, max = 2, step = 0.05, bigStep = 0.25,
+                    disabled = function() return not t.glowReadyInCombat end,
+                    get = function() return math.abs(t.glowFrequency or 0.25) end,
                     set = function(_, v) t.glowFrequency = v; T.Update() end,
                 },
-                glowXOffset = {
-                    order = 9, type = "range", name = "X Offset", min = -20, max = 20, step = 0.5,
-                    disabled = function() return not t.glowReadyInCombat or t.glowType == "button" or t.glowType == "proc" end,
-                    get = function() return t.glowXOffset or 0 end,
-                    set = function(_, v) t.glowXOffset = v; T.Update() end,
+                glowOffset = {
+                    order = 9, type = "range", name = "Offset", min = -10, max = 10, step = 0.5,
+                    disabled = function() return not t.glowReadyInCombat or (t.glowType ~= nil and t.glowType ~= "pixel" and t.glowType ~= "autocast") end,
+                    get = function() return t.glowOffset or 0 end,
+                    set = function(_, v) t.glowOffset = v; T.Update() end,
                 },
-                glowYOffset = {
-                    order = 10, type = "range", name = "Y Offset", min = -20, max = 20, step = 0.5,
-                    disabled = function() return not t.glowReadyInCombat or t.glowType == "button" or t.glowType == "proc" end,
-                    get = function() return t.glowYOffset or 0 end,
-                    set = function(_, v) t.glowYOffset = v; T.Update() end,
+                glowBorderStroke = {
+                    order = 10, type = "toggle", name = "Bordered Stroke", width = 1.0,
+                    disabled = function() return not t.glowReadyInCombat or (t.glowType or "pixel") ~= "pixel" end,
+                    get = function() return t.glowBorderStroke end,
+                    set = function(_, v) t.glowBorderStroke = v; T.Update() end,
                 },
             },
         },

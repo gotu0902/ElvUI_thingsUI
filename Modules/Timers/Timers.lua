@@ -110,6 +110,10 @@ function M.GetAllTriggerSpellIDs(timer)
 end
 
 function M.GetTexture(timer)
+    local ov = tonumber(timer.iconID)
+    if ov and ov > 0 then
+        return (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(ov)) or ov
+    end
     if timer.kind == "spell" and timer.spellID then
         return C_Spell.GetSpellTexture(timer.spellID)
     elseif timer.kind == "item" and timer.itemID then
@@ -260,12 +264,19 @@ function M.TotemUpdate(slot)
     end
 end
 
+function M.IsActive(timer)
+    if not (timer and timer.enabled) then return false end
+    local req = tonumber(timer.talentSpellID)
+    if req and req > 0 and not IsPlayerSpell(req) then return false end
+    return true
+end
+
 function M.Rebuild()
     wipe(triggerMap)
     wipe(durationCache)
     wipe(trackedItems)
     for _, timer in ipairs(M.GetTimers()) do
-        if timer.enabled then
+        if M.IsActive(timer) then
             for _, sid in ipairs(M.GetAllTriggerSpellIDs(timer)) do
                 local t = triggerMap[sid]
                 if not t then t = {}; triggerMap[sid] = t end
@@ -284,7 +295,7 @@ function M.Rebuild()
     if ns.TimersRender and ns.TimersRender.SetGlowActive then
         local wantGlow = false
         for _, timer in ipairs(M.GetTimers()) do
-            if timer.enabled and timer.glowReadyInCombat then wantGlow = true; break end
+            if M.IsActive(timer) and timer.glowReadyInCombat then wantGlow = true; break end
         end
         ns.TimersRender.SetGlowActive(wantGlow and InCombatLockdown())
     end
@@ -314,6 +325,8 @@ end
 
 local ev = CreateFrame("Frame")
 ev:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+ev:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+ev:RegisterEvent("TRAIT_CONFIG_UPDATED")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")
 ev:RegisterEvent("PLAYER_REGEN_ENABLED")
 ev:RegisterEvent("PLAYER_REGEN_DISABLED")

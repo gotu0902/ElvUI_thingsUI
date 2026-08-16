@@ -558,7 +558,7 @@ function M.SyncAll()
             local mname = "TUI_TimerStandaloneMover" .. t.id
             local mover = _G[mname]
             if mover then
-                if not t.enabled then
+                if not (Tm.IsActive and Tm.IsActive(t)) then
                     if E.DisableMover and E.CreatedMovers and E.CreatedMovers[mname] then E:DisableMover(mname) end
                 else
                     if E.EnableMover and E.DisabledMovers and E.DisabledMovers[mname] then E:EnableMover(mname) end

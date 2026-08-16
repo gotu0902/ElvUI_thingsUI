@@ -25,7 +25,7 @@ function M.Refresh()
     local sig = {}
     for _, timer in ipairs(ns.Timers.GetTimers()) do
         local key = timer.destination
-        if timer.enabled and (key == "essential" or key == "utility") then
+        if ns.Timers.IsActive(timer) and (key == "essential" or key == "utility") then
             local btn = EnsureButton(timer)
             local list = listFor[key]
             local i = #list + 1
@@ -42,7 +42,7 @@ function M.Refresh()
 
     for id, btn in pairs(buttons) do
         local t = ns.Timers.GetByID(id)
-        if not (t and t.enabled and (t.destination == "essential" or t.destination == "utility")) then
+        if not (t and ns.Timers.IsActive(t) and (t.destination == "essential" or t.destination == "utility")) then
             btn:Hide(); btn.layoutIndex = nil
         end
     end

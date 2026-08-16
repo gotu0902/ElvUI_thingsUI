@@ -315,18 +315,18 @@ local function UpdateItemIcon(btn, force)
     local count = usesItem and C_Item.GetItemCount(id, false, true) or C_Item.GetItemCount(id)
     if btn.count then
         local show = usesItem and (count and count > 0) or (count and count > 1)
-        if timer and timer.enabled and not timer.showIdle then show = false end
+        if timer and ns.Timers.IsActive(timer) and not timer.showIdle then show = false end
         btn.count:SetText(show and tostring(count) or "")
     end
     local bStart, bDur
-    if timer and timer.enabled and timer.showCDTimer then bStart, bDur = ns.Timers.GetActiveBuff(timer, GetTime()) end
+    if timer and ns.Timers.IsActive(timer) and timer.showCDTimer then bStart, bDur = ns.Timers.GetActiveBuff(timer, GetTime()) end
 
     local start, dur = C_Item.GetItemCooldown(id)
     local active = (start and dur and dur > 0) or false
     if bStart then
         if ItemCooldownChanged(btn.cooldown, true, bStart, bDur) then btn.cooldown:SetCooldown(bStart, bDur) end
         if btn.icon and btn.icon.SetDesaturated then btn.icon:SetDesaturated(false) end
-    elseif active and not (timer and timer.enabled and timer.trackCooldown == false) then
+    elseif active and not (timer and ns.Timers.IsActive(timer) and timer.trackCooldown == false) then
         if ItemCooldownChanged(btn.cooldown, true, start, dur) then btn.cooldown:SetCooldown(start, dur) end
         if btn.icon and btn.icon.SetDesaturated then btn.icon:SetDesaturated(true) end
     else
@@ -462,7 +462,7 @@ local function CreateIcon(gs, group, kind, id)
 
         cd:SetScript("OnCooldownDone", function()
             local t = ns.Timers and btn._group and ns.Timers.FindItemTimer(btn._id, btn._group.id)
-            if t and t.enabled and not t.showIdle and QueueLayout then
+            if t and ns.Timers.IsActive(t) and not t.showIdle and QueueLayout then
                 QueueLayout()
             else
                 UpdateIcon(btn)
@@ -803,8 +803,8 @@ local function CollectScopeInto(group, scope, root, shown)
     if ns.Timers then
         local now = GetTime()
         for _, t in ipairs(ns.Timers.GetTimers()) do
-            if t.enabled and t.destination == group.id and TimerInScope(t, scope)
-               and (t.showIdle or TimerActive(t, now)) then
+            if ns.Timers.IsActive(t) and t.destination == group.id and TimerInScope(t, scope)
+               and (t.showIdle or TimerActive(t, now) or M.testMode) then
                 local li = t.groupOrder or 10000
                 if t.kind == "item" and t.itemID then
                     if not _seen["i" .. t.itemID] then

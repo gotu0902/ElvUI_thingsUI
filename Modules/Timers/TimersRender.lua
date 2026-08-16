@@ -1,6 +1,5 @@
 local _, ns = ...
 local E = ns.E
-local LCG = LibStub and LibStub("LibCustomGlow-1.0", true)
 
 ns.TimersRender = ns.TimersRender or {}
 local R = ns.TimersRender
@@ -15,16 +14,13 @@ local SpellDesat          = H.SpellDesat
 local TimerActive         = H.TimerActive
 R.TimerActive = TimerActive
 
-local GLOW_KEY = "tuiTimer"
-local _glowCol = { 1, 1, 0, 1 }
-local _procOpts = { color = _glowCol, duration = 0.25, key = GLOW_KEY }
+local STYLE_MAP = { pixel = "pixel", autocast = "ants", proc = "proc", button = "proc", pulse = "pulse" }
+local _stopOpts = {}
 
-local function StopGlow(btn)
-    if not LCG then return end
-    LCG.PixelGlow_Stop(btn, GLOW_KEY)
-    LCG.AutoCastGlow_Stop(btn, GLOW_KEY)
-    LCG.ButtonGlow_Stop(btn)
-    LCG.ProcGlow_Stop(btn, GLOW_KEY)
+local function FXStore(btn)
+    local r = btn._tuiFX
+    if not r then r = {}; btn._tuiFX = r end
+    return r
 end
 
 local function GlowActiveNow(timer)
@@ -33,40 +29,46 @@ local function GlowActiveNow(timer)
 end
 
 function R.UpdateGlow(btn, timer)
-    if not (LCG and btn) then return end
+    local A = ns.AuraLane
+    if not (A and A.ApplyButtonFX and btn) then return end
     local ready
     if timer and timer.glowReadyInCombat then
-        local mode = timer.glowWhen or "active"
-        if mode == "active" then
-            ready = GlowActiveNow(timer)
+        if ns.CustomGroups and ns.CustomGroups.testMode then
+            ready = true
         else
-            ready = ns.Timers.IsInCombat() and not TimerActive(timer, GetTime())
+            local mode = timer.glowWhen or "active"
+            if mode == "active" then
+                ready = GlowActiveNow(timer)
+            else
+                ready = ns.Timers.IsInCombat() and not TimerActive(timer, GetTime())
+            end
         end
     end
     if not ready then
-        if btn._glowSig then btn._glowSig = nil; StopGlow(btn) end
+        if btn._glowSig then
+            btn._glowSig = nil
+            A.ApplyButtonFX(btn, FXStore(btn), _stopOpts)
+        end
         return
     end
-    local gc = timer.glowColor or _glowCol
-    local r, g, b, a = gc.r or 1, gc.g or 1, gc.b or 0, gc.a or 1
-    local gtype = timer.glowType or "pixel"
-    local n, freq, len = timer.glowN or 8, timer.glowFrequency or 0.25, timer.glowLength or 10
-    local th, xo, yo = timer.glowThickness or 2, timer.glowXOffset or 0, timer.glowYOffset or 0
-    local sig = table.concat({ gtype, r, g, b, n, freq, len, th, xo, yo }, "|")
+    local style = STYLE_MAP[timer.glowType or "pixel"] or "pixel"
+    local gc = timer.glowColor
+    local th = timer.glowThickness or 2
+    local n = math.min(12, timer.glowN or 8)
+    local freq = math.abs(timer.glowFrequency or 0.25)
+    local len = math.min(6, timer.glowLength or 3)
+    local off = timer.glowOffset or 0
+    local w = math.floor((btn:GetWidth() or 36) + 0.5)
+    local h = math.floor((btn:GetHeight() or 36) + 0.5)
+    local outline = timer.glowBorderStroke and true or false
+    local sig = table.concat({ style, gc and gc.r or 1, gc and gc.g or 1, gc and gc.b or 0,
+        n, freq, len, th, off, outline and 1 or 0, w, h }, "|")
     if btn._glowSig == sig then return end
-    StopGlow(btn)
     btn._glowSig = sig
-    _glowCol[1], _glowCol[2], _glowCol[3], _glowCol[4] = r, g, b, a
-    if gtype == "autocast" then
-        LCG.AutoCastGlow_Start(btn, _glowCol, n, freq, th, xo, yo, GLOW_KEY)
-    elseif gtype == "proc" then
-        _procOpts.color, _procOpts.duration = _glowCol, freq
-        LCG.ProcGlow_Start(btn, _procOpts)
-    elseif gtype == "button" then
-        LCG.ButtonGlow_Start(btn, _glowCol)
-    else
-        LCG.PixelGlow_Start(btn, _glowCol, n, freq, len, th, xo, yo, false, GLOW_KEY)
-    end
+    A.ApplyButtonFX(btn, FXStore(btn), {
+        style = style, color = gc, thickness = th, outline = outline,
+        lines = n, length = len, offset = off, frequency = freq, w = w, h = h,
+    })
 end
 local UpdateGlow = R.UpdateGlow
 

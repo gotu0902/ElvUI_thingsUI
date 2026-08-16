@@ -53,7 +53,7 @@ local function EnsureContainer(timer)
                 configString  = "thingsUI,modulesTab,timers,tmr" .. timer.id,
                 shouldDisable = function()
                     local t = ns.Timers and ns.Timers.GetByID(timer.id)
-                    return not (t and t.enabled and t.destination == "standalone")
+                    return not (t and ns.Timers.IsActive(t) and t.destination == "standalone")
                 end,
                 onSave = function(point, relPoint, x, y)
                     timer.anchorPoint = point
@@ -74,7 +74,7 @@ function M.Refresh()
     if not (ns.Timers and ns.TimersRender) then return end
     local now = GetTime()
     for _, timer in ipairs(ns.Timers.GetTimers()) do
-        if timer.destination == "standalone" and timer.enabled then
+        if timer.destination == "standalone" and ns.Timers.IsActive(timer) then
 
             local st = EnsureContainer(timer)
             local size = timer.iconSize or 36
@@ -99,7 +99,7 @@ function M.Refresh()
     end
     for id, st in pairs(state) do
         local t = ns.Timers.GetByID(id)
-        local standalone = t and t.enabled and t.destination == "standalone"
+        local standalone = t and ns.Timers.IsActive(t) and t.destination == "standalone"
         if not standalone and st.container then st.container:Hide() end
         if ns.MoverSync and ns.MoverSync.SetManagedEnabled then
             ns.MoverSync.SetManagedEnabled(st.mover, standalone)
