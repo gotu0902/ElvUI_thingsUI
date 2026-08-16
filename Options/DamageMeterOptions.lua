@@ -209,6 +209,15 @@ function TUI:DamageMeterOptions()
                                 get = function() return tdb().classColor ~= false end,
                                 set = function(_, v) tset("classColor", v) end,
                             },
+                            barColor = {
+                                order = 4.05, type = "color", name = "Bar Color",
+                                disabled = function() return tdb().classColor ~= false end,
+                                get = function()
+                                    local c = tdb().barColor or {}
+                                    return c.r or 0.35, c.g or 0.55, c.b or 0.8
+                                end,
+                                set = function(_, r, g, b) tset("barColor", { r = r, g = g, b = b }) end,
+                            },
                             alwaysShowPlayer = {
                                 order = 4.2, type = "toggle", name = "Always Show Player",
                                 desc = "If you rank below the visible bars, your bar takes the last slot.",
@@ -269,6 +278,11 @@ function TUI:DamageMeterOptions()
                                 order = 5, type = "toggle", name = "Shadow",
                                 get = function() return tdb().fontShadow end,
                                 set = function(_, v) tset("fontShadow", v) end,
+                            },
+                            classColorText = {
+                                order = 5.5, type = "toggle", name = "Class Colored",
+                                get = function() return tdb().classColorText end,
+                                set = function(_, v) tset("classColorText", v) end,
                             },
                             numberFormat = {
                                 order = 6, type = "select", name = "Numbers",

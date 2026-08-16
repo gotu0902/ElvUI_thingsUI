@@ -113,8 +113,6 @@ local lastFightStart = 0
 local lastFightStartWall = 0
 local lastCombatEnd = 0
 local liveSessionID, pinnedSession
-
--- dead player leaves combat, the fight does not
 local fightOn = false
 
 local function InFight()
@@ -256,7 +254,7 @@ local function SpellDisplay(spell, drill)
     local unitClass = PlainStr(det and det.unitClassFilename)
     local creature = PlainStr(spell.creatureName)
     local db = TDB()
-    local colorNames = db and db.classColor == false
+    local colorNames = db and db.classColorText and true or false
 
     local name
     if spellName then
@@ -669,7 +667,6 @@ local function UpdateRow(win, i, rank, src, maxAmt, db)
         row.fill:SetMinMaxValues(0, 1)
         row.fill:SetValue(1)
     elseif src._hpFrac then
-        -- bar = victim's remaining health after the hit
         row.fill:SetStatusBarColor(src._recapKill and 0.7 or 0.42, 0.14, 0.14)
         row.fill:SetMinMaxValues(0, 1)
         row.fill:SetValue(src._hpFrac)
@@ -694,6 +691,11 @@ local function UpdateRow(win, i, rank, src, maxAmt, db)
     else
         row.label:SetText("")
     end
+    local tc = (db.classColorText and classFile) and RAID_CLASS_COLORS[classFile] or nil
+    local tr, tg, tb = tc and tc.r or 1, tc and tc.g or 1, tc and tc.b or 1
+    row.pos:SetTextColor(tr, tg, tb)
+    row.label:SetTextColor(tr, tg, tb)
+    row.amount:SetTextColor(tr, tg, tb)
     local fmt = TYPE_NO_PS[win.cfg and win.cfg.type or 0] and "total" or db.numberFormat
     local perSec = src.amountPerSecond
     if win._psDiv and type(src.totalAmount) == "number" and not Secret(src.totalAmount) then
@@ -900,6 +902,10 @@ local function TipRow(i)
         r.icon = r:CreateTexture(nil, "ARTWORK")
         r.icon:SetPoint("TOPLEFT", r, "TOPLEFT", 0, 0)
         r.icon:SetPoint("BOTTOMLEFT", r, "BOTTOMLEFT", 0, 0)
+        r.iconBorder = CreateFrame("Frame", nil, r)
+        r.iconBorder:SetAllPoints(r)
+        r.iconBorder:SetFrameLevel(r:GetFrameLevel() + 3)
+        r.iconDiv = r.iconBorder:CreateTexture(nil, "OVERLAY")
         local tf = CreateFrame("Frame", nil, r.fill)
         tf:SetAllPoints(r.fill)
         tf:SetFrameLevel(r.fill:GetFrameLevel() + 2)
@@ -924,16 +930,24 @@ ShowRowTooltip = function(win, row)
     local db = TDB()
     if not db or db.tooltipEnabled == false then return end
     if M.testMode or win.drill then return end
-    local DTt = Enum.DamageMeterType
-    if DTt and DTt.Deaths and win.cfg and win.cfg.type == DTt.Deaths then return end
     local src = row._src
     if not src then return end
     if InCombatLockdown() and not IsSelfSrc(src) then M.HideRowTooltip() return end
+    local DTt = Enum.DamageMeterType
+    local deaths = (DTt and DTt.Deaths and win.cfg and win.cfg.type == DTt.Deaths) and true or false
     local d = DrillInfo(src)
     if not d then return end
-    local drill = FetchSource(win.cfg.session, win.cfg.type or 0, d)
-    local spells = drill and drill.combatSpells
-    if not spells or #spells == 0 then M.HideRowTooltip() return end
+    local spells, recap
+    if deaths then
+        local id = src.deathRecapID
+        if Secret(id) or type(id) ~= "number" or id <= 0 then M.HideRowTooltip() return end
+        recap = RecapRows({ recapID = id })
+        if not recap or #recap == 0 then M.HideRowTooltip() return end
+    else
+        local drill = FetchSource(win.cfg.session, win.cfg.type or 0, d)
+        spells = drill and drill.combatSpells
+        if not spells or #spells == 0 then M.HideRowTooltip() return end
+    end
 
     if not tip then
         tip = CreateFrame("Frame", "TUI_MeterTooltip", E.UIParent, "BackdropTemplate")
@@ -950,7 +964,9 @@ ShowRowTooltip = function(win, row)
     local flag = (db.fontOutline ~= "NONE") and (db.fontOutline or "OUTLINE") or ""
     local size = db.fontSize or 12
     local barH = db.tooltipBarHeight or 16
-    local n = math.min(#spells, db.tooltipBars or 8)
+    local list = spells or recap
+    local n = math.min(#list, db.tooltipBars or 8)
+    local start = deaths and (#list - n + 1) or 1
     local tex = (db.barTexture and db.barTexture ~= "" and LSM) and LSM:Fetch("statusbar", db.barTexture)
         or [[Interface\Buttons\WHITE8x8]]
     local pad = 4
@@ -964,9 +980,13 @@ ShowRowTooltip = function(win, row)
     if d.classFile and RAID_CLASS_COLORS[d.classFile] then
         title = RAID_CLASS_COLORS[d.classFile]:WrapTextInColorCode(title)
     end
+    if deaths then
+        local c = DeathClockText(src)
+        if c ~= "" then title = title .. "  |cFF808080" .. c .. "|r" end
+    end
     tip.title:SetText(title)
 
-    local top = spells[1] and spells[1].totalAmount
+    local top = spells and spells[1] and spells[1].totalAmount
     if Secret(top) or type(top) ~= "number" or top <= 0 then top = nil end
     local cc = (db.classColor ~= false) and d.classFile and RAID_CLASS_COLORS[d.classFile]
     local bc = db.barColor or {}
@@ -976,9 +996,14 @@ ShowRowTooltip = function(win, row)
 
     local y = pad + size + 5
     for i = 1, n do
-        local sp = spells[i]
+        local sp = list[start + i - 1]
         local r = TipRow(i)
-        local name, icon = SpellDisplay(sp, d)
+        local name, icon, rowClass
+        if deaths then
+            name, icon = sp.name, sp.specIconID
+        else
+            name, icon, rowClass = SpellDisplay(sp, d)
+        end
         r:SetHeight(barH)
         r:ClearAllPoints()
         r:SetPoint("TOPLEFT", tip, "TOPLEFT", pad, -y)
@@ -992,27 +1017,52 @@ ShowRowTooltip = function(win, row)
         else
             r.icon:Hide()
         end
+        if db.iconBorder and r.icon:IsShown() then
+            local s = db.iconBorderSize or 1
+            local ibc = db.iconBorderColor or {}
+            r.iconDiv:SetColorTexture(ibc.r or 0, ibc.g or 0, ibc.b or 0, ibc.a or 1)
+            r.iconDiv:ClearAllPoints()
+            r.iconDiv:SetPoint("TOPLEFT", r.icon, "TOPRIGHT", -1, 0)
+            r.iconDiv:SetPoint("BOTTOMLEFT", r.icon, "BOTTOMRIGHT", -1, 0)
+            r.iconDiv:SetWidth(s + 1)
+            r.iconDiv:Show()
+        else
+            r.iconDiv:Hide()
+        end
         r.fill:ClearAllPoints()
         r.fill:SetPoint("TOPLEFT", r, "TOPLEFT", r.icon:IsShown() and (barH + (db.iconGap or 0)) or 0, 0)
         r.fill:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT", 0, 0)
         r.fill:SetStatusBarTexture(tex)
-        r.fill:SetStatusBarColor(fr, fg2, fb)
-        if top then
-            r.fill:SetMinMaxValues(0, top)
-            r.fill:SetValue(sp.totalAmount or 0)
-        else
-            r.fill:SetMinMaxValues(0, 1)
-            r.fill:SetValue(1)
-        end
         r.label:SetFont(font or STANDARD_TEXT_FONT, size, flag)
         r.amount:SetFont(font or STANDARD_TEXT_FONT, size, flag)
         r.label:SetText(name or "")
-        r.amount:SetText(ValueText(sp.totalAmount, sp.amountPerSecond, fmt))
+        if deaths then
+            r.fill:SetStatusBarColor(sp._recapKill and 0.7 or 0.42, 0.14, 0.14)
+            r.fill:SetMinMaxValues(0, 1)
+            r.fill:SetValue(sp._hpFrac or 0)
+            r.amount:SetText(sp._recapText or "")
+        else
+            local rr, rg, rb = fr, fg2, fb
+            if db.classColor ~= false and rowClass and RAID_CLASS_COLORS[rowClass] then
+                local c2 = RAID_CLASS_COLORS[rowClass]
+                rr, rg, rb = c2.r, c2.g, c2.b
+            end
+            r.fill:SetStatusBarColor(rr, rg, rb)
+            if top then
+                r.fill:SetMinMaxValues(0, top)
+                r.fill:SetValue(sp.totalAmount or 0)
+            else
+                r.fill:SetMinMaxValues(0, 1)
+                r.fill:SetValue(1)
+            end
+            r.amount:SetText(ValueText(sp.totalAmount, sp.amountPerSecond, fmt))
+        end
         r:Show()
+        y = y + barH + 1
     end
     for i = n + 1, #tip.rows do tip.rows[i]:Hide() end
 
-    tip:SetHeight(y + n * (barH + 1) + pad - 1)
+    tip:SetHeight(y + pad - 1)
     tip:ClearAllPoints()
     tip:SetPoint("BOTTOMLEFT", win.header, "TOPLEFT", 0, 1)
     tip:SetPoint("BOTTOMRIGHT", win.header, "TOPRIGHT", 0, 1)
@@ -1605,6 +1655,9 @@ local function BuildSessionEntries(win)
         M.testMode = not M.testMode
     end }
     e[#e + 1] = { label = "Reset Data", func = ShowResetConfirm }
+    e[#e + 1] = { label = "Settings", func = function()
+        if E.ToggleOptions then E:ToggleOptions("thingsUI,modulesTab,damageMeter") end
+    end }
     return e
 end
 
