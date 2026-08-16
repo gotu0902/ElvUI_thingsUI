@@ -848,51 +848,6 @@ function TUI:CDMIconsOptions()
         childGroups = "tab",
         args = {
 
-            editModeLock = {
-                order = 1, type = "toggle", width = "full",
-                name = "Lock CDM viewers in /editmode",
-                get = function() return E.db.thingsUI.cdmIcons.editModeLock end,
-                set = function(_, v)
-                    E.db.thingsUI.cdmIcons.editModeLock = v
-                end,
-            },
-            hideAuraBorder = {
-                order = 2, type = "toggle", width = "full",
-                name = "Hide Blizzard aura border",
-                get = function() return E.db.thingsUI.cdmIcons.hideAuraBorder end,
-                set = function(_, v)
-                    E.db.thingsUI.cdmIcons.hideAuraBorder = v
-                    TUI:UpdateCDMIcons()
-                    if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
-                end,
-            },
-            hideAuraOverlay = {
-                order = 3, type = "toggle", width = "full",
-                name = "Hide Aura Overlay",
-                get = function() return E.db.thingsUI.cdmIcons.hideAuraOverlay end,
-                set = function(_, v)
-                    E.db.thingsUI.cdmIcons.hideAuraOverlay = v
-                    TUI:UpdateCDMIcons()
-                end,
-            },
-            hidePandemic = {
-                order = 3.5, type = "toggle", width = "full",
-                name = "Hide Pandemic Glow",
-                get = function() return E.db.thingsUI.cdmIcons.hidePandemic end,
-                set = function(_, v)
-                    E.db.thingsUI.cdmIcons.hidePandemic = v
-                    if ns.CDMIcons and ns.CDMIcons.ClearPandemicAll then ns.CDMIcons.ClearPandemicAll() end
-                end,
-            },
-            autoEnableCDM = {
-                order = 4, type = "toggle", width = "full",
-                name = "Auto-enable Cooldown Manager",
-                get = function() return E.db.thingsUI.cdmIcons.autoEnableCDM end,
-                set = function(_, v)
-                    E.db.thingsUI.cdmIcons.autoEnableCDM = v
-                    if v and ns.CDMIcons and ns.CDMIcons.MaybeAutoEnableCDM then ns.CDMIcons.MaybeAutoEnableCDM() end
-                end,
-            },
             essentialTab        = ViewerGroup(10, "essential", "Essential"),
             utilityTab          = ViewerGroup(20, "utility",   "Utility",
                                     { includeAnchor = true }),
@@ -907,6 +862,56 @@ function TUI:CDMIconsOptions()
                 if g then g.order = 50 end
                 return g
             end)(),
+            settingsTab = {
+                order = 60, type = "group", name = "Settings",
+                args = {
+                    editModeLock = {
+                        order = 1, type = "toggle", width = "full",
+                        name = "Lock CDM viewers in /editmode",
+                        get = function() return E.db.thingsUI.cdmIcons.editModeLock end,
+                        set = function(_, v)
+                            E.db.thingsUI.cdmIcons.editModeLock = v
+                        end,
+                    },
+                    hideAuraBorder = {
+                        order = 2, type = "toggle", width = "full",
+                        name = "Hide Blizzard aura border",
+                        get = function() return E.db.thingsUI.cdmIcons.hideAuraBorder end,
+                        set = function(_, v)
+                            E.db.thingsUI.cdmIcons.hideAuraBorder = v
+                            TUI:UpdateCDMIcons()
+                            if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
+                        end,
+                    },
+                    hideAuraOverlay = {
+                        order = 3, type = "toggle", width = "full",
+                        name = "Hide Aura Overlay",
+                        get = function() return E.db.thingsUI.cdmIcons.hideAuraOverlay end,
+                        set = function(_, v)
+                            E.db.thingsUI.cdmIcons.hideAuraOverlay = v
+                            TUI:UpdateCDMIcons()
+                        end,
+                    },
+                    hidePandemic = {
+                        order = 4, type = "toggle", width = "full",
+                        name = "Hide Pandemic Glow",
+                        get = function() return E.db.thingsUI.cdmIcons.hidePandemic end,
+                        set = function(_, v)
+                            E.db.thingsUI.cdmIcons.hidePandemic = v
+                            if ns.CDMIcons and ns.CDMIcons.ClearPandemicAll then ns.CDMIcons.ClearPandemicAll() end
+                        end,
+                    },
+                    autoEnableCDM = {
+                        order = 5, type = "toggle", width = "full",
+                        name = "Auto-enable Cooldown Manager",
+                        get = function() return E.db.thingsUI.cdmIcons.autoEnableCDM end,
+                        set = function(_, v)
+                            E.db.thingsUI.cdmIcons.autoEnableCDM = v
+                            if v and ns.CDMIcons and ns.CDMIcons.MaybeAutoEnableCDM then ns.CDMIcons.MaybeAutoEnableCDM() end
+                        end,
+                    },
+                },
+            },
         },
     }
 end
