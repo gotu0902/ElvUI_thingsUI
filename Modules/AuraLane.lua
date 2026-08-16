@@ -257,6 +257,15 @@ local function StyleButton(button, group, lane)
             idb.borderSize or 1, idb.borderInset or 0, idb.borderColor
         if idb.glowBorderStroke and idb.showGlow and A.MapGlowStyle(idb.glowType) == "pixel" then bSize = idb.glowThickness or bSize end
     end
+    local SBm = ns.SpecialBars
+    local st = (not idb) and def and def.styleName and SBm and SBm.Styles
+        and SBm.Styles.Get("icons", def.styleName)
+    if st then
+        bShow, bSize, bInset, bColor = st.showBorder, st.borderSize or 1, st.borderInset or 0, st.borderColor
+        if bShow and st.glowBorderStroke and st.showGlow and A.MapGlowStyle(st.glowType) == "pixel" then
+            bSize = st.glowThickness or bSize
+        end
+    end
 
     if bShow then
         if not r.border then

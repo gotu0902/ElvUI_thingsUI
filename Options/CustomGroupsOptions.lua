@@ -161,66 +161,75 @@ local function EditAura(def, title, onChange, group)
     local function PixelOn()
         return not sorted and def.showGlow and (def.glowStyle or "pulse") == "pixel"
     end
-    -- pixel sliders only exist while Pixel Glow is selected; rebuild to resize
+
     local function Reopen()
         C_Timer.After(0, function() EditAura(def, title, onChange, group) end)
     end
 
-    local glow = AceGUI:Create("CheckBox")
-    glow:SetLabel("Glow While Active")
-    glow:SetWidth(170)
-    glow:SetValue(def.showGlow and true or false)
-    glow:SetDisabled(sorted)
-    glow:SetCallback("OnValueChanged", function(_, _, v)
-        def.showGlow = v
-        if gstyle then gstyle:SetDisabled(sorted or not v) end
-        onChange()
-        Reopen()
-    end)
-    f:AddChild(glow)
-
-    gstyle = AceGUI:Create("Dropdown")
-    gstyle:SetLabel("Glow Style")
-    gstyle:SetWidth(170)
-    gstyle:SetList({ pulse = "Pulse Ring", pixel = "Pixel Glow", proc = "Proc Glow", ants = "Marching Ants" },
-        { "pulse", "pixel", "proc", "ants" })
-    gstyle:SetValue(def.glowStyle or "pulse")
-    gstyle:SetDisabled(sorted or not def.showGlow)
-    gstyle:SetCallback("OnValueChanged", function(_, _, v)
-        def.glowStyle = v
-        onChange()
-        Reopen()
-    end)
-    f:AddChild(gstyle)
-
-    if PixelOn() then
-        f:SetHeight(590)
-        local bstroke = AceGUI:Create("CheckBox")
-        bstroke:SetLabel("Bordered Stroke")
-        bstroke:SetWidth(170)
-        bstroke:SetValue(def.glowBorderStroke and true or false)
-        bstroke:SetDisabled(not (group and group.showBorder))
-        bstroke:SetCallback("OnValueChanged", function(_, _, v)
-            def.glowBorderStroke = v
+    local styled = (def.styleName and ns.SpecialBars and ns.SpecialBars.Styles
+        and ns.SpecialBars.Styles.Get("icons", def.styleName)) and true or false
+    if styled then
+        local note = AceGUI:Create("Label")
+        note:SetFullWidth(true)
+        note:SetText(("|cffCBA0FFGlow and border come from style:|r |cffFFFFFF%s|r"):format(def.styleName))
+        f:AddChild(note)
+    else
+        local glow = AceGUI:Create("CheckBox")
+        glow:SetLabel("Glow While Active")
+        glow:SetWidth(170)
+        glow:SetValue(def.showGlow and true or false)
+        glow:SetDisabled(sorted)
+        glow:SetCallback("OnValueChanged", function(_, _, v)
+            def.showGlow = v
+            if gstyle then gstyle:SetDisabled(sorted or not v) end
             onChange()
             Reopen()
         end)
-        f:AddChild(bstroke)
-        local function AddPixelSlider(label, field, mn, mx, step, dflt, disabled)
-            local s = AceGUI:Create("Slider")
-            s:SetLabel(label)
-            s:SetWidth(170)
-            s:SetSliderValues(mn, mx, step)
-            s:SetValue(def[field] or dflt)
-            s:SetDisabled(disabled or false)
-            s:SetCallback("OnValueChanged", function(_, _, v) def[field] = v; onChange() end)
-            f:AddChild(s)
+        f:AddChild(glow)
+
+        gstyle = AceGUI:Create("Dropdown")
+        gstyle:SetLabel("Glow Style")
+        gstyle:SetWidth(170)
+        gstyle:SetList({ pulse = "Pulse Ring", pixel = "Pixel Glow", proc = "Proc Glow", ants = "Marching Ants" },
+            { "pulse", "pixel", "proc", "ants" })
+        gstyle:SetValue(def.glowStyle or "pulse")
+        gstyle:SetDisabled(sorted or not def.showGlow)
+        gstyle:SetCallback("OnValueChanged", function(_, _, v)
+            def.glowStyle = v
+            onChange()
+            Reopen()
+        end)
+        f:AddChild(gstyle)
+
+        if PixelOn() then
+            f:SetHeight(590)
+            local bstroke = AceGUI:Create("CheckBox")
+            bstroke:SetLabel("Bordered Stroke")
+            bstroke:SetWidth(170)
+            bstroke:SetValue(def.glowBorderStroke and true or false)
+            bstroke:SetDisabled(not (group and group.showBorder))
+            bstroke:SetCallback("OnValueChanged", function(_, _, v)
+                def.glowBorderStroke = v
+                onChange()
+                Reopen()
+            end)
+            f:AddChild(bstroke)
+            local function AddPixelSlider(label, field, mn, mx, step, dflt, disabled)
+                local s = AceGUI:Create("Slider")
+                s:SetLabel(label)
+                s:SetWidth(170)
+                s:SetSliderValues(mn, mx, step)
+                s:SetValue(def[field] or dflt)
+                s:SetDisabled(disabled or false)
+                s:SetCallback("OnValueChanged", function(_, _, v) def[field] = v; onChange() end)
+                f:AddChild(s)
+            end
+            AddPixelSlider("Thickness", "glowThickness", 1, 6, 1, 2)
+            AddPixelSlider("Particles", "glowLines", 1, 12, 1, 8)
+            AddPixelSlider("Line Length", "glowLength", 1, 6, 1, 3)
+            AddPixelSlider("Offset", "glowOffset", -6, 8, 1, 0)
+            AddPixelSlider("Speed", "glowSpeed", 0.05, 1, 0.05, 0.25)
         end
-        AddPixelSlider("Thickness", "glowThickness", 1, 6, 1, 2)
-        AddPixelSlider("Particles", "glowLines", 1, 12, 1, 8)
-        AddPixelSlider("Line Length", "glowLength", 1, 6, 1, 3)
-        AddPixelSlider("Offset", "glowOffset", -6, 8, 1, 0)
-        AddPixelSlider("Speed", "glowSpeed", 0.05, 1, 0.05, 0.25)
     end
 
     pand = AceGUI:Create("CheckBox")
@@ -624,7 +633,6 @@ function TUI:CustomGroupsOptions()
                 set = function(_, v) local id = tonumber(v); if id and CG then CG.AddItem(group, scope, getKey(), id); NotifyChange() end end,
             },
             addAura = {
-                -- external buffs only: the spec's own spells live in Add Special Icon
                 order = 11.5, type = "select", name = "|cFF60E0A0Add Buff|r", width = "double",   -- auras = green
                 values = auraCommonValues,
                 sorting = auraCommonSorting,

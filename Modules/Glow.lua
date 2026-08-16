@@ -35,7 +35,10 @@ function A.GlowOptsFor(group, def)
         end
     end
     if not style then return nil end
-    local bOn = (idb and idb.showBorder) or (not idb and group and group.showBorder)
+    local bOn
+    if idb then bOn = idb.showBorder
+    elseif gSrc ~= def then bOn = gSrc.showBorder
+    else bOn = group and group.showBorder end
     local outline = (gSrc.glowBorderStroke and bOn) and true or false
     return {
         style = style, color = gColor, thickness = gTh, outline = outline,

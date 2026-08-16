@@ -876,8 +876,8 @@ local function ApplyGroup(group)
             m_iw = proxy._tuiLastIconW or (vdb and vdb.overrideSize and vdb.iconWidth) or nil
             m_ih = proxy._tuiLastIconH or (vdb and vdb.overrideSize and vdb.iconHeight) or m_iw
             if m_iw then
-                m_iw, m_ih = m_iw + pad, (m_ih or m_iw) + pad
-                m_sp = (vdb and vdb.spacing) or 0
+                m_ih = m_ih or m_iw
+                m_sp = ((vdb and vdb.spacing) or 0) + pad
                 m_zoom = tonumber(vdb and vdb.iconZoom) or 0
                 m_lock = (vdb and vdb.iconLockAspectRatio) ~= false
                 m_text = vdb and vdb.text or nil

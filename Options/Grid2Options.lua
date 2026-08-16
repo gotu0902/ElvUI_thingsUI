@@ -21,7 +21,6 @@ function TUI:Grid2Options()
         },
     }
 
-    -- One inline group per tier (NHT / FHT), buttons in list order.
     local tierGroup, count, order = {}, {}, 10
     for _, p in ipairs(ns.GRID2_PROFILES or {}) do
         if not tierGroup[p.group] then

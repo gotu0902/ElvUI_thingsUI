@@ -89,7 +89,7 @@ local function ComputeIconTexCoord(db)
     local z = db.zoom or 0.1
     local w = db.width or 36
     local h = (db.keepAspectRatio ~= false) and w or (db.height or 36)
-    -- inside a custom group the neighbours' crop wins, not the icon's own
+
     if db.customGroup and ns.CustomGroups and ns.CustomGroups.GroupByID then
         local g = ns.CustomGroups.GroupByID(db.customGroup)
         if g then
