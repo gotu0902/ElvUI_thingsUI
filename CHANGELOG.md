@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.1.5
+- Skinned mini meter: always show player, don't stop when I die, tooltip test
+
+
 ## 4.1.4
 - NB: Reworked pixels alignment and some sizing, so some things like icon groups size will be off and position to their anchor may be 1-2px off without an update\adjustment.
 - Fixed export string

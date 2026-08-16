@@ -209,6 +209,12 @@ function TUI:DamageMeterOptions()
                                 get = function() return tdb().classColor ~= false end,
                                 set = function(_, v) tset("classColor", v) end,
                             },
+                            alwaysShowPlayer = {
+                                order = 4.2, type = "toggle", name = "Always Show Player",
+                                desc = "If you rank below the visible bars, your bar takes the last slot.",
+                                get = function() return tdb().alwaysShowPlayer ~= false end,
+                                set = function(_, v) tset("alwaysShowPlayer", v) end,
+                            },
                             nsrtNicknames = {
                                 order = 4.5, type = "toggle", name = "NSRT Nicknames",
                                 desc = "Show Northern Sky Raid Tools nicknames instead of character names.",
@@ -317,6 +323,33 @@ function TUI:DamageMeterOptions()
                                 set = function(_, r, g, b, a) tset("iconBorderColor", { r = r, g = g, b = b, a = a }) end,
                             },
                         },
+                    },
+                },
+            },
+            tooltipTab = {
+                order = 25, type = "group", name = "Tooltips",
+                hidden = notTUI,
+                args = {
+                    enable = {
+                        order = 1, type = "toggle", name = "Enable",
+                        get = function() return tdb().tooltipEnabled ~= false end,
+                        set = function(_, v) tset("tooltipEnabled", v) end,
+                    },
+                    bars = {
+                        order = 2, type = "range", name = "Bars", min = 1, max = 15, step = 1,
+                        disabled = function() return tdb().tooltipEnabled == false end,
+                        get = function() return tdb().tooltipBars or 8 end,
+                        set = function(_, v) tset("tooltipBars", v) end,
+                    },
+                    barHeight = {
+                        order = 3, type = "range", name = "Bar Height", min = 8, max = 30, step = 0.5,
+                        disabled = function() return tdb().tooltipEnabled == false end,
+                        get = function() return tdb().tooltipBarHeight or 16 end,
+                        set = function(_, v) tset("tooltipBarHeight", v) end,
+                    },
+                    hint = {
+                        order = 10, type = "description", fontSize = "medium", width = "full",
+                        name = "\nHover a player bar to see their top spells, anchored above the window. In combat only your own bar responds.",
                     },
                 },
             },
