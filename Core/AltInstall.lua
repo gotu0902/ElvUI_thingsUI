@@ -321,6 +321,72 @@ E.PopupDialogs["TUI_ALT_ROLEUPDATE"] = {
     timeout = 0, whileDead = 1, hideOnEscape = 1,
 }
 
+local function DefaultPresetName()
+    local g = _G.thingsUIGlobalDB
+    local name = g and g.altPresetDefault
+    return (name and Presets()[name]) and name or nil
+end
+
+local function DefaultPresetDiff()
+    local name = DefaultPresetName()
+    local p = name and Presets()[name]
+    if not p then return nil end
+    local rp = RoleStore(false)
+    local diff = {}
+    for _, prov in ipairs(PROVIDERS) do
+        local pp = p.providers and p.providers[prov.key]
+        local roleGoverned = rp and rp.enabled and rp.providers
+            and rp.providers[prov.key] and next(rp.providers[prov.key])
+        if pp and pp.profile and prov.loaded() and not roleGoverned then
+            local exists = {}
+            for _, n in ipairs(prov.profiles() or {}) do exists[n] = true end
+            if exists[pp.profile] and prov.current() ~= pp.profile then
+                diff[#diff + 1] = { prov = prov, profile = pp.profile }
+            end
+        end
+    end
+    return diff, name
+end
+
+function M.ApplyDefaultPreset()
+    local diff = DefaultPresetDiff()
+    if not diff then return end
+    local deferred
+    for _, d in ipairs(diff) do
+        if d.prov.deferSet then
+            local pr, nm = d.prov, d.profile
+            deferred = function() pr.set(nm) end
+        else
+            d.prov.set(d.profile)
+        end
+    end
+    if M._needReload then
+        M._needReload = nil
+        E:StaticPopup_Show("TUI_ALT_RELOAD")
+    end
+    if deferred then deferred() end
+end
+
+E.PopupDialogs["TUI_ALT_DEFPRESET"] = {
+    text = "%s",
+    button1 = ACCEPT, button2 = CANCEL,
+    OnAccept = function() M.ApplyDefaultPreset() end,
+    timeout = 0, whileDead = 1, hideOnEscape = 1,
+}
+
+function M.CheckDefaultPreset()
+    if InCombatLockdown() then return end
+    if not Store()[CharKey()] then return end
+    local diff, name = DefaultPresetDiff()
+    if not (diff and #diff > 0) then return end
+    local lines = {}
+    for _, d in ipairs(diff) do
+        lines[#lines + 1] = ("|cFF%s%s:|r %s"):format(d.prov.color or "FFFFFF", d.prov.title, d.profile)
+    end
+    E:StaticPopup_Show("TUI_ALT_DEFPRESET",
+        ("|cFF8080FFthingsUI|r: Switch to the '%s' preset profiles?\n\n%s"):format(name, table.concat(lines, "\n")))
+end
+
 function M.OfferRoleUpdate(provKey, profileName)
     local rp = RoleStore(false)
     if not (rp and rp.enabled and rp.providers) then return end
@@ -512,6 +578,16 @@ function M.Open()
         emSpec.spec[i] = emStore and emStore.spec and emStore.spec[i] or nil
     end
 
+    do
+        local dflt = DefaultPresetName()
+        if dflt then
+            presetSel = dflt
+            local emIdx, missing = ApplyPresetToSel(Presets()[dflt], sel, specs, emSpec)
+            presetMissing = (missing and #missing > 0) and missing or nil
+            if emIdx then emSel = emIdx end
+        end
+    end
+
     local f = AceGUI:Create("Frame")
     ns.SolidDialog(f)
     frame = f
@@ -551,9 +627,13 @@ function M.Open()
         do
             local list, order = { [""] = "|cFF888888- None -|r" }, { "" }
             local names = {}
+            local dflt = DefaultPresetName()
             for name in pairs(presets) do names[#names + 1] = name end
             table.sort(names)
-            for _, n in ipairs(names) do list[n] = n; order[#order + 1] = n end
+            for _, n in ipairs(names) do
+                list[n] = (n == dflt) and (n .. " |cFF888888(default)|r") or n
+                order[#order + 1] = n
+            end
             Add(scroll, "Dropdown", function(w)
                 w:SetLabel("Load Preset")
                 w:SetRelativeWidth(0.4)
@@ -602,9 +682,24 @@ function M.Open()
                     if presetSel then
                         presets[presetSel] = nil
                         FixRoleRefs(presetSel, nil)
+                        local g = _G.thingsUIGlobalDB
+                        if g and g.altPresetDefault == presetSel then g.altPresetDefault = nil end
                         presetSel = nil
                         render()
                     end
+                end)
+            end)
+            Add(scroll, "CheckBox", function(w)
+                w:SetLabel("Default preset (loads on open, checked at login)")
+                w:SetFullWidth(true)
+                w:SetDisabled(not (presetSel and presets[presetSel]))
+                w:SetValue(presetSel ~= nil and DefaultPresetName() == presetSel)
+                w:SetCallback("OnValueChanged", function(_, _, v)
+                    _G.thingsUIGlobalDB = _G.thingsUIGlobalDB or {}
+                    local g = _G.thingsUIGlobalDB
+                    if v then g.altPresetDefault = presetSel
+                    elseif g.altPresetDefault == presetSel then g.altPresetDefault = nil end
+                    render()
                 end)
             end)
             Add(scroll, "EditBox", function(w)
@@ -621,6 +716,8 @@ function M.Open()
                     presets[v] = presets[presetSel]
                     presets[presetSel] = nil
                     FixRoleRefs(presetSel, v)
+                    local g = _G.thingsUIGlobalDB
+                    if g and g.altPresetDefault == presetSel then g.altPresetDefault = v end
                     print("|cFF8080FFthingsUI|r - preset '" .. presetSel .. "' renamed to '" .. v .. "'.")
                     presetSel = v
                     render()
@@ -924,4 +1021,5 @@ boot:SetScript("OnEvent", function(self)
         end)
     end
     C_Timer.After(8, function() M.CheckRoleMismatch() end)
+    C_Timer.After(10, function() M.CheckDefaultPreset() end)
 end)

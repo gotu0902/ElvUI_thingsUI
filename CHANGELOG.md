@@ -8,6 +8,7 @@
 - Added quick setup and elvui private & global to setup.
 - Picking Details! now imports the profile as well, if missing.
 - Racials respect CDM placement when assigned to be there
+- Timers show in group preview/test mode if in a group
 
 ## 4.1.3
 - New profile presets with new positions
