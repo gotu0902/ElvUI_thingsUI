@@ -10,6 +10,11 @@ local MAX_ROWS = 60
 
 local function Secret(v) return issecretvalue and issecretvalue(v) end
 
+local function IsSelfSrc(src)
+    local g = src and src.sourceGUID
+    return not Secret(g) and g ~= nil and g == UnitGUID("player")
+end
+
 local function DB() return E.db.thingsUI and E.db.thingsUI.damageMeter end
 local function TDB()
     local db = DB()
@@ -99,7 +104,7 @@ local function Clock(d)
 end
 
 local windows = {}
-local ApplyLayout, RefreshWindow, EnterDrill, EnterRecapDrill, RenderPopout
+local ApplyLayout, RefreshWindow, EnterDrill, EnterRecapDrill, RenderPopout, ShowRowTooltip
 local function Panel() return _G.RightChatPanel end
 
 local frozenCur, frozenOverall = 0, 0
@@ -108,9 +113,27 @@ local lastFightStart = 0
 local lastFightStartWall = 0
 local lastCombatEnd = 0
 local liveSessionID, pinnedSession
+local fightOn = false
+
+local function InFight()
+    return InCombatLockdown() or fightOn
+end
+
+local function GroupInCombat()
+    if IsInRaid() then
+        for i = 1, GetNumGroupMembers() do
+            if UnitAffectingCombat("raid" .. i) then return true end
+        end
+    elseif IsInGroup() then
+        for i = 1, GetNumSubgroupMembers() do
+            if UnitAffectingCombat("party" .. i) then return true end
+        end
+    end
+    return false
+end
 
 local function LiveNow()
-    return InCombatLockdown() or (GetTime() - lastCombatEnd) < 3
+    return InFight() or (GetTime() - lastCombatEnd) < 3
 end
 
 local function NewestSessionID()
@@ -122,7 +145,7 @@ end
 local function ResolveSession(sess)
     if type(sess) == "number" then return sess end
     if sess == "overall" then return "overall" end
-    if InCombatLockdown() then return "current" end
+    if InFight() then return "current" end
     if pinnedSession then return pinnedSession end
     return NewestSessionID() or "current"
 end
@@ -231,7 +254,7 @@ local function SpellDisplay(spell, drill)
     local unitClass = PlainStr(det and det.unitClassFilename)
     local creature = PlainStr(spell.creatureName)
     local db = TDB()
-    local colorNames = db and db.classColor == false
+    local colorNames = db and db.classColorText and true or false
 
     local name
     if spellName then
@@ -542,7 +565,14 @@ local function CreateRow(win, i)
     row.label:SetWordWrap(false)
 
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp", "MiddleButtonUp")
+    row:SetScript("OnEnter", function(self)
+        if ShowRowTooltip then ShowRowTooltip(win, self) end
+    end)
+    row:SetScript("OnLeave", function() M.HideRowTooltip() end)
     row:SetScript("OnClick", function(self, btn)
+        if btn ~= "RightButton" and InCombatLockdown() and not M.testMode and not IsSelfSrc(self._src) then
+            return
+        end
         if btn == "RightButton" then
             if win.drill then
                 win.drill = nil; win.scroll = 0; RefreshWindow(win)
@@ -637,7 +667,6 @@ local function UpdateRow(win, i, rank, src, maxAmt, db)
         row.fill:SetMinMaxValues(0, 1)
         row.fill:SetValue(1)
     elseif src._hpFrac then
-        -- bar = victim's remaining health after the hit
         row.fill:SetStatusBarColor(src._recapKill and 0.7 or 0.42, 0.14, 0.14)
         row.fill:SetMinMaxValues(0, 1)
         row.fill:SetValue(src._hpFrac)
@@ -662,6 +691,11 @@ local function UpdateRow(win, i, rank, src, maxAmt, db)
     else
         row.label:SetText("")
     end
+    local tc = (db.classColorText and classFile) and RAID_CLASS_COLORS[classFile] or nil
+    local tr, tg, tb = tc and tc.r or 1, tc and tc.g or 1, tc and tc.b or 1
+    row.pos:SetTextColor(tr, tg, tb)
+    row.label:SetTextColor(tr, tg, tb)
+    row.amount:SetTextColor(tr, tg, tb)
     local fmt = TYPE_NO_PS[win.cfg and win.cfg.type or 0] and "total" or db.numberFormat
     local perSec = src.amountPerSecond
     if win._psDiv and type(src.totalAmount) == "number" and not Secret(src.totalAmount) then
@@ -687,11 +721,11 @@ local function SessionTimerText(win, session)
         return ""
     end
     local overall = s == "overall"
-    if not overall and not InCombatLockdown() then
+    if not overall and not InFight() then
         local d = session and session.durationSeconds
         if not Secret(d) and type(d) == "number" then return Clock(d) end
     end
-    if not InCombatLockdown() and not pinnedSession
+    if not InFight() and not pinnedSession
         and (GetTime() - lastCombatEnd) < 3 and C_DamageMeter.GetSessionDurationSeconds then
         local sType = overall and Enum.DamageMeterSessionType.Overall or Enum.DamageMeterSessionType.Current
         local ok, d = pcall(C_DamageMeter.GetSessionDurationSeconds, sType)
@@ -783,11 +817,22 @@ RefreshWindow = function(win)
     local DTd = Enum.DamageMeterType
     local deathsView = DTd and DTd.Deaths and not win.drill
         and win.cfg and win.cfg.type == DTd.Deaths and not M.testMode
-    for rank = first, math.min(total, first + vis - 1) do
+    local last = math.min(total, first + vis - 1)
+    local meRank
+    if db.alwaysShowPlayer ~= false and not win.drill and not M.testMode and not deathsView and total > 0 then
+        local pg = UnitGUID("player")
+        for r = 1, total do
+            local g = sources[r].sourceGUID
+            if not Secret(g) and g == pg then meRank = r break end
+        end
+        if meRank and meRank >= first and meRank <= last then meRank = nil end
+    end
+    for rank = first, last do
         shown = shown + 1
-        local src = sources[deathsView and (total - rank + 1) or rank]
+        local src, useRank = sources[deathsView and (total - rank + 1) or rank], rank
+        if meRank and rank == last then src, useRank = sources[meRank], meRank end
         if win.drill and not win.drill.recapID then src = SpellRowSrc(win, rank, src, win.drill) end
-        UpdateRow(win, shown, rank, src, maxAmt, db)
+        UpdateRow(win, shown, useRank, src, maxAmt, db)
     end
     for i = shown + 1, #win.rows do win.rows[i]:Hide() end
     if win.drill then
@@ -825,6 +870,7 @@ end
 EnterDrill = function(win, src)
     local d = DrillInfo(src)
     if not d then return end
+    M.HideRowTooltip()
     win.drill = d
     win.scroll = 0
     RefreshWindow(win)
@@ -840,9 +886,187 @@ EnterRecapDrill = function(win, src)
     end
     local si = src.specIconID
     if Secret(si) or type(si) ~= "number" then si = nil end
+    M.HideRowTooltip()
     win.drill = { recapID = id, name = src.name, classFile = cf, specIconID = si }
     win.scroll = 0
     RefreshWindow(win)
+end
+
+local tip
+local function TipRow(i)
+    local r = tip.rows[i]
+    if not r then
+        r = CreateFrame("Frame", nil, tip)
+        r.fill = CreateFrame("StatusBar", nil, r)
+        r.fill:SetMinMaxValues(0, 1)
+        r.icon = r:CreateTexture(nil, "ARTWORK")
+        r.icon:SetPoint("TOPLEFT", r, "TOPLEFT", 0, 0)
+        r.icon:SetPoint("BOTTOMLEFT", r, "BOTTOMLEFT", 0, 0)
+        r.iconBorder = CreateFrame("Frame", nil, r)
+        r.iconBorder:SetAllPoints(r)
+        r.iconBorder:SetFrameLevel(r:GetFrameLevel() + 3)
+        r.iconDiv = r.iconBorder:CreateTexture(nil, "OVERLAY")
+        local tf = CreateFrame("Frame", nil, r.fill)
+        tf:SetAllPoints(r.fill)
+        tf:SetFrameLevel(r.fill:GetFrameLevel() + 2)
+        r.label = tf:CreateFontString(nil, "OVERLAY")
+        r.amount = tf:CreateFontString(nil, "OVERLAY")
+        r.label:SetPoint("LEFT", tf, "LEFT", 2, 0)
+        r.amount:SetPoint("RIGHT", tf, "RIGHT", -2, 0)
+        r.amount:SetJustifyH("RIGHT")
+        r.label:SetPoint("RIGHT", r.amount, "LEFT", -3, 0)
+        r.label:SetJustifyH("LEFT")
+        r.label:SetWordWrap(false)
+        tip.rows[i] = r
+    end
+    return r
+end
+
+function M.HideRowTooltip()
+    if tip then tip:Hide() end
+end
+
+ShowRowTooltip = function(win, row)
+    local db = TDB()
+    if not db or db.tooltipEnabled == false then return end
+    if M.testMode or win.drill then return end
+    local src = row._src
+    if not src then return end
+    if InCombatLockdown() and not IsSelfSrc(src) then M.HideRowTooltip() return end
+    local DTt = Enum.DamageMeterType
+    local deaths = (DTt and DTt.Deaths and win.cfg and win.cfg.type == DTt.Deaths) and true or false
+    local d = DrillInfo(src)
+    if not d then return end
+    local spells, recap
+    if deaths then
+        local id = src.deathRecapID
+        if Secret(id) or type(id) ~= "number" or id <= 0 then M.HideRowTooltip() return end
+        recap = RecapRows({ recapID = id })
+        if not recap or #recap == 0 then M.HideRowTooltip() return end
+    else
+        local drill = FetchSource(win.cfg.session, win.cfg.type or 0, d)
+        spells = drill and drill.combatSpells
+        if not spells or #spells == 0 then M.HideRowTooltip() return end
+    end
+
+    if not tip then
+        tip = CreateFrame("Frame", "TUI_MeterTooltip", E.UIParent, "BackdropTemplate")
+        tip:SetFrameStrata("TOOLTIP")
+        tip:SetBackdrop({ bgFile = [[Interface\Buttons\WHITE8x8]], edgeFile = [[Interface\Buttons\WHITE8x8]], edgeSize = 1 })
+        tip:SetBackdropColor(0.04, 0.04, 0.04, 0.97)
+        tip:SetBackdropBorderColor(0, 0, 0, 1)
+        tip:EnableMouse(false)
+        tip.title = tip:CreateFontString(nil, "OVERLAY")
+        tip.rows = {}
+    end
+
+    local font = LSM and LSM:Fetch("font", db.font or "Expressway")
+    local flag = (db.fontOutline ~= "NONE") and (db.fontOutline or "OUTLINE") or ""
+    local size = db.fontSize or 12
+    local barH = db.tooltipBarHeight or 16
+    local list = spells or recap
+    local n = math.min(#list, db.tooltipBars or 8)
+    local start = deaths and (#list - n + 1) or 1
+    local tex = (db.barTexture and db.barTexture ~= "" and LSM) and LSM:Fetch("statusbar", db.barTexture)
+        or [[Interface\Buttons\WHITE8x8]]
+    local pad = 4
+
+    tip.title:SetFont(font or STANDARD_TEXT_FONT, size, flag)
+    tip.title:ClearAllPoints()
+    tip.title:SetPoint("TOPLEFT", tip, "TOPLEFT", pad + 1, -pad)
+    local nm = d.name
+    local title = (not Secret(nm) and nm)
+        and (NickFor(nm) or (Ambiguate and Ambiguate(nm, "short")) or nm) or ""
+    if d.classFile and RAID_CLASS_COLORS[d.classFile] then
+        title = RAID_CLASS_COLORS[d.classFile]:WrapTextInColorCode(title)
+    end
+    if deaths then
+        local c = DeathClockText(src)
+        if c ~= "" then title = title .. "  |cFF808080" .. c .. "|r" end
+    end
+    tip.title:SetText(title)
+
+    local top = spells and spells[1] and spells[1].totalAmount
+    if Secret(top) or type(top) ~= "number" or top <= 0 then top = nil end
+    local cc = (db.classColor ~= false) and d.classFile and RAID_CLASS_COLORS[d.classFile]
+    local bc = db.barColor or {}
+    local fr, fg2, fb = bc.r or 0.35, bc.g or 0.55, bc.b or 0.8
+    if cc then fr, fg2, fb = cc.r, cc.g, cc.b end
+    local fmt = TYPE_NO_PS[win.cfg and win.cfg.type or 0] and "total" or db.numberFormat
+
+    local y = pad + size + 5
+    for i = 1, n do
+        local sp = list[start + i - 1]
+        local r = TipRow(i)
+        local name, icon, rowClass
+        if deaths then
+            name, icon = sp.name, sp.specIconID
+        else
+            name, icon, rowClass = SpellDisplay(sp, d)
+        end
+        r:SetHeight(barH)
+        r:ClearAllPoints()
+        r:SetPoint("TOPLEFT", tip, "TOPLEFT", pad, -y)
+        r:SetPoint("TOPRIGHT", tip, "TOPRIGHT", -pad, -y)
+        local z = db.iconZoom or 0.05
+        r.icon:SetWidth(barH)
+        if icon and icon ~= 0 then
+            r.icon:SetTexture(icon)
+            r.icon:SetTexCoord(z, 1 - z, z, 1 - z)
+            r.icon:Show()
+        else
+            r.icon:Hide()
+        end
+        if db.iconBorder and r.icon:IsShown() then
+            local s = db.iconBorderSize or 1
+            local ibc = db.iconBorderColor or {}
+            r.iconDiv:SetColorTexture(ibc.r or 0, ibc.g or 0, ibc.b or 0, ibc.a or 1)
+            r.iconDiv:ClearAllPoints()
+            r.iconDiv:SetPoint("TOPLEFT", r.icon, "TOPRIGHT", -1, 0)
+            r.iconDiv:SetPoint("BOTTOMLEFT", r.icon, "BOTTOMRIGHT", -1, 0)
+            r.iconDiv:SetWidth(s + 1)
+            r.iconDiv:Show()
+        else
+            r.iconDiv:Hide()
+        end
+        r.fill:ClearAllPoints()
+        r.fill:SetPoint("TOPLEFT", r, "TOPLEFT", r.icon:IsShown() and (barH + (db.iconGap or 0)) or 0, 0)
+        r.fill:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT", 0, 0)
+        r.fill:SetStatusBarTexture(tex)
+        r.label:SetFont(font or STANDARD_TEXT_FONT, size, flag)
+        r.amount:SetFont(font or STANDARD_TEXT_FONT, size, flag)
+        r.label:SetText(name or "")
+        if deaths then
+            r.fill:SetStatusBarColor(sp._recapKill and 0.7 or 0.42, 0.14, 0.14)
+            r.fill:SetMinMaxValues(0, 1)
+            r.fill:SetValue(sp._hpFrac or 0)
+            r.amount:SetText(sp._recapText or "")
+        else
+            local rr, rg, rb = fr, fg2, fb
+            if db.classColor ~= false and rowClass and RAID_CLASS_COLORS[rowClass] then
+                local c2 = RAID_CLASS_COLORS[rowClass]
+                rr, rg, rb = c2.r, c2.g, c2.b
+            end
+            r.fill:SetStatusBarColor(rr, rg, rb)
+            if top then
+                r.fill:SetMinMaxValues(0, top)
+                r.fill:SetValue(sp.totalAmount or 0)
+            else
+                r.fill:SetMinMaxValues(0, 1)
+                r.fill:SetValue(1)
+            end
+            r.amount:SetText(ValueText(sp.totalAmount, sp.amountPerSecond, fmt))
+        end
+        r:Show()
+        y = y + barH + 1
+    end
+    for i = n + 1, #tip.rows do tip.rows[i]:Hide() end
+
+    tip:SetHeight(y + pad - 1)
+    tip:ClearAllPoints()
+    tip:SetPoint("BOTTOMLEFT", win.header, "TOPLEFT", 0, 1)
+    tip:SetPoint("BOTTOMRIGHT", win.header, "TOPRIGHT", 0, 1)
+    tip:Show()
 end
 
 local popout
@@ -1431,6 +1655,9 @@ local function BuildSessionEntries(win)
         M.testMode = not M.testMode
     end }
     e[#e + 1] = { label = "Reset Data", func = ShowResetConfirm }
+    e[#e + 1] = { label = "Settings", func = function()
+        if E.ToggleOptions then E:ToggleOptions("thingsUI,modulesTab,damageMeter") end
+    end }
     return e
 end
 
@@ -1755,9 +1982,34 @@ local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")
 
 local COMBAT_EVENTS = {
-    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ENCOUNTER_START",
+    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ENCOUNTER_START", "ENCOUNTER_END",
     "DAMAGE_METER_RESET", "DAMAGE_METER_COMBAT_SESSION_UPDATED", "DAMAGE_METER_CURRENT_SESSION_UPDATED",
 }
+
+local encounterActive = false
+local settleAt = 0
+local function EndFight()
+    fightOn = false
+    lastCombatEnd = GetTime()
+    if combatStart then
+        frozenOverall = (frozenOverall or 0) + (GetTime() - combatStart)
+        frozenCur = GetTime() - combatStart
+    end
+    combatStart = nil
+    StopTicker()
+    pinnedSession = NewestSessionID() or liveSessionID
+    M.RefreshAll()
+    C_Timer.After(0.5, function()
+        pinnedSession = NewestSessionID() or pinnedSession
+        M.RefreshAll()
+    end)
+end
+local function ScheduleSettle()
+    settleAt = GetTime() + 3
+    C_Timer.After(3.1, function()
+        if fightOn and not InCombatLockdown() and GetTime() >= settleAt then EndFight() end
+    end)
+end
 local eventsActive = false
 local function SetEventsActive(on)
     if on == eventsActive then return end
@@ -1773,6 +2025,7 @@ end
 ev:SetScript("OnEvent", function(_, event, arg1, arg2)
     if not Active() then return end
     if event == "ENCOUNTER_START" then
+        encounterActive = true
         frozenCur = 0
         liveSessionID, pinnedSession = nil, nil
         if InCombatLockdown() and not combatStart then
@@ -1782,34 +2035,35 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
         lastEventPaint = 0
         StartTicker()
         QueueRefresh()
+    elseif event == "ENCOUNTER_END" then
+        encounterActive = false
+        if fightOn and not InCombatLockdown() then EndFight() end
     elseif event == "PLAYER_REGEN_DISABLED" then
-        combatStart = GetTime()
-        lastFightStart = combatStart; lastFightStartWall = time()
-        frozenCur = 0
-        liveSessionID, pinnedSession = nil, nil
+        if fightOn and combatStart then
+            fightOn = false
+        else
+            combatStart = GetTime()
+            lastFightStart = combatStart; lastFightStartWall = time()
+            frozenCur = 0
+            liveSessionID, pinnedSession = nil, nil
+        end
         StartTicker()
         QueueRefresh()
     elseif event == "PLAYER_REGEN_ENABLED" then
-        lastCombatEnd = GetTime()
-        if combatStart then
-            frozenOverall = (frozenOverall or 0) + (GetTime() - combatStart)
-            frozenCur = GetTime() - combatStart
+        if UnitIsDeadOrGhost("player") and (encounterActive or GroupInCombat()) then
+            fightOn = true
+            ScheduleSettle()
+        else
+            EndFight()
         end
-        combatStart = nil
-        StopTicker()
-        pinnedSession = NewestSessionID() or liveSessionID
-        M.RefreshAll()
-        C_Timer.After(0.5, function()
-            pinnedSession = NewestSessionID() or pinnedSession
-            M.RefreshAll()
-        end)
     elseif event == "DAMAGE_METER_CURRENT_SESSION_UPDATED" then
-        if InCombatLockdown() then
+        if InFight() then
             frozenCur = 0
             if not combatStart then
                 combatStart = GetTime()
                 lastFightStart = combatStart; lastFightStartWall = time()
             end
+            if fightOn and not InCombatLockdown() then ScheduleSettle() end
             QueueRefresh()
             StartTicker()
         elseif GetTime() - lastCombatEnd < 3 then
@@ -1821,7 +2075,9 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
         QueueRefresh()
     elseif event == "DAMAGE_METER_COMBAT_SESSION_UPDATED" then
         if type(arg2) == "number" and arg2 ~= 0 then liveSessionID = arg2 end
-        if InCombatLockdown() then
+        if fightOn and not InCombatLockdown() then
+            EndFight()
+        elseif InCombatLockdown() then
             local now = GetTime()
             if now - lastEventPaint >= 1 then
                 lastEventPaint = now

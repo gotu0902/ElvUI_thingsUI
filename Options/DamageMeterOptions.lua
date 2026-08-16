@@ -209,6 +209,21 @@ function TUI:DamageMeterOptions()
                                 get = function() return tdb().classColor ~= false end,
                                 set = function(_, v) tset("classColor", v) end,
                             },
+                            barColor = {
+                                order = 4.05, type = "color", name = "Bar Color",
+                                disabled = function() return tdb().classColor ~= false end,
+                                get = function()
+                                    local c = tdb().barColor or {}
+                                    return c.r or 0.35, c.g or 0.55, c.b or 0.8
+                                end,
+                                set = function(_, r, g, b) tset("barColor", { r = r, g = g, b = b }) end,
+                            },
+                            alwaysShowPlayer = {
+                                order = 4.2, type = "toggle", name = "Always Show Player",
+                                desc = "If you rank below the visible bars, your bar takes the last slot.",
+                                get = function() return tdb().alwaysShowPlayer ~= false end,
+                                set = function(_, v) tset("alwaysShowPlayer", v) end,
+                            },
                             nsrtNicknames = {
                                 order = 4.5, type = "toggle", name = "NSRT Nicknames",
                                 desc = "Show Northern Sky Raid Tools nicknames instead of character names.",
@@ -264,6 +279,11 @@ function TUI:DamageMeterOptions()
                                 get = function() return tdb().fontShadow end,
                                 set = function(_, v) tset("fontShadow", v) end,
                             },
+                            classColorText = {
+                                order = 5.5, type = "toggle", name = "Class Colored",
+                                get = function() return tdb().classColorText end,
+                                set = function(_, v) tset("classColorText", v) end,
+                            },
                             numberFormat = {
                                 order = 6, type = "select", name = "Numbers",
                                 values = { both = "Damage (DPS)", total = "Damage", persec = "DPS" },
@@ -317,6 +337,29 @@ function TUI:DamageMeterOptions()
                                 set = function(_, r, g, b, a) tset("iconBorderColor", { r = r, g = g, b = b, a = a }) end,
                             },
                         },
+                    },
+                },
+            },
+            tooltipTab = {
+                order = 25, type = "group", name = "Tooltips",
+                hidden = notTUI,
+                args = {
+                    enable = {
+                        order = 1, type = "toggle", name = "Enable",
+                        get = function() return tdb().tooltipEnabled ~= false end,
+                        set = function(_, v) tset("tooltipEnabled", v) end,
+                    },
+                    bars = {
+                        order = 2, type = "range", name = "Bars", min = 1, max = 15, step = 1,
+                        disabled = function() return tdb().tooltipEnabled == false end,
+                        get = function() return tdb().tooltipBars or 8 end,
+                        set = function(_, v) tset("tooltipBars", v) end,
+                    },
+                    barHeight = {
+                        order = 3, type = "range", name = "Bar Height", min = 8, max = 30, step = 0.5,
+                        disabled = function() return tdb().tooltipEnabled == false end,
+                        get = function() return tdb().tooltipBarHeight or 16 end,
+                        set = function(_, v) tset("tooltipBarHeight", v) end,
                     },
                 },
             },
