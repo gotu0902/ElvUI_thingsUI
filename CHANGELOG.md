@@ -2,6 +2,7 @@
 
 ## 4.1.5
 - Skinned mini meter: always show player, don't stop when I die, tooltip test
+- Added "Hide Pandemic Glow" toggle in CDM tab.
 
 
 ## 4.1.4

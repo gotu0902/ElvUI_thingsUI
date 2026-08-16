@@ -875,6 +875,15 @@ function TUI:CDMIconsOptions()
                     TUI:UpdateCDMIcons()
                 end,
             },
+            hidePandemic = {
+                order = 3.5, type = "toggle", width = "full",
+                name = "Hide Pandemic Glow",
+                get = function() return E.db.thingsUI.cdmIcons.hidePandemic end,
+                set = function(_, v)
+                    E.db.thingsUI.cdmIcons.hidePandemic = v
+                    if ns.CDMIcons and ns.CDMIcons.ClearPandemicAll then ns.CDMIcons.ClearPandemicAll() end
+                end,
+            },
             autoEnableCDM = {
                 order = 4, type = "toggle", width = "full",
                 name = "Auto-enable Cooldown Manager",

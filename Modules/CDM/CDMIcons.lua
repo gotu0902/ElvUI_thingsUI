@@ -19,6 +19,24 @@ local VIEWERS = {
     BuffIconCooldownViewer  = "buffIcon",
 }
 
+local function ClearPandemic(child)
+    local p = child and child.PandemicIcon
+    if not p then return end
+    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    p:SetAlpha((cdm and cdm.hidePandemic) and 0 or 1)
+end
+
+function M.ClearPandemicAll()
+    for name in pairs(VIEWERS) do
+        local v = _G[name]
+        if v and v.GetItemFrames then
+            for _, child in ipairs(v:GetItemFrames() or {}) do
+                ClearPandemic(child)
+            end
+        end
+    end
+end
+
 local VIEWER_BY_KEY = {
     essential = "EssentialCooldownViewer",
     utility   = "UtilityCooldownViewer",
@@ -461,6 +479,10 @@ local function HookChild(child, viewer)
     if hookedChildren[child] then return end
     hookedChildren[child] = true
     child._tuiViewer = viewer
+    ClearPandemic(child)
+    if type(child.ShowPandemicStateFrame) == "function" then
+        hooksecurefunc(child, "ShowPandemicStateFrame", ClearPandemic)
+    end
 
     hooksecurefunc(child, "SetPoint",        ReapplyChildAnchor)
     hooksecurefunc(child, "ClearAllPoints", ReapplyChildAnchor)
@@ -470,6 +492,7 @@ local function HookChild(child, viewer)
     if type(child.OnAuraInstanceInfoSet) == "function" then
         hooksecurefunc(child, "OnAuraInstanceInfoSet", function(self)
             childAuraOn[self] = true
+            ClearPandemic(self)
             OnChildAuraChanged(self)
         end)
     end
@@ -1040,6 +1063,7 @@ local function HookViewer(name)
             itemFrame._tuiViewer = self
             itemFrame._tuiAnchor = nil
             childAuraOn[itemFrame] = nil
+            ClearPandemic(itemFrame)
             StopOverrideGlow(itemFrame)
             ApplyPassiveState(itemFrame, false)
             passiveMouse[itemFrame] = nil
