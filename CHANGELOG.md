@@ -9,6 +9,9 @@
 - Picking Details! now imports the profile as well, if missing.
 - Racials respect CDM placement when assigned to be there
 - Timers show in group preview/test mode if in a group
+- Styled buffs now get the style's border and bordered stroke
+- Fixed Match CDM Anchor Icons being weird with bordered stroke
+
 
 ## 4.1.3
 - New profile presets with new positions
