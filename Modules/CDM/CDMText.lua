@@ -119,7 +119,6 @@ local function ReassertCountText(_, text)
         if not child then return end
         local t = child._tuiTextConfig
         if not t then
-            -- fresh pooled children haven't met StyleChild yet; resolve from the viewer
             local p = child:GetParent()
             local vn = p and p.GetName and p:GetName()
             if vn and VIEWERS[vn] then

@@ -4,7 +4,7 @@ local E = ns.E
 
 local NotifyChange = ns.NotifyChange
 
-local selected = {}   -- [sectionIndex] = true to include; default exclude
+local selected = {}
 
 local function SectionValues()
     local v = {}
@@ -32,7 +32,7 @@ function TUI:ShareOptions()
 
             defaultsHeader = { order = 4, type = "header", name = "Import default presets" },
             defaultsDesc = { order = 5, type = "description",
-                name = "Import all |cFF8080FFplugin things|r, if you want to start with and edit my stuff. |cFFFF6060Overwrites everythings hah.|r\n\n" },
+                name = "Import |cFF8080FFthe ElvUI profile and plugin things|r\n\n" },
             defaultsBreak = { order = 7, type = "description", width = "full", name = "\n" },
 
             exportHeader = { order = 10, type = "header", name = "Export" },
@@ -92,7 +92,7 @@ function TUI:ShareOptions()
 
     for i, p in ipairs(ns.PRESET_LIST or {}) do
         args["preset" .. p.key] = {
-            order = 5 + i * 0.1, type = "execute", name = "Import " .. p.label,
+            order = 5 + i * 0.1, type = "execute", name = "Import " .. p.label:gsub("%s+$", "") .. " Plugins",
             func = function()
                 local s = ns.PresetString and ns.PresetString(p.key)
                 if s and s ~= "" and ns.ShareWizard then
@@ -104,5 +104,27 @@ function TUI:ShareOptions()
         }
     end
 
-    return { order = 40, type = "group", name = "Share", args = args }
+    local ELV_PRESETS = {
+        { key = "NHT_PROFILE", label = "|cFFff0000NHT|r ElvUI" },
+        { key = "FHT_PROFILE", label = "|cFF00ff17FHT|r ElvUI" },
+    }
+    for i, p in ipairs(ELV_PRESETS) do
+        args["elvprofile" .. p.key] = {
+            order = 5.4 + i * 0.1, type = "execute", name = "Import " .. p.label,
+            confirm = function() return "Import the " .. p.label .. " profile? This overwrites your current ElvUI profile." end,
+            func = function()
+                local s = ns.InstallStrings and ns.InstallStrings[p.key]
+                if not s or s == "" then
+                    print("|cFF8080FFthingsUI|r: profile string not set yet.")
+                    return
+                end
+                local ok, pending = ns.ImportElvProfile(s)
+                print(ok and ("|cFF8080FFthingsUI|r - " .. p.label .. (pending and ": name exists, pick one in the popup." or " profile imported."))
+                    or "|cFF8080FFthingsUI|r: import failed.")
+                if ok and not pending then E:StaticPopup_Show("IMPORT_RL") end
+            end,
+        }
+    end
+
+    return { order = 40, type = "group", name = "Import - Export - Install", args = args }
 end

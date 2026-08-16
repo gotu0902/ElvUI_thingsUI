@@ -96,6 +96,39 @@ function TUI:Initialize()
         if not ok then geterrorhandler()("|cFF8080FFthingsUI|r ConfigTable failed: " .. tostring(err)) end
     end)
 
+    local D = E:GetModule("Distributor", true)
+    if D and D.blacklistedKeys and D.blacklistedKeys.profile then
+        D.blacklistedKeys.profile.thingsUI = true
+    end
+
+    if D and D.Decode and C_EncodingUtil then
+        local origDecode = D.Decode
+        D.Decode = function(self, dataString)
+            if type(dataString) == "string" and dataString:match("^!E2!") then
+                local okB, decoded = pcall(C_EncodingUtil.DecodeBase64, dataString:gsub("^!E2!", ""))
+                local okZ, dec
+                if okB and decoded then
+                    okZ, dec = pcall(C_EncodingUtil.DecompressString, decoded, Enum.CompressionMethod.Deflate)
+                end
+                if okZ and dec then
+                    local serialized, ptype, pkey = dec:match("^(.*)::(profile)::(.+)$")
+                    if not serialized then
+                        serialized, ptype = dec:match("^(.*)::(private)$")
+                        if not serialized then serialized, ptype = dec:match("^(.*)::(global)$") end
+                        if not serialized then serialized, ptype = dec:match("^(.*)::(filters)$") end
+                    end
+                    if serialized then
+                        local ok, profileData = pcall(C_EncodingUtil.DeserializeCBOR, serialized)
+                        if ok and type(profileData) == "table" then
+                            return ptype, pkey, profileData
+                        end
+                    end
+                end
+            end
+            return origDecode(self, dataString)
+        end
+    end
+
     wipe(ns.skinnedBars)
     wipe(ns.yoinkedBars)
 

@@ -32,7 +32,24 @@ end
 
 local PROVIDERS = {
     {
-        key = "elvui", title = "ElvUI",
+        key = "platynator", title = "Platynator", color = "FF6EB4",
+        loaded = function() return _G.PLATYNATOR_CONFIG and _G.PLATYNATOR_CONFIG.Profiles and true or false end,
+        profiles = function()
+            local out = {}
+            for name in pairs(_G.PLATYNATOR_CONFIG.Profiles) do out[#out + 1] = name end
+            return out
+        end,
+        current = function() return _G.PLATYNATOR_CURRENT_PROFILE end,
+        set = function(name)
+            if _G.PLATYNATOR_CONFIG.Profiles[name] == nil then return end
+            if _G.PLATYNATOR_CURRENT_PROFILE ~= name then
+                _G.PLATYNATOR_CURRENT_PROFILE = name
+                M._needReload = true
+            end
+        end,
+    },
+    {
+        key = "elvui", title = "ElvUI", color = "8080FF",
         loaded = function() return E.data ~= nil end,
         profiles = function() return E.data:GetProfiles() end,
         current = function() return E.data:GetCurrentProfile() end,
@@ -40,7 +57,15 @@ local PROVIDERS = {
         specApply = function(map) DualSpecApply(E.data, map) end,
     },
     {
-        key = "grid2", title = "Grid2",
+        key = "elvpriv", title = "ElvUI Private", color = "CBA0FF",
+        noRoles = true, deferSet = true,
+        loaded = function() return E.charSettings ~= nil end,
+        profiles = function() return E.charSettings:GetProfiles() end,
+        current = function() return E.charSettings:GetCurrentProfile() end,
+        set = function(name) E.charSettings:SetProfile(name) end,
+    },
+    {
+        key = "grid2", title = "Grid2", color = "7FFF7F",
         loaded = function() return _G.Grid2 and _G.Grid2.db and true or false end,
         profiles = function() return _G.Grid2.db:GetProfiles() end,
         current = function() return _G.Grid2.db:GetCurrentProfile() end,
@@ -57,7 +82,7 @@ local PROVIDERS = {
         end,
     },
     {
-        key = "bigwigs", title = "BigWigs",
+        key = "bigwigs", title = "BigWigs", color = "FF7F3F",
         loaded = function() return _G.BigWigsLoader and _G.BigWigsLoader.db and true or false end,
         profiles = function() return _G.BigWigsLoader.db:GetProfiles() end,
         current = function() return _G.BigWigsLoader.db:GetCurrentProfile() end,
@@ -65,7 +90,7 @@ local PROVIDERS = {
         specApply = function(map) DualSpecApply(_G.BigWigsLoader.db, map) end,
     },
     {
-        key = "buffreminders", title = "BuffReminders",
+        key = "buffreminders", title = "BuffReminders", color = "FFD700",
         loaded = function() return _G.BuffReminders and _G.BuffRemindersDB and true or false end,
         profiles = function()
             local db = AceDBForSV(_G.BuffRemindersDB)
@@ -86,6 +111,7 @@ local PROVIDERS = {
         specApply = function(map) DualSpecApply(AceDBForSV(_G.BuffRemindersDB), map) end,
     },
 }
+table.sort(PROVIDERS, function(a, b) return a.title < b.title end)
 
 local function ClassSpecs()
     local classID = select(3, UnitClass("player"))
@@ -113,7 +139,6 @@ local function EditModeLayouts()
     return combined, presets, info.activeLayout
 end
 
--- Edit Mode has no spec link; we switch the active layout ourselves
 local function EMSpecStore(create)
     _G.thingsUIGlobalDB = _G.thingsUIGlobalDB or {}
     local g = _G.thingsUIGlobalDB
@@ -151,6 +176,7 @@ emEv:SetScript("OnEvent", function(_, event, unit)
     if event == "PLAYER_SPECIALIZATION_CHANGED" then
         if unit and unit ~= "player" then return end
         C_Timer.After(1, function() M.ApplyEMForSpec() end)
+        C_Timer.After(2, function() if M.CheckRoleMismatch then M.CheckRoleMismatch() end end)
     elseif event == "PLAYER_REGEN_ENABLED" and pendingEM then
         pendingEM = false
         C_Timer.After(1, function() M.ApplyEMForSpec() end)
@@ -192,6 +218,128 @@ function M.ImportPresets(str)
     return n
 end
 
+local function RoleStore(create)
+    _G.thingsUIGlobalDB = _G.thingsUIGlobalDB or {}
+    local g = _G.thingsUIGlobalDB
+    if create then
+        g.rolePresets = g.rolePresets or { mergeTankDps = true }
+        g.rolePresets.providers = g.rolePresets.providers or {}
+        g.rolePresets.em = g.rolePresets.em or {}
+    end
+    return g.rolePresets
+end
+M.RoleStore = RoleStore
+
+local function RoleForSpecIndex(i)
+    local classID = select(3, UnitClass("player"))
+    if not classID then return nil end
+    return select(5, GetSpecializationInfoForClassID(classID, i))
+end
+
+local function RoleKeyFor(i, rp)
+    local role = RoleForSpecIndex(i)
+    if not role then return nil end
+    if rp.mergeTankDps ~= false and role == "TANK" then role = "DAMAGER" end
+    return role
+end
+
+function M.ApplyRoleProfiles(silent)
+    local rp = RoleStore(false)
+    if not (rp and rp.enabled and rp.providers) then return end
+    local specs = ClassSpecs()
+    local curIdx = GetSpecialization()
+    for _, prov in ipairs(PROVIDERS) do
+        local rmap = rp.providers[prov.key]
+        if rmap and prov.loaded() and not prov.noRoles then
+            local exists = {}
+            for _, n in ipairs(prov.profiles() or {}) do exists[n] = true end
+            local map = {}
+            for i in ipairs(specs) do
+                local want = rmap[RoleKeyFor(i, rp) or ""]
+                if want and exists[want] then map[i] = want end
+            end
+            if curIdx and map[curIdx] and map[curIdx] ~= prov.current() then prov.set(map[curIdx]) end
+            if prov.specApply and next(map) then prov.specApply(map) end
+        end
+    end
+    local emSpec = {}
+    for i in ipairs(specs) do
+        local nm = rp.em and rp.em[RoleKeyFor(i, rp) or ""]
+        if nm then emSpec[i] = nm end
+    end
+    if next(emSpec) then
+        local st = EMSpecStore(true)
+        st.enabled = true
+        st.spec = emSpec
+        M.ApplyEMForSpec(not silent)
+    end
+    if M._needReload then
+        M._needReload = nil
+        E:StaticPopup_Show("TUI_ALT_RELOAD")
+    end
+end
+M.ApplyRolePresets = M.ApplyRoleProfiles
+
+E.PopupDialogs["TUI_ALT_ROLEPOPUP"] = {
+    text = "%s",
+    button1 = ACCEPT, button2 = CANCEL,
+    OnAccept = function() M.ApplyRoleProfiles() end,
+    timeout = 0, whileDead = 1, hideOnEscape = 1,
+}
+
+function M.CheckRoleMismatch()
+    local rp = RoleStore(false)
+    if not (rp and rp.enabled and rp.providers) or InCombatLockdown() then return end
+    local curIdx = GetSpecialization()
+    if not curIdx then return end
+    local rk = RoleKeyFor(curIdx, rp)
+    if not rk then return end
+    local lines = {}
+    for _, prov in ipairs(PROVIDERS) do
+        local rmap = rp.providers[prov.key]
+        local want = rmap and rmap[rk]
+        if want and prov.loaded() and want ~= prov.current() then
+            lines[#lines + 1] = ("|cFF%s%s:|r %s"):format(prov.color or "FFFFFF", prov.title, want)
+        end
+    end
+    if #lines == 0 then return end
+    local msg = "|cFF8080FFthingsUI|r: Update profile preset?\n\n" .. table.concat(lines, "\n")
+    E:StaticPopup_Show("TUI_ALT_ROLEPOPUP", msg)
+end
+
+E.PopupDialogs["TUI_ALT_ROLEUPDATE"] = {
+    text = "%s",
+    button1 = YES, button2 = NO,
+    OnAccept = function(_, data)
+        local rp = RoleStore(false)
+        if rp and rp.providers then
+            rp.providers[data.provKey] = rp.providers[data.provKey] or {}
+            rp.providers[data.provKey][data.role] = data.profile
+            print("|cFF8080FFthingsUI|r - Multi-Spec preset updated.")
+        end
+    end,
+    timeout = 0, whileDead = 1, hideOnEscape = 1,
+}
+
+function M.OfferRoleUpdate(provKey, profileName)
+    local rp = RoleStore(false)
+    if not (rp and rp.enabled and rp.providers) then return end
+    local curIdx = GetSpecialization()
+    local rk = curIdx and RoleKeyFor(curIdx, rp)
+    if not rk then return end
+    local prov
+    for _, p in ipairs(PROVIDERS) do if p.key == provKey then prov = p break end end
+    if not prov or prov.noRoles then return end
+    local rmap = rp.providers[provKey]
+    local have = rmap and rmap[rk]
+    if have == profileName then return end
+    local roleLabel = (rk == "HEALER") and "Healer"
+        or ((rp.mergeTankDps ~= false) and "Tank & DPS" or ((rk == "TANK") and "Tank" or "DPS"))
+    local msg = ("|cFF8080FFthingsUI|r: Set the |cFF%s%s|r Multi-Spec profile for |cFFFFFFFF%s|r to '%s'?\n\nPreset currently has: %s"):format(
+        prov.color or "FFFFFF", prov.title, roleLabel, profileName, have or "|cFF888888- none -|r")
+    E:StaticPopup_Show("TUI_ALT_ROLEUPDATE", msg, nil, { provKey = provKey, role = rk, profile = profileName })
+end
+
 local function CapturePreset(sel, emSel, emSpec)
     local p = { providers = {} }
     if emSpec then
@@ -227,6 +375,7 @@ local function ApplyPresetToSel(preset, sel, specs, emSpecOut)
             if type(i) == "number" and type(nm) == "string" then emSpecOut.spec[i] = nm end
         end
     end
+    local missing = {}
     for _, prov in ipairs(PROVIDERS) do
         local pp = preset.providers and preset.providers[prov.key]
         if pp and prov.loaded() then
@@ -234,7 +383,10 @@ local function ApplyPresetToSel(preset, sel, specs, emSpecOut)
             sel[prov.key] = s
             local exists = {}
             for _, n in ipairs(prov.profiles() or {}) do exists[n] = true end
-            if pp.profile and exists[pp.profile] then s.profile = pp.profile end
+            if pp.profile then
+                if exists[pp.profile] then s.profile = pp.profile
+                else missing[#missing + 1] = ("|cFF%s%s:|r %s"):format(prov.color or "FFFFFF", prov.title, pp.profile) end
+            end
             s.specEnabled = pp.specEnabled or false
             s.spec = {}
             for i in ipairs(specs) do
@@ -243,14 +395,17 @@ local function ApplyPresetToSel(preset, sel, specs, emSpecOut)
             end
         end
     end
+    local emIdx
     if preset.editModeLayout then
         local combined = EditModeLayouts()
         if combined then
             for i, l in ipairs(combined) do
-                if l.layoutName == preset.editModeLayout then return i end
+                if l.layoutName == preset.editModeLayout then emIdx = i break end
             end
+            if not emIdx then missing[#missing + 1] = "|cFFAAAAAAEdit Mode:|r " .. preset.editModeLayout end
         end
     end
+    return emIdx, missing
 end
 
 local function ShowTextPopup(title, text, onAccept)
@@ -291,10 +446,18 @@ function M.Apply(sel, emSel, emSpec)
         print("|cFF8080FFthingsUI|r - Cannot apply profiles during combat.")
         return
     end
+    local deferred
     for _, prov in ipairs(PROVIDERS) do
         local s = sel[prov.key]
         if s and prov.loaded() then
-            if s.profile and s.profile ~= prov.current() then prov.set(s.profile) end
+            if s.profile and s.profile ~= prov.current() then
+                if prov.deferSet then
+                    local p, n = prov, s.profile
+                    deferred = function() p.set(n) end
+                else
+                    prov.set(s.profile)
+                end
+            end
             if s.specEnabled and prov.specApply then
                 local map = {}
                 for i, name in pairs(s.spec or {}) do
@@ -324,7 +487,13 @@ function M.Apply(sel, emSel, emSpec)
     end
     Store()[CharKey()] = true
     if frame then frame:Hide() end
-    if reloadNeeded then E:StaticPopup_Show("TUI_ALT_RELOAD") end
+    local rp = RoleStore(false)
+    if rp and rp.enabled then M.ApplyRolePresets(true) end
+    if deferred then deferred() return end
+    if reloadNeeded or M._needReload then
+        M._needReload = nil
+        E:StaticPopup_Show("TUI_ALT_RELOAD")
+    end
 end
 
 function M.Open()
@@ -335,6 +504,7 @@ function M.Open()
     local sel = {}
     local emSel
     local presetSel
+    local presetMissing
     local specs = ClassSpecs()
     local emStore = EMSpecStore(false)
     local emSpec = { enabled = (emStore and emStore.enabled) or false, spec = {} }
@@ -390,11 +560,12 @@ function M.Open()
                 w:SetList(list, order)
                 w:SetValue((presetSel and presets[presetSel]) and presetSel or "")
                 w:SetCallback("OnValueChanged", function(_, _, v)
-                    if v == "" then presetSel = nil; render() return end
+                    if v == "" then presetSel = nil; presetMissing = nil; render() return end
                     presetSel = v
                     local p = presets[v]
                     if p then
-                        local emIdx = ApplyPresetToSel(p, sel, specs, emSpec)
+                        local emIdx, missing = ApplyPresetToSel(p, sel, specs, emSpec)
+                        presetMissing = (missing and #missing > 0) and missing or nil
                         if emIdx then emSel = emIdx end
                         render()
                     end
@@ -411,12 +582,48 @@ function M.Open()
                     end
                 end)
             end)
+            local function FixRoleRefs(old, new)
+                local rp = RoleStore(false)
+                if not rp then return end
+                for _, k in ipairs({ "TANK", "DAMAGER", "HEALER" }) do
+                    if rp[k] == old then rp[k] = new end
+                end
+                for _, cs in pairs(rp.classSpec or {}) do
+                    for i, nm in pairs(cs) do
+                        if nm == old then cs[i] = new end
+                    end
+                end
+            end
             Add(scroll, "Button", function(w)
                 w:SetText("Delete")
                 w:SetRelativeWidth(0.3)
                 w:SetDisabled(not (presetSel and presets[presetSel]))
                 w:SetCallback("OnClick", function()
-                    if presetSel then presets[presetSel] = nil; presetSel = nil; render() end
+                    if presetSel then
+                        presets[presetSel] = nil
+                        FixRoleRefs(presetSel, nil)
+                        presetSel = nil
+                        render()
+                    end
+                end)
+            end)
+            Add(scroll, "EditBox", function(w)
+                w:SetLabel("Rename selected preset to")
+                w:SetRelativeWidth(0.5)
+                w:SetDisabled(not (presetSel and presets[presetSel]))
+                w:SetCallback("OnEnterPressed", function(_, _, v)
+                    v = (v or ""):match("^%s*(.-)%s*$")
+                    if v == "" or not (presetSel and presets[presetSel]) then return end
+                    if presets[v] then
+                        print("|cFF8080FFthingsUI|r - a preset named '" .. v .. "' already exists.")
+                        return
+                    end
+                    presets[v] = presets[presetSel]
+                    presets[presetSel] = nil
+                    FixRoleRefs(presetSel, v)
+                    print("|cFF8080FFthingsUI|r - preset '" .. presetSel .. "' renamed to '" .. v .. "'.")
+                    presetSel = v
+                    render()
                 end)
             end)
             Add(scroll, "EditBox", function(w)
@@ -452,12 +659,42 @@ function M.Open()
             end)
         end
 
+        if presetMissing then
+            Add(scroll, "Label", function(w)
+                w:SetFullWidth(true)
+                w:SetText("|cFFFF6060Preset profiles not found on this account:|r " .. table.concat(presetMissing, "   ") .. "\n")
+            end)
+        end
+
+        local rp = RoleStore(true)
+        Add(scroll, "Heading", function(w) w:SetText("Multi-Spec"); w:SetFullWidth(true) end)
+        Add(scroll, "CheckBox", function(w)
+            w:SetLabel("Enable Multi-Spec")
+            w:SetFullWidth(true)
+            w:SetValue(rp.enabled or false)
+            w:SetCallback("OnValueChanged", function(_, _, v) rp.enabled = v or nil; render() end)
+        end)
+        if rp.enabled then
+            Add(scroll, "CheckBox", function(w)
+                w:SetLabel("Tank & DPS share profile")
+                w:SetFullWidth(true)
+                w:SetValue(rp.mergeTankDps ~= false)
+                w:SetCallback("OnValueChanged", function(_, _, v) rp.mergeTankDps = v and true or false; render() end)
+            end)
+        end
+        local uiRoles = (rp.mergeTankDps ~= false)
+            and { { key = "DAMAGER", label = "Tank & DPS" }, { key = "HEALER", label = "Healer" } }
+            or { { key = "TANK", label = "Tank" }, { key = "DAMAGER", label = "DPS" }, { key = "HEALER", label = "Healer" } }
+
         for _, prov in ipairs(PROVIDERS) do
             if prov.loaded() then
                 local s = sel[prov.key]
                 if not s then s = { spec = {} }; sel[prov.key] = s end
 
-                Add(scroll, "Heading", function(w) w:SetText(prov.title); w:SetFullWidth(true) end)
+                Add(scroll, "Heading", function(w)
+                    w:SetText(("|cFF%s%s|r"):format(prov.color or "FFFFFF", prov.title))
+                    w:SetFullWidth(true)
+                end)
 
                 local names = prov.profiles() or {}
                 table.sort(names)
@@ -468,6 +705,24 @@ function M.Open()
                     order[#order + 1] = n
                 end
 
+                if rp.enabled and not prov.noRoles then
+                    rp.providers[prov.key] = rp.providers[prov.key] or {}
+                    local rmap = rp.providers[prov.key]
+                    local rlist = { [""] = "|cFF888888- None -|r" }
+                    local rorder = { "" }
+                    for _, n in ipairs(order) do rlist[n] = list[n]; rorder[#rorder + 1] = n end
+                    for _, role in ipairs(uiRoles) do
+                        Add(scroll, "Dropdown", function(w)
+                            w:SetLabel(role.label)
+                            w:SetRelativeWidth(1 / #uiRoles)
+                            w:SetList(rlist, rorder)
+                            w:SetValue(rmap[role.key] or "")
+                            w:SetCallback("OnValueChanged", function(_, _, v)
+                                rmap[role.key] = (v ~= "") and v or nil
+                            end)
+                        end)
+                    end
+                else
                 Add(scroll, "Dropdown", function(w)
                     w:SetLabel("Profile")
                     w:SetFullWidth(true)
@@ -484,8 +739,9 @@ function M.Open()
                         end
                     end)
                 end)
+                end
 
-                if prov.specApply and #specs > 0 then
+                if prov.specApply and #specs > 0 and not rp.enabled then
                     Add(scroll, "CheckBox", function(w)
                         w:SetLabel("Spec profiles")
                         w:SetFullWidth(true)
@@ -530,6 +786,29 @@ function M.Open()
                 list[k] = (l.layoutName or ("Layout " .. i)) .. suffix .. cur
                 order[#order + 1] = k
             end
+            if rp.enabled then
+                rp.em = rp.em or {}
+                local rlist = { [""] = "|cFF888888- None -|r" }
+                local rorder = { "" }
+                for i, l in ipairs(combined) do
+                    local nm = l.layoutName
+                    if nm and rlist[nm] == nil then
+                        rlist[nm] = list[tostring(i)]
+                        rorder[#rorder + 1] = nm
+                    end
+                end
+                for _, role in ipairs(uiRoles) do
+                    Add(scroll, "Dropdown", function(w)
+                        w:SetLabel(role.label)
+                        w:SetRelativeWidth(1 / #uiRoles)
+                        w:SetList(rlist, rorder)
+                        w:SetValue(rp.em[role.key] or "")
+                        w:SetCallback("OnValueChanged", function(_, _, v)
+                            rp.em[role.key] = (v ~= "") and v or nil
+                        end)
+                    end)
+                end
+            else
             Add(scroll, "Dropdown", function(w)
                 w:SetLabel(emSpec.enabled and "Layout |cff888888(spec layouts below take over)|r"
                     or "Layout (switching prompts a reload)")
@@ -573,6 +852,18 @@ function M.Open()
                     end)
                 end
             end
+            end
+        end
+
+        local offline = {}
+        for _, prov in ipairs(PROVIDERS) do
+            if not prov.loaded() then offline[#offline + 1] = ("|cFF%s%s|r"):format(prov.color or "FFFFFF", prov.title) end
+        end
+        if #offline > 0 then
+            Add(scroll, "Label", function(w)
+                w:SetFullWidth(true)
+                w:SetText("\n|cFFFF6060Addons not installed or enabled:|r " .. table.concat(offline, ", "))
+            end)
         end
 
         Add(scroll, "Label", function(w) w:SetFullWidth(true); w:SetText("\n") end)
@@ -618,6 +909,11 @@ local boot = CreateFrame("Frame")
 boot:RegisterEvent("PLAYER_ENTERING_WORLD")
 boot:SetScript("OnEvent", function(self)
     self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+    local presets = Presets()
+    if not next(presets) then
+        local s = ns.InstallStrings and ns.InstallStrings.ALT_PRESETS
+        if s and s ~= "" then M.ImportPresets(s) end
+    end
     for _, t in ipairs({ 4, 10, 20 }) do
         C_Timer.After(t, function()
             if booted or frame then return end
@@ -627,4 +923,5 @@ boot:SetScript("OnEvent", function(self)
             end
         end)
     end
+    C_Timer.After(8, function() M.CheckRoleMismatch() end)
 end)

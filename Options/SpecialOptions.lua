@@ -762,10 +762,40 @@ function TUI:SpecialBarOptions(barKey, ctx)
         hidden = function() return not db().spellID end,
     }
     commonArgs.totemTimer = {
-        order = 3.2, type = "toggle", name = "Totem Timer",
+        order = 3.2, type = "toggle", name = "Totem / No Aura Timer",
         hidden = function() return not db().spellID end,
         get = function() return db().totemTimer end,
         set = function(_, v) db().totemTimer = v and true or nil; QueueUpdate() end,
+    }
+    commonArgs.totemTicks = {
+        order = 3.25, type = "toggle", name = "Ticks",
+        hidden = function() return not db().spellID end,
+        get = function() return db().totemTicks end,
+        set = function(_, v) db().totemTicks = v and true or nil; QueueUpdate() end,
+    }
+    commonArgs.totemTickThickness = {
+        order = 3.26, type = "range", name = "Tick Thickness", min = 1, max = 6, step = 1,
+        hidden = function() return not (db().spellID and db().totemTicks) end,
+        get = function() return db().totemTickThickness or 2 end,
+        set = function(_, v) db().totemTickThickness = v; QueueUpdate() end,
+    }
+    commonArgs.totemTickLength = {
+        order = 3.27, type = "range", name = "Tick Length", min = 2, max = 60, step = 1,
+        hidden = function() return not (db().spellID and db().totemTicks) end,
+        get = function() return db().totemTickLength or 20 end,
+        set = function(_, v) db().totemTickLength = v; QueueUpdate() end,
+    }
+    commonArgs.totemTickColor = {
+        order = 3.28, type = "color", name = "Tick Color", hasAlpha = true,
+        hidden = function() return not (db().spellID and db().totemTicks) end,
+        get = function()
+            local c = db().totemTickColor or { r = 1, g = 1, b = 1, a = 1 }
+            return c.r or 1, c.g or 1, c.b or 1, c.a or 1
+        end,
+        set = function(_, r, g, b, a)
+            db().totemTickColor = { r = r, g = g, b = b, a = a }
+            QueueUpdate()
+        end,
     }
     commonArgs.customGroup = {
         order = 3.5, type = "select", name = "|cFFF27D2ABar Group|r",
@@ -1107,7 +1137,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
         set = function(_, v) db().enabled = v; if not v and not ESpec() then SB.ReleaseIcon(curKey()) end; QueueUpdate() end,
     }
     commonArgs.totemTimer = {
-        order = 3.2, type = "toggle", name = "Totem Timer",
+        order = 3.2, type = "toggle", name = "Totem / No Aura Timer",
         hidden = function() return not db().spellID end,
         get = function() return db().totemTimer end,
         set = function(_, v) db().totemTimer = v and true or nil; QueueUpdate() end,

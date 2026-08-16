@@ -51,6 +51,11 @@ ns.SPECIAL_BAR_DEFAULTS = {
     anchorXOffset       = 0,
     anchorYOffset       = 0,
     frameStrata         = "MEDIUM",
+    totemTimer          = false,
+    totemTicks          = false,
+    totemTickThickness  = 2,
+    totemTickLength     = 20,
+    totemTickColor      = { r = 1, g = 1, b = 1, a = 1 },
 }
 
 ns.SPECIAL_ICON_DEFAULTS = {
@@ -70,6 +75,7 @@ ns.SPECIAL_ICON_DEFAULTS = {
     showCooldown          = true,
     invertSwipe           = false,
     desaturateWhenInactive = false,
+    totemTimer            = false,
     showBorder            = false,
     borderSize            = 1,
     borderColor           = { r = 0, g = 0, b = 0, a = 1 },

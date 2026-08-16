@@ -653,13 +653,24 @@ local function SyncGroup(group)
     local effW = group.width or 220
     local effH = group.height or 22
     if target then
+        local tn = target.GetName and target:GetName()
+        local cdmInset = (tn and tn:match("^TUI_CDMProxy_")) and 2 or 0
         if group.inheritWidth then
             local aw = target:GetWidth()
-            if aw and aw > 0 then effW = aw + (group.inheritWidthOffset or 0) end
+            if aw and aw > 0 then
+                effW = aw + cdmInset + (group.inheritWidthOffset or 0)
+                local one = ns.Pixel.Size(frame)
+                if one and one > 0 then
+                    local p = math.floor(aw / one + 0.5)
+                    local e = math.floor(effW / one + 0.5)
+                    if (p - e) % 2 ~= 0 then e = e + 1 end
+                    effW = e * one
+                end
+            end
         end
         if group.inheritHeight then
             local ah = target:GetHeight()
-            if ah and ah > 0 then effH = ah + (group.inheritHeightOffset or 0) end
+            if ah and ah > 0 then effH = ah + cdmInset + (group.inheritHeightOffset or 0) end
         end
     end
     st.effW, st.effH = effW, effH
@@ -668,6 +679,49 @@ local function SyncGroup(group)
     frame:ClearAllPoints()
     ns.Pixel.SetPoint(frame, group.anchorPoint or "CENTER", target or _G.UIParent,
         group.anchorRelativePoint or "CENTER", group.anchorXOffset or 0, group.anchorYOffset or 0)
+    do
+        local one = ns.Pixel.Size(frame)
+        local tgt = target or _G.UIParent
+        local pt = group.anchorPoint or "CENTER"
+        local rpt = group.anchorRelativePoint or "CENTER"
+        local function xf(f, p)
+            if p:find("LEFT") then return f:GetLeft() end
+            if p:find("RIGHT") then return f:GetRight() end
+            local l, r = f:GetLeft(), f:GetRight()
+            return l and r and (l + r) / 2
+        end
+        local function yf(f, p)
+            if p:find("TOP") then return f:GetTop() end
+            if p:find("BOTTOM") then return f:GetBottom() end
+            local b, t = f:GetBottom(), f:GetTop()
+            return b and t and (b + t) / 2
+        end
+        local bx, tx = xf(frame, pt), xf(tgt, rpt)
+        local by, ty = yf(frame, pt), yf(tgt, rpt)
+        if bx and tx and by and ty and one and one > 0 then
+            local dx, dy = bx - tx, by - ty
+            local rx = dx - math.floor(dx / one + 0.5) * one
+            local ry = dy - math.floor(dy / one + 0.5) * one
+            if math.abs(rx) > one * 0.05 or math.abs(ry) > one * 0.05 then
+                frame:ClearAllPoints()
+                frame:SetPoint(pt, tgt, rpt,
+                    (group.anchorXOffset or 0) - rx, (group.anchorYOffset or 0) - ry)
+            end
+        end
+
+        local lx, bot = frame:GetLeft(), frame:GetBottom()
+        if lx and bot and one and one > 0 then
+            local fx = (lx / one - math.floor(lx / one)) * one
+            local fy = (bot / one - math.floor(bot / one)) * one
+            if fx > one * 0.01 or fy > one * 0.01 then
+                local p1, rel1, rp1, cx1, cy1 = frame:GetPoint(1)
+                if p1 then
+                    frame:ClearAllPoints()
+                    frame:SetPoint(p1, rel1, rp1, (cx1 or 0) - fx, (cy1 or 0) - fy)
+                end
+            end
+        end
+    end
     EnsureMover(st, group)
     frame:Show()
 

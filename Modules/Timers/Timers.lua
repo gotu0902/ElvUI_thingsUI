@@ -35,7 +35,6 @@ end
 
 M.DefaultTimer = ns.Defaults.Timer
 
--- lust tracking moved to the aura lane; old profiles still carry this
 function M.DropLustTimers()
     local db = DB()
     if not (db and db.list) then return end
@@ -169,6 +168,7 @@ end
 local totemSlot = {}
 local totemSpells = {}
 local totemCast = {}
+local totemCastList = {}
 local totemCallbacks = {}
 local issecret = issecretvalue
 
@@ -185,24 +185,40 @@ local function FireTotem()
 end
 
 function M.GetTotemState(sid)
-    local db = DB()
     local start = totemCast[sid]
-    local dur = db and db.totemLearn and db.totemLearn[sid]
+    local dur = M.GetLearnedDuration(sid)
     if start and dur and dur > 0 and start + dur > GetTime() then return start, dur end
 end
 
-function M.GetLearnedDuration(sid)
-    local db = DB()
-    return db and db.totemLearn and db.totemLearn[sid]
+function M.GetTotemCasts(sid)
+    local list = totemCastList[sid]
+    local dur = M.GetLearnedDuration(sid)
+    if not (list and dur and dur > 0) then return nil end
+    local now = GetTime()
+    for i = #list, 1, -1 do
+        if list[i] + dur <= now then table.remove(list, i) end
+    end
+    return list, dur
 end
 
--- values are secret in combat; learn OOC, use event timing only in combat
+local ttDur = {}
+function M.GetLearnedDuration(sid)
+    local db = DB()
+    local learned = db and db.totemLearn and db.totemLearn[sid]
+    if learned then return learned end
+    if not ttDur[sid] then
+        ttDur[sid] = TooltipDuration({ kind = "spell", spellID = sid })
+    end
+    return ttDur[sid]
+end
+
 function M.TotemUpdate(slot)
     local db = DB(); if not db then return end
     if not InCombatLockdown() then
         for sid, s in pairs(totemSlot) do
             if s == slot then
                 totemCast[sid] = nil
+                totemCastList[sid] = nil
                 local ids = triggerMap[sid]
                 if ids then for i = 1, #ids do lastCastStart[ids[i]] = nil end end
             end
@@ -229,7 +245,7 @@ function M.TotemUpdate(slot)
         if s == slot then
             local now = GetTime()
             local st0 = totemCast[sid]
-            if st0 and (now - st0) > 0.5 then totemCast[sid] = nil end
+            if st0 and (now - st0) > 0.5 then totemCast[sid] = nil; totemCastList[sid] = nil end
             local ids = triggerMap[sid]
             if ids then
                 for i = 1, #ids do
@@ -310,6 +326,9 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, spellID)
         if totemSpells[spellID] then
             local now = GetTime()
             totemCast[spellID] = now
+            local list = totemCastList[spellID]
+            if not list then list = {}; totemCastList[spellID] = list end
+            list[#list + 1] = now
             local dur = M.GetLearnedDuration(spellID)
             if dur and dur > 0 then
                 C_Timer.After(dur + 0.1, function()

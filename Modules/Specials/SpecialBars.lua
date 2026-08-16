@@ -250,6 +250,51 @@ local function RenderTotemBar(wrapper, db, w, h, start, dur)
     fx.fill:Show()
     fx.slide:Play()
 
+    if db.totemTicks then
+        local TM = ns.Timers
+        local list = TM and TM.GetTotemCasts and TM.GetTotemCasts(db.spellID)
+        fx.ticks = fx.ticks or {}
+        local shown = 0
+        if list and #list > 0 then
+            local tc = db.totemTickColor or { r = 1, g = 1, b = 1, a = 1 }
+            local tw = db.totemTickThickness or 2
+            local tlen = math.min(db.totemTickLength or (h - 2), h - 2)
+            local now = GetTime()
+            for _, t in ipairs(list) do
+                do
+                    local trem = (t + dur) - now
+                    local x = areaW * (trem / dur)
+                    if trem > 0 and x <= areaW then
+                        shown = shown + 1
+                        local tex = fx.ticks[shown]
+                        if not tex then
+                            tex = fx:CreateTexture(nil, "ARTWORK", nil, 7)
+                            tex.ag = tex:CreateAnimationGroup()
+                            tex.move = tex.ag:CreateAnimation("Translation")
+                            tex.ag:SetScript("OnFinished", function() tex:Hide() end)
+                            fx.ticks[shown] = tex
+                        end
+                        tex:SetColorTexture(tc.r or 1, tc.g or 1, tc.b or 1, tc.a or 1)
+                        tex.ag:Stop()
+                        tex:ClearAllPoints()
+                        tex:SetPoint("LEFT", fx, "LEFT", left + x, 0)
+                        tex:SetSize(tw, tlen)
+                        tex.move:SetOffset(-x, 0)
+                        tex.move:SetDuration(trem)
+                        tex:Show()
+                        tex.ag:Play()
+                    end
+                end
+            end
+        end
+        for i = shown + 1, #fx.ticks do
+            if fx.ticks[i].ag then fx.ticks[i].ag:Stop() end
+            fx.ticks[i]:Hide()
+        end
+    elseif fx.ticks then
+        for _, tex in ipairs(fx.ticks) do tex:Hide() end
+    end
+
     local font = LSM:Fetch("font", db.font or "Expressway")
     if db.showName then
         E:SetFont(fx.name, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
@@ -431,7 +476,7 @@ local function UpdateBarSlot(barKey)
     end
 
     local TM = ns.Timers
-    if db.totemTimer and db.spellID and TM and TM.RegisterTotemSpell and not test then
+    if (db.totemTimer or db.totemTicks) and db.spellID and TM and TM.RegisterTotemSpell and not test then
         TM.RegisterTotemSpell(db.spellID)
         if not SB._totemCB and TM.AddTotemCallback then
             SB._totemCB = true
@@ -440,7 +485,11 @@ local function UpdateBarSlot(barKey)
                 if T and T.UpdateSpecialBars then T:UpdateSpecialBars() end
             end)
         end
-        RenderTotemBar(wrapper, db, effectiveWidth, effectiveHeight, TM.GetTotemState(db.spellID))
+        if db.totemTimer then
+            RenderTotemBar(wrapper, db, effectiveWidth, effectiveHeight, TM.GetTotemState(db.spellID))
+        elseif wrapper.totemFX then
+            wrapper.totemFX:Hide()
+        end
     elseif wrapper.totemFX then
         wrapper.totemFX:Hide()
     end

@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.1.4
+- NB: Reworked pixels alignment and some sizing, so some things like icon groups size will be off and position to their anchor may be 1-2px off without an update\adjustment.
+- Fixed export string
+- Bar heights should no longer bleed from Global into other bar setups
+- Alt profile presets can now be set on role so you only need one. A popup reminder show up when a characters profile differs from the preset.
+- Added quick setup and elvui private & global to setup.
+- Picking Details! now imports the profile as well, if missing.
+
 ## 4.1.3
 - New profile presets with new positions
 

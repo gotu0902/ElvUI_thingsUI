@@ -2,14 +2,10 @@
 
 ![Version](https://img.shields.io/badge/version-4.1.3-pink)
 
-
-## Installer
-One-time setup: import a preset (NHT/FHT), set UI scale, pick unitframe coloring, move the minimap/auras if you want, choose dmg meter, pick an action bar layout if you want, and choose ElvUI UnitFrames or Grid2. Should pop-up on first time install, re-run it from the Share tab, use /tuialt for, alts. Yeeees, alts.
-
 ## Modules
 - **Bar Setup** - arrange and stack your bars into one cluster.
 - **Buff Bars** - skin and anchor CDM tracked bars, grow up/down, swap font/texture.
-- **CDM** - anchor the Cooldown Manager viewers to Player/Target, change up icon size, anchoring etc, add racials to viewers, trinkets blacklisting cd\buff and move to custom group.
+- **CDM** - CDM stuff, anchor the Cooldown Manager viewers to Player/Target, change up icon size, text, glow, anchoring etc, add racials to viewers\custom group, trinkets blacklisting cd\buff.
 - **Charge Bar** - per-spec spell charge tracker, in the CDM cluster or free-floating.
 - **Classbar** - per-spec ElvUI classbar where you anchor it.
 - **Damage Meter** - Details to anchor Details to right chat, Mini Meter for a skinned Blizzard meter, anchored to right chat yy you guessed it.
@@ -21,8 +17,8 @@ One-time setup: import a preset (NHT/FHT), set UI scale, pick unitframe coloring
 ## Grid2
 Apply bundled raid-frame profiles (NHT, FHT Icons/Squares) from the Grid2 tab.
 
-## Share
-Export and import your thingsUI config as a string, per module..
+## Installer
+One-time setup: import profile and plugin things, set UI scale, pick unitframe coloring, move the minimap/auras if you want, choose dmg meter, optional extra action bar layouts, and pick between ElvUI UnitFrames or Grid2. Should pop-up on first time install, re-run it from the Import\Export tab, use /tuialt for, alts. Yeeees, alts.
 
 # Installation
 

@@ -60,7 +60,6 @@ function TUI:DamageMeterOptions()
                         get = function() return ns.GetDamageMeterProvider() end,
                         set = function(_, v)
                             if ns.SetDamageMeterProvider then ns.SetDamageMeterProvider(v) end
-                            -- enable-state applies at load; the other meter keeps running otherwise
                             if C_UI and C_UI.Reload then C_UI.Reload() else ReloadUI() end
                         end,
                     },

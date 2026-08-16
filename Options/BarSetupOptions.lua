@@ -51,7 +51,6 @@ local function ApplyStack()
     if ns.BarSetup and ns.BarSetup.ApplyStack then ns.BarSetup.ApplyStack() end
 end
 
--- Spec picker
 local selectedClassID = nil
 
 local function ClassColorHex(classFile)
@@ -404,7 +403,6 @@ local function SetupEditor(idx)
     end
     if not selectedClassID then selectedClassID = defaultClassID() end
 
-    -- Specs
     local specsTab = {
         type = "group", order = 1, name = "Specs",
         hidden = function() return idx == 1 end,
@@ -493,7 +491,6 @@ local function SetupEditor(idx)
         },
     }
 
-    -- Bar Order
     local barOrderTab = {
         type = "group", order = 2, name = "Bar Order",
         args = {
@@ -548,7 +545,6 @@ local function SetupEditor(idx)
         },
     }
 
-    -- Layout tab 
     local layoutTab = {
         type = "group", order = 3, name = "Layout",
         args = {
@@ -699,7 +695,6 @@ function TUI:BarSetupOptions()
         end,
     }
 
-    -- 12.1 VM errors on div-by-zero; a tab group must never render with zero visible tabs
     args.disabledTab = {
         order = 5, type = "group", name = "Disabled",
         hidden = function() return E.db.thingsUI.barSetup.enabled ~= false end,

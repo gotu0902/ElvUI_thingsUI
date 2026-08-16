@@ -1,0 +1,10 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+	<Script file="NHT_Plugin.lua"/>
+	<Script file="FHT_Plugin.lua"/>
+	<Script file="NHT_Profile.lua"/>
+	<Script file="FHT_Profile.lua"/>
+	<Script file="AltPresets.lua"/>
+	<Script file="Elv_Extras.lua"/>
+	<Script file="Details_Profile.lua"/>
+	<Script file="Install.lua"/>
+</Ui>

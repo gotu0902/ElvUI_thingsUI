@@ -325,6 +325,54 @@ function SA.StyleBarButton(button, r, wrapper, key)
         r.barBound = true
     end
 
+    if db.totemTicks and db.spellID then
+        local TM = ns.Timers
+        if TM and TM.RegisterTotemSpell then TM.RegisterTotemSpell(db.spellID) end
+        local list, tdur = nil, nil
+        if TM and TM.GetTotemCasts then list, tdur = TM.GetTotemCasts(db.spellID) end
+        r.ticks = r.ticks or {}
+        local shown = 0
+        if list and tdur and #list > 0 then
+            local barW = w - barOffset - 2
+            local tc = db.totemTickColor or { r = 1, g = 1, b = 1, a = 1 }
+            local tw = db.totemTickThickness or 2
+            local tlen = math.min(db.totemTickLength or (h - 2), h - 2)
+            local now = GetTime()
+            for _, t in ipairs(list) do
+                do
+                    local rem = (t + tdur) - now
+                    local x = barW * (rem / tdur)
+                    if rem > 0 and x <= barW then
+                        shown = shown + 1
+                        local tex = r.ticks[shown]
+                        if not tex then
+                            tex = r.overlay:CreateTexture(nil, "OVERLAY")
+                            tex.ag = tex:CreateAnimationGroup()
+                            tex.move = tex.ag:CreateAnimation("Translation")
+                            tex.ag:SetScript("OnFinished", function() tex:Hide() end)
+                            r.ticks[shown] = tex
+                        end
+                        tex:SetColorTexture(tc.r or 1, tc.g or 1, tc.b or 1, tc.a or 1)
+                        tex.ag:Stop()
+                        tex:ClearAllPoints()
+                        tex:SetPoint("LEFT", r.bd, "LEFT", 1 + x, 0)
+                        tex:SetSize(tw, tlen)
+                        tex.move:SetOffset(-x, 0)
+                        tex.move:SetDuration(rem)
+                        tex:Show()
+                        tex.ag:Play()
+                    end
+                end
+            end
+        end
+        for i = shown + 1, #r.ticks do
+            if r.ticks[i].ag then r.ticks[i].ag:Stop() end
+            r.ticks[i]:Hide()
+        end
+    elseif r.ticks then
+        for _, tex in ipairs(r.ticks) do tex:Hide() end
+    end
+
     local font = LSM:Fetch("font", db.font or "Expressway")
     r.name = r.name or r.overlay:CreateFontString(nil, "OVERLAY")
     if db.showName then

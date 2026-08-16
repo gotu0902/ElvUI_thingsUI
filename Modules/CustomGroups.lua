@@ -553,7 +553,6 @@ local function HideGroupIcons(gs)
     if gs.testIcons then for _, b in pairs(gs.testIcons) do b:Hide() end end
 end
 
--- ElvUI CDM model: icon fills the button, pixel-perfect backdrop outside
 function M.ApplyIconSkin(btn, icon, crop, px)
     if not icon then return end
     if crop then icon:SetTexCoord(crop[1], crop[2], crop[3], crop[4])
@@ -628,7 +627,6 @@ local function RenderTestLane(gs, group, frame)
             M.ApplyIconSkin(f, f.tex, S.crop, S.skin)
 
             local AL = ns.AuraLane
-            -- mirror StyleButton: per-icon border override wins over the group's
             local idb = entry.def and entry.def.iconDB
             local bShow, bs, bi, bc, bstk = group.showBorder,
                 group.borderSize or 1, group.borderInset or 0, group.borderColor, false
@@ -1029,6 +1027,23 @@ local function ApplyGroup(group)
     frame:ClearAllPoints()
     ns.Pixel.SetPoint(frame, group.anchorPoint or "CENTER", target or _G.UIParent,
         group.anchorRelativePoint or "CENTER", ox, oy)
+    do
+        -- swipe rect must land on grid
+        local one = ns.Pixel.Size(frame)
+        if one and one > 0 then
+            for _, btn in ipairs(btns) do
+                local cd = btn.cooldown
+                local bl, bb = btn:GetLeft(), btn:GetBottom()
+                if cd and bl and bb then
+                    local fx = (bl / one - math.floor(bl / one)) * one
+                    local fy = (bb / one - math.floor(bb / one)) * one
+                    cd:ClearAllPoints()
+                    cd:SetPoint("TOPLEFT", btn, "TOPLEFT", -fx, -fy)
+                    cd:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -fx, -fy)
+                end
+            end
+        end
+    end
 
     local visible = M.VisibilityOK(group) or M.testMode
     local lane = ns.AuraLane and ns.AuraLane.HasSets(group)
@@ -1393,4 +1408,3 @@ end)
 function TUI:UpdateCustomGroups()
     QueueLayout()
 end
-

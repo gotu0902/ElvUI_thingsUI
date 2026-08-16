@@ -73,7 +73,6 @@ local function FormatSpecLabel(e)
     return label
 end
 
--- "CLASSTOKEN:specID" cascade key -> spec DB key (string-int).
 local function CascadeKeyToSpecKey(value)
     local _, specID = value:match("^([A-Z_]+):(%d+)$")
     return specID
@@ -115,7 +114,6 @@ local function SpellName(id)
     return (C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or ("Spell " .. id)
 end
 
--- True once the edited spec has been scanned into the CDM cache.
 local function EditedHasCDM()
     GetEditSpec()
     local specID = tonumber(selectedEditSpec)
@@ -131,7 +129,6 @@ local function EditedSpecLabel()
     return sName or "this spec"
 end
 
--- Per-spec charge spells from ns.CDMSpells; empty until the spec is visited.
 local function CDMOrderedForEdit()
     GetEditSpec()
     local specID = tonumber(selectedEditSpec)
@@ -321,7 +318,6 @@ function TUI:ChargeBarOptions()
                 set = function(_, v) local e = GetEditSpec(); if not e then return end; e.useGlobalLayout = v; Update() end,
             },
 
-            -- Spec Layout
             specLayoutTab = {
                 order = 20, type = "group", name = "Spec Layout",
                 disabled = function() return not E.db.thingsUI.chargeBar.enabled end,

@@ -1,6 +1,3 @@
--- ns.ActiveSpecsList.Build{ order, selected(), onRemove(specID), emptyText }
---   Returns: AceConfig group args table.
-
 local _, ns = ...
 local E = ns.E
 

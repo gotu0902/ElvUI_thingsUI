@@ -10,7 +10,7 @@ ns.EP = EP
 ns.TUI = TUI
 ns.LSM = E.Libs.LSM
 
-TUI.version = "4.1.3"
+TUI.version = C_AddOns.GetAddOnMetadata(addon, "Version") or "dev"
 TUI.name = "thingsUI"
 
 ns.skinnedBars = ns.skinnedBars or {}

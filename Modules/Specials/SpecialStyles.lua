@@ -14,11 +14,14 @@ local EXCLUDE = {
         anchorMode = true, anchorFrame = true, anchorPoint = true,
         anchorRelativePoint = true, anchorXOffset = true, anchorYOffset = true,
         customGroup = true, customGroupOrder = true,
+        totemTimer = true,
     },
     bars = {
         spellID = true, spellName = true, enabled = true, styleName = true,
         anchorMode = true, anchorFrame = true, anchorPoint = true,
         anchorRelativePoint = true, anchorXOffset = true, anchorYOffset = true,
+        totemTimer = true, totemTicks = true, totemTickThickness = true,
+        totemTickLength = true, totemTickColor = true,
     },
 }
 

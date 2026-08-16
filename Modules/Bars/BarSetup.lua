@@ -172,6 +172,15 @@ local function EnsureDB()
             b.yOffset     = b.yOffset     or 0
         end
 
+        -- own heights per setup, stops global bleed
+        if type(s.barHeights) ~= "table" then s.barHeights = {} end
+        for _, k in ipairs(M.BAR_KEYS) do
+            if not (type(s.barHeights[k]) == "number" and s.barHeights[k] > 0) then
+                local v = M.GetBarHeight and M.GetBarHeight(k, s)
+                if type(v) == "number" and v > 0 then s.barHeights[k] = v end
+            end
+        end
+
         s.gap          = s.gap          or 1
         s.xOffset      = s.xOffset      or 0
         s.yOffset      = s.yOffset      or 0
@@ -554,7 +563,6 @@ function M.PositionStack(positionOnly)
     if not setup then return end
 
     local anchorName = setup.anchorFrame or "EssentialCooldownViewer"
-    -- widths/heights/modes must apply even before the CDM anchor exists (fresh chars)
     local stackAnchor = (ns.CDMIcons and ns.CDMIcons.ProxyForName and ns.CDMIcons.ProxyForName(anchorName))
         or _G[anchorName]
 

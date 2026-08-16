@@ -746,7 +746,6 @@ local function TrinketsTab(order)
             set = function(_, v) setFlag(slotID(slot), "buff", v) end,
         }
         eqArgs["s" .. slot .. "_dest"] = {
-            -- re-home the slot's icon into a Groups - Icons group (its Global list)
             order = ord + 0.25, type = "select", name = "Destination", width = 0.9,
             values = function()
                 local out = { [0] = "CDM" }
