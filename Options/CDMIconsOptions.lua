@@ -590,6 +590,14 @@ local function RacialsToCDMTab(order)
         if d and d ~= tabKey then label = label .. "  " .. (RACIAL_DEST_TAG[d] or "") end
         local gname = RacialGroupName(id)
         if gname then label = label .. ("  |cFFF20553(CG: %s)|r"):format(gname) end
+        local nat = ns.RacialsCDM and ns.RacialsCDM.NativeViewer and ns.RacialsCDM.NativeViewer(id)
+        if nat and d and d ~= "off" then
+            if d ~= "dynamic" and d ~= nat then
+                label = label .. ("  |cFFFF3030! shown in CDM %s|r"):format(nat == "essential" and "Essential" or "Utility")
+            else
+                label = label .. "  |cFF888888(CDM native)|r"
+            end
+        end
         return label
     end
 
@@ -616,7 +624,7 @@ local function RacialsToCDMTab(order)
             },
             hint = {
                 order = 3, type = "description", fontSize = "medium", width = "full",
-                name = "|cFF888888Tick to add here - ticking a racial assigned elsewhere moves it here. Untick to remove.|r\n",
+                name = "|cFF888888Tick to add here - ticking a racial assigned elsewhere moves it here. Untick to remove.\nIf the racial is shown natively in the Cooldown Manager, its CDM position wins. |r|cFFFF3030!|r|cFF888888 = it sits in the other viewer - move it in Blizzard's Cooldown Settings.|r\n",
             },
         }
         for i, e in ipairs(SortedRacials()) do

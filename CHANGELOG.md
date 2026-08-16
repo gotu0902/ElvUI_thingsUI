@@ -7,6 +7,7 @@
 - Alt profile presets can now be set on role so you only need one. A popup reminder show up when a characters profile differs from the preset.
 - Added quick setup and elvui private & global to setup.
 - Picking Details! now imports the profile as well, if missing.
+- Racials respect CDM placement when assigned to be there
 
 ## 4.1.3
 - New profile presets with new positions
