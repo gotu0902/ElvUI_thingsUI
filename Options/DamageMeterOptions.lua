@@ -347,10 +347,6 @@ function TUI:DamageMeterOptions()
                         get = function() return tdb().tooltipBarHeight or 16 end,
                         set = function(_, v) tset("tooltipBarHeight", v) end,
                     },
-                    hint = {
-                        order = 10, type = "description", fontSize = "medium", width = "full",
-                        name = "\nHover a player bar to see their top spells, anchored above the window. In combat only your own bar responds.",
-                    },
                 },
             },
             titleTab = {
