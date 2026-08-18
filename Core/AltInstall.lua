@@ -287,7 +287,11 @@ E.PopupDialogs["TUI_ALT_ROLEPOPUP"] = {
     timeout = 0, whileDead = 1, hideOnEscape = 1,
 }
 
+local frame
+
 function M.CheckRoleMismatch()
+    if frame then return end
+    if not Store()[CharKey()] then return end
     local rp = RoleStore(false)
     if not (rp and rp.enabled and rp.providers) or InCombatLockdown() then return end
     local curIdx = GetSpecialization()
@@ -375,6 +379,7 @@ E.PopupDialogs["TUI_ALT_DEFPRESET"] = {
 }
 
 function M.CheckDefaultPreset()
+    if frame then return end
     if InCombatLockdown() then return end
     if not Store()[CharKey()] then return end
     local diff, name = DefaultPresetDiff()
@@ -505,8 +510,6 @@ E.PopupDialogs["TUI_ALT_RELOAD"] = {
     timeout = 0, whileDead = 1, hideOnEscape = 1,
 }
 
-local frame
-
 function M.Apply(sel, emSel, emSpec)
     if InCombatLockdown() then
         print("|cFF8080FFthingsUI|r - Cannot apply profiles during combat.")
@@ -606,8 +609,6 @@ function M.Open()
     local scroll = AceGUI:Create("ScrollFrame")
     scroll:SetLayout("Flow")
     f:AddChild(scroll)
-
-    -- recycled AceGUI frame keeps children, guard + rewire
     do
         local raw = f.frame
         local b = raw._tuiAltButtons
@@ -617,6 +618,7 @@ function M.Open()
             for _, k in ipairs({ "apply", "skip" }) do
                 local btn = CreateFrame("Button", nil, raw, "UIPanelButtonTemplate")
                 btn:SetSize(100, 20)
+                btn:SetFrameLevel(raw:GetFrameLevel() + 10)
                 if S and S.HandleButton then S:HandleButton(btn) end
                 b[k] = btn
             end
