@@ -84,10 +84,17 @@ function A.Entries(group)
             if idb and idb.enabled and idb.spellID and idb.customGroup == group.id and not idb.totemTimer then
                 local spells = (ns.SpecialAura and ns.SpecialAura.ExpandSpellIDs
                     and ns.SpecialAura.ExpandSpellIDs(idb.spellID)) or { [idb.spellID] = true }
+                local rank = siSpec * 100000 + (idb.customGroupOrder or 20000)
                 out[#out + 1] = {
                     key = ("TUIAura%d_si_%s"):format(group.id or 0, ikey),
                     def = { spells = spells, max = 1, iconDB = idb },
-                    rank = siSpec * 100000 + (idb.customGroupOrder or 20000),
+                    rank = rank,
+                }
+                out[#out + 1] = {
+                    key = ("TUIAura%d_siT_%s"):format(group.id or 0, ikey),
+                    def = { spells = spells, max = 1, iconDB = idb, kind = "HARMFUL", unit = "target",
+                        previewSkip = true },
+                    rank = rank + 1,
                 }
             end
         end

@@ -136,8 +136,16 @@ local function TimerTab(t, id, order, Rebuild)
             set = function(_, v) t.showIdle = v; T.Update() end,
         },
 
+        styleNote = {
+            order = 12.9, type = "description", fontSize = "medium", width = "full",
+            hidden = function() return not t.styleName end,
+            name = function()
+                return "|cffCBA0FFGlow comes from style:|r |cffFFFFFF" .. (t.styleName or "") .. "|r"
+            end,
+        },
         glowGroup = {
             order = 13, type = "group", inline = true, name = "Glow",
+            hidden = function() return t.styleName ~= nil end,
             args = {
                 showGlow = {
                     order = 1, type = "toggle", width = 1.0,

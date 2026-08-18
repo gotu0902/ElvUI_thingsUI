@@ -909,7 +909,7 @@ function TUI:CustomGroupsOptions()
 
                         box["r" .. i .. "_bstyle"] = {
                             order = base + 4.5, type = "select", name = "", width = 1.2,
-                            hidden = function() local e = entry(); return not (e and e.kind == "aura") end,
+                            hidden = function() local e = entry(); return not (e and (e.kind == "aura" or e.kind == "timer")) end,
                             values = function()
                                 local SBm = ns.SpecialBars
                                 return (SBm and SBm.Styles and SBm.Styles.DropdownValues("icons", "|cFF888888- No Style -|r")) or {}
@@ -918,10 +918,23 @@ function TUI:CustomGroupsOptions()
                                 local SBm = ns.SpecialBars
                                 return (SBm and SBm.Styles and SBm.Styles.DropdownSorting("icons", true)) or {}
                             end,
-                            get = function() local e = entry(); return (e and e.def and e.def.styleName) or "" end,
+                            get = function()
+                                local e = entry(); if not e then return "" end
+                                if e.kind == "timer" then
+                                    local t = ns.Timers and ns.Timers.GetByID(e.id)
+                                    return (t and t.styleName) or ""
+                                end
+                                return (e.def and e.def.styleName) or ""
+                            end,
                             set = function(_, v)
-                                local e = entry(); if not (e and e.def) then return end
-                                e.def.styleName = (v ~= "") and v or nil
+                                local e = entry(); if not e then return end
+                                v = (v ~= "") and v or nil
+                                if e.kind == "timer" then
+                                    local t = ns.Timers and ns.Timers.GetByID(e.id)
+                                    if t then t.styleName = v; ns.Timers.Update() end
+                                elseif e.def then
+                                    e.def.styleName = v
+                                end
                                 TUI:UpdateCustomGroups()
                             end,
                         }
@@ -1301,6 +1314,15 @@ function TUI:CustomGroupsOptions()
                         TUI:UpdateCustomGroups()
                         if CG._rebuildOptions then CG._rebuildOptions() end
                         NotifyChange()
+                    end,
+                },
+                centeredLaneWarn = {
+                    order = 0.9, type = "description", fontSize = "medium", width = "full",
+                    name = "|cFFFF6060Buffs/debuffs can't auto-center with Centered growth - Blizzard's aura layout only grows from a corner, so live icons won't recenter like the preview does.|r",
+                    hidden = function()
+                        local g = group.growth or ""
+                        if not g:find("CENTERED") then return true end
+                        return not (ns.AuraLane and ns.AuraLane.HasSets and ns.AuraLane.HasSets(group))
                     end,
                 },
                 gname = {

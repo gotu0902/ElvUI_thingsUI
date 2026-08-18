@@ -407,19 +407,44 @@ local function UpdateTrinketIcon(btn)
     UpdateItemIcon(btn, false)
 end
 
+local function FindTotemIconDB(sid, groupID)
+    local SBm = ns.SpecialBars
+    if not (SBm and SBm.GetIconCount and SBm.GetIconDB) then return nil end
+    for i = 1, SBm.GetIconCount() do
+        local idb = SBm.GetIconDB("icon" .. i)
+        if idb and idb.totemTimer and idb.spellID == sid and idb.customGroup == groupID then
+            return idb
+        end
+    end
+end
+
 local function UpdateTotemIcon(btn)
     local sid = btn._id
+    local idb = FindTotemIconDB(sid, btn._group and btn._group.id)
     if btn.icon then
         local tex = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)
         if tex then btn.icon:SetTexture(tex) end
     end
     local start, dur
     if ns.Timers and ns.Timers.GetTotemState then start, dur = ns.Timers.GetTotemState(sid) end
+    if not start and M.testMode then start, dur = GetTime() - 8, 30 end
     if btn.cooldown then
         if btn.cooldown.SetReverse then btn.cooldown:SetReverse(false) end
+        if btn.cooldown.SetHideCountdownNumbers then
+            btn.cooldown:SetHideCountdownNumbers((idb and idb.showDuration == false) and true or false)
+        end
         if start then btn.cooldown:SetCooldown(start, dur) else btn.cooldown:Clear() end
     end
     if btn.count then btn.count:SetText("") end
+    local AL = ns.AuraLane
+    if AL and AL.ApplyButtonFX then
+        local r = btn._tuiFX
+        if not r then r = {}; btn._tuiFX = r end
+        local fx = (idb and AL.GlowOptsFor and AL.GlowOptsFor(nil, { iconDB = idb })) or {}
+        fx.w = btn:GetWidth() or 36
+        fx.h = btn:GetHeight() or 36
+        AL.ApplyButtonFX(btn, r, fx)
+    end
 end
 
 local function UpdateIcon(btn)
@@ -617,7 +642,7 @@ local function RenderTestLane(gs, group, frame)
     for ei, entry in ipairs(entries) do
         local sl = ns.AuraLane.SpellListUnique(entry.def)
         lists[ei] = sl
-        local n = math.max(1, entry.def.max or 1)
+        local n = entry.def.previewSkip and 0 or math.max(1, entry.def.max or 1)
         if #sl > 1 then n = math.min(n, #sl) end
         if remaining then
             n = math.min(n, remaining)

@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.1.6
+- Fixed player power bar detached on FHT import
+- Export moved to it's own tab
+- Config layout stuff
+- Alt popup tweaks
+- Totem icons should show style glow and timer preview
+- Timers can also use styles
+- NHT plugin update: Added more classes to groups
+
 ## 4.1.5
 - Skinned mini meter: 
 - - always show player
