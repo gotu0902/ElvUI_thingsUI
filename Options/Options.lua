@@ -126,7 +126,7 @@ function TUI.ConfigTable()
             classbar     = WithSentinel(withOrder(Colorize(TUI:ClassbarModeOptions(), "6FB7FF"), 5), "classbar"),
             customGroups = WithSentinel(withOrder(Colorize(TUI:CustomGroupsOptions(), "F20553"), 6), "customGroups"),
             customBars   = WithSentinel(withOrder(Colorize(TUI:CustomBarsOptions(), "F27D2A"), 6.2), "customBars"),
-            damageMeter  = WithSentinel(withOrder(Colorize(TUI:DamageMeterOptions(),  "FF5C5C"), 6.5), "damageMeter"),
+            damageMeter  = WithSentinel(withOrder(Colorize(TUI:DamageMeterOptions(),  "FF5C5C"), 5.5), "damageMeter"),
             specialBars  = WithSentinel(withOrder(Colorize(TUI:SpecialBarsOptions(),  "80FF80"), 7), "specialBars"),
             specialIcons = WithSentinel(withOrder(Colorize(TUI:SpecialIconsOptions(), "FF80C0"), 8), "specialIcons"),
             timers       = WithSentinel(withOrder(Colorize(TUI:TimersOptions(),       "FFC04D"), 9), "timers"),
