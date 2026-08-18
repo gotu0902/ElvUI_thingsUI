@@ -3,7 +3,7 @@ local E, L, V, P, G = unpack(ElvUI)
 P["thingsUI"] = P["thingsUI"] or {}
 
 P["thingsUI"].barSetup = {
-    enabled = true,
+    enabled = false,
     active = 1,
     setups = {},
 }
