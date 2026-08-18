@@ -81,7 +81,7 @@ function A.Entries(group)
         for i = 1, SB.GetIconCount() do
             local ikey = "icon" .. i
             local idb = SB.GetIconDB(ikey)
-            if idb and idb.enabled and idb.spellID and idb.customGroup == group.id then
+            if idb and idb.enabled and idb.spellID and idb.customGroup == group.id and not idb.totemTimer then
                 local spells = (ns.SpecialAura and ns.SpecialAura.ExpandSpellIDs
                     and ns.SpecialAura.ExpandSpellIDs(idb.spellID)) or { [idb.spellID] = true }
                 out[#out + 1] = {
