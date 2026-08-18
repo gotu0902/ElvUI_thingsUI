@@ -597,6 +597,8 @@ function M.Open()
     f:SetLayout("Fill")
     f:SetCallback("OnClose", function(w)
         Store()[CharKey()] = true
+        local b = w.frame and w.frame._tuiAltButtons
+        if b then b.apply:Hide(); b.skip:Hide() end
         AceGUI:Release(w)
         if frame == w then frame = nil end
     end)
@@ -604,6 +606,31 @@ function M.Open()
     local scroll = AceGUI:Create("ScrollFrame")
     scroll:SetLayout("Flow")
     f:AddChild(scroll)
+
+    -- recycled AceGUI frame keeps children, guard + rewire
+    do
+        local raw = f.frame
+        local b = raw._tuiAltButtons
+        if not b then
+            b = {}
+            local S = E.GetModule and E:GetModule("Skins", true)
+            for _, k in ipairs({ "apply", "skip" }) do
+                local btn = CreateFrame("Button", nil, raw, "UIPanelButtonTemplate")
+                btn:SetSize(100, 20)
+                if S and S.HandleButton then S:HandleButton(btn) end
+                b[k] = btn
+            end
+            b.apply:SetPoint("BOTTOMRIGHT", raw, "BOTTOMRIGHT", -227, 17)
+            b.skip:SetPoint("BOTTOMRIGHT", raw, "BOTTOMRIGHT", -127, 17)
+            b.apply:SetText("|cFF40FF40Apply|r")
+            b.skip:SetText("|cFFFFD200Skip|r")
+            raw._tuiAltButtons = b
+        end
+        b.apply:SetScript("OnClick", function() M.Apply(sel, emSel, emSpec) end)
+        b.skip:SetScript("OnClick", function() f:Hide() end)
+        b.apply:Show()
+        b.skip:Show()
+    end
 
     local function Add(c, wtype, setup)
         local w = AceGUI:Create(wtype)
@@ -964,16 +991,6 @@ function M.Open()
         end
 
         Add(scroll, "Label", function(w) w:SetFullWidth(true); w:SetText("\n") end)
-        Add(scroll, "Button", function(w)
-            w:SetText("Apply")
-            w:SetRelativeWidth(0.5)
-            w:SetCallback("OnClick", function() M.Apply(sel, emSel, emSpec) end)
-        end)
-        Add(scroll, "Button", function(w)
-            w:SetText("Skip")
-            w:SetRelativeWidth(0.5)
-            w:SetCallback("OnClick", function() f:Hide() end)
-        end)
     end
 
     render()
