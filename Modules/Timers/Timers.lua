@@ -124,6 +124,7 @@ end
 
 local function ParseDurationFromText(text)
     if type(text) ~= "string" then return end
+    if issecretvalue and issecretvalue(text) then return end
     local lower = text:lower()
     local best
     for n, unit in lower:gmatch("for%s+(%d+%.?%d*)%s*(%a+)") do
