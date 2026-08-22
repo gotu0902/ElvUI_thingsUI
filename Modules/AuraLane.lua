@@ -206,6 +206,7 @@ local function Font(name, size, outline)
 end
 
 local function StyleButton(button, group, lane)
+    if button:IsForbidden() then return end
     local S = lane.slot
     if not S then return end
     ns.Pixel.SetSize(button, S.iw, S.ih)

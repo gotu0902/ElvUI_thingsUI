@@ -258,6 +258,7 @@ function M.FirstSpell(def)
 end
 
 local function StyleBar(button, r, group, def)
+    if button:IsForbidden() then return end
     local st = state[group.id]
     local sp = group.spacing or 2
     local w = (st and st.effW) or group.width or 220

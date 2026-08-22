@@ -248,6 +248,7 @@ local function OnChildRebound(child, cooldownID)
     else
         QueuePassiveRebuild()
     end
+    QueueLayout(child._tuiViewer)
 end
 
 local function SortByCooldownID(children)
