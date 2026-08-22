@@ -50,6 +50,7 @@ local hookedChildren = {}
 local applyingChild  = {}
 local pendingViewers = {}
 local passiveHidden  = {}
+local verdictByID    = {}
 local passiveDirty   = false
 local pendingFrame   = CreateFrame("Frame")
 local QueueLayout
@@ -210,6 +211,8 @@ local function RebuildPassiveCache()
                         end
                     end
                     if hide ~= nil then
+                        local cid = PlainID(c:GetCooldownID())
+                        if cid then verdictByID[cid] = hide end
                         if (passiveHidden[c] and true or false) ~= hide then changed = true end
                         ApplyPassiveState(c, hide)
                     end
@@ -235,6 +238,17 @@ end
 
 function M.IsPassiveHidden(child) return passiveHidden[child] == true end
 M.QueuePassiveRebuild = function() QueuePassiveRebuild() end
+
+local function OnChildRebound(child, cooldownID)
+    if child._tuiCdID == cooldownID then return end
+    child._tuiCdID = cooldownID
+    local v = verdictByID[cooldownID]
+    if v ~= nil then
+        ApplyPassiveState(child, v)
+    else
+        QueuePassiveRebuild()
+    end
+end
 
 local function SortByCooldownID(children)
     table.sort(children, function(a, b)
@@ -482,6 +496,10 @@ local function HookChild(child, viewer)
     ClearPandemic(child)
     if type(child.ShowPandemicStateFrame) == "function" then
         hooksecurefunc(child, "ShowPandemicStateFrame", ClearPandemic)
+    end
+    if type(child.SetCooldownID) == "function" then
+        child._tuiCdID = child:GetCooldownID()
+        hooksecurefunc(child, "SetCooldownID", OnChildRebound)
     end
 
     hooksecurefunc(child, "SetPoint",        ReapplyChildAnchor)
