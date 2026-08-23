@@ -260,6 +260,7 @@ local function IsSpecialBarAvailable(key)
     if not SB or not SB.GetBarDB then return false end
     local bdb = SB.GetBarDB(slotKey)
     if type(bdb) ~= "table" then return false end
+    if bdb.customGroup ~= nil then return false end
     return (bdb.enabled == true) and (bdb.spellID ~= nil)
 end
 M.IsSpecialBarAvailable = IsSpecialBarAvailable

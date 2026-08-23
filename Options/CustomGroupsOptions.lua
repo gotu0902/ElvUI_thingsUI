@@ -709,27 +709,26 @@ function TUI:CustomGroupsOptions()
             addSpecialIcon = {
                 order = 13, type = "select", name = "|cFFFF80C0Add Special Icon|r", width = "double",   -- special icons = pink
                 hidden = function()
-                    if scope ~= "spec" or getKey() ~= curSpecID() then return true end
+                    if scope ~= "spec" then return true end
                     local SB = ns.SpecialBars
-                    if not SB then return true end
-                    for i = 1, (SB.GetIconCount and SB.GetIconCount() or 0) do
-                        local idb = SB.GetIconDB and SB.GetIconDB("icon" .. i)
-                        if idb and idb.enabled and idb.spellID then return false end
+                    if not (SB and SB.GetSpecRoot) then return true end
+                    local root = SB.GetSpecRoot(getKey())
+                    for _, idb in pairs((root and root.icons) or {}) do
+                        if type(idb) == "table" and idb.enabled and idb.spellID then return false end
                     end
                     return true
                 end,
                 values = function()
                     local v, SB = {}, ns.SpecialBars
-                    if SB then
-                        for i = 1, (SB.GetIconCount and SB.GetIconCount() or 0) do
-                            local ikey = "icon" .. i
-                            local idb = SB.GetIconDB and SB.GetIconDB(ikey)
-                            if idb and idb.enabled and idb.spellID then
-                                local nm = (C_Spell.GetSpellName and C_Spell.GetSpellName(idb.spellID)) or ("Spell " .. tostring(idb.spellID))
-                                local where = (idb.customGroup == group.id) and "  |cFF888888(here)|r"
-                                    or (idb.customGroup and ns.CustomGroups.GroupByID(idb.customGroup) and "  |cFFFF8040(in another group)|r") or ""
-                                v[ikey] = ("|T%d:16:16|t %s%s"):format((C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(idb.spellID)) or 134400, nm, where)
-                            end
+                    local root = SB and SB.GetSpecRoot and SB.GetSpecRoot(getKey())
+                    for i = 1, (root and (root.iconCount or 3)) or 0 do
+                        local ikey = "icon" .. i
+                        local idb = root.icons and root.icons[ikey]
+                        if type(idb) == "table" and idb.enabled and idb.spellID then
+                            local nm = (C_Spell.GetSpellName and C_Spell.GetSpellName(idb.spellID)) or ("Spell " .. tostring(idb.spellID))
+                            local where = (idb.customGroup == group.id) and "  |cFF888888(here)|r"
+                                or (idb.customGroup and ns.CustomGroups.GroupByID(idb.customGroup) and "  |cFFFF8040(in another group)|r") or ""
+                            v[ikey] = ("|T%d:16:16|t %s%s"):format((C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(idb.spellID)) or 134400, nm, where)
                         end
                     end
                     return v
@@ -737,10 +736,10 @@ function TUI:CustomGroupsOptions()
                 get = function() return "" end,
                 set = function(_, v)
                     local SB = ns.SpecialBars
-                    local idb = SB and SB.GetIconDB and SB.GetIconDB(v)
+                    local idb = SB and SB.GetIconDB and SB.GetIconDB(v, getKey())
                     if idb then
                         idb.customGroup = group.id
-                        if SB.ReleaseIcon then SB.ReleaseIcon(v) end
+                        if getKey() == curSpecID() and SB.ReleaseIcon then SB.ReleaseIcon(v) end
                         TUI:UpdateSpecialBars(); TUI:UpdateCustomGroups(); NotifyChange()
                     end
                 end,
@@ -748,27 +747,28 @@ function TUI:CustomGroupsOptions()
             newSpecialIcon = {
                 order = 13.5, type = "select", name = "|cFFFF80C0New Special Icon (from spell)|r", width = "double",
                 hidden = function()
-                    return scope ~= "spec" or getKey() ~= curSpecID() or not ns.SpecialBars
+                    return scope ~= "spec" or not ns.SpecialBars
                 end,
                 values = function()
-                    return (ns.SB_SpellChoices and ns.SB_SpellChoices(nil, false)) or {}
+                    return (ns.SB_SpellChoices and ns.SB_SpellChoices(nil, false, getKey())) or {}
                 end,
                 sorting = function()
-                    return ns.SB_SpellChoicesSorting and ns.SB_SpellChoicesSorting() or nil
+                    return ns.SB_SpellChoicesSorting and ns.SB_SpellChoicesSorting(getKey()) or nil
                 end,
                 get = function() return "" end,
                 set = function(_, v)
                     local SB = ns.SpecialBars
                     local id = tonumber(v)
                     if not (SB and id and SB.GetSpecRoot and SB.GetIconDB) then return end
-                    local usage = SB.GetSpellUsageInfo and SB.GetSpellUsageInfo(id)
+                    local es = getKey()
+                    local usage = SB.GetSpellUsageInfo and SB.GetSpellUsageInfo(id, nil, nil, es)
                     if usage then E:Print("This spell is already used by " .. usage .. "!") return end
-                    local s = SB.GetSpecRoot()
+                    local s = SB.GetSpecRoot(es)
                     local c = s.iconCount or 3
                     if c >= (SB.MAX_SLOTS or 12) then E:Print(("All %d Special Icon slots are in use on this spec."):format(SB.MAX_SLOTS or 12)) return end
     if ns.SB_RebuildSlotPages then C_Timer.After(0, ns.SB_RebuildSlotPages) end
                     s.iconCount = c + 1
-                    local idb = SB.GetIconDB("icon" .. (c + 1))
+                    local idb = SB.GetIconDB("icon" .. (c + 1), es)
                     if SB.Styles and SB.Styles.ApplyToDB then
                         SB.Styles.ApplyToDB("icons", SB.Styles.EffectiveDefault("icons"), idb)
                     end

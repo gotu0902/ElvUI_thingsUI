@@ -6,7 +6,9 @@ local LSM   = ns.LSM
 local SB = ns.SpecialBars
 
 local forceCurrentSpec = false
+local forceSpecID
 local function ESpec()
+    if forceSpecID then return forceSpecID end
     if forceCurrentSpec then return nil end
     return SB.EditingSpec and SB.EditingSpec() or nil
 end
@@ -263,15 +265,19 @@ local function GetSortedKeys()
     return keys
 end
 
-function ns.SB_SpellChoices(currentKey, isBar)
-    forceCurrentSpec = true
+function ns.SB_SpellChoices(currentKey, isBar, specID)
+    forceSpecID = tonumber(specID)
+    forceCurrentSpec = not forceSpecID
     local res = GetChoicesTable(currentKey, isBar)
+    forceSpecID = nil
     forceCurrentSpec = false
     return res
 end
-function ns.SB_SpellChoicesSorting()
-    forceCurrentSpec = true
+function ns.SB_SpellChoicesSorting(specID)
+    forceSpecID = tonumber(specID)
+    forceCurrentSpec = not forceSpecID
     local res = GetSortedKeys()
+    forceSpecID = nil
     forceCurrentSpec = false
     return res
 end
@@ -713,6 +719,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
 
     local function IsInBarSetup()
         if styleMode then return false end
+        if db().customGroup ~= nil then return false end
         local bs = ns.BarSetup
         if not bs or not bs.GetActiveSetup then return false end
         local setup = bs.GetActiveSetup()
@@ -797,16 +804,37 @@ function TUI:SpecialBarOptions(barKey, ctx)
             QueueUpdate()
         end,
     }
+    local function BarSetupUsesBar()
+        local bsdb = E.db.thingsUI and E.db.thingsUI.barSetup
+        if not (bsdb and bsdb.enabled and bsdb.setups) then return false end
+        local specID = ESpec() or CurSpecID()
+        local setup
+        if specID and specID ~= 0 then
+            for _, s in ipairs(bsdb.setups) do
+                if s.specs and s.specs[specID] then setup = s break end
+            end
+        end
+        setup = setup or bsdb.setups[bsdb.active] or bsdb.setups[1]
+        local b = setup and setup.bars and setup.bars["special:" .. barKey]
+        return (b and b.enabled) and true or false
+    end
     commonArgs.customGroup = {
-        order = 3.5, type = "select", name = "|cFFF27D2ABar Group|r",
+        order = 3.5, type = "select", name = "|cFFF27D2AShow In|r",
         hidden = function()
             if not db().spellID then return true end
-            if IsInBarSetup() then return true end
             local CBm = ns.CustomBars
-            return not (CBm and CBm.GetGroups and #CBm.GetGroups() > 0)
+            local hasGroups = CBm and CBm.GetGroups and #CBm.GetGroups() > 0
+            return not (hasGroups or BarSetupUsesBar())
         end,
         values = function()
-            local out = { [0] = "|cFF888888Standalone|r" }
+            local out = {}
+            if BarSetupUsesBar() then
+                out[0] = "|cFFFFD200Bar Setup|r"
+                out[-1] = "Standalone"
+            else
+                out[0] = "Standalone"
+            end
+            if db().customGroup == -1 and not out[-1] then out[-1] = "Standalone" end
             for _, g in ipairs((ns.CustomBars and ns.CustomBars.GetGroups and ns.CustomBars.GetGroups()) or {}) do
                 out[g.id] = g.name or ("Bar Group " .. g.id)
             end
@@ -814,6 +842,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
         end,
         sorting = function()
             local out = { 0 }
+            if BarSetupUsesBar() or db().customGroup == -1 then out[#out + 1] = -1 end
             local groups = (ns.CustomBars and ns.CustomBars.GetGroups and ns.CustomBars.GetGroups()) or {}
             local ids = {}
             for _, g in ipairs(groups) do ids[#ids + 1] = g.id end
@@ -831,6 +860,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
             if not ESpec() then SB.ReleaseBar(barKey) end
             QueueUpdate()
             if TUI.QueueCustomBarsUpdate then TUI:QueueCustomBarsUpdate() end
+            if ns.BarSetup and ns.BarSetup.ApplyStack then ns.BarSetup.ApplyStack() end
             NotifyChange()
         end,
     }
