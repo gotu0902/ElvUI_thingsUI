@@ -313,6 +313,7 @@ local function OpenCopyPicker(kind, onlySpecStr, destSpec)
         title = ("Copy %s from..."):format(kind:gsub("^%l", string.upper)),
         tree  = tree,
         width = 480, height = 560,
+        classFilter = true,
         onSelect = function(leafID, leaf)
             ShowChoicePopup(kind, leaf and leaf.label, leafID, destSpec)
         end,
