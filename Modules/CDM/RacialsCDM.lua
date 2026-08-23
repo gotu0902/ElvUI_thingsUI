@@ -78,44 +78,13 @@ local function IsRacialSpell(sid)
     return sid and racialSet[sid] or false
 end
 
-local function PlainID(v)
-    if issecretvalue and issecretvalue(v) then return nil end
-    return v
-end
-
--- racials shown natively in CDM keep their CDM position
-local nativeIn = {}
-local function CollectNative()
-    if InCombatLockdown() then return end
-    if not (C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCategorySet
-        and C_CooldownViewer.GetCooldownViewerCooldownInfo) then return end
-    wipe(nativeIn)
-    local cats = {
-        essential = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.Essential,
-        utility   = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.Utility,
-    }
-    for key, cat in pairs(cats) do
-        if cat then
-            local ids = C_CooldownViewer.GetCooldownViewerCategorySet(cat, false)
-            for _, cdID in ipairs(ids or {}) do
-                local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
-                local sid = info and (PlainID(info.overrideSpellID) or PlainID(info.spellID))
-                if sid and IsRacialSpell(sid) then nativeIn[sid] = key end
-            end
-        end
-    end
-end
-
-function M.NativeViewer(sid) return nativeIn[sid] end
-
 function M.ShouldHideNativeSpell(sid)
     if not IsRacialSpell(sid) then return false end
     local db = DB()
     if not db then return false end
     if db.customGroupsOnly then return true end
     local d = db.dest and db.dest[sid]
-    if not (d and d ~= "off") then return false end
-    return not nativeIn[sid]
+    return (d and d ~= "off") and true or false
 end
 
 function M.RefreshCooldowns()
@@ -125,19 +94,8 @@ function M.RefreshCooldowns()
     end
 end
 
-local cvsHooked = false
-local function HookCVS()
-    if cvsHooked then return end
-    local cvs = _G.CooldownViewerSettings
-    if not (cvs and cvs.HookScript) then return end
-    cvsHooked = true
-    cvs:HookScript("OnHide", function() C_Timer.After(0.1, M.Refresh) end)
-end
-
 function M.Refresh()
     if not (ns.TimersRender and DB()) then return end
-    HookCVS()
-    CollectNative()
     wipe(listFor.essential)
     wipe(listFor.utility)
     local db = DB()
@@ -146,9 +104,7 @@ function M.Refresh()
 
     for _, spellID in ipairs(ns.Racials or {}) do
         local d = dest[spellID]
-        local active = not db.customGroupsOnly and d and d ~= "off" and HasRacial(spellID)
-        local nat = active and nativeIn[spellID] or nil
-        if active and not nat then
+        if not db.customGroupsOnly and d and d ~= "off" and HasRacial(spellID) then
             local key = (d == "dynamic") and ResolveDynamic() or d
             local list = listFor[key]
             if list then
@@ -163,7 +119,6 @@ function M.Refresh()
         else
             local btn = buttons[spellID]
             if btn then btn:Hide(); btn.layoutIndex = nil end
-            if nat then sig[#sig + 1] = "nat" .. nat .. ":" .. spellID end
         end
     end
     if db.customGroupsOnly then sig[#sig + 1] = "cgonly" end

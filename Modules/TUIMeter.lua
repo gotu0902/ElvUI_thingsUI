@@ -111,6 +111,8 @@ local frozenCur, frozenOverall = 0, 0
 local combatStart
 local lastFightStart = 0
 local lastFightStartWall = 0
+local fightBase = 0
+local fightLog = {}
 local lastCombatEnd = 0
 local liveSessionID, pinnedSession
 local fightOn = false
@@ -360,14 +362,32 @@ local function RecapEvents(id)
     return events
 end
 
-local function DeathClockText(src)
+local function DeathClockText(src, overall)
     local events = RecapEvents(src and (src.deathRecapID or src.recapID))
     local ts = events and events[1] and events[1].timestamp
     if Secret(ts) or type(ts) ~= "number" then return "" end
+    if overall then
+        if lastFightStartWall > 0 and ts >= lastFightStartWall - 1 and ts - lastFightStartWall <= 7200 then
+            return Clock(math.max(0, fightBase + (ts - lastFightStartWall)))
+        end
+        for i = #fightLog, 1, -1 do
+            local f = fightLog[i]
+            if ts >= f.sw - 1 and ts <= f.ew + 1 then
+                return Clock(math.max(0, f.base + (ts - f.sw)))
+            end
+        end
+        return ""
+    end
     for _, base in ipairs({ lastFightStart, lastFightStartWall }) do
         local rel = ts - base
         if base > 0 and rel >= -1 and rel <= 7200 then
             return Clock(math.max(0, rel))
+        end
+    end
+    for i = #fightLog, 1, -1 do
+        local f = fightLog[i]
+        if ts >= f.sw - 1 and ts <= f.ew + 1 then
+            return Clock(math.max(0, ts - f.sw))
         end
     end
     return ""
@@ -702,7 +722,7 @@ local function UpdateRow(win, i, rank, src, maxAmt, db)
         perSec = src.totalAmount / win._psDiv
     end
     if deathsRow then
-        row.amount:SetText(DeathClockText(src))
+        row.amount:SetText(DeathClockText(src, win.cfg and win.cfg.session == "overall"))
     elseif src._recapText then
         row.amount:SetText(src._recapText)
     else
@@ -839,7 +859,7 @@ RefreshWindow = function(win)
         local dn = win.drill.name
         local t = (not Secret(dn) and dn and NickFor(dn)) or dn or ""
         if win.drill.recapID then
-            local c = DeathClockText(win.drill)
+            local c = DeathClockText(win.drill, win.cfg and win.cfg.session == "overall")
             if c ~= "" then t = t .. "  |cFF808080" .. c .. "|r" end
         end
         local si = win.drill.specIconID
@@ -981,7 +1001,7 @@ ShowRowTooltip = function(win, row)
         title = RAID_CLASS_COLORS[d.classFile]:WrapTextInColorCode(title)
     end
     if deaths then
-        local c = DeathClockText(src)
+        local c = DeathClockText(src, win.cfg and win.cfg.session == "overall")
         if c ~= "" then title = title .. "  |cFF808080" .. c .. "|r" end
     end
     tip.title:SetText(title)
@@ -1092,6 +1112,9 @@ local function EnsurePopout()
         else popout.offset = (popout.offset or 0) + 1 end
         RenderPopout()
     end)
+    popout:RegisterForDrag("LeftButton")
+    popout:SetScript("OnDragStart", function() popout:StartMoving() end)
+    popout:SetScript("OnDragStop", function() popout:StopMovingOrSizing() end)
     popout.rows = {}
 
     local header = CreateFrame("Button", nil, popout)
@@ -1119,6 +1142,21 @@ local function PopoutRow(i)
     local p = popout
     if p.rows[i] then return p.rows[i] end
     local row = CreateFrame("Frame", nil, p)
+    row:EnableMouse(true)
+    row:RegisterForDrag("LeftButton")
+    row:SetScript("OnDragStart", function() popout:StartMoving() end)
+    row:SetScript("OnDragStop", function() popout:StopMovingOrSizing() end)
+    row:SetScript("OnMouseUp", function(_, btn)
+        if btn == "RightButton" then popout:Hide() end
+    end)
+    row:SetScript("OnEnter", function(self)
+        local sid = self._ttSpell
+        if not (sid and C_Spell.DoesSpellExist and C_Spell.DoesSpellExist(sid)) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetSpellByID(sid)
+        GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
     row.bg = row:CreateTexture(nil, "BACKGROUND")
     row.bg:SetAllPoints(row)
     row.fill = CreateFrame("StatusBar", nil, row)
@@ -1202,6 +1240,8 @@ local function RenderRecapPopout(p, db, ctx)
 
         row.amount:SetText(at)
         row._src = nil
+        local esid = ev.spellId
+        row._ttSpell = (not Secret(esid) and type(esid) == "number" and esid > 0) and esid or nil
     end
 
     for i = shown + 1, #p.rows do p.rows[i]:Hide() end
@@ -1231,9 +1271,16 @@ RenderPopout = function()
     local total = #spells
     local rowH = math.max(20, math.floor((db.barHeight or 20) + 0.5))
     local maxRows = math.max(4, math.floor(((E.UIParent:GetHeight() or 800) * 0.6) / (rowH + 1)))
-    local offMax = math.max(0, total - maxRows)
-    if (p.offset or 0) > offMax then p.offset = offMax end
-    local first = 1 + (p.offset or 0)
+    local T = Enum.DamageMeterType
+    local isDamage = T and (ctx.type == T.DamageDone or ctx.type == T.Dps) or (ctx.type or 0) == 0
+    local targets = (isDamage and not InCombatLockdown()) and PlayerTargets(ctx) or nil
+    if targets and #targets == 0 then targets = nil end
+    local spellMax = math.max(0, total - maxRows)
+    local tExtra = targets and math.max(0, #targets - 10) or 0
+    if (p.offset or 0) > spellMax + tExtra then p.offset = spellMax + tExtra end
+    local spellOff = math.min(p.offset or 0, spellMax)
+    local tOff = (p.offset or 0) - spellOff
+    local first = 1 + spellOff
     local font = (LSM and LSM:Fetch("font", db.font or "Expressway")) or STANDARD_TEXT_FONT
     local flag = (db.fontOutline ~= "NONE") and (db.fontOutline or "OUTLINE") or ""
     local tex = (db.barTexture and db.barTexture ~= "" and LSM) and LSM:Fetch("statusbar", db.barTexture) or [[Interface\Buttons\WHITE8x8]]
@@ -1264,6 +1311,8 @@ RenderPopout = function()
         row.label:SetFont(font, db.fontSize or 12, flag)
         row.amount:SetFont(font, db.valueFontSize or 12, flag)
         local nm, icon, cf = SpellDisplay(sp, ctx.drill)
+        local tsid = sp.spellID
+        row._ttSpell = (not Secret(tsid) and type(tsid) == "number" and tsid > 0) and tsid or nil
         row.icon:SetWidth(rowH)
         if icon and icon ~= 0 then
             row.icon:SetTexture(icon)
@@ -1303,11 +1352,7 @@ RenderPopout = function()
         row.amount:SetText(vt)
     end
 
-    local T = Enum.DamageMeterType
-    local isDamage = T and (ctx.type == T.DamageDone or ctx.type == T.Dps) or (ctx.type or 0) == 0
-    if isDamage and not InCombatLockdown() then
-        local targets = PlayerTargets(ctx)
-        if targets and #targets > 0 then
+    if targets then
             shown = shown + 1
             local hr = PopoutRow(shown)
             hr:Show()
@@ -1327,8 +1372,9 @@ RenderPopout = function()
             hr.pos:SetText("")
             hr.label:SetText("|cFF808080Targets|r")
             hr.amount:SetText("")
+            hr._ttSpell = nil
             local tMax = targets[1].amount
-            for ti = 1, #targets do
+            for ti = 1 + tOff, math.min(#targets, tOff + 10) do
                 local tg = targets[ti]
                 shown = shown + 1
                 local row = PopoutRow(shown)
@@ -1358,8 +1404,8 @@ RenderPopout = function()
                     vt = vt .. ("  |cFF808080%.1f%%|r"):format(tg.amount / pTotal * 100)
                 end
                 row.amount:SetText(vt)
+                row._ttSpell = nil
             end
-        end
     end
 
     for i = shown + 1, #p.rows do p.rows[i]:Hide() end
@@ -1984,16 +2030,27 @@ ev:RegisterEvent("PLAYER_ENTERING_WORLD")
 local COMBAT_EVENTS = {
     "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ENCOUNTER_START", "ENCOUNTER_END",
     "DAMAGE_METER_RESET", "DAMAGE_METER_COMBAT_SESSION_UPDATED", "DAMAGE_METER_CURRENT_SESSION_UPDATED",
+    "CHALLENGE_MODE_START",
 }
 
 local encounterActive = false
+local lastInstMap
 local settleAt = 0
+local function BeginFightClock()
+    combatStart = GetTime()
+    lastFightStart = combatStart; lastFightStartWall = time()
+    fightBase = frozenOverall or 0
+end
 local function EndFight()
     fightOn = false
     lastCombatEnd = GetTime()
     if combatStart then
         frozenOverall = (frozenOverall or 0) + (GetTime() - combatStart)
         frozenCur = GetTime() - combatStart
+        if lastFightStartWall > 0 then
+            fightLog[#fightLog + 1] = { sw = lastFightStartWall, ew = time(), base = fightBase }
+            if #fightLog > 200 then table.remove(fightLog, 1) end
+        end
     end
     combatStart = nil
     StopTicker()
@@ -2029,8 +2086,7 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
         frozenCur = 0
         liveSessionID, pinnedSession = nil, nil
         if InCombatLockdown() and not combatStart then
-            combatStart = GetTime()
-            lastFightStart = combatStart; lastFightStartWall = time()
+            BeginFightClock()
         end
         lastEventPaint = 0
         StartTicker()
@@ -2042,8 +2098,7 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
         if fightOn and combatStart then
             fightOn = false
         else
-            combatStart = GetTime()
-            lastFightStart = combatStart; lastFightStartWall = time()
+            BeginFightClock()
             frozenCur = 0
             liveSessionID, pinnedSession = nil, nil
         end
@@ -2060,8 +2115,7 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
         if InFight() then
             frozenCur = 0
             if not combatStart then
-                combatStart = GetTime()
-                lastFightStart = combatStart; lastFightStartWall = time()
+                BeginFightClock()
             end
             if fightOn and not InCombatLockdown() then ScheduleSettle() end
             QueueRefresh()
@@ -2071,6 +2125,8 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
         end
     elseif event == "DAMAGE_METER_RESET" then
         frozenCur, frozenOverall = 0, 0
+        fightBase = 0
+        wipe(fightLog)
         liveSessionID, pinnedSession = nil, nil
         QueueRefresh()
     elseif event == "DAMAGE_METER_COMBAT_SESSION_UPDATED" then
@@ -2086,7 +2142,20 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
         elseif (GetTime() - lastCombatEnd) < 3 then
             QueueRefresh()
         end
-    else
+    elseif event == "CHALLENGE_MODE_START" then
+        local db = TDB()
+        if db and db.resetOnNewInstance ~= false and C_DamageMeter.ResetAllCombatSessions then
+            C_DamageMeter.ResetAllCombatSessions()
+        end
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        local inInst = IsInInstance()
+        local mapID = inInst and select(8, GetInstanceInfo()) or nil
+        local db = TDB()
+        if mapID and mapID ~= lastInstMap and not arg1 and not arg2
+            and db and db.resetOnNewInstance ~= false and C_DamageMeter.ResetAllCombatSessions then
+            C_DamageMeter.ResetAllCombatSessions()
+        end
+        if mapID then lastInstMap = mapID end
         C_Timer.After(1, function() TUI:UpdateTUIMeter() end)
     end
 end)

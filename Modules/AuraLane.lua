@@ -81,13 +81,20 @@ function A.Entries(group)
         for i = 1, SB.GetIconCount() do
             local ikey = "icon" .. i
             local idb = SB.GetIconDB(ikey)
-            if idb and idb.enabled and idb.spellID and idb.customGroup == group.id then
+            if idb and idb.enabled and idb.spellID and idb.customGroup == group.id and not idb.totemTimer then
                 local spells = (ns.SpecialAura and ns.SpecialAura.ExpandSpellIDs
                     and ns.SpecialAura.ExpandSpellIDs(idb.spellID)) or { [idb.spellID] = true }
+                local rank = siSpec * 100000 + (idb.customGroupOrder or 20000)
                 out[#out + 1] = {
                     key = ("TUIAura%d_si_%s"):format(group.id or 0, ikey),
                     def = { spells = spells, max = 1, iconDB = idb },
-                    rank = siSpec * 100000 + (idb.customGroupOrder or 20000),
+                    rank = rank,
+                }
+                out[#out + 1] = {
+                    key = ("TUIAura%d_siT_%s"):format(group.id or 0, ikey),
+                    def = { spells = spells, max = 1, iconDB = idb, kind = "HARMFUL", unit = "target",
+                        previewSkip = true },
+                    rank = rank + 1,
                 }
             end
         end
@@ -199,6 +206,7 @@ local function Font(name, size, outline)
 end
 
 local function StyleButton(button, group, lane)
+    if button:IsForbidden() then return end
     local S = lane.slot
     if not S then return end
     ns.Pixel.SetSize(button, S.iw, S.ih)
@@ -672,7 +680,29 @@ function A.Sync(group, frame)
         local tPt, cPt, ox, oy, tH, tV, tAnchor = AttachLayout(side, S.sp, hDir, vDir, S.center)
         cT:ClearAllPoints()
         cT:SetSize(S.iw, S.ih)
-        cT:SetPoint(tPt, lane.container, cPt, ox, oy)
+        -- if adding target @ debuff icon to a group after its been active, it'll throw a taint.. needs a reload I guess sadge
+        local anchored = pcall(cT.SetPoint, cT, tPt, lane.container, cPt, ox, oy)
+        if not anchored then
+            local totalMain = 0
+            for _, e in ipairs(mainEntries) do totalMain = totalMain + math.max(1, e.def.max or 1) end
+            local perLine = (S.perLine > 0) and S.perLine or math.max(totalMain, 1)
+            local lineLen = math.min(perLine, math.max(totalMain, 1))
+            local lines = math.max(1, math.ceil(math.max(totalMain, 1) / perLine))
+            local alongExt = lineLen * S.alongDim + (lineLen - 1) * S.sp
+            local crossExt = lines * S.crossDim + (lines - 1) * S.sp
+            local spanX = S.horizontal and ((S.alongSign == 1) and alongExt or -alongExt)
+                or ((S.crossSign == 1) and crossExt or -crossExt)
+            local spanY = S.horizontal and ((S.crossSign == 1) and crossExt or -crossExt)
+                or ((S.alongSign == 1) and alongExt or -alongExt)
+            local minX, maxX = math.min(0, spanX), math.max(0, spanX)
+            local minY, maxY = math.min(0, spanY), math.max(0, spanY)
+            local cx
+            if cPt:find("LEFT") then cx = minX elseif cPt:find("RIGHT") then cx = maxX else cx = (minX + maxX) / 2 end
+            local cy
+            if cPt:find("TOP") then cy = maxY elseif cPt:find("BOTTOM") then cy = minY else cy = (minY + maxY) / 2 end
+            cT:ClearAllPoints()
+            cT:SetPoint(tPt, lane.tail, S.pt, cx + ox, cy + oy)
+        end
         cT:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
         ApplyFlowTo(cT, S, altEntries, tAnchor, tH, tV)
     end

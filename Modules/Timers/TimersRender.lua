@@ -31,8 +31,12 @@ end
 function R.UpdateGlow(btn, timer)
     local A = ns.AuraLane
     if not (A and A.ApplyButtonFX and btn) then return end
+    local stOpts
+    if timer and timer.styleName and A.GlowOptsFor then
+        stOpts = A.GlowOptsFor(nil, { styleName = timer.styleName })
+    end
     local ready
-    if timer and timer.glowReadyInCombat then
+    if timer and (timer.glowReadyInCombat or stOpts) then
         if ns.CustomGroups and ns.CustomGroups.testMode then
             ready = true
         else
@@ -49,6 +53,27 @@ function R.UpdateGlow(btn, timer)
             btn._glowSig = nil
             A.ApplyButtonFX(btn, FXStore(btn), _stopOpts)
         end
+        return
+    end
+    if timer.styleName then
+        -- style owns the glow look
+        if not stOpts then
+            if btn._glowSig then
+                btn._glowSig = nil
+                A.ApplyButtonFX(btn, FXStore(btn), _stopOpts)
+            end
+            return
+        end
+        local w = math.floor((btn:GetWidth() or 36) + 0.5)
+        local h = math.floor((btn:GetHeight() or 36) + 0.5)
+        stOpts.w, stOpts.h = w, h
+        local c = stOpts.color or {}
+        local sig = table.concat({ "st", timer.styleName, stOpts.style or "",
+            c.r or 1, c.g or 1, c.b or 0, stOpts.thickness or 0,
+            stOpts.outline and 1 or 0, w, h }, "|")
+        if btn._glowSig == sig then return end
+        btn._glowSig = sig
+        A.ApplyButtonFX(btn, FXStore(btn), stOpts)
         return
     end
     local style = STYLE_MAP[timer.glowType or "pixel"] or "pixel"

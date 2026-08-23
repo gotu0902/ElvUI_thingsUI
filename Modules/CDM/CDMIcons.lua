@@ -236,6 +236,18 @@ end
 function M.IsPassiveHidden(child) return passiveHidden[child] == true end
 M.QueuePassiveRebuild = function() QueuePassiveRebuild() end
 
+-- never run code inside RefreshData's stack
+local dataRefreshQueued = false
+local function OnViewerDataRefresh()
+    if dataRefreshQueued then return end
+    dataRefreshQueued = true
+    C_Timer.After(0, function()
+        dataRefreshQueued = false
+        RebuildPassiveCache()
+        for name in pairs(VIEWERS) do QueueLayout(_G[name]) end
+    end)
+end
+
 local function SortByCooldownID(children)
     table.sort(children, function(a, b)
         local ai = a.layoutIndex or math.huge
@@ -483,7 +495,6 @@ local function HookChild(child, viewer)
     if type(child.ShowPandemicStateFrame) == "function" then
         hooksecurefunc(child, "ShowPandemicStateFrame", ClearPandemic)
     end
-
     hooksecurefunc(child, "SetPoint",        ReapplyChildAnchor)
     hooksecurefunc(child, "ClearAllPoints", ReapplyChildAnchor)
     hooksecurefunc(child, "Hide", OnChildAuraChanged)
@@ -1048,6 +1059,9 @@ local function HookViewer(name)
     local viewer = _G[name]
     if not viewer or type(viewer.RefreshLayout) ~= "function" then return false end
     hookedViewers[name] = true
+    if type(viewer.RefreshData) == "function" then
+        hooksecurefunc(viewer, "RefreshData", OnViewerDataRefresh)
+    end
     hooksecurefunc(viewer, "RefreshLayout", function(v)
         if rebuildFinish then
             local f = rebuildFinish
@@ -1275,6 +1289,8 @@ f:SetScript("OnEvent", function(_, event, arg1)
         M.RefreshAll()
         for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAllSoft) end
     else
+        local spec = GetSpecialization and GetSpecialization()
+        if spec ~= nil then lastSpec = spec end
         M.RefreshAll()
         for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAllSoft) end
     end
@@ -1291,6 +1307,26 @@ SlashCmdList.TUICDM = function()
     local cvs = _G.CooldownViewerSettings
     print(("|cFF8080FFtuicdm|r editmode=%s cvs=%s rebuilding=%s"):format(
         tostring(emm and emm:IsShown()), tostring(cvs and cvs:IsShown()), tostring(M.IsRebuilding())))
+    local specIdx = GetSpecialization and GetSpecialization()
+    local sid, sname
+    if specIdx and GetSpecializationInfo then sid, sname = GetSpecializationInfo(specIdx) end
+    print(("  spec idx=%s id=%s %s"):format(tostring(specIdx), tostring(sid), tostring(sname)))
+    local cat = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.Essential
+    if cat and C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCategorySet then
+        local set = C_CooldownViewer.GetCooldownViewerCategorySet(cat)
+        local names = {}
+        for i = 1, math.min(6, set and #set or 0) do
+            local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(set[i])
+            local sp = info and info.spellID
+            if sp and not (issecretvalue and issecretvalue(sp)) then
+                local nm = C_Spell.GetSpellName and C_Spell.GetSpellName(sp)
+                names[#names + 1] = tostring(nm or sp)
+            else
+                names[#names + 1] = "?"
+            end
+        end
+        print("  essential C-side: " .. ((#names > 0) and table.concat(names, ", ") or "EMPTY"))
+    end
     for name in pairs(VIEWERS) do
         local v = _G[name]
         if v then

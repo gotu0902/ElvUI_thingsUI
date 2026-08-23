@@ -379,12 +379,11 @@ local function GroupTab(gi)
                 order = 3, type = "select", name = "|cFF80FF80Add Special Bar|r", width = 1.2,
                 disabled = full,
                 hidden = function()
-                    if editingOtherSpec() then return true end
                     local SBm = ns.SpecialBars
-                    if not (SBm and SBm.GetBarCount and SBm.GetBarDB) then return true end
-                    for i = 1, SBm.GetBarCount() do
-                        local bdb = SBm.GetBarDB("bar" .. i)
-                        if bdb and bdb.enabled and bdb.spellID then return false end
+                    if not (SBm and SBm.GetSpecRoot) then return true end
+                    local root = SBm.GetSpecRoot(getEditSpec())
+                    for _, bdb in pairs((root and root.bars) or {}) do
+                        if type(bdb) == "table" and bdb.enabled and bdb.spellID then return false end
                     end
                     return true
                 end,
@@ -392,19 +391,20 @@ local function GroupTab(gi)
                     local out = { [""] = "|cFF888888- Select -|r" }
                     local SBm = ns.SpecialBars
                     local g = grp()
-                    if SBm and SBm.GetBarCount then
-                        for i = 1, SBm.GetBarCount() do
-                            local bkey = "bar" .. i
-                            local bdb = SBm.GetBarDB(bkey)
-                            if bdb and bdb.enabled and bdb.spellID then
-                                local nm = bdb.spellName
-                                    or (C_Spell.GetSpellName and C_Spell.GetSpellName(bdb.spellID)) or bkey
-                                local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(bdb.spellID)) or 134400
-                                local tag = ""
-                                if g and bdb.customGroup == g.id then tag = " |cff888888(here)|r"
-                                elseif bdb.customGroup then tag = " |cff888888(in another group)|r" end
-                                out[bkey] = ("|T%d:16:16|t %s%s"):format(tex, nm, tag)
+                    local root = SBm and SBm.GetSpecRoot and SBm.GetSpecRoot(getEditSpec())
+                    for i = 1, (root and (root.barCount or 3)) or 0 do
+                        local bkey = "bar" .. i
+                        local bdb = root.bars and root.bars[bkey]
+                        if type(bdb) == "table" and bdb.enabled and bdb.spellID then
+                            local nm = bdb.spellName
+                                or (C_Spell.GetSpellName and C_Spell.GetSpellName(bdb.spellID)) or bkey
+                            local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(bdb.spellID)) or 134400
+                            local tag = ""
+                            if g and bdb.customGroup == g.id then tag = " |cff888888(here)|r"
+                            elseif type(bdb.customGroup) == "number" and bdb.customGroup > 0 then
+                                tag = " |cff888888(in another group)|r"
                             end
+                            out[bkey] = ("|T%d:16:16|t %s%s"):format(tex, nm, tag)
                         end
                     end
                     return out
@@ -413,12 +413,14 @@ local function GroupTab(gi)
                 set = function(_, v)
                     if v == "" then return end
                     local SBm = ns.SpecialBars
-                    local bdb = SBm and SBm.GetBarDB and SBm.GetBarDB(v)
+                    local es = getEditSpec()
+                    local bdb = SBm and SBm.GetBarDB and SBm.GetBarDB(v, es)
                     local g = grp()
                     if bdb and g then
                         bdb.customGroup = g.id
-                        if SBm.ReleaseBar then SBm.ReleaseBar(v) end
+                        if es == curSpecID() and SBm.ReleaseBar then SBm.ReleaseBar(v) end
                         TUI:UpdateSpecialBars()
+                        if ns.BarSetup and ns.BarSetup.ApplyStack then ns.BarSetup.ApplyStack() end
                         Refresh()
                     end
                 end,
@@ -426,12 +428,12 @@ local function GroupTab(gi)
             args.newSpecialBar = {
                 order = 4, type = "select", name = "|cFF80FF80New Special Bar (from spell)|r", width = "double",
                 disabled = full,
-                hidden = editingOtherSpec,
+                hidden = function() return not ns.SpecialBars end,
                 values = function()
-                    return (ns.SB_SpellChoices and ns.SB_SpellChoices(nil, true)) or {}
+                    return (ns.SB_SpellChoices and ns.SB_SpellChoices(nil, true, getEditSpec())) or {}
                 end,
                 sorting = function()
-                    return ns.SB_SpellChoicesSorting and ns.SB_SpellChoicesSorting() or nil
+                    return ns.SB_SpellChoicesSorting and ns.SB_SpellChoicesSorting(getEditSpec()) or nil
                 end,
                 get = function() return "" end,
                 set = function(_, v)
@@ -440,12 +442,13 @@ local function GroupTab(gi)
                     local SBm = ns.SpecialBars
                     local g = grp()
                     if not (SBm and g) then return end
-                    local usage = SBm.GetSpellUsageInfo and SBm.GetSpellUsageInfo(id)
+                    local es = getEditSpec()
+                    local usage = SBm.GetSpellUsageInfo and SBm.GetSpellUsageInfo(id, nil, nil, es)
                     if usage then
                         E:Print("This spell is already used by " .. usage .. "!")
                         return
                     end
-                    local s = SBm.GetSpecRoot()
+                    local s = SBm.GetSpecRoot(es)
                     local c = s.barCount or 3
                     local maxSlots = SBm.MAX_SLOTS or 12
                     if c >= maxSlots then
@@ -454,7 +457,7 @@ local function GroupTab(gi)
                     end
                     if ns.SB_RebuildSlotPages then C_Timer.After(0, ns.SB_RebuildSlotPages) end
                     s.barCount = c + 1
-                    local bdb = SBm.GetBarDB("bar" .. (c + 1))
+                    local bdb = SBm.GetBarDB("bar" .. (c + 1), es)
                     if SBm.Styles and SBm.Styles.ApplyToDB and SBm.Styles.EffectiveDefault then
                         SBm.Styles.ApplyToDB("bars", SBm.Styles.EffectiveDefault("bars"), bdb)
                     end

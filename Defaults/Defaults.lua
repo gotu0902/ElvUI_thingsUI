@@ -22,10 +22,10 @@ p.mbb = {
     seeded = false,
 }
 p.instanceDifficulty = {
-    enable = false,
-    point = "TOPLEFT",
+    enable = true,
+    point = "bottom",
     x = 0,
-    y = 0,
+    y = 10,
     font = "Expressway",
     fontSize = 12,
     fontOutline = "OUTLINE",

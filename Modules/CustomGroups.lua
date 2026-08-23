@@ -407,10 +407,51 @@ local function UpdateTrinketIcon(btn)
     UpdateItemIcon(btn, false)
 end
 
+local function FindTotemIconDB(sid, groupID)
+    local SBm = ns.SpecialBars
+    if not (SBm and SBm.GetIconCount and SBm.GetIconDB) then return nil end
+    for i = 1, SBm.GetIconCount() do
+        local idb = SBm.GetIconDB("icon" .. i)
+        if idb and idb.totemTimer and idb.spellID == sid and idb.customGroup == groupID then
+            return idb
+        end
+    end
+end
+
+local function UpdateTotemIcon(btn)
+    local sid = btn._id
+    local idb = FindTotemIconDB(sid, btn._group and btn._group.id)
+    if btn.icon then
+        local tex = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)
+        if tex then btn.icon:SetTexture(tex) end
+    end
+    local start, dur
+    if ns.Timers and ns.Timers.GetTotemState then start, dur = ns.Timers.GetTotemState(sid) end
+    if not start and M.testMode then start, dur = GetTime() - 8, 30 end
+    if btn.cooldown then
+        if btn.cooldown.SetReverse then btn.cooldown:SetReverse(false) end
+        if btn.cooldown.SetHideCountdownNumbers then
+            btn.cooldown:SetHideCountdownNumbers((idb and idb.showDuration == false) and true or false)
+        end
+        if start then btn.cooldown:SetCooldown(start, dur) else btn.cooldown:Clear() end
+    end
+    if btn.count then btn.count:SetText("") end
+    local AL = ns.AuraLane
+    if AL and AL.ApplyButtonFX then
+        local r = btn._tuiFX
+        if not r then r = {}; btn._tuiFX = r end
+        local fx = (idb and AL.GlowOptsFor and AL.GlowOptsFor(nil, { iconDB = idb })) or {}
+        fx.w = btn:GetWidth() or 36
+        fx.h = btn:GetHeight() or 36
+        AL.ApplyButtonFX(btn, r, fx)
+    end
+end
+
 local function UpdateIcon(btn)
     if btn._type == "item" then UpdateItemIcon(btn, true)
     elseif btn._type == "trinket" then UpdateTrinketIcon(btn)
     elseif btn._type == "timer" then UpdateTimerIcon(btn)
+    elseif btn._type == "totem" then UpdateTotemIcon(btn)
     else UpdateSpellIcon(btn) end
     ApplyGroupBorder(btn)
 end
@@ -422,9 +463,11 @@ end
 
 local function CreateIcon(gs, group, kind, id)
     if kind == "trinket" then gs.trinketIcons = gs.trinketIcons or {} end
+    if kind == "totem" then gs.totemIcons = gs.totemIcons or {} end
     local pool = (kind == "item") and gs.itemIcons
               or (kind == "timer") and gs.timerIcons
               or (kind == "trinket") and gs.trinketIcons
+              or (kind == "totem") and gs.totemIcons
               or gs.spellIcons
     if pool[id] then pool[id]._group = group; return pool[id] end
 
@@ -550,6 +593,7 @@ local function HideGroupIcons(gs)
     for _, b in pairs(gs.itemIcons) do b:Hide() end
     if gs.timerIcons then for _, b in pairs(gs.timerIcons) do b:Hide() end end
     if gs.trinketIcons then for _, b in pairs(gs.trinketIcons) do b:Hide() end end
+    if gs.totemIcons then for _, b in pairs(gs.totemIcons) do b:Hide() end end
     if gs.testIcons then for _, b in pairs(gs.testIcons) do b:Hide() end end
 end
 
@@ -598,7 +642,7 @@ local function RenderTestLane(gs, group, frame)
     for ei, entry in ipairs(entries) do
         local sl = ns.AuraLane.SpellListUnique(entry.def)
         lists[ei] = sl
-        local n = math.max(1, entry.def.max or 1)
+        local n = entry.def.previewSkip and 0 or math.max(1, entry.def.max or 1)
         if #sl > 1 then n = math.min(n, #sl) end
         if remaining then
             n = math.min(n, remaining)
@@ -813,6 +857,21 @@ local function CollectScopeInto(group, scope, root, shown)
                     end
                 else
                     list[#list + 1] = { kind = "timer", id = t.id, li = li }
+                end
+            end
+        end
+    end
+
+    if scope == "spec" and ns.SpecialBars and ns.SpecialBars.GetIconCount and ns.SpecialBars.GetIconDB then
+        local SBm = ns.SpecialBars
+        for i = 1, SBm.GetIconCount() do
+            local idb = SBm.GetIconDB("icon" .. i)
+            if idb and idb.enabled and idb.spellID and idb.customGroup == group.id and idb.totemTimer then
+                if ns.Timers and ns.Timers.RegisterTotemSpell then ns.Timers.RegisterTotemSpell(idb.spellID) end
+                local active = ns.Timers and ns.Timers.GetTotemState and ns.Timers.GetTotemState(idb.spellID)
+                if (active or M.testMode) and not _seen["t" .. idb.spellID] then
+                    _seen["t" .. idb.spellID] = true
+                    list[#list + 1] = { kind = "totem", id = idb.spellID, li = idb.customGroupOrder or 20000 }
                 end
             end
         end
@@ -1107,6 +1166,10 @@ if ns.Timers and ns.Timers.AddHostRepaint then
         if restructure then QueueLayout() end
     end
     ns.Timers.AddHostRepaint(TimerRepaint)
+end
+
+if ns.Timers and ns.Timers.AddTotemCallback then
+    ns.Timers.AddTotemCallback(function() if QueueLayout then QueueLayout() end end)
 end
 
 if ns.TimersRender and ns.TimersRender.RegisterGlowHost then

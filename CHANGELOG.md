@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.1.6
+- Fixed player power bar detached on FHT import
+- Export moved to it's own tab
+- Config layout stuff
+- Totem icons should show style glow and timer preview
+- Timers can also use styles
+- NHT plugin update: Added more classes to groups
+- Alt Setup: the preset popup now warns about deleted/renamed preset profiles and notes when Platynator nameplates are in use; popups are movable, centered and outlined
+- Installer: Everything! as a quick setup - imports.. everything?
+- New ElvUI profiles created from scratch offer to copy from your preset profile (or opt out)
+- Special Bars: new "Show In" dropdown, Bar Setup, Standalone, Groups
+- Add Special Bar/Icon and "New Special Bar/Icon (from spell)" now work when editing another spec
+- Special Icons/Bars: the "Copy from..." popup got a class dropdown, no longer clips its bottom row
+
 ## 4.1.5
 - Skinned mini meter: 
 - - always show player

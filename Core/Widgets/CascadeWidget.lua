@@ -25,13 +25,10 @@ function Cascade.OpenSingle(opts)
     if not opts or type(opts.tree) ~= "table" then return end
     local f = CreateWindow(opts.title or "Select", opts.width, opts.height)
 
-    local scroll = AceGUI:Create("ScrollFrame")
-    scroll:SetFullWidth(true)
-    scroll:SetFullHeight(true)
-    scroll:SetLayout("Flow")
-    f:AddChild(scroll)
+    local selectedClass
+    local scroll
 
-    for _, classEntry in ipairs(opts.tree) do
+    local function RenderClass(classEntry)
         local classHeading = AceGUI:Create("Heading")
         classHeading:SetText(classEntry.label or "")
         classHeading:SetFullWidth(true)
@@ -64,6 +61,52 @@ function Cascade.OpenSingle(opts)
             end
         end
     end
+
+    local function RenderTree()
+        scroll:ReleaseChildren()
+        for _, classEntry in ipairs(opts.tree) do
+            if not selectedClass or classEntry.token == selectedClass then
+                RenderClass(classEntry)
+            end
+        end
+        local pad = AceGUI:Create("SimpleGroup")
+        pad:SetFullWidth(true)
+        pad:SetAutoAdjustHeight(false)
+        pad:SetHeight(30)
+        pad:SetLayout("Flow")
+        scroll:AddChild(pad)
+        if scroll.DoLayout then scroll:DoLayout() end
+    end
+
+    if opts.classFilter and #opts.tree > 1 then
+        local values, order = { ALL = "All Classes" }, { "ALL" }
+        for _, ce in ipairs(opts.tree) do
+            if ce.token then
+                values[ce.token] = ce.label
+                order[#order + 1] = ce.token
+            end
+        end
+        local myToken = select(2, UnitClass("player"))
+        local def = values[myToken] and myToken or "ALL"
+        selectedClass = (def ~= "ALL") and def or nil
+
+        local dd = AceGUI:Create("Dropdown")
+        dd:SetList(values, order)
+        dd:SetValue(def)
+        dd:SetFullWidth(true)
+        dd:SetCallback("OnValueChanged", function(_, _, v)
+            selectedClass = (v ~= "ALL") and v or nil
+            RenderTree()
+        end)
+        f:AddChild(dd)
+    end
+
+    scroll = AceGUI:Create("ScrollFrame")
+    scroll:SetFullWidth(true)
+    scroll:SetFullHeight(true)
+    scroll:SetLayout("Flow")
+    f:AddChild(scroll)
+    RenderTree()
 
     return f
 end

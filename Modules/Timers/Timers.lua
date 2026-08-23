@@ -124,15 +124,19 @@ end
 
 local function ParseDurationFromText(text)
     if type(text) ~= "string" then return end
+    if issecretvalue and issecretvalue(text) then return end
     local lower = text:lower()
-    local n, unit = lower:match("for%s+(%d+%.?%d*)%s*(%a+)")
-    if n then
-        if unit:find("^min") then return tonumber(n) * 60 end
-        if unit:find("^sec") then return tonumber(n) end
+    local best
+    for n, unit in lower:gmatch("for%s+(%d+%.?%d*)%s*(%a+)") do
+        local v
+        if unit:find("^min") then v = tonumber(n) * 60
+        elseif unit:find("^sec") then v = tonumber(n) end
+        if v and (not best or v > best) then best = v end
     end
+    if best then return best end
 
     local before = lower:match("^(.-)cooldown") or lower
-    n = before:match("(%d+%.?%d*)%s*sec")
+    local n = before:match("(%d+%.?%d*)%s*sec")
     if n then return tonumber(n) end
     n = before:match("(%d+%.?%d*)%s*min")
     if n then return tonumber(n) * 60 end
@@ -147,10 +151,12 @@ local function TooltipDuration(timer)
         data = C_TooltipInfo.GetSpellByID(timer.spellID)
     end
     if not data or not data.lines then return end
+    local best
     for _, line in ipairs(data.lines) do
         local d = ParseDurationFromText(line.leftText)
-        if d and d > 0 then return d end
+        if d and d > 0 and (not best or d > best) then best = d end
     end
+    return best
 end
 
 function M.GetDuration(timer)
@@ -230,11 +236,25 @@ function M.TotemUpdate(slot)
         for s = 1, 4 do
             local have, _, start, dur, _, _, sid = GetTotemInfo(s)
             if not (issecret and (issecret(have) or issecret(sid))) and have and sid then
+                local key = sid
+                if not totemSpells[sid] then
+                    -- totem spellid can differ from cast spellid
+                    local best, bestDt
+                    local ref = (type(start) == "number" and start > 0) and start or GetTime()
+                    for reg in pairs(totemSpells) do
+                        local c = totemCast[reg]
+                        if c then
+                            local dt = math.abs(ref - c)
+                            if dt < 2 and (not bestDt or dt < bestDt) then best, bestDt = reg, dt end
+                        end
+                    end
+                    key = best or sid
+                end
                 db.totemLearn = db.totemLearn or {}
-                db.totemLearn[sid] = dur
-                totemSlot[sid] = s
-                totemCast[sid] = start
-                local ids = triggerMap[sid]
+                db.totemLearn[key] = dur
+                totemSlot[key] = s
+                totemCast[key] = start
+                local ids = triggerMap[key]
                 if ids then
                     for i = 1, #ids do lastCastStart[ids[i]] = start end
                 end

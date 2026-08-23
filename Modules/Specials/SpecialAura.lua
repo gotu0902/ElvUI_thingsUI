@@ -151,6 +151,7 @@ local function IconTexture(spellID)
 end
 
 function SA.StyleIconButton(button, r, wrapper, key)
+    if button:IsForbidden() then return end
     local db = SB.GetIconDB(key)
     if not db then return end
     local w, h = wrapper:GetSize()
@@ -256,6 +257,7 @@ function SA.StyleIconButton(button, r, wrapper, key)
 end
 
 function SA.StyleBarButton(button, r, wrapper, key)
+    if button:IsForbidden() then return end
     local db = SB.GetBarDB(key)
     if not db then return end
     local w, h = wrapper:GetSize()

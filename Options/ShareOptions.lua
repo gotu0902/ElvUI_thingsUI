@@ -12,8 +12,67 @@ local function SectionValues()
     return v
 end
 
+local function ImportProfileString(key, label)
+    local s = ns.InstallStrings and ns.InstallStrings[key]
+    if not s or s == "" then
+        print("|cFF8080FFthingsUI|r: profile string not set yet.")
+        return false
+    end
+    local ok, pending = ns.ImportElvProfile(s)
+    print(ok and ("|cFF8080FFthingsUI|r - " .. label .. (pending and ": name exists, pick one in the popup." or " profile imported."))
+        or "|cFF8080FFthingsUI|r: import failed.")
+    return ok, pending
+end
+
+local function FullSetup(order, key, label)
+    local profKey = key .. "_PROFILE"
+    local profLabel = label .. " ElvUI"
+    return {
+        order = order, type = "group", inline = true, name = label,
+        args = {
+            full = {
+                order = 1, type = "execute", width = 3.4,
+                name = label .. " Full Install",
+                confirm = function()
+                    return ("Import the full %s setup? This overwrites your ElvUI profile and thingsUI sections."):format(key)
+                end,
+                func = function()
+                    local ok, pending = ImportProfileString(profKey, profLabel)
+                    if ns.ImportPreset then ns.ImportPreset(key) end
+                    if ok and not pending then E:StaticPopup_Show("IMPORT_RL") end
+                end,
+            },
+            profile = {
+                order = 2, type = "execute", width = 1.7,
+                name = label .. " ElvUI Profile",
+                confirm = function()
+                    return "Import the " .. profLabel .. " profile? This overwrites your current ElvUI profile."
+                end,
+                func = function()
+                    local ok, pending = ImportProfileString(profKey, profLabel)
+                    if ok and not pending then E:StaticPopup_Show("IMPORT_RL") end
+                end,
+            },
+            plugin = {
+                order = 3, type = "execute", width = 1.7,
+                name = label .. " Plugin Stuff",
+                func = function()
+                    local s = ns.PresetString and ns.PresetString(key)
+                    if s and s ~= "" and ns.ShareWizard then
+                        ns.ShareWizard.Open(s)
+                    elseif ns.ImportPresetConfirm then
+                        ns.ImportPresetConfirm(key, label)
+                    end
+                end,
+            },
+        },
+    }
+end
+
 function TUI:ShareOptions()
-    local args = {
+    local importTab = {
+        order = 1, type = "group", name = "Import / Install",
+        args = {
             desc = {
                 order = 1, type = "description", fontSize = "medium", width = "full",
                 name = "\n",
@@ -33,31 +92,49 @@ function TUI:ShareOptions()
             defaultsHeader = { order = 4, type = "header", name = "Import default presets" },
             defaultsDesc = { order = 5, type = "description",
                 name = "Import |cFF8080FFthe ElvUI profile and plugin things|r\n\n" },
-            defaultsBreak = { order = 7, type = "description", width = "full", name = "\n" },
+            FullNHT = FullSetup(6, "NHT", "|cFFff0000NHT|r"),
+            FullFHT = FullSetup(7, "FHT", "|cFF00ff17FHT|r"),
 
-            exportHeader = { order = 10, type = "header", name = "Export" },
+            importHeader = { order = 20, type = "header", name = "Import" },
+            importDesc = {
+                order = 21, type = "description", fontSize = "medium", width = "full",
+                name = "Opens the importer - paste the string there and pick what you want.\n\n\n",
+            },
+            importButton = {
+                order = 22, type = "execute", name = "Import...", width = "double",
+                func = function()
+                    if ns.ShareWizard then ns.ShareWizard.Open() end
+                end,
+            },
+        },
+    }
+
+    local exportTab = {
+        order = 2, type = "group", name = "Export",
+        args = {
             exportSelectAll = {
-                order = 10.1, type = "execute", name = "Select All", width = 0.8,
+                order = 1, type = "execute", name = "Select All", width = 0.8,
                 func = function()
                     for i in ipairs(ns.Share.SECTIONS) do selected[i] = true end
                     NotifyChange()
                 end,
             },
             exportClearAll = {
-                order = 10.2, type = "execute", name = "Clear All", width = 0.8,
+                order = 2, type = "execute", name = "Clear All", width = 0.8,
                 func = function()
                     wipe(selected)
                     NotifyChange()
                 end,
             },
             exportSections = {
-                order = 11, type = "multiselect", name = "Sections to include",
+                order = 3, type = "multiselect", name = "Sections to include",
+                descStyle = "inline",
                 values = SectionValues,
                 get = function(_, i) return selected[i] == true end,
                 set = function(_, i, val) selected[i] = val and true or nil; NotifyChange() end,
             },
             exportButton = {
-                order = 12, type = "execute", name = "Generate Export String",
+                order = 4, type = "execute", name = "Generate Export String",
                 func = function()
                     local sel, any = {}, false
                     for i in ipairs(ns.Share.SECTIONS) do
@@ -76,55 +153,14 @@ function TUI:ShareOptions()
                     end
                 end,
             },
-
-            importHeader = { order = 20, type = "header", name = "Import" },
-            importDesc = {
-                order = 21, type = "description", fontSize = "medium", width = "full",
-                name = "Opens the importer - paste the string there and pick what you want.\n\n\n",
-            },
-            importButton = {
-                order = 22, type = "execute", name = "Import...", width = "double",
-                func = function()
-                    if ns.ShareWizard then ns.ShareWizard.Open() end
-                end,
-            },
+        },
     }
 
-    for i, p in ipairs(ns.PRESET_LIST or {}) do
-        args["preset" .. p.key] = {
-            order = 5 + i * 0.1, type = "execute", name = "Import " .. p.label:gsub("%s+$", "") .. " Plugins",
-            func = function()
-                local s = ns.PresetString and ns.PresetString(p.key)
-                if s and s ~= "" and ns.ShareWizard then
-                    ns.ShareWizard.Open(s)
-                elseif ns.ImportPresetConfirm then
-                    ns.ImportPresetConfirm(p.key, p.label)
-                end
-            end,
-        }
-    end
-
-    local ELV_PRESETS = {
-        { key = "NHT_PROFILE", label = "|cFFff0000NHT|r ElvUI" },
-        { key = "FHT_PROFILE", label = "|cFF00ff17FHT|r ElvUI" },
+    return {
+        order = 40, type = "group", name = "Import - Export - Install", childGroups = "tab",
+        args = {
+            importTab = importTab,
+            exportTab = exportTab,
+        },
     }
-    for i, p in ipairs(ELV_PRESETS) do
-        args["elvprofile" .. p.key] = {
-            order = 5.4 + i * 0.1, type = "execute", name = "Import " .. p.label,
-            confirm = function() return "Import the " .. p.label .. " profile? This overwrites your current ElvUI profile." end,
-            func = function()
-                local s = ns.InstallStrings and ns.InstallStrings[p.key]
-                if not s or s == "" then
-                    print("|cFF8080FFthingsUI|r: profile string not set yet.")
-                    return
-                end
-                local ok, pending = ns.ImportElvProfile(s)
-                print(ok and ("|cFF8080FFthingsUI|r - " .. p.label .. (pending and ": name exists, pick one in the popup." or " profile imported."))
-                    or "|cFF8080FFthingsUI|r: import failed.")
-                if ok and not pending then E:StaticPopup_Show("IMPORT_RL") end
-            end,
-        }
-    end
-
-    return { order = 40, type = "group", name = "Import - Export - Install", args = args }
 end
