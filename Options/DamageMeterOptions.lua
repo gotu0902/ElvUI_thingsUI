@@ -128,6 +128,12 @@ function TUI:DamageMeterOptions()
                         get = function() return tdb().windowBorder end,
                         set = function(_, v) tset("windowBorder", v) end,
                     },
+                    resetOnNewInstance = {
+                        order = 3.5, type = "toggle", name = "Reset on New Instance",
+                        desc = "Wipes all meter data when entering a new dungeon or starting a Mythic+ key.",
+                        get = function() return tdb().resetOnNewInstance ~= false end,
+                        set = function(_, v) tset("resetOnNewInstance", v) end,
+                    },
                     windowDivider = {
                         order = 4, type = "toggle", name = "Window Divider",
                         get = function() return tdb().windowDivider ~= false end,
