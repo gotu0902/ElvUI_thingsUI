@@ -42,6 +42,7 @@ local function FinishElvProfileImport(key, data)
     local D = E:GetModule("Distributor", true)
     if not (D and D.SetImportedProfile) then return false end
     local keep = ns.DeepCopy(E.db.thingsUI or {})
+    ns.SuppressNewProfileAsk = GetTime()
     D:SetImportedProfile("profile", key, data, true)
     E.db.thingsUI = keep
     if E.StaggeredUpdateAll then E:StaggeredUpdateAll() end
@@ -257,6 +258,51 @@ local function QuickSetup(key)
     if IsInstalled("Grid2") then ns.UseGrid2() else ns.UseElvUF() end
 end
 
+local function DecodeProfileStr(key)
+    local strs = ns.InstallStrings or {}
+    local s = strs[key .. "_PROFILE"]
+    local D = E:GetModule("Distributor", true)
+    if not (s and s ~= "" and D and D.Decode) then return end
+    local ptype, name, data = D:Decode(s)
+    if ptype == "profile" and name and type(data) == "table" then return name, data end
+end
+
+local function HasElvProfile(name)
+    return name and _G.ElvDB and _G.ElvDB.profiles and _G.ElvDB.profiles[name] and true or false
+end
+
+-- healer spec = FHT, everything else = NHT
+function ns.QuickSetupAuto()
+    local spec = GetSpecialization and GetSpecialization()
+    local role = spec and GetSpecializationRole and GetSpecializationRole(spec)
+    local mainKey = (role == "HEALER") and "FHT" or "NHT"
+    local otherKey = (mainKey == "FHT") and "NHT" or "FHT"
+
+    local oname, odata = DecodeProfileStr(otherKey)
+    if oname and not HasElvProfile(oname) then FinishElvProfileImport(oname, odata) end
+    local mname, mdata = DecodeProfileStr(mainKey)
+    if mname then
+        if HasElvProfile(mname) then
+            if E.data:GetCurrentProfile() ~= mname then E.data:SetProfile(mname) end
+        else
+            FinishElvProfileImport(mname, mdata)
+        end
+    end
+
+    local strs = ns.InstallStrings or {}
+    local D = E:GetModule("Distributor", true)
+    if strs.ELV_PRIVATE and strs.ELV_PRIVATE ~= "" then ns.ImportElvPrivate(strs.ELV_PRIVATE) end
+    if strs.ELV_GLOBAL and strs.ELV_GLOBAL ~= "" and D and D.ImportProfile then D:ImportProfile(strs.ELV_GLOBAL) end
+
+    ns.ImportPreset(mainKey)
+    if ns.SetAutoScale then ns.SetAutoScale() end
+    if ns.ApplyDarkMode then ns.ApplyDarkMode() end
+    ns.SetDamageMeterProvider("TUI")
+    E.db.thingsUI.rightChatAsBackground = true
+    if IsInstalled("Grid2") then ns.UseGrid2() else ns.UseElvUF() end
+    return mainKey, role
+end
+
 E.PopupDialogs["TUI_CDMSKIN_WARNING"] = {
     text = "|cFF8080FFthingsUI|r: ElvUI's |cFFFFFFFFCooldown Manager skin|r is disabled for this character.\nthingsUI's CDM styling is built on top of it - enable it and reload?",
     button1 = "Enable",
@@ -300,6 +346,16 @@ ns.installTable = {
                     end
                 end)
             end
+            local auto = f.Option3
+            auto:Show(); auto:Enable(); auto:SetText("Everything!")
+            auto:SetScript("OnClick", function()
+                local key = ns.QuickSetupAuto()
+                StepDone(key .. " quick setup done (spec-based) - click Finished")
+                local fr = PIF()
+                if PI.SetPage and fr and fr.CurrentPage then
+                    PI:SetPage(#ns.installTable.Pages, fr.CurrentPage)
+                end
+            end)
         end,
         -- 2: Plugin import
         function()
