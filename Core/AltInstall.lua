@@ -280,10 +280,43 @@ function M.ApplyRoleProfiles(silent)
 end
 M.ApplyRolePresets = M.ApplyRoleProfiles
 
+local ALT_POPUPS = {
+    TUI_ALT_ROLEPOPUP = true, TUI_ALT_DEFPRESET = true,
+    TUI_ALT_ROLEUPDATE = true, TUI_NEWPROFILE_COPY = true,
+}
+local function AltPopupShow(frame)
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", E.UIParent, "CENTER", 0, 120)
+    local t = frame.text
+    if t then
+        local ff, fs, flags = t:GetFont()
+        frame._tuiOldFlags = flags or ""
+        t:SetFont(ff, fs, "OUTLINE")
+    end
+    frame:SetMovable(true)
+    if not frame._tuiDragHooked then
+        frame._tuiDragHooked = true
+        frame:RegisterForDrag("LeftButton")
+        frame:SetScript("OnDragStart", function(self)
+            if ALT_POPUPS[self.which] then self:StartMoving() end
+        end)
+        frame:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+    end
+end
+local function AltPopupHide(frame)
+    local t = frame.text
+    if t and frame._tuiOldFlags then
+        local ff, fs = t:GetFont()
+        t:SetFont(ff, fs, frame._tuiOldFlags)
+        frame._tuiOldFlags = nil
+    end
+end
+
 E.PopupDialogs["TUI_ALT_ROLEPOPUP"] = {
     text = "%s",
     button1 = ACCEPT, button2 = CANCEL,
     OnAccept = function() M.ApplyRoleProfiles() end,
+    OnShow = AltPopupShow, OnHide = AltPopupHide,
     timeout = 0, whileDead = 1, hideOnEscape = 1,
 }
 
@@ -322,6 +355,7 @@ E.PopupDialogs["TUI_ALT_ROLEUPDATE"] = {
             print("|cFF8080FFthingsUI|r - Multi-Spec preset updated.")
         end
     end,
+    OnShow = AltPopupShow, OnHide = AltPopupHide,
     timeout = 0, whileDead = 1, hideOnEscape = 1,
 }
 
@@ -336,20 +370,31 @@ local function DefaultPresetDiff()
     local p = name and Presets()[name]
     if not p then return nil end
     local rp = RoleStore(false)
-    local diff = {}
+    local diff, missing = {}, {}
     for _, prov in ipairs(PROVIDERS) do
         local pp = p.providers and p.providers[prov.key]
-        local roleGoverned = rp and rp.enabled and rp.providers
-            and rp.providers[prov.key] and next(rp.providers[prov.key])
-        if pp and pp.profile and prov.loaded() and not roleGoverned then
+        local rmap = rp and rp.enabled and rp.providers and rp.providers[prov.key]
+        local roleGoverned = rmap and next(rmap)
+        if prov.loaded() then
             local exists = {}
             for _, n in ipairs(prov.profiles() or {}) do exists[n] = true end
-            if exists[pp.profile] and prov.current() ~= pp.profile then
-                diff[#diff + 1] = { prov = prov, profile = pp.profile }
+            if pp and pp.profile and not roleGoverned then
+                if not exists[pp.profile] then
+                    missing[#missing + 1] = { prov = prov, profile = pp.profile }
+                elseif prov.current() ~= pp.profile then
+                    diff[#diff + 1] = { prov = prov, profile = pp.profile }
+                end
+            end
+            if roleGoverned then
+                for _, want in pairs(rmap) do
+                    if type(want) == "string" and not exists[want] then
+                        missing[#missing + 1] = { prov = prov, profile = want }
+                    end
+                end
             end
         end
     end
-    return diff, name
+    return diff, name, missing
 end
 
 function M.ApplyDefaultPreset()
@@ -375,6 +420,7 @@ E.PopupDialogs["TUI_ALT_DEFPRESET"] = {
     text = "%s",
     button1 = ACCEPT, button2 = CANCEL,
     OnAccept = function() M.ApplyDefaultPreset() end,
+    OnShow = AltPopupShow, OnHide = AltPopupHide,
     timeout = 0, whileDead = 1, hideOnEscape = 1,
 }
 
@@ -382,11 +428,19 @@ function M.CheckDefaultPreset()
     if frame then return end
     if InCombatLockdown() then return end
     if not Store()[CharKey()] then return end
-    local diff, name = DefaultPresetDiff()
-    if not (diff and #diff > 0) then return end
+    local diff, name, missing = DefaultPresetDiff()
+    if not diff then return end
+    if #diff == 0 and #(missing or {}) == 0 then return end
     local lines = {}
     for _, d in ipairs(diff) do
         lines[#lines + 1] = ("|cFF%s%s:|r %s"):format(d.prov.color or "FFFFFF", d.prov.title, d.profile)
+    end
+    for _, d in ipairs(missing or {}) do
+        lines[#lines + 1] = ("|cFF%s%s:|r |cFFFF4040'%s' not found - deleted or renamed?|r"):format(
+            d.prov.color or "FFFFFF", d.prov.title, d.profile)
+    end
+    if _G.PLATYNATOR_CONFIG then
+        lines[#lines + 1] = "|cFF888888Nameplates: Platynator|r"
     end
     E:StaticPopup_Show("TUI_ALT_DEFPRESET",
         ("|cFF8080FFthingsUI|r: Switch to the '%s' preset profiles?\n\n%s"):format(name, table.concat(lines, "\n")))
@@ -410,6 +464,67 @@ function M.OfferRoleUpdate(provKey, profileName)
         prov.color or "FFFFFF", prov.title, roleLabel, profileName, have or "|cFF888888- none -|r")
     E:StaticPopup_Show("TUI_ALT_ROLEUPDATE", msg, nil, { provKey = provKey, role = rk, profile = profileName })
 end
+
+local function PresetProfileForRole()
+    local name = DefaultPresetName()
+    local p = name and Presets()[name]
+    if not p then return end
+    local rp = RoleStore(false)
+    local curIdx = GetSpecialization and GetSpecialization()
+    local rk = curIdx and rp and RoleKeyFor(curIdx, rp)
+    local rmap = rp and rp.providers and rp.providers.elvui
+    local want = (rk and rmap and rmap[rk])
+        or (p.providers and p.providers.elvui and p.providers.elvui.profile)
+    if want and _G.ElvDB and _G.ElvDB.profiles and _G.ElvDB.profiles[want] then return want end
+end
+
+E.PopupDialogs["TUI_NEWPROFILE_COPY"] = {
+    text = "|cFF8080FFthingsUI|r: New ElvUI profile |cFFFFFFFF'%s'|r.\nCopy settings from the preset profile |cFFFFFFFF'%s'|r?",
+    button1 = YES, button2 = NO, button3 = "Never for this profile",
+    OnAccept = function(_, data)
+        if E.data:GetCurrentProfile() == data.new then E.data:CopyProfile(data.src) end
+    end,
+    OnAlt = function(_, data)
+        _G.thingsUIGlobalDB = _G.thingsUIGlobalDB or {}
+        local g = _G.thingsUIGlobalDB
+        g.newProfileNoAsk = g.newProfileNoAsk or {}
+        g.newProfileNoAsk[data.new] = true
+    end,
+    OnShow = AltPopupShow, OnHide = AltPopupHide,
+    timeout = 0, whileDead = 1, hideOnEscape = 1, preferredIndex = 3,
+}
+
+local pendingNewProfile
+local function OnNewProfile(_, _, profileKey)
+    pendingNewProfile = profileKey
+end
+local function OnProfileChanged(_, _, profileKey)
+    if not pendingNewProfile or profileKey ~= pendingNewProfile then pendingNewProfile = nil return end
+    pendingNewProfile = nil
+    if ns.SuppressNewProfileAsk and (GetTime() - ns.SuppressNewProfileAsk) < 5 then return end
+    local g = _G.thingsUIGlobalDB
+    if g and g.newProfileNoAsk and g.newProfileNoAsk[profileKey] then return end
+    local src = PresetProfileForRole()
+    if not src or src == profileKey then return end
+    C_Timer.After(0.2, function()
+        if E.data:GetCurrentProfile() ~= profileKey then return end
+        E:StaticPopup_Show("TUI_NEWPROFILE_COPY", profileKey, src, { new = profileKey, src = src })
+    end)
+end
+local cbRegistered
+local function RegisterProfileCallbacks()
+    if cbRegistered then return end
+    if not (E.data and E.data.RegisterCallback) then return end
+    cbRegistered = true
+    E.data.RegisterCallback("thingsUIAltNewProfile", "OnNewProfile", OnNewProfile)
+    E.data.RegisterCallback("thingsUIAltNewProfile", "OnProfileChanged", OnProfileChanged)
+end
+local cbEv = CreateFrame("Frame")
+cbEv:RegisterEvent("PLAYER_ENTERING_WORLD")
+cbEv:SetScript("OnEvent", function(self)
+    RegisterProfileCallbacks()
+    if cbRegistered then self:UnregisterAllEvents() end
+end)
 
 local function CapturePreset(sel, emSel, emSpec)
     local p = { providers = {} }
