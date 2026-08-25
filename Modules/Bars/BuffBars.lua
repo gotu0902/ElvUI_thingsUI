@@ -331,11 +331,14 @@ local lastProcessTime = 0
 local throttledPending = false
 local THROTTLE_INTERVAL = 0.1
 
+local VerifyAnchor
 local function OnNextFrame(self)
     self:SetScript("OnUpdate", nil)
     isDirty = false
     lastProcessTime = GetTime()
-    ProcessUpdate()
+    VerifyAnchor()
+    local BB = ns.BuffBars
+    if BB and BB.ProcessUpdate then BB.ProcessUpdate() else ProcessUpdate() end
 end
 
 local function MarkDirty()
@@ -362,8 +365,7 @@ end
 
 ns.MarkBuffBarsDirty = MarkDirty
 
-local anchorTicker
-local function VerifyAnchor()
+VerifyAnchor = function()
     if InCombatLockdown() then return end
     if not BuffBarCooldownViewer then return end
     local db = E.db.thingsUI and E.db.thingsUI.buffBars
@@ -430,14 +432,12 @@ function TUI:UpdateBuffBars()
         eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
         eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
         wipe(skinnedBars)
-        if not anchorTicker then anchorTicker = C_Timer.NewTicker(0.5, VerifyAnchor) end
         MarkDirty()
     else
         isEnabled = false
         isDirty = false
         updateFrame:SetScript("OnUpdate", nil)
         eventFrame:UnregisterAllEvents()
-        if anchorTicker then anchorTicker:Cancel(); anchorTicker = nil end
     end
 end
 

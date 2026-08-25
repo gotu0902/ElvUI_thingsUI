@@ -224,26 +224,26 @@ local function RebuildPassiveCache()
 end
 
 local passiveQueued = false
+M.RebuildPassiveCache = RebuildPassiveCache
 local function QueuePassiveRebuild()
     if passiveQueued then return end
     passiveQueued = true
     C_Timer.After(0.1, function()
         passiveQueued = false
-        RebuildPassiveCache()
+        M.RebuildPassiveCache()
     end)
 end
 
 function M.IsPassiveHidden(child) return passiveHidden[child] == true end
 M.QueuePassiveRebuild = function() QueuePassiveRebuild() end
 
--- never run code inside RefreshData's stack
 local dataRefreshQueued = false
 local function OnViewerDataRefresh()
     if dataRefreshQueued then return end
     dataRefreshQueued = true
     C_Timer.After(0, function()
         dataRefreshQueued = false
-        RebuildPassiveCache()
+        M.RebuildPassiveCache()
         for name in pairs(VIEWERS) do QueueLayout(_G[name]) end
     end)
 end
@@ -1042,9 +1042,10 @@ end
 
 local function FlushPending(self)
     self:SetScript("OnUpdate", nil)
+    if not M.LayoutViewer then M.LayoutViewer = LayoutViewer end
     for viewer in pairs(pendingViewers) do
         pendingViewers[viewer] = nil
-        LayoutViewer(viewer)
+        M.LayoutViewer(viewer)
     end
 end
 

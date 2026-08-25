@@ -542,6 +542,29 @@ function Teardown(groupID)
     lane.tail:Hide()
 end
 
+local function DefSig(def)
+    local keys = {}
+    for k, v in pairs(def) do
+        local tv = type(v)
+        if tv == "string" or tv == "number" or tv == "boolean" then
+            keys[#keys + 1] = k .. "=" .. tostring(v)
+        elseif tv == "table" and k ~= "spells" then
+            local sub = {}
+            for k2, v2 in pairs(v) do
+                local t2 = type(v2)
+                if t2 == "string" or t2 == "number" or t2 == "boolean" then sub[#sub + 1] = k2 .. "=" .. tostring(v2) end
+            end
+            table.sort(sub)
+            keys[#keys + 1] = k .. "{" .. table.concat(sub, ",") .. "}"
+        end
+    end
+    table.sort(keys)
+    local sp = {}
+    for id in pairs(def.spells or {}) do sp[#sp + 1] = tostring(id) end
+    table.sort(sp)
+    return table.concat(keys, ";") .. "#" .. table.concat(sp, ",")
+end
+
 function A.Sync(group, frame)
     if not (group and frame and frame._tuiSlot) then return end
     if ns.CustomGroups.testMode then
@@ -630,6 +653,15 @@ function A.Sync(group, frame)
 
     local slotIndex = ns.CustomGroups.NextFreeSlot(group, frame)
     local pt, tx, ty = ns.CustomGroups.SlotPoint(frame, slotIndex)
+    local sigParts = { tostring(slotIndex), tostring(pt), tostring(tx), tostring(ty),
+        tostring(S.iw), tostring(S.ih), tostring(S.sp), tostring(S.pt), tostring(S.perLine),
+        tostring(S.center), tostring(S.horizontal), tostring(S.alongSign), tostring(S.crossSign),
+        tostring(group.maxIcons), tostring(sortMode), tostring(frame:GetFrameStrata()) }
+    for _, e in ipairs(entries) do sigParts[#sigParts + 1] = e.key .. ":" .. DefSig(e.def) end
+    local syncSig = table.concat(sigParts, "|")
+    if lane._syncSig == syncSig then return end
+    lane._syncSig = syncSig
+
     lane.tail:ClearAllPoints()
     ns.Pixel.SetSize(lane.tail, S.iw, S.ih)
     ns.Pixel.SetPoint(lane.tail, pt, frame, pt, tx, ty)
@@ -680,7 +712,6 @@ function A.Sync(group, frame)
         local tPt, cPt, ox, oy, tH, tV, tAnchor = AttachLayout(side, S.sp, hDir, vDir, S.center)
         cT:ClearAllPoints()
         cT:SetSize(S.iw, S.ih)
-        -- if adding target @ debuff icon to a group after its been active, it'll throw a taint.. needs a reload I guess sadge
         local anchored = pcall(cT.SetPoint, cT, tPt, lane.container, cPt, ox, oy)
         if not anchored then
             local totalMain = 0
