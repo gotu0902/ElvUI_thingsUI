@@ -498,7 +498,7 @@ local function CreateIcon(gs, group, kind, id)
             if t and t.showIdle then
                 UpdateIcon(btn)
             elseif QueueLayout then
-                QueueLayout()
+                QueueLayout(false)
             end
         end)
     else
@@ -506,7 +506,7 @@ local function CreateIcon(gs, group, kind, id)
         cd:SetScript("OnCooldownDone", function()
             local t = ns.Timers and btn._group and ns.Timers.FindItemTimer(btn._id, btn._group.id)
             if t and ns.Timers.IsActive(t) and not t.showIdle and QueueLayout then
-                QueueLayout()
+                QueueLayout(false)
             else
                 UpdateIcon(btn)
             end
@@ -903,11 +903,12 @@ local function CollectEntries(group, shown)
     end
 end
 
-local function ApplyGroup(group)
+local function ApplyGroup(group, force)
     local gs = EnsureContainer(group)
     local frame = gs.container
 
     if not group.enabled then
+        gs._applied = false
         HideGroupIcons(gs)
         if ns.AuraLane then ns.AuraLane.Release(group.id) end
         frame:Hide()
@@ -974,7 +975,6 @@ local function ApplyGroup(group)
         end
     end
 
-    HideGroupIcons(gs)
     CollectEntries(group, gs.shown)
 
     local cap = tonumber(group.maxIcons) or 0
@@ -984,26 +984,51 @@ local function ApplyGroup(group)
         end
     end
 
+    local parts = {}
+    for i, e in ipairs(gs.shown) do parts[i] = e.kind .. e.id end
+    local sig = table.concat(parts, ",") .. "|" .. table.concat({
+        iw, ih, sp, growth, perLine, tostring(group.wrapDir), mscale,
+        tostring(m_zoom), tostring(m_lock), tostring(group.iconZoom),
+        tostring(group.anchorFrame), tostring(group.anchorFrameCustom),
+        tostring(group.anchorPoint), tostring(group.anchorRelativePoint),
+        tostring(group.anchorXOffset), tostring(group.anchorYOffset),
+    }, "|")
+    if not force and not M.testMode and gs._applied and gs._applySig == sig then
+        for _, e in ipairs(gs.shown) do UpdateIcon(CreateIcon(gs, group, e.kind, e.id)) end
+        local visible = M.VisibilityOK(group)
+        local lane = ns.AuraLane and ns.AuraLane.HasSets(group)
+        frame:SetShown((visible and (#gs.shown > 0 or lane)) and true or false)
+        return
+    end
+
+    HideGroupIcons(gs)
     local btns = {}
     for _, e in ipairs(gs.shown) do
         local btn = CreateIcon(gs, group, e.kind, e.id)
-        if btn:GetParent() ~= frame then btn:SetParent(frame) end
-        btn:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
-        ns.Pixel.SetSize(btn, iw, ih)
-        UpdateIcon(btn)
-        M.ApplyIconSkin(btn, btn.icon, crop, skinPx)
-        if btn.count then
-            local t = m_text or group.text or {}
-            local font = (LSM and LSM:Fetch("font", t.countFont or "Expressway")) or STANDARD_TEXT_FONT
-
-            E:SetFont(btn.count, font, t.countFontSize or 12, t.countFontOutline or "OUTLINE")
-            local cc = t.countColor or {}
-            btn.count:SetTextColor(cc.r or 1, cc.g or 1, cc.b or 1)
-            local pt = t.countPoint or "BOTTOMRIGHT"
-            btn.count:ClearAllPoints()
-            btn.count:SetPoint(pt, btn, pt, t.countXOffset or 0, t.countYOffset or 0)
-            btn.count:SetShown(t.showCount ~= false)
+        local t = m_text or group.text or {}
+        local cc = t.countColor or {}
+        local ssig = table.concat({ tostring(iw), tostring(ih), tostring(skinPx),
+            crop and (crop[1] .. "," .. crop[3]) or "", tostring(frame:GetFrameStrata()),
+            tostring(t.countFont), tostring(t.countFontSize), tostring(t.countFontOutline),
+            tostring(t.countPoint), tostring(t.countXOffset), tostring(t.countYOffset),
+            tostring(t.showCount), tostring(cc.r), tostring(cc.g), tostring(cc.b) }, "|")
+        if btn._tuiStyleSig ~= ssig or btn:GetParent() ~= frame then
+            btn._tuiStyleSig = ssig
+            if btn:GetParent() ~= frame then btn:SetParent(frame) end
+            btn:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
+            ns.Pixel.SetSize(btn, iw, ih)
+            M.ApplyIconSkin(btn, btn.icon, crop, skinPx)
+            if btn.count then
+                local font = (LSM and LSM:Fetch("font", t.countFont or "Expressway")) or STANDARD_TEXT_FONT
+                E:SetFont(btn.count, font, t.countFontSize or 12, t.countFontOutline or "OUTLINE")
+                btn.count:SetTextColor(cc.r or 1, cc.g or 1, cc.b or 1)
+                local pt = t.countPoint or "BOTTOMRIGHT"
+                btn.count:ClearAllPoints()
+                btn.count:SetPoint(pt, btn, pt, t.countXOffset or 0, t.countYOffset or 0)
+                btn.count:SetShown(t.showCount ~= false)
+            end
         end
+        UpdateIcon(btn)
         btns[#btns + 1] = btn
     end
 
@@ -1114,9 +1139,11 @@ local function ApplyGroup(group)
     if ns.CDMText and ns.CDMText.StyleChild and textCfg then
         for _, btn in ipairs(btns) do ns.CDMText.StyleChild(btn, textCfg) end
     end
+    gs._applySig = sig
+    gs._applied = true
 end
 
-local function ApplyAll()
+local function ApplyAll(force)
     local groups = GetGroups()
     local live = {}
     for _, g in ipairs(groups) do live[g.id] = true end
@@ -1127,20 +1154,27 @@ local function ApplyAll()
             if ns.AuraLane and ns.AuraLane.Release then ns.AuraLane.Release(id) end
         end
     end
-    for _, g in ipairs(groups) do ApplyGroup(g) end
+    for _, g in ipairs(groups) do ApplyGroup(g, force) end
     if ns.MoverSync and ns.MoverSync.Queue then ns.MoverSync.Queue() end
 end
 
-local queued = false
-QueueLayout = function()
+M.ApplyAll = ApplyAll
+local queued, queuedForce = false, false
+QueueLayout = function(force)
+    if force == nil then force = true end
+    queuedForce = queuedForce or force
     if queued then return end
     queued = true
-    C_Timer.After(0, function() queued = false; ApplyAll() end)
+    C_Timer.After(0, function()
+        local f = queuedForce
+        queued, queuedForce = false, false
+        M.ApplyAll(f)
+    end)
 end
 M.QueueLayout = QueueLayout
 
 if ns.Timers and ns.Timers.AddHostRefresh then
-    ns.Timers.AddHostRefresh(QueueLayout)
+    ns.Timers.AddHostRefresh(function() QueueLayout(false) end)
 end
 
 if ns.Timers and ns.Timers.AddHostRepaint then
@@ -1163,13 +1197,13 @@ if ns.Timers and ns.Timers.AddHostRepaint then
                 end
             end
         end
-        if restructure then QueueLayout() end
+        if restructure then QueueLayout(false) end
     end
     ns.Timers.AddHostRepaint(TimerRepaint)
 end
 
 if ns.Timers and ns.Timers.AddTotemCallback then
-    ns.Timers.AddTotemCallback(function() if QueueLayout then QueueLayout() end end)
+    ns.Timers.AddTotemCallback(function() if QueueLayout then QueueLayout(false) end end)
 end
 
 if ns.TimersRender and ns.TimersRender.RegisterGlowHost then
@@ -1213,6 +1247,12 @@ local function RefreshItemsAll()
     for _, gs in pairs(groupState) do
         for _, b in pairs(gs.itemIcons) do if b:IsShown() then UpdateItemIcon(b) end end
     end
+end
+local chargesQueued = false
+local function QueueChargesRefresh()
+    if chargesQueued then return end
+    chargesQueued = true
+    C_Timer.After(0.1, function() chargesQueued = false; RefreshSpellsAll() end)
 end
 
 local _pendingCD = {}
@@ -1455,14 +1495,14 @@ ev:RegisterEvent("BAG_UPDATE_COOLDOWN")
 ev:RegisterEvent("BAG_UPDATE_DELAYED")
 ev:RegisterEvent("GROUP_ROSTER_UPDATE")
 ev:SetScript("OnEvent", function(_, event, arg1)
-    if event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED"
-       or event == "BAG_UPDATE_DELAYED" or event == "SPELLS_CHANGED"
-       or event == "GROUP_ROSTER_UPDATE" then
+    if event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_SPECIALIZATION_CHANGED" then
         QueueLayout()
+    elseif event == "BAG_UPDATE_DELAYED" or event == "SPELLS_CHANGED" or event == "GROUP_ROSTER_UPDATE" then
+        QueueLayout(false)
     elseif event == "SPELL_UPDATE_COOLDOWN" then
         if arg1 then RefreshSpellThrottled(arg1) end
     elseif event == "SPELL_UPDATE_CHARGES" then
-        RefreshSpellsAll()
+        QueueChargesRefresh()
     elseif event == "BAG_UPDATE_COOLDOWN" then
         RefreshItemsAll()
     end

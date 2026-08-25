@@ -290,8 +290,21 @@ local function ApplyHoverAlpha()
     main:SetAlpha(over and 1 or 0)
 end
 
-local hoverTicker
-local verifyTicker
+local function HoverLeave() C_Timer.After(0.1, ApplyHoverAlpha) end
+local function HookHover(main)
+    if not main._tuiHover then
+        main._tuiHover = true
+        main:HookScript("OnEnter", ApplyHoverAlpha)
+        main:HookScript("OnLeave", HoverLeave)
+    end
+    local cont = ContainerOf(main)
+    if cont and not cont._tuiHover then
+        cont._tuiHover = true
+        cont:HookScript("OnEnter", ApplyHoverAlpha)
+        cont:HookScript("OnLeave", HoverLeave)
+    end
+end
+
 local hooked = false
 function TUI:UpdateMBB()
     if not Loaded() then return end
@@ -301,7 +314,7 @@ function TUI:UpdateMBB()
         hooked = true
         main:HookScript("OnMouseDown", QueueSkin)
     end
-    if not verifyTicker then verifyTicker = C_Timer.NewTicker(1, VerifyState) end
+    for _, d in ipairs({ 1, 3, 6, 10 }) do C_Timer.After(d, VerifyState) end
     if db and not db.seeded then
         db.seeded = true
         M.SetDirection("leftup")
@@ -309,10 +322,9 @@ function TUI:UpdateMBB()
     end
     main:SetScale((db and db.scale) or 1)
     if db and db.mouseover then
-        if not hoverTicker then hoverTicker = C_Timer.NewTicker(0.2, ApplyHoverAlpha) end
+        HookHover(main)
         ApplyHoverAlpha()
     else
-        if hoverTicker then hoverTicker:Cancel(); hoverTicker = nil end
         main:SetAlpha(1)
     end
     ApplyPosition()
@@ -321,9 +333,16 @@ function TUI:UpdateMBB()
     ApplyHideMain()
 end
 
+local worldEntered = false
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")
-ev:SetScript("OnEvent", function()
+ev:RegisterEvent("ADDON_LOADED")
+ev:SetScript("OnEvent", function(_, event)
+    if event == "ADDON_LOADED" then
+        if worldEntered then C_Timer.After(1, VerifyState) end
+        return
+    end
+    worldEntered = true
     C_Timer.After(2, function()
         if TUI.UpdateMBB then TUI:UpdateMBB() end
     end)

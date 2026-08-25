@@ -2,7 +2,7 @@
 ## Title: |cFF8080FFElvUI_thingsUI|r
 ## Notes: ElvUI plugin for doing things
 ## Author: geir, Dan G, pat_skr, Claude
-## Version: 4.1.6
+## Version: 4.1.7
 ## RequiredDeps: ElvUI
 ## OptionalDeps: MinimapButtonButton, Details! Damage Meter, Grid2
 ## DefaultState: Enabled

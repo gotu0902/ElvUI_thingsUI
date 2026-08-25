@@ -370,7 +370,9 @@ local function DefaultPresetDiff()
     local p = name and Presets()[name]
     if not p then return nil end
     local rp = RoleStore(false)
-    local diff, missing = {}, {}
+    local curIdx = GetSpecialization and GetSpecialization()
+    local rk = curIdx and rp and RoleKeyFor(curIdx, rp)
+    local diff, missing, roleDiff = {}, {}, {}
     for _, prov in ipairs(PROVIDERS) do
         local pp = p.providers and p.providers[prov.key]
         local rmap = rp and rp.enabled and rp.providers and rp.providers[prov.key]
@@ -391,10 +393,14 @@ local function DefaultPresetDiff()
                         missing[#missing + 1] = { prov = prov, profile = want }
                     end
                 end
+                local want = rk and rmap[rk]
+                if want and exists[want] and not prov.noRoles and prov.current() ~= want then
+                    roleDiff[#roleDiff + 1] = { prov = prov, profile = want }
+                end
             end
         end
     end
-    return diff, name, missing
+    return diff, name, missing, roleDiff
 end
 
 function M.ApplyDefaultPreset()
@@ -416,10 +422,23 @@ function M.ApplyDefaultPreset()
     if deferred then deferred() end
 end
 
+local function DeclinedStore()
+    _G.thingsUIGlobalDB = _G.thingsUIGlobalDB or {}
+    local g = _G.thingsUIGlobalDB
+    g.defPresetDeclined = g.defPresetDeclined or {}
+    return g.defPresetDeclined
+end
+
 E.PopupDialogs["TUI_ALT_DEFPRESET"] = {
     text = "%s",
     button1 = ACCEPT, button2 = CANCEL,
-    OnAccept = function() M.ApplyDefaultPreset() end,
+    OnAccept = function()
+        M.ApplyDefaultPreset()
+        M.ApplyRoleProfiles(true)
+    end,
+    OnCancel = function(_, data)
+        if data and data.name then DeclinedStore()[CharKey()] = data.name end
+    end,
     OnShow = AltPopupShow, OnHide = AltPopupHide,
     timeout = 0, whileDead = 1, hideOnEscape = 1,
 }
@@ -427,12 +446,15 @@ E.PopupDialogs["TUI_ALT_DEFPRESET"] = {
 function M.CheckDefaultPreset()
     if frame then return end
     if InCombatLockdown() then return end
-    if not Store()[CharKey()] then return end
-    local diff, name, missing = DefaultPresetDiff()
+    local diff, name, missing, roleDiff = DefaultPresetDiff()
     if not diff then return end
-    if #diff == 0 and #(missing or {}) == 0 then return end
+    if DeclinedStore()[CharKey()] == name then return end
+    if #diff == 0 and #(missing or {}) == 0 and #(roleDiff or {}) == 0 then return end
     local lines = {}
     for _, d in ipairs(diff) do
+        lines[#lines + 1] = ("|cFF%s%s:|r %s"):format(d.prov.color or "FFFFFF", d.prov.title, d.profile)
+    end
+    for _, d in ipairs(roleDiff or {}) do
         lines[#lines + 1] = ("|cFF%s%s:|r %s"):format(d.prov.color or "FFFFFF", d.prov.title, d.profile)
     end
     for _, d in ipairs(missing or {}) do
@@ -443,7 +465,8 @@ function M.CheckDefaultPreset()
         lines[#lines + 1] = "|cFF888888Nameplates: Platynator|r"
     end
     E:StaticPopup_Show("TUI_ALT_DEFPRESET",
-        ("|cFF8080FFthingsUI|r: Switch to the '%s' preset profiles?\n\n%s"):format(name, table.concat(lines, "\n")))
+        ("|cFF8080FFthingsUI|r: Switch to the '%s' preset profiles?\n\n%s"):format(name, table.concat(lines, "\n")),
+        nil, { name = name })
 end
 
 function M.OfferRoleUpdate(provKey, profileName)
@@ -1148,12 +1171,12 @@ boot:SetScript("OnEvent", function(self)
     for _, t in ipairs({ 4, 10, 20 }) do
         C_Timer.After(t, function()
             if booted or frame then return end
+            if DefaultPresetName() then return end
             if GateCheck() then
                 booted = true
                 M.Open()
             end
         end)
     end
-    C_Timer.After(8, function() M.CheckRoleMismatch() end)
     C_Timer.After(10, function() M.CheckDefaultPreset() end)
 end)

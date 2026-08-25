@@ -78,12 +78,14 @@ local function ScanAndHookViewers()
 end
 
 local clusterUpdateQueued = false
+ns.ClusterPositioning = ns.ClusterPositioning or {}
+ns.ClusterPositioning.Force = ForceClusterUpdate
 function TUI:QueueClusterUpdate()
     if clusterUpdateQueued then return end
     clusterUpdateQueued = true
     C_Timer.After(0, function()
         clusterUpdateQueued = false
-        ForceClusterUpdate()
+        ns.ClusterPositioning.Force()
         MarkDirty()
     end)
 end
