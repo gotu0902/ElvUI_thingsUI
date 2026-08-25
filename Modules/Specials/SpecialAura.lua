@@ -157,7 +157,7 @@ function SA.StyleIconButton(button, r, wrapper, key)
     local w, h = wrapper:GetSize()
     if not w or w < 1 then w = db.width or 36 end
     if not h or h < 1 then h = w end
-    ns.Pixel.SetSize(button, w, h)
+    ns.Pixel.SetSizeScaled(button, wrapper, w, h)
 
     if not r.icon then
         r.icon = button:CreateTexture(nil, "ARTWORK")

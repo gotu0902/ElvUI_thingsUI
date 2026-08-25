@@ -209,7 +209,7 @@ local function StyleButton(button, group, lane)
     if button:IsForbidden() then return end
     local S = lane.slot
     if not S then return end
-    ns.Pixel.SetSize(button, S.iw, S.ih)
+    ns.Pixel.SetSizeScaled(button, lane.container, S.iw, S.ih)
 
     local r = lane.regions[button]
     if not r then

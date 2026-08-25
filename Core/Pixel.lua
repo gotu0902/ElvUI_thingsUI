@@ -54,3 +54,16 @@ function Pixel.SetSize(frame, width, height)
         frame:SetSize(Pixel.Snap(width, frame), Pixel.Snap(height, frame))
     end
 end
+
+-- scale from container perchance?
+function Pixel.SetSizeScaled(frame, scaleFrame, width, height)
+    if not frame then return end
+    width  = width or 1
+    height = height or width
+    local s = GetEffectiveScale(scaleFrame)
+    if PixelUtil and PixelUtil.GetNearestPixelSize then
+        frame:SetSize(PixelUtil.GetNearestPixelSize(width, s), PixelUtil.GetNearestPixelSize(height, s))
+    else
+        frame:SetSize(width, height)
+    end
+end
