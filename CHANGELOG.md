@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.1.7
+- Performance: Kinda substantial buff, reined in some combat and bag update stuff that were off the chainhooks
+- Alt setup should load profiles automatically now, and only show one popup for platynator and private profile
+
 ## 4.1.6
 - Fixed player power bar detached on FHT import
 - Export moved to it's own tab

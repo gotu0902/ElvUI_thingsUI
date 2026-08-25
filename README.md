@@ -1,6 +1,6 @@
 # ElvUI_thingsUI
 
-![Version](https://img.shields.io/badge/version-4.1.6-pink)
+![Version](https://img.shields.io/badge/version-4.1.7-pink)
 
 ## Modules
 - **Bar Setup** - arrange and stack your bars into one cluster.
