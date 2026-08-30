@@ -140,7 +140,9 @@ local function ApplyGroupTo(c, key, filter, spells, w, h, styler)
             end,
         })
     end
-    for button, r in pairs(c._tuiRegions) do styler(button, r) end
+    for button, r in pairs(c._tuiRegions) do
+        if not pcall(styler, button, r) then pending = true end
+    end
 end
 
 local function IconTexture(spellID)

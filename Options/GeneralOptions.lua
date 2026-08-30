@@ -353,42 +353,6 @@ function TUI:PositioningTweaksOptions()
                             },
                         },
                     },
-                    friendPresetsGroup = {
-                        order = 4,
-                        type = "group",
-                        name = "Buddies Presets",
-                        inline = true,
-                        args = {
-                            friendPresetsDesc = {
-                                order = 1,
-                                type = "description",
-                                name = "Some buddys that uses things have made adjustments, the buttons will load their profiles. To revert you'll have to import NHT Profile from wago :)\n\nIf you want your preset here, gimme a shout and I'll see what I can do o7\n\n",
-                            },
-                            lommes = {
-                                order = 2, type = "execute", name = "Nala's profile", width = 1.2,
-                                desc = "Just Nalas ActionBars setup atm (he uses 3 bars, 5-1-6 atm tho hehe)",
-                                func = function()
-                                    ApplyABPreset("Nala (5-1-6)", function()
-                                        local a = E.db.actionbar
-                                        a.bar1.buttonSize = 40
-                                        a.bar1.inheritGlobalFade = true
-                                        a.bar3.enabled = false
-                                        a.bar4.enabled = false
-                                        a.bar5.buttonSize = 40
-                                        a.bar5.inheritGlobalFade = true
-                                        a.bar6.buttonSize = 40
-                                        a.bar6.inheritGlobalFade = true
-                                        a.globalFadeAlpha = 0.69
-                                        a.lockActionBars = false
-                                        local m = E.db.movers
-                                        m["ElvAB_1"]  = "BOTTOM,UIParent,BOTTOM,0,47"
-                                        m["ElvAB_5"]  = "BOTTOM,UIParent,BOTTOM,0,88"
-                                        m["ElvAB_6"]  = "BOTTOM,UIParent,BOTTOM,0,4"
-                                    end)
-                                end,
-                            },
-                        },
-                    },
         },
     }
 end

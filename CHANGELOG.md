@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.1.8
+- Fixed special icons breaking when secret auras (Lifebloom++) blocked styling
+- Fixed grouped special icons staying hidden after visiting options
+- Fixed Essential->Utility overflow icon vanishing after loading screens
+- Installer: Everything!/quick setup errors no longer strand you on page 1
+- Full Install now includes ElvUI Global + Private settings
+- Quick setups import the Alt Profile preset and set it default
+- New standalone Private / Global / Alt Presets import buttons
+- Updated bundled ElvUI private/global and alt preset strings
+- Removed Buddies presets
+
 ## 4.1.7
 - Performance: Kinda substantial buff, reined in some combat and bag update stuff that were off the chainhooks
 - Alt setup should load profiles automatically now, and only show one popup for platynator and private profile

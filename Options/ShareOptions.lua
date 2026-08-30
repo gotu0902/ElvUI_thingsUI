@@ -34,11 +34,13 @@ local function FullSetup(order, key, label)
                 order = 1, type = "execute", width = 3.4,
                 name = label .. " Full Install",
                 confirm = function()
-                    return ("Import the full %s setup? This overwrites your ElvUI profile and thingsUI sections."):format(key)
+                    return ("Import the full %s setup? This overwrites your ElvUI profile, global/private settings and thingsUI sections."):format(key)
                 end,
                 func = function()
                     local ok, pending = ImportProfileString(profKey, profLabel)
-                    if ns.ImportPreset then ns.ImportPreset(key) end
+                    if pending then ns.__afterProfilePreset = key
+                    elseif ns.ImportPreset then ns.ImportPreset(key) end
+                    if ns.ImportElvExtras then ns.ImportElvExtras() end
                     if ok and not pending then E:StaticPopup_Show("IMPORT_RL") end
                 end,
             },
@@ -94,6 +96,45 @@ function TUI:ShareOptions()
                 name = "Import |cFF8080FFthe ElvUI profile and plugin things|r\n\n" },
             FullNHT = FullSetup(6, "NHT", "|cFFff0000NHT|r"),
             FullFHT = FullSetup(7, "FHT", "|cFF00ff17FHT|r"),
+
+            accountGroup = {
+                order = 10, type = "group", inline = true, name = "Account Settings",
+                args = {
+                    accountDesc = {
+                        order = 1, type = "description", width = "full",
+                        name = "Standalone pieces of the full setup.\n|cFFFFFFFFPrivate|r = per character (fonts, skins, chat bubbles) - |cFFFFFFFFGlobal|r = account (datatext panels) - |cFFFFFFFFAlt Presets|r = /tuialt profile combos.\n",
+                    },
+                    importPrivate = {
+                        order = 2, type = "execute", width = 1.13, name = "ElvUI Private",
+                        confirm = function() return "Import the private settings for this character? Applies on reload." end,
+                        func = function()
+                            local s = ns.InstallStrings and ns.InstallStrings.ELV_PRIVATE
+                            if not s or s == "" then print("|cFF8080FFthingsUI|r: private string not set yet.") return end
+                            if ns.ImportElvPrivate(s) then E:StaticPopup_Show("IMPORT_RL")
+                            else print("|cFF8080FFthingsUI|r: private import failed.") end
+                        end,
+                    },
+                    importGlobal = {
+                        order = 3, type = "execute", width = 1.13, name = "ElvUI Global",
+                        confirm = function() return "Import the account-wide global settings (datatext panels etc.)?" end,
+                        func = function()
+                            local s = ns.InstallStrings and ns.InstallStrings.ELV_GLOBAL
+                            local D = E:GetModule("Distributor", true)
+                            if not s or s == "" then print("|cFF8080FFthingsUI|r: global string not set yet.") return end
+                            if D and D.ImportProfile and D:ImportProfile(s) then E:StaticPopup_Show("IMPORT_RL")
+                            else print("|cFF8080FFthingsUI|r: global import failed.") end
+                        end,
+                    },
+                    importAltPresets = {
+                        order = 4, type = "execute", width = 1.13, name = "Alt Presets",
+                        confirm = function() return "Import the Alt Profile Setup presets (overwrites same-named presets)?" end,
+                        func = function()
+                            local n = ns.EnsureAltPresets and ns.EnsureAltPresets() or 0
+                            print(("|cFF8080FFthingsUI|r - %s"):format(n > 0 and ("imported " .. n .. " alt preset(s).") or "alt preset import failed."))
+                        end,
+                    },
+                },
+            },
 
             importHeader = { order = 20, type = "header", name = "Import" },
             importDesc = {

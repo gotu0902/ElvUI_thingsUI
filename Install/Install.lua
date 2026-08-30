@@ -23,7 +23,8 @@ function ns.ImportPreset(key)
     local s = PresetStr(key)
     if not s or s == "" then print("|cFF8080FFthingsUI|r: preset '" .. tostring(key) .. "' not set.") return end
     local ok, err = ns.Share and ns.Share.Import(s)
-    if ok then print("|cFF8080FFthingsUI|r - Imported " .. key .. " defaults.") end
+    if ok then print("|cFF8080FFthingsUI|r - Imported " .. key .. " defaults.")
+    else print("|cFF8080FFthingsUI|r - " .. key .. " plugin import |cFFFF6060failed|r: " .. tostring(err or "Share module unavailable")) end
     return ok, err
 end
 
@@ -37,6 +38,16 @@ function ns.ImportPresetConfirm(key, label)
     E:StaticPopup_Show("TUI_IMPORT_PRESET", label or key, nil, key)
 end
 
+-- plugin preset queued behind an async profile-name popup; drained on accept/cancel
+local function DrainPendingPreset()
+    local pk = ns.__afterProfilePreset
+    if pk then
+        ns.__afterProfilePreset = nil
+        ns.ImportPreset(pk)
+        E:StaticPopup_Show("IMPORT_RL")
+    end
+end
+
 -- profile swap keeps thingsUI, any step order works
 local function FinishElvProfileImport(key, data)
     local D = E:GetModule("Distributor", true)
@@ -46,6 +57,7 @@ local function FinishElvProfileImport(key, data)
     D:SetImportedProfile("profile", key, data, true)
     E.db.thingsUI = keep
     if E.StaggeredUpdateAll then E:StaggeredUpdateAll() end
+    DrainPendingPreset()
     return true
 end
 
@@ -56,6 +68,7 @@ E.PopupDialogs["TUI_IMPORT_PROFILE_NAME"] = {
     OnAccept = function(frame, data)
         FinishElvProfileImport(frame.editBox:GetText(), data.data)
     end,
+    OnCancel = function() DrainPendingPreset() end,
     EditBoxOnTextChanged = function(frame)
         frame:GetParent().button1:SetEnabled(frame:GetText() ~= "")
     end,
@@ -246,15 +259,51 @@ function ns.EnsureDetailsProfile()
     return true
 end
 
+-- import shipped alt presets; set as default unless the user already has a valid one
+function ns.EnsureAltPresets()
+    local s = ns.InstallStrings and ns.InstallStrings.ALT_PRESETS
+    local AI = ns.AltInstall
+    if not (s and s ~= "" and AI and AI.ImportPresets) then return 0 end
+    local n = AI.ImportPresets(s) or 0
+    if n > 0 then
+        local g = _G.thingsUIGlobalDB
+        if g and g.altPresets and not (g.altPresetDefault and g.altPresets[g.altPresetDefault]) then
+            local data = ns.Share and ns.Share.DecodeTable
+                and ns.Share.DecodeTable(tostring(s):gsub("%s", ""), "!TUIALT2!")
+            if type(data) == "table" then
+                local pick = data.default and "default"
+                if not pick then
+                    for name in pairs(data) do
+                        if not pick or name < pick then pick = name end
+                    end
+                end
+                g.altPresetDefault = pick
+            end
+        end
+    end
+    return n
+end
+
+function ns.ImportElvExtras()
+    local strs = ns.InstallStrings or {}
+    local D = E:GetModule("Distributor", true)
+    local okP = strs.ELV_PRIVATE and strs.ELV_PRIVATE ~= "" and ns.ImportElvPrivate(strs.ELV_PRIVATE)
+    local okG = strs.ELV_GLOBAL and strs.ELV_GLOBAL ~= "" and D and D.ImportProfile and D:ImportProfile(strs.ELV_GLOBAL) or false
+    return okP or false, okG or false
+end
+
 local function QuickSetup(key)
     local strs = ns.InstallStrings or {}
     local ps = strs[key .. "_PROFILE"]
-    if ps and ps ~= "" then ns.ImportElvProfile(ps) end
-    ns.ImportPreset(key)
+    local ok, pending
+    if ps and ps ~= "" then ok, pending = ns.ImportElvProfile(ps) end
+    if pending then ns.__afterProfilePreset = key else ns.ImportPreset(key) end
+    ns.ImportElvExtras()
     if ns.SetAutoScale then ns.SetAutoScale() end
     if ns.ApplyDarkMode then ns.ApplyDarkMode() end
     ns.SetDamageMeterProvider("TUI")
     E.db.thingsUI.rightChatAsBackground = true
+    ns.EnsureAltPresets()
     if IsInstalled("Grid2") then ns.UseGrid2() else ns.UseElvUF() end
 end
 
@@ -289,16 +338,14 @@ function ns.QuickSetupAuto()
         end
     end
 
-    local strs = ns.InstallStrings or {}
-    local D = E:GetModule("Distributor", true)
-    if strs.ELV_PRIVATE and strs.ELV_PRIVATE ~= "" then ns.ImportElvPrivate(strs.ELV_PRIVATE) end
-    if strs.ELV_GLOBAL and strs.ELV_GLOBAL ~= "" and D and D.ImportProfile then D:ImportProfile(strs.ELV_GLOBAL) end
+    ns.ImportElvExtras()
 
     ns.ImportPreset(mainKey)
     if ns.SetAutoScale then ns.SetAutoScale() end
     if ns.ApplyDarkMode then ns.ApplyDarkMode() end
     ns.SetDamageMeterProvider("TUI")
     E.db.thingsUI.rightChatAsBackground = true
+    ns.EnsureAltPresets()
     if IsInstalled("Grid2") then ns.UseGrid2() else ns.UseElvUF() end
     return mainKey, role
 end
@@ -338,7 +385,12 @@ ns.installTable = {
                 local opt = f["Option" .. i]
                 opt:Show(); opt:Enable(); opt:SetText(d.label)
                 opt:SetScript("OnClick", function()
-                    QuickSetup(d.key)
+                    -- surface errors without stranding the wizard mid-page
+                    local ok, err = pcall(QuickSetup, d.key)
+                    if not ok then
+                        geterrorhandler()(err)
+                        print("|cFF8080FFthingsUI|r - Quick setup hit an error (see BugSack); parts may not have applied.")
+                    end
                     StepDone(d.key .. " quick setup done - click Finished")
                     local fr = PIF()
                     if PI.SetPage and fr and fr.CurrentPage then
@@ -349,8 +401,13 @@ ns.installTable = {
             local auto = f.Option3
             auto:Show(); auto:Enable(); auto:SetText("Everything!")
             auto:SetScript("OnClick", function()
-                local key = ns.QuickSetupAuto()
-                StepDone(key .. " quick setup done (spec-based) - click Finished")
+                local ok, key = pcall(ns.QuickSetupAuto)
+                if not ok then
+                    geterrorhandler()(key)
+                    print("|cFF8080FFthingsUI|r - Quick setup hit an error (see BugSack); parts may not have applied.")
+                    key = nil
+                end
+                StepDone((key or "Quick") .. " setup done - click Finished")
                 local fr = PIF()
                 if PI.SetPage and fr and fr.CurrentPage then
                     PI:SetPage(#ns.installTable.Pages, fr.CurrentPage)
@@ -408,17 +465,12 @@ ns.installTable = {
             local strs = ns.InstallStrings or {}
             f.Option1:Show(); f.Option1:Enable(); f.Option1:SetText("Private + Global")
             f.Option1:SetScript("OnClick", function()
-                local D = E:GetModule("Distributor", true)
-                local sp, sg = strs.ELV_PRIVATE, strs.ELV_GLOBAL
-                local okP = sp and sp ~= "" and ns.ImportElvPrivate(sp)
-                local okG = sg and sg ~= "" and D and D.ImportProfile and D:ImportProfile(sg)
+                local okP, okG = ns.ImportElvExtras()
                 StepDone((okP and okG) and "Private + Global imported" or "Import failed")
             end)
             f.Option2:Show(); f.Option2:Enable(); f.Option2:SetText("Alt Profiles")
             f.Option2:SetScript("OnClick", function()
-                local s = strs.ALT_PRESETS
-                if not s or s == "" then StepDone("Preset string not set yet") return end
-                local n = (ns.AltInstall and ns.AltInstall.ImportPresets) and ns.AltInstall.ImportPresets(s) or 0
+                local n = ns.EnsureAltPresets()
                 StepDone(n > 0 and ("Imported " .. n .. " alt preset(s)") or "Import failed")
             end)
         end,

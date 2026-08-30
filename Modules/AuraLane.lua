@@ -540,6 +540,7 @@ function Teardown(groupID)
     lane.container:Hide()
     if lane.containerT then lane.containerT:Hide() end
     lane.tail:Hide()
+    lane._syncSig = nil
 end
 
 local function DefSig(def)
@@ -572,6 +573,7 @@ function A.Sync(group, frame)
         if lane then
             lane.container:Hide()
             if lane.containerT then lane.containerT:Hide() end
+            lane._syncSig = nil
         end
         return
     end
@@ -590,6 +592,7 @@ function A.Sync(group, frame)
             end
             lane.container:Hide()
             if lane.containerT then lane.containerT:Hide() end
+            lane._syncSig = nil
         end
         return
     end
@@ -659,7 +662,11 @@ function A.Sync(group, frame)
         tostring(group.maxIcons), tostring(sortMode), tostring(frame:GetFrameStrata()) }
     for _, e in ipairs(entries) do sigParts[#sigParts + 1] = e.key .. ":" .. DefSig(e.def) end
     local syncSig = table.concat(sigParts, "|")
-    if lane._syncSig == syncSig then return end
+    if lane._syncSig == syncSig then
+        lane.container:SetShown(LaneVisOK(lane))
+        if lane.containerT then lane.containerT:SetShown(LaneVisOKT(lane)) end
+        return
+    end
     lane._syncSig = syncSig
 
     lane.tail:ClearAllPoints()
@@ -890,3 +897,40 @@ ev:SetScript("OnEvent", function(_, event)
         end
     end
 end)
+
+local function DumpVal(v)
+    if issecretvalue and issecretvalue(v) then return "secret" end
+    return tostring(v)
+end
+
+SLASH_TUILANE1 = "/tuilane"
+SlashCmdList.TUILANE = function()
+    local CG = ns.CustomGroups
+    print(("|cFF8080FFtuilane|r testMode=%s pendingSync=%s assistOK=%s combat=%s"):format(
+        tostring(CG and CG.testMode or false), tostring(pendingSync),
+        tostring(playerAssistOK), tostring(InCombatLockdown())))
+    if not (CG and CG.GetGroups) then print("  no CustomGroups") return end
+    for _, g in ipairs(CG.GetGroups()) do
+        local frame = _G["TUI_CustomGroup" .. g.id]
+        local lane = lanes[g.id]
+        local entries = A.Entries(g)
+        local si = 0
+        for _, e in ipairs(entries) do if e.def.iconDB then si = si + 1 end end
+        local keys = 0
+        if lane then for _ in pairs(lane.keys) do keys = keys + 1 end end
+        print(("  g%d '%s' en=%s entries=%d(si=%d) frameShown=%s"):format(
+            g.id, tostring(g.name), tostring(g.enabled),
+            #entries, si, tostring(frame and frame:IsShown())))
+        if lane then
+            print(("    lane keys=%d unit=%s shown=%s visOK=%s pureH=%s hasH=%s tShown=%s tVisOK=%s"):format(
+                keys, tostring(lane.unit),
+                DumpVal(lane.container and lane.container:IsShown()),
+                tostring(LaneVisOK(lane)),
+                tostring(lane.pureHarmful), tostring(lane.hasHarmful),
+                DumpVal(lane.containerT and lane.containerT:IsShown()),
+                tostring(LaneVisOKT(lane))))
+        elseif si > 0 or #entries > 0 then
+            print("    NO LANE (never synced)")
+        end
+    end
+end

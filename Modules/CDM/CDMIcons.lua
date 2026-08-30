@@ -762,7 +762,16 @@ LayoutViewer = function(viewer)
     end
     if moved then
         overflowOut[targetName] = moved
-        if changed then
+        local needTarget = changed
+        if not needTarget then
+            local tv = _G[targetName]
+            local tproxy = tv and GetProxy(tv)
+            for i = 1, #moved do
+                local a = moved[i]._tuiAnchor
+                if not a or a.relative ~= tproxy then needTarget = true break end
+            end
+        end
+        if needTarget then
             local tv = _G[targetName]
             if tv then tv._tuiLayoutSig = nil; QueueLayout(tv) end
         end
