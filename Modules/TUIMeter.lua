@@ -2160,8 +2160,7 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
     end
 end)
 
-SLASH_TUIMETERDEBUG1 = "/tuimeterdbg"
-SlashCmdList["TUIMETERDEBUG"] = function()
+ns.SlashCommand("meter", function()
     local P = function(s) print("|cFF8080FFTUIMeter|r " .. s) end
     P("client build: " .. table.concat({ GetBuildInfo() }, " / "))
     if not C_DamageMeter then P("C_DamageMeter: MISSING"); return end
@@ -2190,7 +2189,7 @@ SlashCmdList["TUIMETERDEBUG"] = function()
         P("  plain 732.14 -> " .. tostring(AbbreviateNumbers(732.14)))
         if abb then P("  config 732.14 -> " .. tostring(AbbreviateNumbers(732.14, abb))) else P("  config: not built") end
     end
-end
+end)
 
 local panelHooked = false
 function TUI:UpdateTUIMeter()

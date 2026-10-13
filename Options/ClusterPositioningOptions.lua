@@ -249,7 +249,12 @@ function TUI:ClusterPositioningSubTab()
                                             sorting = function() return ns.ANCHORS.FilteredOrder() end,
                                             disabled = off,
                                             get = function() return fdb().anchorFrame or "ElvUF_Target" end,
-                                            set = function(_, v) fset("anchorFrame", v) end,
+                                            set = function(_, v)
+                                                if v ~= fdb().anchorFrame then
+                                                    ns.ANCHORS.ResetPlacement(fdb(), { "anchorPoint", "anchorRelativePoint", "xOffset", "yOffset" })
+                                                end
+                                                fset("anchorFrame", v)
+                                            end,
                                         },
                                         anchorPoint = {
                                             order = 4, type = "select", name = "Anchor From",

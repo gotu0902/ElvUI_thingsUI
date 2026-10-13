@@ -6,13 +6,128 @@ ns.SpecialBars = ns.SpecialBars or {}
 local SB = ns.SpecialBars
 local iconGroupState = SB.iconGroupState
 
+-- icons shown in a CDM row: CDMIcons folds them into that viewer's grid,
+-- ordered by layoutIndex between Blizzard's own (1..N)
+local CDM_VIEWER = { essential = "EssentialCooldownViewer", utility = "UtilityCooldownViewer" }
+local cdmRowOf = {}
+
+local function RowIconSize(row)
+    local proxy = ns.CDMIcons and ns.CDMIcons.ProxyForName and ns.CDMIcons.ProxyForName(CDM_VIEWER[row])
+    local vdb = E.db.thingsUI.cdmIcons and E.db.thingsUI.cdmIcons[row]
+    local w = (proxy and proxy._tuiLastIconW) or (vdb and vdb.overrideSize and vdb.iconWidth) or 36
+    local h = (proxy and proxy._tuiLastIconH)
+        or (vdb and vdb.overrideSize and (vdb.lockAspect and w or vdb.iconHeight)) or w
+    return w, h
+end
+
+-- an icon in a CDM row takes the row's text unless it overrides it, like a grouped one
+function SB.IconTextDB(db)
+    local row = db and db.cdmRow and not db.overrideGroupText and db.cdmRow
+    local cdm = row and E.db.thingsUI.cdmIcons
+    local vt = cdm and cdm[row] and cdm[row].text
+    if not vt then return db end
+    return setmetatable({
+        showDuration = vt.showCooldown ~= false,
+        durationFont = vt.cooldownFont, durationFontSize = vt.cooldownFontSize,
+        durationFontOutline = vt.cooldownFontOutline, durationColor = vt.cooldownColor,
+        durationPoint = vt.cooldownPoint, durationXOffset = vt.cooldownXOffset,
+        durationYOffset = vt.cooldownYOffset,
+        showStacks = vt.showStacks ~= false,
+        stackFont = vt.stacksFont, stackFontSize = vt.stacksFontSize,
+        stackFontOutline = vt.stacksFontOutline, stackColor = vt.stacksColor,
+        stackPoint = vt.stacksPoint, stackXOffset = vt.stacksXOffset, stackYOffset = vt.stacksYOffset,
+    }, { __index = db })
+end
+
+function SB.GetInlineIconsFor(viewer)
+    local name = viewer and viewer:GetName()
+    local out
+    for key, row in pairs(cdmRowOf) do
+        local wrapper = CDM_VIEWER[row] == name and _G["TUI_SpecialIcon_" .. key]
+        if wrapper and wrapper:IsShown() then
+            out = out or {}
+            out[#out + 1] = wrapper
+        end
+    end
+    return out
+end
+
+-- every aura a special icon or bar shows: the CDM buff copy is a duplicate
+function SB.AuraSet()
+    local set = {}
+    local SA = ns.SpecialAura
+    local function add(db)
+        if not (db and db.enabled and db.spellID) or db.totemTimer then return end
+        set[db.spellID] = true
+        local ex = SA and SA.ExpandSpellIDs and SA.ExpandSpellIDs(db.spellID)
+        for id in pairs(ex or {}) do set[id] = true end
+    end
+    for i = 1, (SB.GetIconCount and SB.GetIconCount() or 0) do add(SB.GetIconDB("icon" .. i)) end
+    for i = 1, (SB.GetBarCount and SB.GetBarCount() or 0) do add(SB.GetBarDB("bar" .. i)) end
+    return set
+end
+
+local lastAuraSig
+function SB.NotifyAuraSet()
+    local keys = {}
+    for id in pairs(SB.AuraSet()) do keys[#keys + 1] = id end
+    table.sort(keys)
+    local sig = table.concat(keys, ",")
+    if sig == lastAuraSig then return end
+    lastAuraSig = sig
+    if ns.CDMIcons and ns.CDMIcons.QueuePassiveRebuild then ns.CDMIcons.QueuePassiveRebuild() end
+end
+
+local lastRowSig, rowCheckQueued = nil, false
+local function RowCheck()
+    rowCheckQueued = false
+    local keys = {}
+    for key, row in pairs(cdmRowOf) do
+        local w = _G["TUI_SpecialIcon_" .. key]
+        keys[#keys + 1] = key .. ":" .. row .. ":" .. tostring(w and w.layoutIndex) .. ":" .. tostring(w and w:IsShown())
+    end
+    table.sort(keys)
+    local sig = table.concat(keys, ",")
+    if sig == lastRowSig then return end
+    lastRowSig = sig
+    if ns.CDMIcons and ns.CDMIcons.QueuePassiveRebuild then ns.CDMIcons.QueuePassiveRebuild() end
+    if ns.CDMIcons and ns.CDMIcons.RefreshAll then ns.CDMIcons.RefreshAll() end
+end
+local function QueueRowCheck()
+    if rowCheckQueued then return end
+    rowCheckQueued = true
+    C_Timer.After(0, RowCheck)
+end
+
+-- visibility rules for standalone and row icons; a grouped icon follows its group's
+local function VisibleNow(db)
+    return (ns.CustomGroups and ns.CustomGroups.testMode) or ns.Visibility.Shown(db.visibility)
+end
+
+function SB.RefreshIconVisibility()
+    local changed = false
+    for i = 1, (SB.GetIconCount and SB.GetIconCount() or 0) do
+        local key = "icon" .. i
+        local db = SB.GetIconDB(key)
+        local wrapper = _G["TUI_SpecialIcon_" .. key]
+        local g = db and db.customGroup and ns.CustomGroups and ns.CustomGroups.GroupByID
+            and ns.CustomGroups.GroupByID(db.customGroup)
+        if wrapper and db and db.enabled and db.spellID and not (g and g.enabled) then
+            local want = VisibleNow(db) and true or false
+            if wrapper:IsShown() ~= want then wrapper:SetShown(want); changed = true end
+        end
+    end
+    if changed then QueueRowCheck() end
+end
+ns.Visibility.OnChange(function() SB.RefreshIconVisibility() end)
+
 local _iconMoverCreated = {}
 local function EnsureIconMover(wrapper, iconKey, displayName)
     if _iconMoverCreated[iconKey] then return end
     local ms = ns.MoverSync
     if not (ms and ms.CreateManaged) then return end
-    ms.CreateManaged(wrapper, "TUI_SpecialIconMover_" .. iconKey, displayName or ("Special Icon " .. iconKey), {
-        configString  = "thingsUI,modulesTab,specialIcons," .. iconKey .. "Group,anchorGroup",
+    ms.CreateManaged(wrapper, "TUI_SpecialIconMover_" .. iconKey, displayName or ("Aura Icon " .. iconKey), {
+        configString  = "thingsUI,modulesTab,specialIcons,iconsTab," .. iconKey .. "Group,anchorGroup",
         shouldDisable = function() return not (E.db.thingsUI and E.db.thingsUI.specialBars) end,
         onSave = function(point, relPoint, x, y)
             local db = SB.GetIconDB(iconKey)
@@ -21,6 +136,11 @@ local function EnsureIconMover(wrapper, iconKey, displayName)
             db.anchorRelativePoint = relPoint
             db.anchorXOffset = x
             db.anchorYOffset = y
+            ns.NotifyChange()
+        end,
+        onNudge = function(dx, dy)
+            ms.ShiftOffsets(SB.GetIconDB(iconKey), dx, dy)
+            TUI:QueueSpecialBarsUpdate()
             ns.NotifyChange()
         end,
     })
@@ -90,7 +210,11 @@ local function ComputeIconTexCoord(db)
     local w = db.width or 36
     local h = (db.keepAspectRatio ~= false) and w or (db.height or 36)
 
-    if db.customGroup and ns.CustomGroups and ns.CustomGroups.GroupByID then
+    if db.cdmRow and CDM_VIEWER[db.cdmRow] then
+        local vdb = E.db.thingsUI.cdmIcons and E.db.thingsUI.cdmIcons[db.cdmRow]
+        z = tonumber(vdb and vdb.iconZoom) or 0
+        w, h = RowIconSize(db.cdmRow)
+    elseif db.customGroup and ns.CustomGroups and ns.CustomGroups.GroupByID then
         local g = ns.CustomGroups.GroupByID(db.customGroup)
         if g then
             z = tonumber(g.iconZoom) or 0
@@ -127,6 +251,10 @@ local function ReleaseIcon(iconKey)
         wrapper:Hide()
     end
     iconGroupState[iconKey] = nil
+    if cdmRowOf[iconKey] then
+        cdmRowOf[iconKey] = nil
+        QueueRowCheck()
+    end
 
     local moverName = "TUI_SpecialIconMover_" .. iconKey
     if E and E.CreatedMovers and E.CreatedMovers[moverName] and E.DisableMover then
@@ -158,30 +286,54 @@ local function UpdateIconSlot(iconKey)
     local wrapper   = GetOrCreateIconFrame(iconKey)
     local Pixel     = ns.Pixel
     local moverName = "TUI_SpecialIconMover_" .. iconKey
+    local row = db.cdmRow and CDM_VIEWER[db.cdmRow] and db.cdmRow
 
     local anchorName  = (db.anchorMode ~= 'CUSTOM') and db.anchorMode or db.anchorFrame
-    local anchorFrame = SB.ResolveAnchorTarget(anchorName)
+    local anchorFrame = not row and SB.ResolveAnchorTarget(anchorName)
 
-    local w = db.width  or 36
-    local h = db.keepAspectRatio ~= false and w or (db.height or 36)
-    Pixel.SetSize(wrapper, w, h)
-
-    wrapper:ClearAllPoints()
-    if anchorFrame then
-        Pixel.SetPoint(wrapper, db.anchorPoint or "CENTER", anchorFrame, db.anchorRelativePoint or "CENTER", db.anchorXOffset or 0, db.anchorYOffset or 0)
+    local w, h
+    if row then
+        -- the viewer's layout places it by its center; Blizzard's skinned icons
+        -- draw their 1px border outside the cell, ours draws inside: grow by it
+        local pad = ns.CDM_SPACING_INSET or 2
+        w, h = RowIconSize(row)
+        w, h = w + pad, h + pad
+        Pixel.SetSize(wrapper, w, h)
+        wrapper._tuiOwnSize = true
+        wrapper.layoutIndex = (db.cdmIndex or 30) - 0.5
+        cdmRowOf[iconKey] = row
+        QueueRowCheck()
+        if E and E.CreatedMovers and E.CreatedMovers[moverName] and E.DisableMover then
+            E:DisableMover(moverName)
+        end
     else
-        Pixel.SetPoint(wrapper, "CENTER", UIParent, "CENTER", db.anchorXOffset or 0, db.anchorYOffset or 0)
-    end
+        if cdmRowOf[iconKey] then
+            cdmRowOf[iconKey] = nil
+            wrapper.layoutIndex = nil
+            QueueRowCheck()
+        end
+        wrapper._tuiOwnSize = nil
+        w = db.width  or 36
+        h = db.keepAspectRatio ~= false and w or (db.height or 36)
+        Pixel.SetSize(wrapper, w, h)
 
-    local iconNum = iconKey:match("(%d+)$") or ""
-    local label = "Special Icon " .. iconNum
-    if anchorFrame and db.anchorMode and db.anchorMode ~= "UIParent" then
-        label = label .. "\n|cFF888888(Anchored to: " .. (db.anchorMode or "?") .. ")|r"
-    end
-    EnsureIconMover(wrapper, iconKey, label)
+        wrapper:ClearAllPoints()
+        if anchorFrame then
+            Pixel.SetPoint(wrapper, db.anchorPoint or "CENTER", anchorFrame, db.anchorRelativePoint or "CENTER", db.anchorXOffset or 0, db.anchorYOffset or 0)
+        else
+            Pixel.SetPoint(wrapper, "CENTER", UIParent, "CENTER", db.anchorXOffset or 0, db.anchorYOffset or 0)
+        end
 
-    if E and E.DisabledMovers and E.DisabledMovers[moverName] and E.EnableMover then
-        E:EnableMover(moverName)
+        local iconNum = iconKey:match("(%d+)$") or ""
+        local label = "Aura Icon " .. iconNum
+        if anchorFrame and db.anchorMode and db.anchorMode ~= "UIParent" then
+            label = label .. "\n|cFF888888(Anchored to: " .. (db.anchorMode or "?") .. ")|r"
+        end
+        EnsureIconMover(wrapper, iconKey, label)
+
+        if E and E.DisabledMovers and E.DisabledMovers[moverName] and E.EnableMover then
+            E:EnableMover(moverName)
+        end
     end
 
     local mover = _G[moverName]
@@ -211,7 +363,8 @@ local function UpdateIconSlot(iconKey)
     state.wrapper = wrapper
 
     local test = ns.CustomGroups and ns.CustomGroups.testMode
-    if test or db.desaturateWhenInactive then
+    -- a row keeps its cell: idle shows the spell greyed out, like a cooldown
+    if test or db.desaturateWhenInactive or row then
         local raw = SB.GetRawSpellList and SB.GetRawSpellList()[db.spellID]
         local tex = raw and raw.icon
         if not tex then
@@ -257,13 +410,14 @@ local function UpdateIconSlot(iconKey)
             local fs = SB.CooldownText and SB.CooldownText(wrapper.totemCD)
             if fs then
                 local LSM = ns.LSM
-                E:SetFont(fs, LSM and LSM:Fetch("font", db.durationFont or "Expressway"),
-                    db.durationFontSize or 14, db.durationFontOutline or "OUTLINE")
-                local dc = db.durationColor
+                local tx = SB.IconTextDB(db)
+                E:SetFont(fs, LSM and LSM:Fetch("font", tx.durationFont or "Expressway"),
+                    tx.durationFontSize or 14, tx.durationFontOutline or "OUTLINE")
+                local dc = tx.durationColor
                 if dc then fs:SetTextColor(dc.r or 1, dc.g or 1, dc.b or 1) end
                 fs:ClearAllPoints()
-                fs:SetPoint(db.durationPoint or "CENTER", wrapper.totemCD, db.durationPoint or "CENTER",
-                    db.durationXOffset or 0, db.durationYOffset or 0)
+                fs:SetPoint(tx.durationPoint or "CENTER", wrapper.totemCD, tx.durationPoint or "CENTER",
+                    tx.durationXOffset or 0, tx.durationYOffset or 0)
             end
             wrapper.totemCD:Show()
         elseif wrapper.totemCD then
@@ -285,7 +439,7 @@ local function UpdateIconSlot(iconKey)
             AL.ApplyButtonFX(wrapper, wrapper._tuiTestFXR, fx)
         end
     end
-    wrapper:Show()
+    wrapper:SetShown(VisibleNow(db) and true or false)
 
     if ns.SpecialAura then ns.SpecialAura.AttachIcon(wrapper, iconKey, db, w, h) end
 end

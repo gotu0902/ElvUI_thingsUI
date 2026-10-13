@@ -26,7 +26,8 @@ local function CloseCDMSettings()
     if cvs and cvs:IsShown() then HideUIPanel(cvs) end
 end
 
-local CDM_SECTIONS = { cdm = true, buffBars = true }
+local CDM_SECTIONS = { cdm = true, buffBars = true, customGroups = true, customBars = true,
+    specialIcons = true, specialBars = true }
 
 local watchTicker
 local function StopSectionWatch()
@@ -39,8 +40,8 @@ end
 local function OnConfigClosed()
     curSection = nil
     StopSectionWatch()
-    if ns.CustomGroups and ns.CustomGroups.SetTestMode then
-        ns.CustomGroups.SetTestMode(false)
+    if ns.CustomGroups and ns.CustomGroups.SetTestReason then
+        ns.CustomGroups.SetTestReason("options", false)
     end
     CloseCDMSettings()
 end
@@ -63,8 +64,8 @@ local function StartSectionWatch()
         if not StillInThingsUI() then
             curSection = nil
             StopSectionWatch()
-            if ns.CustomGroups and ns.CustomGroups.SetTestMode then
-                ns.CustomGroups.SetTestMode(false)
+            if ns.CustomGroups and ns.CustomGroups.SetTestReason then
+                ns.CustomGroups.SetTestReason("options", false)
             end
             CloseCDMSettings()
         end
@@ -88,8 +89,8 @@ local function SectionShown(key)
     if key == curSection then return end
     local prev = curSection
     curSection = key
-    if ns.CustomGroups and ns.CustomGroups.SetTestMode then
-        ns.CustomGroups.SetTestMode(TEST_SECTIONS[key] or false)
+    if ns.CustomGroups and ns.CustomGroups.SetTestReason then
+        ns.CustomGroups.SetTestReason("options", TEST_SECTIONS[key] or false)
     end
     if CDM_SECTIONS[key] then
         OpenCDMSettings()
@@ -126,9 +127,10 @@ function TUI.ConfigTable()
             classbar     = WithSentinel(withOrder(Colorize(TUI:ClassbarModeOptions(), "6FB7FF"), 5), "classbar"),
             customGroups = WithSentinel(withOrder(Colorize(TUI:CustomGroupsOptions(), "F20553"), 6), "customGroups"),
             customBars   = WithSentinel(withOrder(Colorize(TUI:CustomBarsOptions(), "F27D2A"), 6.2), "customBars"),
+            auraCollections = WithSentinel(withOrder(Colorize(TUI:AuraCollectionsOptions(), "B0A0FF"), 0.5), "auraCollections"),
             damageMeter  = WithSentinel(withOrder(Colorize(TUI:DamageMeterOptions(),  "FF5C5C"), 5.5), "damageMeter"),
-            specialBars  = WithSentinel(withOrder(Colorize(TUI:SpecialBarsOptions(),  "80FF80"), 7), "specialBars"),
-            specialIcons = WithSentinel(withOrder(Colorize(TUI:SpecialIconsOptions(), "FF80C0"), 8), "specialIcons"),
+            specialBars  = WithSentinel(withOrder(Colorize(TUI:SpecialBarsOptions(),  "80FF80"), 0.4), "specialBars"),
+            specialIcons = WithSentinel(withOrder(Colorize(TUI:SpecialIconsOptions(), "FF80C0"), 0.6), "specialIcons"),
             timers       = WithSentinel(withOrder(Colorize(TUI:TimersOptions(),       "FFC04D"), 9), "timers"),
         },
     }
@@ -195,3 +197,4 @@ function TUI.ConfigTable()
         },
     }
 end
+ns.LoadMark("options")

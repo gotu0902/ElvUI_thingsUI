@@ -60,14 +60,20 @@ function A.Entries(group)
     local order = group.scopeOrder or { "global", "class", "spec" }
     for si, scope in ipairs(order) do
         local root = ns.CustomGroups.GetScopeRoot(group, scope, nil, false)
-        for uid, def in pairs((root and root.auras) or {}) do
-            if def.enabled ~= false and next(def.spells or {}) then
-                out[#out + 1] = {
-                    key = ("TUIAura%d_%s_%s"):format(group.id or 0, scope,
-                        tostring(uid):gsub("[^%w]", "")),
-                    def = def,
-                    rank = si * 100000 + (def.layoutIndex or 999),
-                }
+        local AC = ns.AuraCollections
+        for uid, raw in pairs((root and root.auras) or {}) do
+            local eff = AC and AC.Effective(uid, raw) or raw
+            local defs = AC and AC.Expand(eff) or { eff }
+            for di, def in ipairs(defs) do
+                if def.enabled ~= false and (next(def.spells or {}) or def.filterToken) then
+                    local key = ("TUIAura%d_%s_%s"):format(group.id or 0, scope, (tostring(uid):gsub("[^%w]", "")))
+                    if def.filterToken then key = key .. "_" .. def.filterToken end
+                    out[#out + 1] = {
+                        key = key,
+                        def = def,
+                        rank = si * 100000 + (def.layoutIndex or 999) + di * 0.01,
+                    }
+                end
             end
         end
     end
@@ -85,17 +91,22 @@ function A.Entries(group)
                 local spells = (ns.SpecialAura and ns.SpecialAura.ExpandSpellIDs
                     and ns.SpecialAura.ExpandSpellIDs(idb.spellID)) or { [idb.spellID] = true }
                 local rank = siSpec * 100000 + (idb.customGroupOrder or 20000)
-                out[#out + 1] = {
-                    key = ("TUIAura%d_si_%s"):format(group.id or 0, ikey),
-                    def = { spells = spells, max = 1, iconDB = idb },
-                    rank = rank,
-                }
-                out[#out + 1] = {
-                    key = ("TUIAura%d_siT_%s"):format(group.id or 0, ikey),
-                    def = { spells = spells, max = 1, iconDB = idb, kind = "HARMFUL", unit = "target",
-                        previewSkip = true },
-                    rank = rank + 1,
-                }
+                -- nil = both sides: a buff on you and your debuff on the target
+                if idb.auraKind ~= "HARMFUL" then
+                    out[#out + 1] = {
+                        key = ("TUIAura%d_si_%s"):format(group.id or 0, ikey),
+                        def = { spells = spells, max = 1, iconDB = idb },
+                        rank = rank,
+                    }
+                end
+                if idb.auraKind ~= "HELPFUL" then
+                    out[#out + 1] = {
+                        key = ("TUIAura%d_siT_%s"):format(group.id or 0, ikey),
+                        def = { spells = spells, max = 1, iconDB = idb, kind = "HARMFUL", unit = "target",
+                            previewSkip = idb.auraKind ~= "HARMFUL" },
+                        rank = rank + 1,
+                    }
+                end
             end
         end
     end
@@ -478,23 +489,35 @@ end
 
 A.SortFor = SortFor
 
-local function ApplyEntry(lane, group, entry, ord, c)
-    c = c or lane.container
-    local key, def = entry.key, entry.def
-    local prev = lane.keys[key]
-    if prev and prev ~= true and prev ~= c then prev:SetAuraGroupMaxFrameCount(key, 0) end
+-- filter string + C-side candidate filters of one entry (Groups - Icons and Bars)
+function A.FilterFor(def)
     local filter
     if def.kind == "HARMFUL" then
         filter = "HARMFUL|PLAYER"
     else
         filter = def.onlyMine and "HELPFUL|PLAYER" or "HELPFUL"
     end
-
-    local map = {}
+    if def.filterToken then filter = filter .. "|" .. def.filterToken end
+    local map
     for id in pairs(def.spells or {}) do
         local n = tonumber(id)
-        if n then map[n] = true end
+        if n then map = map or {}; map[n] = true end
     end
+    local cf
+    if map then cf = { includeSpellIDs = map } end
+    if def.exclude and next(def.exclude) then
+        cf = cf or {}
+        cf.excludeSpellIDs = def.exclude
+    end
+    return filter, cf
+end
+
+local function ApplyEntry(lane, group, entry, ord, c)
+    c = c or lane.container
+    local key, def = entry.key, entry.def
+    local prev = lane.keys[key]
+    if prev and prev ~= true and prev ~= c then prev:SetAuraGroupMaxFrameCount(key, 0) end
+    local filter, cf = A.FilterFor(def)
 
     local layout = {
         elementWidth = lane.slot.iw,
@@ -510,7 +533,7 @@ local function ApplyEntry(lane, group, entry, ord, c)
     if c:HasAuraGroup(key) then
         c:SetAuraGroupMaxFrameCount(key, maxCount)
         c:SetAuraGroupFilterString(key, filter)
-        c:SetAuraGroupCandidateFilters(key, { includeSpellIDs = map })
+        c:SetAuraGroupCandidateFilters(key, cf)
         c:SetAuraGroupLayout(key, layout)
         if sortMethod then c:SetAuraGroupSortMethod(key, sortMethod, sortDir) end
     else
@@ -518,7 +541,7 @@ local function ApplyEntry(lane, group, entry, ord, c)
             maxFrameCount = maxCount,
             sortMethod = sortMethod,
             sortDirection = sortDir,
-            candidateFilters = { includeSpellIDs = map },
+            candidateFilters = cf,
             layout = layout,
             initializeFrame = function(button)
                 lane.keyByButton[button] = key
@@ -612,14 +635,26 @@ function A.Sync(group, frame)
             { tag = "HT", kind = nil,       unit = altU, spells = {}, any = false },
             { tag = "DT", kind = "HARMFUL", unit = altU, spells = {}, any = false },
         }
+        local fbuckets = {}
         for _, e in ipairs(entries) do
             local d = e.def
             local isAlt = altU ~= nil and d.unit == altU
             local b
             if d.kind == "HARMFUL" then b = isAlt and buckets[4] or buckets[2]
             else b = isAlt and buckets[3] or buckets[1] end
-            b.any = true
-            for id in pairs(d.spells or {}) do b.spells[id] = true end
+            if d.filterToken then
+                local tag = b.tag .. d.filterToken
+                local fb
+                for _, x in ipairs(fbuckets) do if x.tag == tag then fb = x break end end
+                if not fb then
+                    fb = { tag = tag, kind = b.kind, unit = b.unit, token = d.filterToken, exclude = {} }
+                    fbuckets[#fbuckets + 1] = fb
+                end
+                for id in pairs(d.exclude or {}) do fb.exclude[id] = true end
+            else
+                b.any = true
+                for id in pairs(d.spells or {}) do b.spells[id] = true end
+            end
         end
         local cap = tonumber(group.maxIcons) or 0
         local maxN = (cap > 0) and cap or 40
@@ -633,7 +668,18 @@ function A.Sync(group, frame)
                 }
             end
         end
-        if au0.sortGlow then
+        for j, fb in ipairs(fbuckets) do
+            merged[#merged + 1] = {
+                key = ("TUIAura%d_merged%s"):format(group.id or 0, fb.tag),
+                def = { spells = {}, filterToken = fb.token, exclude = fb.exclude, max = maxN,
+                    sort = sortMode, kind = fb.kind, unit = fb.unit },
+                rank = 10 + j,
+            }
+        end
+        if au0.sortStyle then
+            -- one style for the whole sorted group: border and glow from it
+            for _, m in ipairs(merged) do m.def.styleName = au0.sortStyle end
+        elseif au0.sortGlow then
             for _, m in ipairs(merged) do
                 m.def.showGlow = true
                 m.def.glowStyle = au0.sortGlowStyle or "pulse"
@@ -903,8 +949,7 @@ local function DumpVal(v)
     return tostring(v)
 end
 
-SLASH_TUILANE1 = "/tuilane"
-SlashCmdList.TUILANE = function()
+ns.SlashCommand("lane", function()
     local CG = ns.CustomGroups
     print(("|cFF8080FFtuilane|r testMode=%s pendingSync=%s assistOK=%s combat=%s"):format(
         tostring(CG and CG.testMode or false), tostring(pendingSync),
@@ -932,5 +977,17 @@ SlashCmdList.TUILANE = function()
         elseif si > 0 or #entries > 0 then
             print("    NO LANE (never synced)")
         end
+        -- what each entry matches; * = that aura is on you right now
+        for _, e in ipairs(entries) do
+            local ids = {}
+            for id in pairs(e.def.spells or {}) do
+                -- restricted auras make the lookup throw in combat
+                local ok, aura = pcall(C_UnitAuras.GetPlayerAuraBySpellID, id)
+                ids[#ids + 1] = ("%d %s%s"):format(id, C_Spell.GetSpellName(id) or "?", (ok and aura) and "*" or "")
+            end
+            table.sort(ids)
+            print(("    %s %s@%s%s: %s"):format(e.key, e.def.kind or "HELPFUL", e.def.unit or "player",
+                e.def.filterToken and ("|" .. e.def.filterToken) or "", table.concat(ids, ", ")))
+        end
     end
-end
+end)

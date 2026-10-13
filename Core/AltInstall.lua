@@ -193,10 +193,22 @@ end
 local PRESET_PREFIX = "!TUIALT2!"
 local OLD_PRESET_PREFIX = "!TUIALT1!"
 
+-- role profiles ride along: a preset's spec map is per class, roles fit every class
+local ROLES_KEY = "_roles"
+
+local function SavedRoles()
+    local g = _G.thingsUIGlobalDB
+    local rp = g and g.rolePresets
+    if rp and rp.enabled and type(rp.providers) == "table" and next(rp.providers) then return rp end
+end
+
 function M.ExportPresets()
     local presets = Presets()
     if not next(presets) then return nil end
-    return ns.Share and ns.Share.EncodeTable and ns.Share.EncodeTable(presets, PRESET_PREFIX)
+    local out = CopyTable(presets)
+    local rp = SavedRoles()
+    if rp then out[ROLES_KEY] = CopyTable(rp) end
+    return ns.Share and ns.Share.EncodeTable and ns.Share.EncodeTable(out, PRESET_PREFIX)
 end
 
 function M.ImportPresets(str)
@@ -210,7 +222,13 @@ function M.ImportPresets(str)
     local presets = Presets()
     local n = 0
     for name, p in pairs(data) do
-        if type(name) == "string" and type(p) == "table" then
+        if name == ROLES_KEY then
+            -- never replaces a role setup the user made
+            if type(p) == "table" and not SavedRoles() then
+                _G.thingsUIGlobalDB = _G.thingsUIGlobalDB or {}
+                _G.thingsUIGlobalDB.rolePresets = CopyTable(p)
+            end
+        elseif type(name) == "string" and type(p) == "table" then
             presets[name] = p
             n = n + 1
         end
@@ -1152,11 +1170,14 @@ local function GateCheck(verbose)
     return true
 end
 
-SLASH_TUIALTSETUP1 = "/tuialt"
-SlashCmdList["TUIALTSETUP"] = function(msg)
+local function AltCommand(msg)
     if (msg or ""):match("^%s*why") then GateCheck(true) return end
     M.Open()
 end
+ns.SlashCommand("alt", AltCommand)
+-- old name, kept for muscle memory
+SLASH_TUIALTSETUP1 = "/tuialt"
+SlashCmdList["TUIALTSETUP"] = AltCommand
 
 local booted = false
 local boot = CreateFrame("Frame")

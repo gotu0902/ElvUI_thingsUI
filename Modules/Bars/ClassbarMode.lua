@@ -168,12 +168,7 @@ eventFrame:SetScript("OnEvent", function(_, event)
 end)
 
 HookEssential = function()
-    local f = _G["EssentialCooldownViewer"]
-    if not f or f._TUI_classbarHooked then return end
-    f._TUI_classbarHooked = true
-    if type(f.RefreshLayout) == "function" then
-        hooksecurefunc(f, "RefreshLayout", function() MarkDirty() end)
-    end
+    ns.ViewerHooks.On("EssentialCooldownViewer", "RefreshLayout", "ClassbarMode", MarkDirty)
 end
 
 local hookedConfigureClassBar = false

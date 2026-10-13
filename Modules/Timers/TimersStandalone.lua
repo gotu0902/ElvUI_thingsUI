@@ -56,10 +56,17 @@ local function EnsureContainer(timer)
                     return not (t and ns.Timers.IsActive(t) and t.destination == "standalone")
                 end,
                 onSave = function(point, relPoint, x, y)
-                    timer.anchorPoint = point
-                    timer.anchorRelativePoint = relPoint
-                    timer.anchorXOffset = x
-                    timer.anchorYOffset = y
+                    local t = ns.Timers and ns.Timers.GetByID(timer.id)
+                    if not t then return end
+                    t.anchorPoint = point
+                    t.anchorRelativePoint = relPoint
+                    t.anchorXOffset = x
+                    t.anchorYOffset = y
+                    M.Refresh()
+                    if ns.NotifyChange then ns.NotifyChange() end
+                end,
+                onNudge = function(dx, dy)
+                    ms.ShiftOffsets(ns.Timers and ns.Timers.GetByID(timer.id), dx, dy)
                     M.Refresh()
                     if ns.NotifyChange then ns.NotifyChange() end
                 end,

@@ -26,32 +26,59 @@ local function GrowthDirectionPin()
     return PIN_FOR_GROWTH[essDB and essDB.growthDirection or ""]
 end
 
+local function GetProxy()
+    local ev = _G.EssentialCooldownViewer
+    return ev and ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(ev)
+end
+
+-- the proxy carries the viewer's Edit Mode scale: its offsets are in its own units
+local function ProxyScale()
+    local ev = _G.EssentialCooldownViewer
+    local s = ev and (ev:GetEffectiveScale() or 1) / (_G.UIParent:GetEffectiveScale() or 1)
+    return (s and s > 0) and s or 1
+end
+
+-- offsets that put `point` of a rect (UIParent units) on the same point of UIParent
+local function PointOffsets(point, cx, cy, w, h)
+    w, h = math.floor(w + 0.5), math.floor((h or 0) + 0.5)
+    local uw = _G.UIParent:GetRight() or _G.UIParent:GetWidth() or 1
+    local uh = _G.UIParent:GetTop()   or _G.UIParent:GetHeight() or 1
+    local fx, fy, rx, ry = cx, cy, uw / 2, uh / 2
+    if point:find("LEFT")   then fx, rx = cx - w / 2, 0  end
+    if point:find("RIGHT")  then fx, rx = cx + w / 2, uw end
+    if point:find("TOP")    then fy, ry = cy + h / 2, uh end
+    if point:find("BOTTOM") then fy, ry = cy - h / 2, 0  end
+    local s = ProxyScale()
+    return math.floor((fx - rx) / s + 0.5), math.floor((fy - ry) / s + 0.5)
+end
+
+-- ElvUI's convention: the corner of the screen third the center falls in
+local function ResolvePoint(cx, cy)
+    local uw = _G.UIParent:GetRight() or _G.UIParent:GetWidth() or 1
+    local uh = _G.UIParent:GetTop()   or _G.UIParent:GetHeight() or 1
+    local point = (cy >= uh / 2) and "TOP" or "BOTTOM"
+    if cx >= uw * 2 / 3 then
+        point = point .. "RIGHT"
+    elseif cx <= uw / 3 then
+        point = point .. "LEFT"
+    end
+    return point
+end
+
 local function RetargetPoint(targetPoint)
     local ev = _G.EssentialCooldownViewer
     local db = GetDB()
     if not (ev and db and db.point and targetPoint and db.point ~= targetPoint) then
         return
     end
-    local ref = (ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(ev)) or ev
+    local ref = GetProxy() or ev
     local cx, cy = ref:GetCenter()
     if not cx then return end
     local w, h = ref:GetSize()
     if not w or w < 1 then return end
-    w, h = math.floor(w + 0.5), math.floor((h or 0) + 0.5)
-    local uw = _G.UIParent:GetRight() or _G.UIParent:GetWidth() or 1
-    local uh = _G.UIParent:GetTop()   or _G.UIParent:GetHeight() or 1
-    local fx, fy = cx, cy
-    if targetPoint:find("LEFT")   then fx = cx - w / 2 end
-    if targetPoint:find("RIGHT")  then fx = cx + w / 2 end
-    if targetPoint:find("TOP")    then fy = cy + h / 2 end
-    if targetPoint:find("BOTTOM") then fy = cy - h / 2 end
-    local rx, ry = uw / 2, uh
-    if targetPoint:find("LEFT")   then rx = 0  end
-    if targetPoint:find("RIGHT")  then rx = uw end
-    if targetPoint == "BOTTOM" or targetPoint:find("BOTTOM") then ry = 0 end
+    local k = ref:GetEffectiveScale() / _G.UIParent:GetEffectiveScale()
     db.point = targetPoint
-    db.x = math.floor(fx - rx + 0.5)
-    db.y = math.floor(fy - ry + 0.5)
+    db.x, db.y = PointOffsets(targetPoint, cx * k, cy * k, w * k, (h or 0) * k)
 end
 
 function M.OnGrowthDirectionChanged()
@@ -61,10 +88,11 @@ function M.OnGrowthDirectionChanged()
 end
 
 local function AnchorMover()
-    local ev = _G.EssentialCooldownViewer
-    if not (mover and ev) then return end
-    local proxy = ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(ev)
-    if not proxy then return end
+    local proxy = GetProxy()
+    if not (mover and proxy) then return end
+    -- a size of its own: ElvUI's nudge re-anchors it by a single point
+    local k = proxy:GetEffectiveScale() / mover:GetEffectiveScale()
+    mover:SetSize(math.max(proxy:GetWidth() * k, 1), math.max(proxy:GetHeight() * k, 1))
     mover:ClearAllPoints()
     mover:SetAllPoints(proxy)
 end
@@ -87,7 +115,7 @@ local function ApplyAnchor()
     local x = db.x or 0
     local y = db.y or 0
 
-    proxy:SetScale((ev:GetEffectiveScale() or 1) / (_G.UIParent:GetEffectiveScale() or 1))
+    proxy:SetScale(ProxyScale())
     proxy:ClearAllPoints()
     proxy:SetPoint(point, _G.UIParent, point, x, y)
 
@@ -100,33 +128,6 @@ local function ApplyAnchor()
     if ns.BarSetup and ns.BarSetup.ApplyStack then ns.BarSetup.ApplyStack() end
 end
 
-local function ResolvePoint(centerX, centerY, width, height)
-    local uw = _G.UIParent:GetRight() or _G.UIParent:GetWidth() or 1
-    local uh = _G.UIParent:GetTop()   or _G.UIParent:GetHeight() or 1
-    local point
-    local x, y
-
-    if centerY >= uh / 2 then
-        point = "TOP"
-        y = (centerY + height / 2) - uh
-    else
-        point = "BOTTOM"
-        y = (centerY - height / 2)
-    end
-
-    if centerX >= (uw * 2 / 3) then
-        point = point .. "RIGHT"
-        x = (centerX + width / 2) - uw
-    elseif centerX <= (uw / 3) then
-        point = point .. "LEFT"
-        x = (centerX - width / 2)
-    else
-        x = centerX - uw / 2
-    end
-
-    return point, math.floor(x + 0.5), math.floor(y + 0.5)
-end
-
 local function OnDragStop(self)
     self:StopMovingOrSizing()
     local db = GetDB()
@@ -135,29 +136,9 @@ local function OnDragStop(self)
     local cx, cy = self:GetCenter()
     if not cx then return end
     local w, h = self:GetSize()
-    w, h = math.floor((w or 0) + 0.5), math.floor((h or 0) + 0.5)
-    local point, x, y = ResolvePoint(cx, cy, w, h)
-    local forced = GrowthDirectionPin()
-    if forced and forced ~= point then
-        local uw = _G.UIParent:GetRight() or _G.UIParent:GetWidth() or 1
-        local uh = _G.UIParent:GetTop()   or _G.UIParent:GetHeight() or 1
-        local fx, fy = cx, cy
-        if forced:find("LEFT")   then fx = cx - w / 2 end
-        if forced:find("RIGHT")  then fx = cx + w / 2 end
-        if forced:find("TOP")    then fy = cy + h / 2 end
-        if forced:find("BOTTOM") then fy = cy - h / 2 end
-        local rx, ry = uw / 2, uh
-        if forced:find("LEFT")   then rx = 0  end
-        if forced:find("RIGHT")  then rx = uw end
-        if forced == "BOTTOM" or forced:find("BOTTOM") then ry = 0 end
-        point = forced
-        x = math.floor(fx - rx + 0.5)
-        y = math.floor(fy - ry + 0.5)
-    end
-
+    local point = GrowthDirectionPin() or ResolvePoint(cx, cy)
     db.point = point
-    db.x = x
-    db.y = y
+    db.x, db.y = PointOffsets(point, cx, cy, w or 0, h or 0)
 
     ApplyAnchor()
 end
@@ -252,7 +233,7 @@ local function EnsureMover()
                 ApplyAnchor()
             end
         elseif E.ToggleOptions then
-            E:ToggleOptions("thingsUI,modulesTab,cdm,essentialTab")
+            E:ToggleOptions("thingsUI,modulesTab,cdm,layoutTab,essentialTab")
         end
     end)
     mover:SetScript("OnMouseWheel", function(_, delta)
@@ -267,43 +248,22 @@ local function EnsureMover()
     AnchorMover()
     mover:Hide()
 
+    -- an outside SetPoint (ElvUI's nudge) keeps our point: same spot, our offsets
     hooksecurefunc(mover, "SetPoint", function(self)
         if applying then return end
         local db = GetDB()
         if not (db and db.enabled) then return end
-        if (self:GetWidth() or 0) < 4 then return end
-        local p, relTo, _, x, y = self:GetPoint()
-        local proxy = ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(ev)
+        local p, relTo = self:GetPoint()
+        local proxy = GetProxy()
         if not p or relTo == ev or (proxy and relTo == proxy) then return end
+        local cx, cy = self:GetCenter()
+        local w, h = self:GetSize()
+        if not cx or (w or 0) < 4 then return end
 
-        local nx = math.floor((x or 0) + 0.5)
-        local ny = math.floor((y or 0) + 0.5)
-
-        local forced = GrowthDirectionPin()
-        if forced and forced ~= p then
-            local cx, cy = self:GetCenter()
-            local w, h = self:GetSize()
-            if w then w, h = math.floor(w + 0.5), math.floor((h or 0) + 0.5) end
-            if cx and w and w > 0 then
-                local uw = _G.UIParent:GetRight() or _G.UIParent:GetWidth() or 1
-                local uh = _G.UIParent:GetTop()   or _G.UIParent:GetHeight() or 1
-                local fx, fy = cx, cy
-                if forced:find("LEFT")   then fx = cx - w / 2 end
-                if forced:find("RIGHT")  then fx = cx + w / 2 end
-                if forced:find("TOP")    then fy = cy + h / 2 end
-                if forced:find("BOTTOM") then fy = cy - h / 2 end
-                local rx, ry = uw / 2, uh
-                if forced:find("LEFT")   then rx = 0  end
-                if forced:find("RIGHT")  then rx = uw end
-                if forced == "BOTTOM" or forced:find("BOTTOM") then ry = 0 end
-                p  = forced
-                nx = math.floor(fx - rx + 0.5)
-                ny = math.floor(fy - ry + 0.5)
-            end
-        end
-
-        if db.point == p and db.x == nx and db.y == ny then return end
-        db.point, db.x, db.y = p, nx, ny
+        local point = GrowthDirectionPin() or db.point or DEFAULT_POINT
+        local nx, ny = PointOffsets(point, cx, cy, w, h)
+        if db.point == point and db.x == nx and db.y == ny then return end
+        db.point, db.x, db.y = point, nx, ny
         if M._nudgeQueued then return end
         M._nudgeQueued = true
         C_Timer.After(0, function()

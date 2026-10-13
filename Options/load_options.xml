@@ -1,5 +1,7 @@
 ﻿<Ui xmlns="http://www.blizzard.com/wow/ui/">
+	<Script file="VisibilityOptions.lua"/>
 	<Script file="SpecialOptions.lua"/>
+	<Script file="BarCopyOptions.lua"/>
 	<Script file="GeneralOptions.lua"/>
 	<Script file="BuffBarsOptions.lua"/>
 	<Script file="ClusterPositioningOptions.lua"/>
@@ -10,6 +12,7 @@
 	<Script file="BarSetupOptions.lua"/>
 	<Script file="CustomGroupsOptions.lua"/>
 	<Script file="CustomBarsOptions.lua"/>
+	<Script file="AuraCollectionsOptions.lua"/>
 	<Script file="TimersOptions.lua"/>
 	<Script file="DamageMeterOptions.lua"/>
 	<Script file="ShareOptions.lua"/>

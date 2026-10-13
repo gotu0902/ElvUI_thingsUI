@@ -49,6 +49,7 @@ end
 
 function A.SortGlowOptsFor(group)
     local au = group and group.auras
+    if au and au.sortStyle then return A.GlowOptsFor(group, { styleName = au.sortStyle }) end
     if not (au and au.sortGlow) then return nil end
     return A.GlowOptsFor(group, {
         showGlow = true,

@@ -21,6 +21,9 @@ p.mbb = {
     hideMain = true,
     seeded = false,
 }
+-- ELVUI = ElvUI's own anchoring, GROWTH = the corner the frames grow from, else a point
+p.groupAnchor = { party = "ELVUI", raid1 = "ELVUI", raid2 = "ELVUI", raid3 = "ELVUI" }
+p.actionBarCopy = { keysFollow = false, autoFill = false }
 p.instanceDifficulty = {
     enable = true,
     point = "bottom",

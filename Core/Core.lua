@@ -1,4 +1,9 @@
 local addon, ns = ...
+
+-- load time per file group (TOC order), shown by /tui prof
+ns.loadMarks = { { "start", debugprofilestop() } }
+function ns.LoadMark(name) ns.loadMarks[#ns.loadMarks + 1] = { name, debugprofilestop() } end
+
 local E, L, V, P, G = unpack(ElvUI)
 local EP = LibStub("LibElvUIPlugin-1.0")
 
@@ -54,6 +59,11 @@ function ns.DeepCopy(src)
     return out
 end
 
+-- nil color = white
+function ns.TextColor(fs, c)
+    fs:SetTextColor(c and c.r or 1, c and c.g or 1, c and c.b or 1)
+end
+
 function ns.SolidDialog(f)
     local fr = f and f.frame
     if not fr then return end
@@ -103,3 +113,46 @@ local function EnsureSpecCache() if not _allSpecs then BuildSpecCache() end end
 function ns.AllSpecs()             EnsureSpecCache(); return _allSpecs end
 function ns.SpecMeta(id)           EnsureSpecCache(); return _specByID[id] end
 function ns.SpecsForClass(classID) EnsureSpecCache(); return _specsByClass[classID] or {} end
+
+-- /tui <command>; modules add theirs with ns.SlashCommand
+local slashCommands = {}
+function ns.SlashCommand(name, fn) slashCommands[name] = fn end
+
+SLASH_THINGSUI1 = "/tui"
+SlashCmdList.THINGSUI = function(msg)
+    local cmd, rest = strtrim(msg or ""):match("^(%S*)%s*(.*)$")
+    cmd = strlower(cmd)
+    if cmd == "" then E:ToggleOptions("thingsUI") return end
+    if slashCommands[cmd] then slashCommands[cmd](rest) return end
+    print("|cFF8080FFthingsUI|r: /tui opens the options, /tui install the installer, /tui alt the alt profile setup, /tui prof the profiler.")
+end
+
+-- work inside hooks on ElvUI/Blizzard frames is billed to their rows, not ours
+local PROF_ADDONS = { "ElvUI_thingsUI", "ElvUI", "ElvUI_Libraries" }
+ns.SlashCommand("prof", function()
+    local marks, parts = ns.loadMarks, {}
+    for n = 2, #marks do
+        parts[#parts + 1] = ("%s %.1f"):format(marks[n][1], marks[n][2] - marks[n - 1][2])
+    end
+    print(("|cFF8080FFthingsUI|r load at this login/reload: files %.1f ms (%s), Initialize %.1f ms"):format(
+        marks[#marks][2] - marks[1][2], table.concat(parts, ", "), ns.loadInit or 0))
+
+    local P, M = C_AddOnProfiler, Enum.AddOnProfilerMetric
+    if not (P and P.IsEnabled and P.IsEnabled() and M) then
+        print("|cFF8080FFthingsUI|r: the addon profiler is not available.")
+        return
+    end
+    print("|cFF8080FFthingsUI|r CPU in ms per frame: now | session | boss | peak | frames over 5 ms")
+    for _, name in ipairs(PROF_ADDONS) do
+        if C_AddOns.IsAddOnLoaded(name) then
+            print(("  %-16s %.3f | %.3f | %.3f | %.1f | %.0f"):format(name,
+                P.GetAddOnMetric(name, M.RecentAverageTime),
+                P.GetAddOnMetric(name, M.SessionAverageTime),
+                P.GetAddOnMetric(name, M.EncounterAverageTime),
+                P.GetAddOnMetric(name, M.PeakTime),
+                P.GetAddOnMetric(name, M.CountTimeOver5Ms)))
+        end
+    end
+    print(("  all addons %.3f of %.3f ms per frame"):format(
+        P.GetOverallMetric(M.RecentAverageTime), P.GetApplicationMetric(M.RecentAverageTime)))
+end)

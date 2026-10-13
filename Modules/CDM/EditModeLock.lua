@@ -90,6 +90,8 @@ function M.Apply()
     end
 end
 
+function M.IsLocked() return IsLockEnabled() end
+
 function TUI:UpdateEditModeLock()
     if not IsLockEnabled() then return end
     M.Apply()

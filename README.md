@@ -1,6 +1,6 @@
 # ElvUI_thingsUI
 
-![Version](https://img.shields.io/badge/version-4.1.8-pink)
+![Version](https://img.shields.io/badge/version-4.2.0-pink)
 
 ## Modules
 - **Bar Setup** - arrange and stack your bars into one cluster.
@@ -9,16 +9,16 @@
 - **Charge Bar** - per-spec spell charge tracker, in the CDM cluster or free-floating.
 - **Classbar** - per-spec ElvUI classbar where you anchor it.
 - **Damage Meter** - Details to anchor Details to right chat, Mini Meter for a skinned Blizzard meter, anchored to right chat yy you guessed it.
-- **Group Icons\Bars** - add auras, movable groups of spells, items and Special Icons\Bars.
-- **Special Bars** - put a tracked buff on its own movable bar, anchor it anywhere, or put in the bar setup.
-- **Special Icons** - same but icons; restyle, glow, fold into a Custom Group.
+- **Group Icons\Bars** - add auras, movable groups of spells, items and Aura Icons\Bars.
+- **Aura Bars** - put a tracked buff or debuff on its own movable bar, anchor it anywhere, or put in the bar setup.
+- **Aura Icons** - same but icons; restyle, glow, fold into a Custom Group.
 - **Timers** - cast-triggered static-icon timers with auto & manual durations.
 
 ## Grid2
 Apply bundled raid-frame profiles (NHT, FHT Icons/Squares) from the Grid2 tab.
 
 ## Installer
-One-time setup: import profile and plugin things, set UI scale, pick unitframe coloring, move the minimap/auras if you want, choose dmg meter, optional extra action bar layouts, and pick between ElvUI UnitFrames or Grid2. Should pop-up on first time install, re-run it from the Import\Export tab, use /tuialt for, alts. Yeeees, alts.
+One-time setup: import profile and plugin things, set UI scale, pick unitframe coloring, move the minimap/auras if you want, choose dmg meter, optional extra action bar layouts, and pick between ElvUI UnitFrames or Grid2. Should pop-up on first time install, re-run it from the Import\Export tab, use /tui alt for, alts. Yeeees, alts.
 
 # Installation
 

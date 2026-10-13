@@ -188,3 +188,4 @@ if C_EventUtils and C_EventUtils.IsEventValid and C_EventUtils.IsEventValid("COO
     f:RegisterEvent("COOLDOWN_VIEWER_TABLE_HOTFIXED")
 end
 f:SetScript("OnEvent", function() C_Timer.After(0, M.RefreshCurrentSpec) end)
+ns.LoadMark("core")

@@ -11,6 +11,7 @@ P["thingsUI"].buffBars = {
     height              = 25,
     spacing             = 1,
     statusBarTexture    = "ElvUI Blank",
+    reverseFill         = false,
     iconEnabled         = true,
     iconSpacing         = 1,
     iconZoom            = 0.1,

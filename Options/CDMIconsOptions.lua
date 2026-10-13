@@ -32,6 +32,7 @@ local function AnchorArgs(key, opts)
             disabled = dis,
             get = function() return db().anchorFrame end,
             set = function(_, v)
+                if v ~= db().anchorFrame then ns.ANCHORS.ResetPlacement(db()) end
                 db().anchorFrame = v
                 TUI:UpdateCDMIcons()
             end,
@@ -100,7 +101,10 @@ end
 
 local function TextArgs(key)
     local function tdb() return E.db.thingsUI.cdmIcons[key].text end
-    local function refresh() TUI:UpdateCDMText() end
+    local function refresh()
+        TUI:UpdateCDMText()
+        if TUI.QueueSpecialBarsUpdate then TUI:QueueSpecialBarsUpdate() end
+    end
 
     local function FieldGroup(order, prefix, name, includePlacement)
         local function get(field) return tdb()[prefix .. field] end
@@ -177,6 +181,25 @@ local function TextArgs(key)
         stacksGroup   = FieldGroup(10, "stacks",   "Stacks",   true),
         countGroup    = FieldGroup(20, "count",    "Charges",  true),
         cooldownGroup = FieldGroup(30, "cooldown", "Cooldown Text", true),
+    }
+end
+
+-- the Aura Icons picker, placing the icon in this row
+local function AddAuraIconArg(row)
+    local function spec() return ns.SpecialBars and ns.SpecialBars.GetCurrentSpecID and ns.SpecialBars.GetCurrentSpecID() end
+    return {
+        order = 0.5, type = "select", name = "|cFFFF80C0Add Aura Icon|r", width = "double",
+        hidden = function() return not (ns.SB_GroupPickValues and spec()) end,
+        values = function() return ns.SB_GroupPickValues(false, spec()) end,
+        sorting = function() return ns.SB_GroupPickSorting(false, spec()) end,
+        get = function() return "" end,
+        set = function(_, v)
+            local id = tonumber(v)
+            if id and ns.SB_PlaceSpell(false, id, spec(), nil, row) then
+                TUI:UpdateSpecialBars()
+                ns.NotifyChange()
+            end
+        end,
     }
 end
 
@@ -437,8 +460,9 @@ local function ViewerGroup(order, key, label, opts)
         name  = label,
         childGroups = "tab",
         args  = {
+            addAuraIcon = (key == "essential" or key == "utility") and AddAuraIconArg(key) or nil,
             layoutTab = {
-                order = 1, type = "group", name = "Layout",
+                order = 1, type = "group", name = "Size & Position",
                 args  = layoutArgs,
             },
             textTab = {
@@ -685,6 +709,298 @@ local function RacialsToCDMTab(order)
     }
 end
 
+-- one cooldown's own glow and text, on top of the viewer's settings
+-- one Spell Editor page: Essential/Utility cooldowns, or Buff Icons (stored apart,
+-- so a spell that is both a cooldown and a buff can look different in each)
+local function SpellEditorPage(order, buffs)
+    local sel
+    local storeKey = buffs and "perBuff" or "perSpell"
+    local function store()
+        local db = E.db.thingsUI.cdmIcons
+        db[storeKey] = db[storeKey] or {}
+        return db[storeKey]
+    end
+    local function isSpell() return type(sel) == "number" end
+    local function entry(create)
+        if not isSpell() then return nil end
+        local ps = store()
+        if create and not ps[sel] then ps[sel] = {} end
+        return ps[sel]
+    end
+    local function apply()
+        local ps = store()
+        if sel and ps[sel] and not next(ps[sel]) then ps[sel] = nil end
+        if TUI.UpdateCDMGlow then TUI:UpdateCDMGlow() end
+        if ns.CDMText and ns.CDMText.RefreshAll then ns.CDMText.RefreshAll() end
+        ns.NotifyChange()
+    end
+    local function setField(k, v)
+        entry(true)[k] = v
+        apply()
+    end
+    local function spellName(id)
+        return (C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or ("Spell " .. id)
+    end
+    local function spellLabel(id)
+        local icon = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)
+        return (icon and ("|T" .. icon .. ":16:16:0:0:64:64:5:59:5:59|t ") or "") .. spellName(id)
+    end
+    local function specSpells()
+        if buffs then
+            -- this spec's tracked buffs, keyed by base spell like the lookup
+            local out = {}
+            local cat = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.TrackedBuff
+            local ids = cat and C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCategorySet(cat, false)
+            for _, cdID in ipairs(ids or {}) do
+                local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
+                local sid = info and info.spellID
+                if sid and not (issecretvalue and issecretvalue(sid)) then out[sid] = true end
+            end
+            return out
+        end
+        local spec = GetSpecialization and GetSpecialization()
+        local specID = spec and GetSpecializationInfo(spec)
+        return (ns.CDMSpells and ns.CDMSpells.GetForSpec and ns.CDMSpells.GetForSpec(specID)) or {}
+    end
+    local function byName(a, b) return spellName(a) < spellName(b) end
+    -- Aura Icons in a row (cooldowns), or every Aura Icon/Bar drawing a tracked buff (buffs,
+    -- Blizzard's copy hidden): they keep their look in their own settings.
+    -- covered = the buff spells they take over
+    local function rowIcons()
+        local out, covered, SB = {}, {}, ns.SpecialBars
+        if not SB then return out, covered end
+        if buffs then
+            local cdm = E.db.thingsUI.cdmIcons
+            if cdm and cdm.hideGroupedDuplicates == false then return out, covered end
+            local tracked, SA = specSpells(), ns.SpecialAura
+            local function add(prefix, key, d)
+                if not (d and d.enabled and d.spellID) then return end
+                local ids = (SA and SA.ExpandSpellIDs and SA.ExpandSpellIDs(d.spellID)) or { [d.spellID] = true }
+                local hit = false
+                for id in pairs(ids) do
+                    if tracked[id] then covered[id] = true; hit = true end
+                end
+                if hit then out[prefix .. key] = d end
+            end
+            for i = 1, (SB.GetIconCount and SB.GetIconCount() or 0) do add("si:", "icon" .. i, SB.GetIconDB("icon" .. i)) end
+            for i = 1, (SB.GetBarCount and SB.GetBarCount() or 0) do add("sb:", "bar" .. i, SB.GetBarDB("bar" .. i)) end
+            return out, covered
+        end
+        for i = 1, (SB.GetIconCount and SB.GetIconCount() or 0) do
+            local key = "icon" .. i
+            local idb = SB.GetIconDB(key)
+            if idb and idb.enabled and idb.cdmRow and idb.spellID then out["si:" .. key] = idb end
+        end
+        return out, covered
+    end
+    local function iconKey() return type(sel) == "string" and sel:match("^si:(.+)$") or nil end
+    local function barKey() return type(sel) == "string" and sel:match("^sb:(.+)$") or nil end
+    local function own(k, def)
+        return {
+            order = 3, type = "toggle", name = "Own Color",
+            get = function() local e = entry() return (e and e[k]) ~= nil end,
+            set = function(_, v) setField(k, v and ns.DeepCopy(def) or nil) end,
+        }, {
+            order = 4, type = "color", name = "Color",
+            hidden = function() local e = entry() return not (e and e[k]) end,
+            get = function()
+                local c = (entry() or {})[k] or def
+                return c.r, c.g, c.b
+            end,
+            set = function(_, r, g, b) setField(k, { r = r, g = g, b = b }) end,
+        }
+    end
+    local WHITE = { r = 1, g = 1, b = 1 }
+    local cdColorOn, cdColor = own("cooldownColor", WHITE)
+    local countColorOn, countColor = own("countColor", WHITE)
+    -- own anchor point and offsets; without a point, 0 keeps the viewer's offset
+    local function place(prefix, hideKey)
+        local pk, xk, yk = prefix .. "Point", prefix .. "XOffset", prefix .. "YOffset"
+        local function hidden() local e = entry() return (e and e[hideKey]) and true or false end
+        local values = { [""] = "Viewer's" }
+        for k, v in pairs(ns.POINTS.VALUES) do values[k] = v end
+        local sorting = { "" }
+        for _, k in ipairs(ns.POINTS.ORDER) do sorting[#sorting + 1] = k end
+        return { order = 5, type = "description", name = "", width = "full" }, {
+            order = 6, type = "select", name = "Position", values = values, sorting = sorting,
+            hidden = hidden,
+            get = function() local e = entry() return (e and e[pk]) or "" end,
+            set = function(_, v)
+                entry(true)[pk] = (v ~= "") and v or nil
+                apply()
+            end,
+        }, {
+            order = 7, type = "range", name = "X Offset", min = -50, max = 50, step = 1,
+            hidden = hidden,
+            get = function() local e = entry() return (e and e[xk]) or 0 end,
+            set = function(_, v) setField(xk, (v ~= 0) and v or nil) end,
+        }, {
+            order = 8, type = "range", name = "Y Offset", min = -50, max = 50, step = 1,
+            hidden = hidden,
+            get = function() local e = entry() return (e and e[yk]) or 0 end,
+            set = function(_, v) setField(yk, (v ~= 0) and v or nil) end,
+        }
+    end
+    local cdBrk, cdPoint, cdX, cdY = place("cooldown", "hideCooldownText")
+    local countBrk, countPoint, countX, countY = place("count", "hideCount")
+
+    return {
+        order = order, type = "group", name = buffs and "Buff Icons" or "Cooldowns",
+        args = {
+            desc = {
+                order = 0, type = "description",
+                name = buffs and "Text for one buff in Buff Icons. Buffs set up here are green, buffs an Aura Icon or Aura Bar already shows are pink.\n"
+                    or "Glow and text for one cooldown in Essential or Utility. Spells set up here are green, Aura Icons in a row are pink. Glow needs Custom Glow on in Layout > Glow.\n",
+            },
+            spell = {
+                order = 1, type = "select", name = "Spell", width = "double",
+                values = function()
+                    local out = {}
+                    local ri, covered = rowIcons()
+                    for id in pairs(specSpells()) do
+                        if not covered[id] then out[id] = spellLabel(id) end
+                    end
+                    for id in pairs(store()) do out[id] = "|cFF40FF40" .. spellLabel(id) .. "|r" end
+                    for k, d in pairs(ri) do
+                        out[k] = "|cFFFF80C0" .. spellLabel(d.spellID)
+                            .. (k:sub(1, 3) == "sb:" and " (Aura Bar)|r" or " (Aura Icon)|r")
+                    end
+                    return out
+                end,
+                sorting = function()
+                    local set, icons, other = {}, {}, {}
+                    for id in pairs(store()) do set[#set + 1] = id end
+                    local ri, covered = rowIcons()
+                    for k in pairs(ri) do icons[#icons + 1] = k end
+                    for id in pairs(specSpells()) do
+                        if not store()[id] and not covered[id] then other[#other + 1] = id end
+                    end
+                    table.sort(set, byName)
+                    table.sort(icons, function(a, b) return spellName(ri[a].spellID) < spellName(ri[b].spellID) end)
+                    table.sort(other, byName)
+                    for _, k in ipairs(icons) do set[#set + 1] = k end
+                    for _, id in ipairs(other) do set[#set + 1] = id end
+                    return set
+                end,
+                get = function() return sel end,
+                set = function(_, v) sel = v end,
+            },
+            specialIcon = {
+                order = 9, type = "execute", width = 1.5,
+                name = function() return barKey() and "Open Aura Bar Settings" or "Open Aura Icon Settings" end,
+                hidden = function() return not (iconKey() or barKey()) end,
+                func = function()
+                    if iconKey() and ns.SB_OpenIconEditor then ns.SB_OpenIconEditor(iconKey())
+                    elseif barKey() and ns.SB_OpenBarEditor then ns.SB_OpenBarEditor(barKey()) end
+                end,
+            },
+            spellID = {
+                order = 2, type = "input", name = "Spell ID",
+                get = function() return "" end,
+                set = function(_, v)
+                    local n = tonumber(v)
+                    if n and C_Spell.GetSpellName and C_Spell.GetSpellName(n) then sel = n end
+                end,
+            },
+            settings = {
+                order = 10, type = "group", inline = true,
+                name = function() return isSpell() and spellLabel(sel) or "" end,
+                hidden = function() return not isSpell() end,
+                args = {
+                    glowGrp = {
+                        order = 1, type = "group", inline = true, name = "Glow", hidden = buffs,
+                        args = {
+                            glow = {
+                                order = 1, type = "select", name = "Glow",
+                                values = { default = "On Proc", always = "Always", never = "Never" },
+                                sorting = { "default", "always", "never" },
+                                get = function() local e = entry() return (e and e.glow) or "default" end,
+                                set = function(_, v) setField("glow", (v ~= "default") and v or nil) end,
+                            },
+                            glowColorOn = {
+                                order = 2, type = "toggle", name = "Own Glow Color",
+                                disabled = function() local e = entry() return (e and e.glow) == "never" end,
+                                get = function() local e = entry() return (e and e.glowColor) ~= nil end,
+                                set = function(_, v) setField("glowColor", v and { r = 1, g = 0.85, b = 0.1 } or nil) end,
+                            },
+                            glowColor = {
+                                order = 3, type = "color", name = "Glow Color",
+                                hidden = function() local e = entry() return not (e and e.glowColor) end,
+                                get = function()
+                                    local c = (entry() or {}).glowColor or {}
+                                    return c.r or 1, c.g or 0.85, c.b or 0.1
+                                end,
+                                set = function(_, r, g, b) setField("glowColor", { r = r, g = g, b = b }) end,
+                            },
+                        },
+                    },
+                    cooldownGrp = {
+                        order = 2, type = "group", inline = true, name = buffs and "Duration Text" or "Cooldown Text",
+                        args = {
+                            hideCooldownText = {
+                                order = 1, type = "toggle", name = "Hide",
+                                get = function() local e = entry() return (e and e.hideCooldownText) and true or false end,
+                                set = function(_, v) setField("hideCooldownText", v or nil) end,
+                            },
+                            cooldownFontSize = {
+                                order = 2, type = "range", name = "Size (0 = viewer's)",
+                                min = 0, max = 40, step = 1,
+                                hidden = function() local e = entry() return (e and e.hideCooldownText) and true or false end,
+                                get = function() local e = entry() return (e and e.cooldownFontSize) or 0 end,
+                                set = function(_, v) setField("cooldownFontSize", (v > 0) and v or nil) end,
+                            },
+                            colorOn = cdColorOn,
+                            color = cdColor,
+                            brk = cdBrk,
+                            point = cdPoint,
+                            xOffset = cdX,
+                            yOffset = cdY,
+                        },
+                    },
+                    countGrp = {
+                        order = 3, type = "group", inline = true, name = buffs and "Stacks" or "Stacks and Charges",
+                        args = {
+                            hideCount = {
+                                order = 1, type = "toggle", name = "Hide",
+                                get = function() local e = entry() return (e and e.hideCount) and true or false end,
+                                set = function(_, v) setField("hideCount", v or nil) end,
+                            },
+                            countFontSize = {
+                                order = 2, type = "range", name = "Size (0 = viewer's)",
+                                min = 0, max = 40, step = 1,
+                                hidden = function() local e = entry() return (e and e.hideCount) and true or false end,
+                                get = function() local e = entry() return (e and e.countFontSize) or 0 end,
+                                set = function(_, v) setField("countFontSize", (v > 0) and v or nil) end,
+                            },
+                            colorOn = countColorOn,
+                            color = countColor,
+                            brk = countBrk,
+                            point = countPoint,
+                            xOffset = countX,
+                            yOffset = countY,
+                        },
+                    },
+                    reset = {
+                        order = 9, type = "execute", name = "Reset This Spell",
+                        disabled = function() return entry() == nil end,
+                        func = function() store()[sel] = nil; apply() end,
+                    },
+                },
+            },
+        },
+    }
+end
+
+local function PerSpellTab(order)
+    return {
+        order = order, type = "group", name = "Spell Editor", childGroups = "tab",
+        args = {
+            cooldowns = SpellEditorPage(1, false),
+            buffs = SpellEditorPage(2, true),
+        },
+    }
+end
+
 local function TrinketsTab(order)
     local function bl()
         local db = E.db.thingsUI.cdmIcons
@@ -693,6 +1009,8 @@ local function TrinketsTab(order)
     end
     local function poke()
         if ns.CDMIcons and ns.CDMIcons.QueuePassiveRebuild then ns.CDMIcons.QueuePassiveRebuild() end
+        if ns.TrinketsCDM then ns.TrinketsCDM.Refresh() end
+        if ns.CustomGroups and ns.CustomGroups.QueueLayout then ns.CustomGroups.QueueLayout() end
     end
     local function ent(id, create)
         local b = bl()
@@ -747,21 +1065,32 @@ local function TrinketsTab(order)
         eqArgs["s" .. slot .. "_dest"] = {
             order = ord + 0.25, type = "select", name = "Destination", width = 0.9,
             values = function()
-                local out = { [0] = "CDM" }
+                local out = { [0] = "Blizzard CDM", essential = "Essential", utility = "Utility" }
                 for _, g in ipairs((ns.CustomGroups and ns.CustomGroups.GetGroups and ns.CustomGroups.GetGroups()) or {}) do
                     out[g.id] = g.name or ("Group " .. g.id)
+                end
+                return out
+            end,
+            sorting = function()
+                local out = { 0, "essential", "utility" }
+                for _, g in ipairs((ns.CustomGroups and ns.CustomGroups.GetGroups and ns.CustomGroups.GetGroups()) or {}) do
+                    out[#out + 1] = g.id
                 end
                 return out
             end,
             get = function()
                 local db = E.db.thingsUI.cdmIcons
                 local d = db and db.trinketDest and db.trinketDest[tostring(slot)]
-                return d and d.group or 0
+                return d and (d.row or d.group) or 0
             end,
             set = function(_, v)
                 local db = E.db.thingsUI.cdmIcons
                 db.trinketDest = db.trinketDest or {}
-                db.trinketDest[tostring(slot)] = (v ~= 0) and { group = v } or nil
+                local d
+                if v == "essential" or v == "utility" then d = { row = v }
+                elseif v ~= 0 then d = { group = v } end
+                db.trinketDest[tostring(slot)] = d
+                if ns.TrinketsCDM then ns.TrinketsCDM.Refresh() end
                 if TUI.UpdateCustomGroups then TUI:UpdateCustomGroups() end
                 if ns.CustomGroups and ns.CustomGroups._rebuildOptions then ns.CustomGroups._rebuildOptions() end
                 ns.NotifyChange()
@@ -806,7 +1135,7 @@ local function TrinketsTab(order)
         args = {
             desc = {
                 order = 1, type = "description",
-                name = "Hide trinkets from the CDM viewers: the |cFFFFD200cooldown|r (Essential/Utility) and the |cFF60E0A0buff|r (Buff Icons) hide separately. Blacklisting is by item, so it sticks across swaps.\n",
+                name = "Hide a trinket's |cFFFFD200cooldown|r (everywhere: Blizzard's rows, Destination and groups) and its |cFF60E0A0buff|r (Buff Icons) separately. Blacklisting is by item, so it sticks across swaps.\n",
             },
             addID = {
                 order = 2, type = "input", name = "Add by Item ID or name",
@@ -839,15 +1168,21 @@ function TUI:CDMIconsOptions()
         childGroups = "tab",
         args = {
 
-            essentialTab        = ViewerGroup(10, "essential", "Essential"),
-            utilityTab          = ViewerGroup(20, "utility",   "Utility",
+            layoutTab = {
+                order = 10, type = "group", name = "Layout", childGroups = "tab",
+                args = {
+                    essentialTab = ViewerGroup(10, "essential", "Essential"),
+                    utilityTab   = ViewerGroup(20, "utility",   "Utility",
                                     { includeAnchor = true }),
-            buffIconTab         = ViewerGroup(30, "buffIcon",  "Buff Icons",
+                    buffIconTab  = ViewerGroup(30, "buffIcon",  "Buff Icons",
                                     { includeAnchor = true, alwaysOnAnchor = true,
                                       minIconSize = 10, maxIconSize = 60 }),
-            racialsToCDMSubTab = RacialsToCDMTab(45),
-            glowSubTab = GlowTab(46),
-            trinketBlacklistSubTab = TrinketsTab(47),
+                    glowSubTab   = GlowTab(40),
+                },
+            },
+            spellEditorTab = PerSpellTab(20),
+            racialsToCDMSubTab = RacialsToCDMTab(30),
+            trinketBlacklistSubTab = TrinketsTab(40),
             clusterPositioningSubTab = (function()
                 local g = TUI.ClusterPositioningSubTab and TUI:ClusterPositioningSubTab() or nil
                 if g then g.order = 50 end
@@ -890,6 +1225,15 @@ function TUI:CDMIconsOptions()
                         set = function(_, v)
                             E.db.thingsUI.cdmIcons.hidePandemic = v
                             if ns.CDMIcons and ns.CDMIcons.ClearPandemicAll then ns.CDMIcons.ClearPandemicAll() end
+                        end,
+                    },
+                    hideGroupedDuplicates = {
+                        order = 4.5, type = "toggle", width = "full",
+                        name = "Hide CDM copies of what thingsUI already shows (Groups, Charge Bar, Aura Icons)",
+                        get = function() return E.db.thingsUI.cdmIcons.hideGroupedDuplicates ~= false end,
+                        set = function(_, v)
+                            E.db.thingsUI.cdmIcons.hideGroupedDuplicates = v
+                            if ns.CDMIcons and ns.CDMIcons.QueuePassiveRebuild then ns.CDMIcons.QueuePassiveRebuild() end
                         end,
                     },
                     autoEnableCDM = {

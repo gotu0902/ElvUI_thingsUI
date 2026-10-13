@@ -91,6 +91,7 @@ function TUI:ApplyDetailsRightChatAnchor()
 end
 
 function TUI:Initialize()
+    local initStart = debugprofilestop()
     EP:RegisterPlugin(addon, function(...)
         local ok, err = pcall(TUI.ConfigTable, ...)
         if not ok then geterrorhandler()("|cFF8080FFthingsUI|r ConfigTable failed: " .. tostring(err)) end
@@ -169,12 +170,14 @@ function TUI:Initialize()
     self:UpdateCDMText()
     if self.UpdateCDMGlow then self:UpdateCDMGlow() end
     if self.UpdateRacialsCDM then self:UpdateRacialsCDM() end
+    if self.UpdateTrinketsCDM then self:UpdateTrinketsCDM() end
     self:UpdateEssentialMover()
     self:UpdateCustomGroups()
     if self.UpdateCustomBars then self:UpdateCustomBars() end
     if self.UpdateTUIMeter then self:UpdateTUIMeter() end
     if self.UpdateMBB then self:UpdateMBB() end
     if self.UpdateInstanceDifficulty then self:UpdateInstanceDifficulty() end
+    if self.UpdateGroupAnchor then self:UpdateGroupAnchor() end
     self:UpdateMoverSync()
 
     self:RegisterEvent("PLAYER_ENTERING_WORLD", function()
@@ -218,6 +221,7 @@ function TUI:Initialize()
         C_Timer.After(2.5, pass)
     end)
 
+    ns.loadInit = debugprofilestop() - initStart
     print("|cFF8080FFElvUI_thingsUI|r v" .. self.version .. " loaded")
 end
 
@@ -236,14 +240,17 @@ function TUI:ProfileUpdate()
     self:UpdateCDMText()
     if self.UpdateCDMGlow then self:UpdateCDMGlow() end
     if self.UpdateRacialsCDM then self:UpdateRacialsCDM() end
+    if self.UpdateTrinketsCDM then self:UpdateTrinketsCDM() end
     self:UpdateEssentialMover()
     self:UpdateCustomGroups()
     if self.UpdateCustomBars then self:UpdateCustomBars() end
     if self.UpdateTUIMeter then self:UpdateTUIMeter() end
     if self.UpdateMBB then self:UpdateMBB() end
     if self.UpdateInstanceDifficulty then self:UpdateInstanceDifficulty() end
+    if ns.BarCopy then ns.BarCopy.OnProfile() end
     if ns.CustomGroups and ns.CustomGroups._rebuildOptions then ns.CustomGroups._rebuildOptions() end
     if ns.CustomBars and ns.CustomBars._rebuildOptions then ns.CustomBars._rebuildOptions() end
+    if ns.AuraCollections and ns.AuraCollections._rebuildOptions then ns.AuraCollections._rebuildOptions() end
     if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end
     if ns.BarSetup and ns.BarSetup._rebuildSetupOptions then ns.BarSetup._rebuildSetupOptions() end
     if ns.Timers then
@@ -253,6 +260,7 @@ function TUI:ProfileUpdate()
     if E.db.thingsUI then E.db.thingsUI.trinketsCDM = nil end
     local sb = E.db.thingsUI and E.db.thingsUI.specialBars
     if sb then sb.globalIcons = nil end
+    if self.UpdateGroupAnchor then self:UpdateGroupAnchor() end
     self:UpdateMoverSync()
 end
 

@@ -109,16 +109,16 @@ function M.AddAura(group, scope, spellID, key)
         layoutIndex = NextIndex(group, scope, key) }
 end
 
-function M.AddAuraSet(group, scope, uid, def, key)
-    if not (group and uid and def) then return end
+function M.AddAuraCollection(group, scope, ckey, key)
+    local AC = ns.AuraCollections
+    local c = AC and AC.Get(ckey)
+    if not (group and c) then return end
     local root = M.GetScopeRoot(group, scope, key, true)
-    if root.auras[uid] then return end
-    local spells = {}
-    for _, id in ipairs(def.spells or {}) do spells[id] = true end
+    local uid = "col:" .. ckey
+    if root.auras[uid] or root.auras["preset:" .. ckey] then return end
     root.auras[uid] = {
         enabled = true, layoutIndex = NextIndex(group, scope, key),
-        name = def.name, spells = spells,
-        kind = def.kind or "HELPFUL", max = def.max or 1,
+        collection = ckey, kind = c.kind or "HELPFUL", max = c.max or 10,
     }
 end
 
@@ -195,12 +195,16 @@ function M.Entries(group)
     for band, scope in ipairs(M.ScopeOrderFor(group)) do
         for _, e in ipairs(M.ScopeEntries(group, scope)) do
             if e.kind == "aura" then
-                if e.def.enabled ~= false and next(e.def.spells or {}) then
-                    out[#out + 1] = {
-                        uid = scope .. "_" .. e.uid,
-                        def = e.def,
-                        rank = band * 100000 + e.li,
-                    }
+                local AC = ns.AuraCollections
+                local eff = AC and AC.Effective(e.uid, e.def) or e.def
+                for di, def in ipairs(AC and AC.Expand(eff) or { eff }) do
+                    if def.enabled ~= false and (next(def.spells or {}) or def.filterToken) then
+                        out[#out + 1] = {
+                            uid = scope .. "_" .. e.uid .. (def.filterToken and ("_" .. def.filterToken) or ""),
+                            def = def,
+                            rank = band * 100000 + e.li + di * 0.01,
+                        }
+                    end
                 end
             else
                 local spells = (ns.SpecialAura and ns.SpecialAura.ExpandSpellIDs
@@ -254,7 +258,8 @@ function M.FirstSpell(def)
         local n = tonumber(id)
         if n and (not best or n < best) then best = n end
     end
-    return best
+    -- a filter collection has no list: its sample stands in for previews
+    return best or (def and def.preview)
 end
 
 local function StyleBar(button, r, group, def)
@@ -316,6 +321,7 @@ local function StyleBar(button, r, group, def)
     r.bar:SetPoint("TOPLEFT", r.bd, "TOPLEFT", 1, -1)
     r.bar:SetPoint("BOTTOMRIGHT", r.bd, "BOTTOMRIGHT", -1, 1)
     r.bar:SetStatusBarTexture(LSM:Fetch("statusbar", group.statusBarTexture))
+    r.bar:SetReverseFill(group.reverseFill and true or false)
     if group.useClassColor ~= false then
         local c = E:ClassColor(E.myclass, true)
         r.bar:SetStatusBarColor(c.r, c.g, c.b)
@@ -334,6 +340,7 @@ local function StyleBar(button, r, group, def)
     r.name = r.name or r.overlay:CreateFontString(nil, "OVERLAY")
     if group.showName ~= false then
         E:SetFont(r.name, font, group.fontSize or 12, group.fontOutline or "OUTLINE")
+        ns.TextColor(r.name, group.nameColor)
         r.name:ClearAllPoints()
         r.name:SetPoint(group.namePoint or "LEFT", r.bar, group.namePoint or "LEFT",
             group.nameXOffset or 4, group.nameYOffset or 0)
@@ -358,6 +365,7 @@ local function StyleBar(button, r, group, def)
         r.dur:SetPoint(group.durationPoint or "RIGHT", r.bar, group.durationPoint or "RIGHT",
             group.durationXOffset or -4, group.durationYOffset or 0)
         E:SetFont(r.dur, font, group.fontSize or 12, group.fontOutline or "OUTLINE")
+        ns.TextColor(r.dur, group.durationColor)
         r.dur:Show()
         button:SetDurationText(r.dur, { textFormatter = AL and AL.DurFormatter() or nil })
     else
@@ -372,7 +380,8 @@ local function StyleBar(button, r, group, def)
             and r.bar or r.iconBD
         r.count:SetPoint(group.stackPoint or "CENTER", anchorTo, group.stackPoint or "CENTER",
             group.stackXOffset or 0, group.stackYOffset or 0)
-        E:SetFont(r.count, font, group.stackFontSize or 12, group.fontOutline or "OUTLINE")
+        E:SetFont(r.count, font, group.stackFontSize or 12, group.stackFontOutline or group.fontOutline or "OUTLINE")
+ns.TextColor(r.count, group.stackColor)
         r.count:Show()
         button:SetApplicationCount(r.count, {})
     else
@@ -489,6 +498,7 @@ local function RenderTestBars(st, group)
             f.bar:SetPoint("TOPLEFT", f, "TOPLEFT", off + 1, -1)
             f.bar:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
             f.bar:SetStatusBarTexture(LSM:Fetch("statusbar", group.statusBarTexture))
+            f.bar:SetReverseFill(group.reverseFill and true or false)
             if group.useClassColor ~= false then
                 local c = E:ClassColor(E.myclass, true)
                 f.bar:SetStatusBarColor(c.r, c.g, c.b)
@@ -500,6 +510,7 @@ local function RenderTestBars(st, group)
 
             if group.showName ~= false then
                 E:SetFont(f.name, font, group.fontSize or 12, group.fontOutline or "OUTLINE")
+                ns.TextColor(f.name, group.nameColor)
                 f.name:ClearAllPoints()
                 f.name:SetPoint(group.namePoint or "LEFT", f.bar, group.namePoint or "LEFT",
                     group.nameXOffset or 4, group.nameYOffset or 0)
@@ -510,6 +521,7 @@ local function RenderTestBars(st, group)
             end
             if group.showDuration ~= false then
                 E:SetFont(f.dur, font, group.fontSize or 12, group.fontOutline or "OUTLINE")
+                ns.TextColor(f.dur, group.durationColor)
                 f.dur:ClearAllPoints()
                 f.dur:SetPoint(group.durationPoint or "RIGHT", f.bar, group.durationPoint or "RIGHT",
                     group.durationXOffset or -4, group.durationYOffset or 0)
@@ -520,7 +532,8 @@ local function RenderTestBars(st, group)
             end
             f.stacks = f.stacks or f.bar:CreateFontString(nil, "OVERLAY")
             if group.showStacks ~= false then
-                E:SetFont(f.stacks, font, group.stackFontSize or 12, group.fontOutline or "OUTLINE")
+                E:SetFont(f.stacks, font, group.stackFontSize or 12, group.stackFontOutline or group.fontOutline or "OUTLINE")
+ns.TextColor(f.stacks, group.stackColor)
                 f.stacks:ClearAllPoints()
                 local anchorTo = (group.stackAnchor == "BAR" or group.iconEnabled == false) and f.bar or f.iconBD
                 f.stacks:SetPoint(group.stackPoint or "CENTER", anchorTo, group.stackPoint or "CENTER",
@@ -551,7 +564,13 @@ local function EnsureState(group)
 end
 
 local function EnsureMover(st, group)
-    if moverMade[group.id] then return end
+    if moverMade[group.id] then
+        local ms = ns.MoverSync
+        if ms and ms.SetManagedLabel then
+            ms.SetManagedLabel("TUI_CustomBarsMover" .. group.id, group.name or ("Bar Group " .. group.id))
+        end
+        return
+    end
     local ms = ns.MoverSync
     if not (ms and ms.CreateManaged) then return end
     ms.CreateManaged(st.frame, "TUI_CustomBarsMover" .. group.id, group.name or ("Bar Group " .. group.id), {
@@ -567,6 +586,11 @@ local function EnsureMover(st, group)
             TUI:UpdateCustomBars()
             ns.NotifyChange()
         end,
+        onNudge = function(dx, dy)
+            ms.ShiftOffsets(M.GroupByID(group.id), dx, dy)
+            TUI:UpdateCustomBars()
+            ns.NotifyChange()
+        end,
     })
     moverMade[group.id] = true
 end
@@ -575,18 +599,7 @@ local function ApplyEntryTo(st, group, entry, ord)
     local key = "CB" .. group.id .. "_" .. entry.uid:gsub("[^%w]", "")
     local def = entry.def
 
-    local filter
-    if def.kind == "HARMFUL" then
-        filter = "HARMFUL|PLAYER"
-    else
-        filter = def.onlyMine and "HELPFUL|PLAYER" or "HELPFUL"
-    end
-
-    local map = {}
-    for id in pairs(def.spells or {}) do
-        local n = tonumber(id)
-        if n then map[n] = true end
-    end
+    local filter, cf = ns.AuraLane.FilterFor(def)
 
     local sp = group.spacing or 2
     local w = st.effW or group.width or 220
@@ -609,7 +622,7 @@ local function ApplyEntryTo(st, group, entry, ord)
     if st.container:HasAuraGroup(key) then
         st.container:SetAuraGroupMaxFrameCount(key, maxCount)
         st.container:SetAuraGroupFilterString(key, filter)
-        st.container:SetAuraGroupCandidateFilters(key, { includeSpellIDs = map })
+        st.container:SetAuraGroupCandidateFilters(key, cf)
         st.container:SetAuraGroupLayout(key, layout)
         if sortMethod then st.container:SetAuraGroupSortMethod(key, sortMethod, sortDir) end
     else
@@ -617,7 +630,7 @@ local function ApplyEntryTo(st, group, entry, ord)
             maxFrameCount = maxCount,
             sortMethod = sortMethod,
             sortDirection = sortDir,
-            candidateFilters = { includeSpellIDs = map },
+            candidateFilters = cf,
             layout = layout,
             initializeFrame = function(button)
                 st.keyByButton[button] = key
@@ -743,11 +756,25 @@ local function SyncGroup(group)
     local sortMode = group.sortMode or "manual"
     if sortMode ~= "manual" then
         local unionH, unionD, anyH, anyD = {}, {}, false, false
+        local fmerged = {}
         for _, e in ipairs(entries) do
             local d = e.def
-            local dst = (d.kind == "HARMFUL") and unionD or unionH
-            for id in pairs(d.spells or {}) do dst[id] = true end
-            if d.kind == "HARMFUL" then anyD = true else anyH = true end
+            if d.filterToken then
+                -- a filter collection sorts on its own, one group per filter and side
+                local uid = "merged" .. (d.kind == "HARMFUL" and "D" or "H") .. d.filterToken
+                local fm = fmerged[uid]
+                if not fm then
+                    fm = { uid = uid, def = { spells = {}, filterToken = d.filterToken, exclude = {},
+                        sort = sortMode, kind = d.kind } }
+                    fmerged[uid] = fm
+                    fmerged[#fmerged + 1] = fm
+                end
+                for id in pairs(d.exclude or {}) do fm.def.exclude[id] = true end
+            else
+                local dst = (d.kind == "HARMFUL") and unionD or unionH
+                for id in pairs(d.spells or {}) do dst[id] = true end
+                if d.kind == "HARMFUL" then anyD = true else anyH = true end
+            end
         end
         local cap = tonumber(group.maxBars) or 0
         local maxN = (cap > 0) and cap or 40
@@ -759,6 +786,10 @@ local function SyncGroup(group)
         if anyD then
             merged[#merged + 1] = { uid = "mergedD",
                 def = { spells = unionD, max = maxN, sort = sortMode, kind = "HARMFUL" } }
+        end
+        for _, fm in ipairs(fmerged) do
+            fm.def.max = maxN
+            merged[#merged + 1] = fm
         end
         entries = merged
     end
@@ -811,7 +842,7 @@ local function SyncGroup(group)
             if not pcall(StyleBar, button, r, group, def) then pendingSync = true end
         end
     end
-    c:SetShown(GroupVisOK(st, unit))
+    c:SetShown(GroupVisOK(st, unit) and ns.Visibility.Shown(group.visibility))
 end
 
 local cbUpdateQueued = false
@@ -853,10 +884,13 @@ function M.RefreshVisibility()
     if ns.CustomGroups and ns.CustomGroups.testMode then return end
     for _, st in pairs(state) do
         if st.frame:IsShown() then
-            st.container:SetShown(GroupVisOK(st, st.unit or "player"))
+            st.container:SetShown(GroupVisOK(st, st.unit or "player")
+                and ns.Visibility.Shown(st.group and st.group.visibility))
         end
     end
 end
+
+ns.Visibility.OnChange(function() M.RefreshVisibility() end)
 
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")

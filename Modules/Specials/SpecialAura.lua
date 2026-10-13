@@ -209,14 +209,15 @@ function SA.StyleIconButton(button, r, wrapper, key)
     end
 
     local AL = ns.AuraLane
-    if db.showDuration ~= false then
+    local tx = SB.IconTextDB and SB.IconTextDB(db) or db
+    if tx.showDuration ~= false then
         r.dur = r.dur or r.overlay:CreateFontString(nil, "OVERLAY")
         r.dur:ClearAllPoints()
-        r.dur:SetPoint(db.durationPoint or "CENTER", button, db.durationPoint or "CENTER",
-            db.durationXOffset or 0, db.durationYOffset or 0)
-        E:SetFont(r.dur, LSM:Fetch("font", db.durationFont or "Expressway"),
-            db.durationFontSize or 14, db.durationFontOutline or "OUTLINE")
-        local dc = db.durationColor or {}
+        r.dur:SetPoint(tx.durationPoint or "CENTER", button, tx.durationPoint or "CENTER",
+            tx.durationXOffset or 0, tx.durationYOffset or 0)
+        E:SetFont(r.dur, LSM:Fetch("font", tx.durationFont or "Expressway"),
+            tx.durationFontSize or 14, tx.durationFontOutline or "OUTLINE")
+        local dc = tx.durationColor or {}
         r.dur:SetTextColor(dc.r or 1, dc.g or 1, dc.b or 1)
         r.dur:Show()
         button:SetDurationText(r.dur, { textFormatter = AL and AL.DurFormatter() or nil })
@@ -225,14 +226,14 @@ function SA.StyleIconButton(button, r, wrapper, key)
         if r.dur then r.dur:SetText("") r.dur:Hide() end
     end
 
-    if db.showStacks then
+    if tx.showStacks then
         r.count = r.count or r.overlay:CreateFontString(nil, "OVERLAY")
         r.count:ClearAllPoints()
-        r.count:SetPoint(db.stackPoint or "BOTTOMRIGHT", button, db.stackPoint or "BOTTOMRIGHT",
-            db.stackXOffset or 0, db.stackYOffset or 0)
-        E:SetFont(r.count, LSM:Fetch("font", db.stackFont or "Expressway"),
-            db.stackFontSize or 14, db.stackFontOutline or "OUTLINE")
-        local sc = db.stackColor or {}
+        r.count:SetPoint(tx.stackPoint or "BOTTOMRIGHT", button, tx.stackPoint or "BOTTOMRIGHT",
+            tx.stackXOffset or 0, tx.stackYOffset or 0)
+        E:SetFont(r.count, LSM:Fetch("font", tx.stackFont or "Expressway"),
+            tx.stackFontSize or 14, tx.stackFontOutline or "OUTLINE")
+        local sc = tx.stackColor or {}
         r.count:SetTextColor(sc.r or 1, sc.g or 1, sc.b or 1)
         r.count:Show()
         button:SetApplicationCount(r.count, {})
@@ -317,6 +318,7 @@ function SA.StyleBarButton(button, r, wrapper, key)
     r.bar:SetPoint("TOPLEFT", r.bd, "TOPLEFT", 1, -1)
     r.bar:SetPoint("BOTTOMRIGHT", r.bd, "BOTTOMRIGHT", -1, 1)
     r.bar:SetStatusBarTexture(LSM:Fetch("statusbar", db.statusBarTexture))
+    r.bar:SetReverseFill(db.reverseFill and true or false)
     if db.useClassColor then
         local c = E:ClassColor(E.myclass, true)
         r.bar:SetStatusBarColor(c.r, c.g, c.b)
@@ -359,9 +361,14 @@ function SA.StyleBarButton(button, r, wrapper, key)
                         tex:SetColorTexture(tc.r or 1, tc.g or 1, tc.b or 1, tc.a or 1)
                         tex.ag:Stop()
                         tex:ClearAllPoints()
-                        tex:SetPoint("LEFT", r.bd, "LEFT", 1 + x, 0)
+                        -- ticks ride the shrinking end of the fill
+                        if db.reverseFill then
+                            tex:SetPoint("RIGHT", r.bd, "RIGHT", -1 - x, 0)
+                        else
+                            tex:SetPoint("LEFT", r.bd, "LEFT", 1 + x, 0)
+                        end
                         tex:SetSize(tw, tlen)
-                        tex.move:SetOffset(-x, 0)
+                        tex.move:SetOffset(db.reverseFill and x or -x, 0)
                         tex.move:SetDuration(rem)
                         tex:Show()
                         tex.ag:Play()
@@ -381,6 +388,7 @@ function SA.StyleBarButton(button, r, wrapper, key)
     r.name = r.name or r.overlay:CreateFontString(nil, "OVERLAY")
     if db.showName then
         E:SetFont(r.name, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
+        ns.TextColor(r.name, db.nameColor)
         r.name:ClearAllPoints()
         r.name:SetPoint(db.namePoint or "LEFT", r.bar, db.namePoint or "LEFT",
             db.nameXOffset or 2, db.nameYOffset or 0)
@@ -402,6 +410,7 @@ function SA.StyleBarButton(button, r, wrapper, key)
         r.dur:SetPoint(db.durationPoint or "RIGHT", r.bar, db.durationPoint or "RIGHT",
             db.durationXOffset or -4, db.durationYOffset or 0)
         E:SetFont(r.dur, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
+        ns.TextColor(r.dur, db.durationColor)
         r.dur:Show()
         button:SetDurationText(r.dur, { textFormatter = AL and AL.DurFormatter() or nil })
     else
@@ -416,6 +425,7 @@ function SA.StyleBarButton(button, r, wrapper, key)
         r.count:SetPoint(db.stackPoint or "CENTER", anchorTo, db.stackPoint or "CENTER",
             db.stackXOffset or 0, db.stackYOffset or 0)
         E:SetFont(r.count, font, db.stackFontSize or 14, db.stackFontOutline or "OUTLINE")
+        ns.TextColor(r.count, db.stackColor)
         r.count:Show()
         button:SetApplicationCount(r.count, {})
     else
@@ -426,7 +436,8 @@ function SA.StyleBarButton(button, r, wrapper, key)
     button:SetMouseMotionEnabled(true)
 end
 
-local function Attach(wrapper, key, spellID, w, h, styler)
+-- kind: nil = both sides, HELPFUL = buff on you only, HARMFUL = your debuff on the target only
+local function Attach(wrapper, key, spellID, w, h, styler, kind)
     if not (wrapper and spellID) then return end
     if InCombatLockdown() then pending = true return end
     if not C_AddOns.IsAddOnLoaded("Blizzard_AuraContainer") then
@@ -435,17 +446,27 @@ local function Attach(wrapper, key, spellID, w, h, styler)
     local spells = SA.ExpandSpellIDs(spellID)
     local gkey = "S" .. key
 
-    local cp = EnsureContainer(wrapper, "_tuiAuraP")
-    ConfigureContainer(cp, wrapper, w, h)
-    ApplyGroupTo(cp, gkey, "HELPFUL", spells, w, h, styler)
-    SetUnitLast(cp, "player")
-    cp:SetShown(PlayerAssistOK())
+    if kind ~= "HARMFUL" then
+        local cp = EnsureContainer(wrapper, "_tuiAuraP")
+        ConfigureContainer(cp, wrapper, w, h)
+        ApplyGroupTo(cp, gkey, "HELPFUL", spells, w, h, styler)
+        SetUnitLast(cp, "player")
+        cp:SetShown(PlayerAssistOK())
+    else
+        local cp = wrapper._tuiAuraP
+        if cp and cp:HasAuraGroup(gkey) then cp:SetAuraGroupMaxFrameCount(gkey, 0) end
+    end
 
-    local ct = EnsureContainer(wrapper, "_tuiAuraT")
-    ConfigureContainer(ct, wrapper, w, h)
-    ApplyGroupTo(ct, gkey, "HARMFUL|PLAYER", spells, w, h, styler)
-    SetUnitLast(ct, "target")
-    ct:SetShown(HarmfulTargetOK())
+    if kind ~= "HELPFUL" then
+        local ct = EnsureContainer(wrapper, "_tuiAuraT")
+        ConfigureContainer(ct, wrapper, w, h)
+        ApplyGroupTo(ct, gkey, "HARMFUL|PLAYER", spells, w, h, styler)
+        SetUnitLast(ct, "target")
+        ct:SetShown(HarmfulTargetOK())
+    else
+        local ct = wrapper._tuiAuraT
+        if ct and ct:HasAuraGroup(gkey) then ct:SetAuraGroupMaxFrameCount(gkey, 0) end
+    end
 
     attached[key] = wrapper
 end
@@ -453,7 +474,7 @@ end
 function SA.AttachIcon(wrapper, key, db, w, h)
     Attach(wrapper, key, db.spellID, w, h, function(button, r)
         SA.StyleIconButton(button, r, wrapper, key)
-    end)
+    end, db.auraKind)
 end
 
 function SA.AttachBar(wrapper, key, db, w, h)

@@ -1,5 +1,65 @@
 # Changelog
 
+## 4.2.0
+- Special Icons and Special Bars renamed to **Aura Icons** and **Aura Bars**, makes more sense or something maybe idno.
+### CDM
+- New: Aura Icons can sit inside the Essential or Utility row, like EUI's buffs in Essentials. Pick "Show In" → Essential/Utility Cooldowns and set "Position in Row", or use Add Aura Icon in CDM → Layout → Essential/Utility. They use the row's duration and stack text unless you tick Override CDM Row Text
+- New: no more doubles in CDM. Spells, trinkets and racials you put in a Group, the spell your Charge Bar tracks, and auras you show as Aura Icons/Bars or group auras, are hidden from Blizzard's rows (toggle in CDM → Settings)
+- New: CDM → Spell Editor, glow (on proc / always / never, own color), cooldown text and stacks/charges (hide, size, color, position) for one spell at a time. Aura Icons you put in a row show up in its list too, with a button to their settings. Two tabs: Cooldowns (Essential/Utility) and Buff Icons (duration text and stacks per buff, kept apart from the cooldown of the same spell). Buffs an Aura Icon or Aura Bar already shows are pink there, with a button to their settings. X/Y offsets work without picking a point too
+- CDM options split up: Layout (Essential, Utility, Buff Icons, Glow), Spell Editor, Racials, Trinkets, Cluster Positioning, Settings
+- New: on-use trinkets can go straight into Essential or Utility (CDM → Trinkets → Destination), no need to drag them in Blizzard's Cooldown Settings. Blizzard's own copy hides itself
+- Trinkets: Hide Cooldown now hides the trinket everywhere, also from its Destination row or group
+- Fixed CDM stack and charge text drawing bigger than the same font size elsewhere: ElvUI's skin made it skip the icon's (and the UI's) scale. It follows its icon again like the cooldown text, so those texts get smaller and you may want to raise their size
+- The options preview (thingsUI CDM/Groups/Aura pages or Cooldown Settings open) shows sample cooldown and stack/charge text on CDM icons in their real style, Spell Editor tweaks included, and spells with an Always glow or an own glow color glow in it
+- Racials put in a Group no longer show in CDM as well
+- Auto-enable Cooldown Manager now turns the Cooldown Manager back on whenever it is off (it only did this once per character). With it unticked, thingsUI says in chat once why the CDM rows are empty
+- CDM rows keep their thingsUI layout in Edit Mode instead of falling apart (while "Lock CDM viewers in /editmode" is on, the default)
+- Cluster Positioning: unit frames keep the same gap whether Essential or Utility is the wider row (they moved closer going from 5 to 6 essentials)
+### Aura Collections
+- New module: Aura Collections, named aura lists for Groups - Icons and Groups - Bars. Edit a collection once and every group using it follows
+- A collection is a spell list or Blizzard filters (Big Defensives, External Defensives, Important, HoTs and Shields, Crowd Control; tick several to show auras matching any of them), and can pull in the spells of an ElvUI filter. A Blizzard filter needs no list: the game decides what counts
+- New built-in: Defensives (Blizzard's BIG_DEFENSIVE filter). The old Ready-Made Sets are collections now, and sets you already added follow them. Every collection can be renamed, built-ins too (clear the name to get the original back)
+- Blizzard's Buff Icons copy of an aura a filter group shows hides too (with the duplicates toggle)
+- Opening Blizzard's Cooldown Settings also previews Groups and Aura Icons/Bars, like their options pages do. Their options pages open Cooldown Settings too (and close it again if they opened it), like CDM and Buff Bars already did
+### Visibility
+- New Visibility tab on Aura Icons, Aura Bars and Groups - Bars, and a much bigger one on Groups - Icons: Show (Always / In Combat / Out of Combat / Never), Solo / Party / Raid, Only In (Open World, Dungeon, Raid, Delve, Scenario, Arena, Battleground, Housing), Only in Form (your class's forms, like Cat / Bear / Moonkin, or No Form) and Hide When (Mounted, No Target, No Enemy Target, Resting). Every rule you set has to match; ticked boxes in one list are alternatives
+- Aura Icons and Bars inside a group follow the group's rules; the options pages keep showing everything as a preview
+### Aura Icons & Bars
+- New: Aura Type on Aura Icons, Buff or Debuff (both, as before) / Buff (on you) / Debuff (on target). Fixes an icon like Fiery Brand showing twice in a group: it is a debuff on the target and an aura on you
+- Groups: Add Aura Icon / Add Aura Bar is one list now. A spell that already has an icon or bar moves into the group, any other spell gets a new one. The list says where each one sits today (group, Essential/Utility, standalone)
+- Aura Icons: the side list has its own Essential Cooldowns / Utility Cooldowns headings
+- Aura Bars: Copy Bar, like Copy Icon on Aura Icons
+- Reverse Fill for Aura Bars, Groups - Bars and Buff Bars (totem ticks follow it)
+- Fixed Edit Bar in Groups - Bars, and right-clicking an Aura Bar/Icon mover, opening the module page instead of that bar or icon
+- Groups - Icons with a sorted Aura Order can pick one Style for all their auras (Order tab). Sorting puts every aura in one shared list, so per-entry styles can't apply there; their style selects grey out instead of silently doing nothing
+- Aura Bars and Groups - Bars: color for name, duration and stacks text
+- Groups - Bars: stacks got their own outline, like Aura Bars
+### Groups
+- Fixed Concentrated Silvermoon Health Potion and silver Alluring Nostrum getting the Fleeting border (they have no Fleeting version)
+- Potion of Zealotry (and its Fleeting versions) is a known potion now: ranks group together and Common Items lists it
+### Movers & frames
+- Picking a new Anchor Frame anywhere (Aura Bars/Icons, Groups, Buff Bars, CDM rows, Charge Bar, Timers, Bar Setup, focus frame) resets the points to CENTER/CENTER and the offsets to 0, instead of keeping numbers meant for the old frame
+- Fixed nudging thingsUI movers (mouse wheel / nudge window): Essentials jumped, locked movers could be nudged, and Aura Bars/Icons, Groups and Timers saved a weird anchor
+- Fixed a new Groups - Icons group (or a standalone Timer) snapping back to the middle in /emove until a reload, after switching profiles: its mover still belonged to the other profile's group with the same number. Mover names follow group renames too
+- New: Group Frame Anchor (ElvUI QoL), keeps party/raid frames on one corner of their mover so they grow away from it, also near the screen edge
+- New: Action Bar 2 and 13 (ElvUI QoL). Bar 13 is the bar Blizzard and EllesmereUI call Action Bar 6, so coming from EUI your spells sit there. Preview both, copy one onto the other (the source stays), move keybinds over. Optional: keybinds follow the bar your profile shows, and the shown bar fills itself on each spec when it's empty
+### Installer
+- Turns on Chat → Voice Chat → Hide Voice Buttons
+- Quick setups and Alt Profiles also set your healer/dps spec profiles (FHT/NHT) from the role presets
+### Commands
+- Everything lives under /tui now: `/tui` opens the options, `/tui install` the installer, `/tui alt` the alt profile setup, `/tui prof` the profiler.
+### Performance
+- Performance: Hide Aura Overlay runs one full pass per cooldown update instead of three (plus the nested ones it triggered on itself)
+- Performance: Buff Bars only re-lay bars that actually changed, and stop re-setting strata and anchor on every aura update
+- Performance: CDM layout passes no longer re-anchor proxies that are already in place (that woke cluster positioning every time)
+- CDM modules share one Blizzard hook per viewer instead of five separate ones on Essential
+- CDM text follows ElvUI's Cooldown Manager text options again on newer ElvUI versions
+- New /tui prof: thingsUI load time, plus thingsUI, ElvUI and ElvUI_Libraries CPU from Blizzard's addon profiler
+### Class Stuff
+- DH: Charged Bars spell swap (Veng: IS -> Fracture, Havoc: IA -> Fel Rush)
+- Plenty of buffs and stuff moved around
+- Not halfway done with class presets, soontm.
+
 ## 4.1.8
 - Fixed special icons breaking when secret auras (Lifebloom++) blocked styling
 - Fixed grouped special icons staying hidden after visiting options

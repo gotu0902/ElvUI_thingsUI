@@ -176,6 +176,15 @@ function TUI:BuffBarsOptions()
                                     TUI:UpdateBuffBars()
                                 end,
                             },
+                            reverseFill = {
+                                order = 1.5, type = "toggle", name = "Reverse Fill",
+                                get = function() return E.db.thingsUI.buffBars.reverseFill end,
+                                set = function(_, value)
+                                    E.db.thingsUI.buffBars.reverseFill = value
+                                    wipe(ns.skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
                             useClassColor = {
                                 order = 2,
                                 type = "toggle",
@@ -547,7 +556,9 @@ function TUI:BuffBarsOptions()
                                 values = SHARED_ANCHOR_VALUES,
                                 get = function() return E.db.thingsUI.buffBars.anchorFrame end,
                                 set = function(_, value)
-                                    E.db.thingsUI.buffBars.anchorFrame = value
+                                    local bb = E.db.thingsUI.buffBars
+                                    if value ~= bb.anchorFrame then ns.ANCHORS.ResetPlacement(bb) end
+                                    bb.anchorFrame = value
                                     TUI:UpdateBuffBars()
                                 end,
                                 disabled = function() return not E.db.thingsUI.buffBars.anchorEnabled end,

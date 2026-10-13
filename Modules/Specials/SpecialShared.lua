@@ -122,6 +122,7 @@ function TUI:UpdateSpecialBars()
     EnsureSlotKeys(0, iconCount)
     local updateIcon = SB.UpdateIconSlot
     if updateIcon then for i = 1, iconCount do updateIcon(_iconKeys[i]) end end
+    if SB.NotifyAuraSet then SB.NotifyAuraSet() end
 end
 
 local function OnSpecChanged()
@@ -226,3 +227,15 @@ local function GetSpellUsageInfo(spellID, excludeBarKey, excludeIconKey, specID)
 end
 
 SB.GetSpellUsageInfo = GetSpellUsageInfo
+
+-- the slot of this kind ("bars"/"icons") holding the spell on the spec, enabled or not
+local function FindSlotForSpell(kind, spellID, specID)
+    local s = GetSpecRoot(specID)
+    local isBar = kind == "bars"
+    for i = 1, (isBar and (s.barCount or 3) or (s.iconCount or 3)) do
+        local key = (isBar and "bar" or "icon") .. i
+        local d = s[kind] and s[kind][key]
+        if d and d.spellID == spellID then return key end
+    end
+end
+SB.FindSlotForSpell = FindSlotForSpell

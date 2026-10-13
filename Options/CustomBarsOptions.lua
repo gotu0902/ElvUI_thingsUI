@@ -182,12 +182,14 @@ local function EntryLabel(e)
         local sid = e.def.spellID
         local nm = e.def.spellName or (sid and C_Spell.GetSpellName and C_Spell.GetSpellName(sid)) or "Bar"
         local tex = (sid and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)) or 134400
-        return ("|T%d:16:16|t %s |cFF80FF80(Special Bar)|r"):format(tex, nm)
+        return ("|T%d:16:16|t %s |cFF80FF80(Aura Bar)|r"):format(tex, nm)
     end
-    local sid = CB() and CB().FirstSpell and CB().FirstSpell(e.def)
+    local AC = ns.AuraCollections
+    local d = AC and AC.Effective(e.uid, e.def) or e.def
+    local sid = CB() and CB().FirstSpell and CB().FirstSpell(d)
     local count = 0
-    for _ in pairs(e.def.spells or {}) do count = count + 1 end
-    local nm = e.def.name or (sid and C_Spell.GetSpellName and C_Spell.GetSpellName(sid)) or ("Spell " .. tostring(sid))
+    for _ in pairs(d.spells or {}) do count = count + 1 end
+    local nm = d.name or (sid and C_Spell.GetSpellName and C_Spell.GetSpellName(sid)) or ("Spell " .. tostring(sid))
     local tex = (sid and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)) or 134400
     local label = ("|T%d:16:16|t %s"):format(tex, nm)
     if count > 1 then label = label .. (" |cFF888888(%d spells)|r"):format(count) end
@@ -242,7 +244,7 @@ local function EntryRow(gi, scope, ri)
                     if SBm and scope == "spec" then
                         SBm.editingSpec = (getEditSpec() ~= curSpecID()) and tonumber(getEditSpec()) or nil
                     end
-                    E:ToggleOptions("thingsUI,modulesTab,specialBars," .. e.barKey .. "Group")
+                    if ns.SB_OpenBarEditor then ns.SB_OpenBarEditor(e.barKey) end
                     return
                 end
                 local sid = CB().FirstSpell(e.def)
@@ -274,7 +276,7 @@ local function EntryRow(gi, scope, ri)
             confirm = function()
                 local e = entry()
                 local nm = e and e.def and (e.def.spellName or e.def.spellID) or "?"
-                return ("Delete special bar '%s' PERMANENTLY? It is removed from Special Bars too."):format(nm)
+                return ("Delete aura bar '%s' PERMANENTLY? It is removed from Aura Bars too."):format(nm)
             end,
             func = function()
                 local e = entry(); if not e then return end
@@ -376,99 +378,20 @@ local function GroupTab(gi)
         }
         if scope == "spec" then
             args.addSpecialBar = {
-                order = 3, type = "select", name = "|cFF80FF80Add Special Bar|r", width = 1.2,
+                order = 3, type = "select", name = "|cFF80FF80Add Aura Bar|r", width = "double",
                 disabled = full,
-                hidden = function()
-                    local SBm = ns.SpecialBars
-                    if not (SBm and SBm.GetSpecRoot) then return true end
-                    local root = SBm.GetSpecRoot(getEditSpec())
-                    for _, bdb in pairs((root and root.bars) or {}) do
-                        if type(bdb) == "table" and bdb.enabled and bdb.spellID then return false end
-                    end
-                    return true
-                end,
-                values = function()
-                    local out = { [""] = "|cFF888888- Select -|r" }
-                    local SBm = ns.SpecialBars
-                    local g = grp()
-                    local root = SBm and SBm.GetSpecRoot and SBm.GetSpecRoot(getEditSpec())
-                    for i = 1, (root and (root.barCount or 3)) or 0 do
-                        local bkey = "bar" .. i
-                        local bdb = root.bars and root.bars[bkey]
-                        if type(bdb) == "table" and bdb.enabled and bdb.spellID then
-                            local nm = bdb.spellName
-                                or (C_Spell.GetSpellName and C_Spell.GetSpellName(bdb.spellID)) or bkey
-                            local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(bdb.spellID)) or 134400
-                            local tag = ""
-                            if g and bdb.customGroup == g.id then tag = " |cff888888(here)|r"
-                            elseif type(bdb.customGroup) == "number" and bdb.customGroup > 0 then
-                                tag = " |cff888888(in another group)|r"
-                            end
-                            out[bkey] = ("|T%d:16:16|t %s%s"):format(tex, nm, tag)
-                        end
-                    end
-                    return out
-                end,
+                hidden = function() return not ns.SpecialBars end,
+                values = function() return (ns.SB_GroupPickValues and ns.SB_GroupPickValues(true, getEditSpec())) or {} end,
+                sorting = function() return ns.SB_GroupPickSorting and ns.SB_GroupPickSorting(true, getEditSpec()) or nil end,
                 get = function() return "" end,
                 set = function(_, v)
-                    if v == "" then return end
-                    local SBm = ns.SpecialBars
-                    local es = getEditSpec()
-                    local bdb = SBm and SBm.GetBarDB and SBm.GetBarDB(v, es)
+                    local id = tonumber(v)
                     local g = grp()
-                    if bdb and g then
-                        bdb.customGroup = g.id
-                        if es == curSpecID() and SBm.ReleaseBar then SBm.ReleaseBar(v) end
+                    if id and g and ns.SB_PlaceSpell and ns.SB_PlaceSpell(true, id, getEditSpec(), g.id) then
                         TUI:UpdateSpecialBars()
                         if ns.BarSetup and ns.BarSetup.ApplyStack then ns.BarSetup.ApplyStack() end
                         Refresh()
                     end
-                end,
-            }
-            args.newSpecialBar = {
-                order = 4, type = "select", name = "|cFF80FF80New Special Bar (from spell)|r", width = "double",
-                disabled = full,
-                hidden = function() return not ns.SpecialBars end,
-                values = function()
-                    return (ns.SB_SpellChoices and ns.SB_SpellChoices(nil, true, getEditSpec())) or {}
-                end,
-                sorting = function()
-                    return ns.SB_SpellChoicesSorting and ns.SB_SpellChoicesSorting(getEditSpec()) or nil
-                end,
-                get = function() return "" end,
-                set = function(_, v)
-                    local id = tonumber(v)
-                    if not id then return end
-                    local SBm = ns.SpecialBars
-                    local g = grp()
-                    if not (SBm and g) then return end
-                    local es = getEditSpec()
-                    local usage = SBm.GetSpellUsageInfo and SBm.GetSpellUsageInfo(id, nil, nil, es)
-                    if usage then
-                        E:Print("This spell is already used by " .. usage .. "!")
-                        return
-                    end
-                    local s = SBm.GetSpecRoot(es)
-                    local c = s.barCount or 3
-                    local maxSlots = SBm.MAX_SLOTS or 12
-                    if c >= maxSlots then
-                        E:Print(("All %d Special Bar slots are in use."):format(maxSlots))
-                        return
-                    end
-                    if ns.SB_RebuildSlotPages then C_Timer.After(0, ns.SB_RebuildSlotPages) end
-                    s.barCount = c + 1
-                    local bdb = SBm.GetBarDB("bar" .. (c + 1), es)
-                    if SBm.Styles and SBm.Styles.ApplyToDB and SBm.Styles.EffectiveDefault then
-                        SBm.Styles.ApplyToDB("bars", SBm.Styles.EffectiveDefault("bars"), bdb)
-                    end
-                    local raw = SBm.GetRawSpellList and SBm.GetRawSpellList() or {}
-                    bdb.spellID = id
-                    bdb.spellName = (raw[id] and raw[id].name)
-                        or (C_Spell.GetSpellName and C_Spell.GetSpellName(id))
-                    bdb.enabled = true
-                    bdb.customGroup = g.id
-                    TUI:UpdateSpecialBars()
-                    Refresh()
                 end,
             }
         end
@@ -511,18 +434,22 @@ local function GroupTab(gi)
     local presetArgs = {
         pdesc = {
             order = 1, type = "description",
-            name = "Add a whole set at once; you pick which characters it shows for.\n",
+            name = "Add an Aura Collection; you pick which characters it shows for. It stays linked: edit it under Aura Collections.\n",
+        },
+        edit = {
+            order = 100, type = "execute", name = "|cFFB0A0FFEdit Collections|r", width = 1.2,
+            func = function() if E.ToggleOptions then E:ToggleOptions("thingsUI,modulesTab,auraCollections") end end,
         },
     }
-    for pi, p in ipairs(ns.AURA_PRESETS or {}) do
-        presetArgs["p_" .. tostring(p.key)] = {
-            order = 10 + pi, type = "execute", width = 1.2,
-            name = (p.name or tostring(p.key)) .. " |cff888888(" .. #(p.spells or {}) .. ")|r",
+    for pi, col in ipairs((ns.AuraCollections and ns.AuraCollections.List()) or {}) do
+        local c = col
+        presetArgs["p_" .. tostring(c.key)] = {
+            order = 10 + pi, type = "execute", width = 1.2, name = c.name,
             func = function()
                 local g = grp()
                 if not g then return end
-                AskScope(p.name or tostring(p.key), function(scope)
-                    CB().AddAuraSet(g, scope, "preset:" .. tostring(p.key), p, keyFor(scope))
+                AskScope(c.name, function(scope)
+                    CB().AddAuraCollection(g, scope, c.key, keyFor(scope))
                     Refresh()
                 end)
             end,
@@ -752,6 +679,8 @@ local function GroupTab(gi)
                                 disabled = function() return gget("useClassColor") ~= false end,
                                 get = function() return unpackColor(gget("customColor")) end,
                                 set = function(_, r, g, b) gset("customColor", { r = r, g = g, b = b }) end },
+                            reverseFill = { order = 6.5, type = "toggle", name = "Reverse Fill",
+                                get = function() return gget("reverseFill") end, set = function(_, v) gset("reverseFill", v) end },
                         },
                     },
                     iconGrp = {
@@ -776,11 +705,19 @@ local function GroupTab(gi)
                                 values = function() return ns.ANCHORS and ns.ANCHORS.FilteredValues and ns.ANCHORS.FilteredValues() or { UIParent = "UIParent" } end,
                                 sorting = function() return ns.ANCHORS and ns.ANCHORS.FilteredOrder and ns.ANCHORS.FilteredOrder() or nil end,
                                 get = function() return gget("anchorFrame") or "UIParent" end,
-                                set = function(_, v) gset("anchorFrame", v) end },
+                                set = function(_, v)
+                                    local g = grp()
+                                    if g and v ~= g.anchorFrame then ns.ANCHORS.ResetPlacement(g) end
+                                    gset("anchorFrame", v)
+                                end },
                             anchorFrameCustom = { order = 3, type = "input", name = "Custom Frame Name",
                                 hidden = function() return gget("anchorFrame") ~= "CUSTOM" end,
                                 get = function() return gget("anchorFrameCustom") or "" end,
-                                set = function(_, v) gset("anchorFrameCustom", v) end },
+                                set = function(_, v)
+                                    local g = grp()
+                                    if g and v ~= g.anchorFrameCustom then ns.ANCHORS.ResetPlacement(g) end
+                                    gset("anchorFrameCustom", v)
+                                end },
                             anchorPoint = { order = 4, type = "select", name = "Anchor From (self)",
                                 values = ns.POINTS and ns.POINTS.VALUES, sorting = ns.POINTS and ns.POINTS.ORDER,
                                 get = function() return gget("anchorPoint") or "CENTER" end,
@@ -798,6 +735,17 @@ local function GroupTab(gi)
                         },
                     },
                 },
+            },
+            visibilityTab = {
+                order = 25, type = "group", name = "Visibility",
+                args = ns.VisibilityArgs(function()
+                    local g = grp() or {}
+                    g.visibility = g.visibility or {}
+                    return g.visibility
+                end, function()
+                    TUI:UpdateCustomBars()
+                    if CB() and CB().RefreshVisibility then CB().RefreshVisibility() end
+                end),
             },
             textTab = {
                 order = 30, type = "group", name = "Text",
@@ -822,6 +770,9 @@ local function GroupTab(gi)
                                 get = function() return gget("nameXOffset") or 4 end, set = function(_, v) gset("nameXOffset", v) end },
                             nameYOffset = { order = 4, type = "range", name = "Y Offset", min = -20, max = 20, step = 0.01, bigStep = 1,
                                 get = function() return gget("nameYOffset") or 0 end, set = function(_, v) gset("nameYOffset", v) end },
+                                nameColor = { order = 5, type = "color", name = "Color",
+                                    get = function() local c = gget("nameColor") or {} return c.r or 1, c.g or 1, c.b or 1 end,
+                                    set = function(_, r, g, b) gset("nameColor", { r = r, g = g, b = b }) end },
                         },
                     },
                     durationGroup = {
@@ -836,6 +787,9 @@ local function GroupTab(gi)
                                 get = function() return gget("durationXOffset") or -4 end, set = function(_, v) gset("durationXOffset", v) end },
                             durationYOffset = { order = 4, type = "range", name = "Y Offset", min = -20, max = 20, step = 0.01, bigStep = 1,
                                 get = function() return gget("durationYOffset") or 0 end, set = function(_, v) gset("durationYOffset", v) end },
+                                durationColor = { order = 5, type = "color", name = "Color",
+                                    get = function() local c = gget("durationColor") or {} return c.r or 1, c.g or 1, c.b or 1 end,
+                                    set = function(_, r, g, b) gset("durationColor", { r = r, g = g, b = b }) end },
                         },
                     },
                     stackGroup = {
@@ -850,6 +804,10 @@ local function GroupTab(gi)
                                 set = function(_, v) gset("stackAnchor", v) end },
                             stackFontSize = { order = 2, type = "range", name = "Font Size", min = 6, max = 36, step = 1,
                                 get = function() return gget("stackFontSize") or 12 end, set = function(_, v) gset("stackFontSize", v) end },
+                                stackFontOutline = { order = 2.5, type = "select", name = "Outline",
+                                    values = ns.OUTLINE and ns.OUTLINE.VALUES, sorting = ns.OUTLINE and ns.OUTLINE.ORDER,
+                                    get = function() return gget("stackFontOutline") or gget("fontOutline") or "OUTLINE" end,
+                                    set = function(_, v) gset("stackFontOutline", v) end },
                             stackPoint = { order = 3, type = "select", name = "Position",
                                 values = ns.POINTS and ns.POINTS.VALUES, sorting = ns.POINTS and ns.POINTS.ORDER,
                                 get = function() return gget("stackPoint") or "CENTER" end, set = function(_, v) gset("stackPoint", v) end },
@@ -857,6 +815,9 @@ local function GroupTab(gi)
                                 get = function() return gget("stackXOffset") or 0 end, set = function(_, v) gset("stackXOffset", v) end },
                             stackYOffset = { order = 5, type = "range", name = "Y Offset", min = -20, max = 20, step = 0.01, bigStep = 1,
                                 get = function() return gget("stackYOffset") or 0 end, set = function(_, v) gset("stackYOffset", v) end },
+                                stackColor = { order = 6, type = "color", name = "Color",
+                                    get = function() local c = gget("stackColor") or {} return c.r or 1, c.g or 1, c.b or 1 end,
+                                    set = function(_, r, g, b) gset("stackColor", { r = r, g = g, b = b }) end },
                         },
                     },
                 },

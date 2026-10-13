@@ -60,7 +60,7 @@ local function GetSpecialSlots()
         for i = 1, n do
             local key = "bar" .. i
             local hint = GetSlotSpellHint(SB.GetBarDB, key)
-            local label = string.format("TUI Special Bar %d", i)
+            local label = string.format("TUI Aura Bar %d", i)
             if hint then label = label .. " (" .. hint .. ")" end
             out[#out + 1] = { frame = "TUI_SpecialBar_" .. key, label = col(C_TUI, label) }
         end
@@ -70,7 +70,7 @@ local function GetSpecialSlots()
         for i = 1, n do
             local key = "icon" .. i
             local hint = GetSlotSpellHint(SB.GetIconDB, key)
-            local label = string.format("TUI Special Icon %d", i)
+            local label = string.format("TUI Aura Icon %d", i)
             if hint then label = label .. " (" .. hint .. ")" end
             out[#out + 1] = { frame = "TUI_SpecialIcon_" .. key, label = col(C_TUI, label) }
         end
@@ -153,6 +153,14 @@ function ns.ANCHORS.FilteredOrder()
         if k ~= "CUSTOM" then out[#out + 1] = k end
     end
     return out
+end
+
+-- a new anchor frame starts from CENTER on CENTER without offsets; f = field names where they differ
+local PLACEMENT = { "anchorPoint", "anchorRelativePoint", "anchorXOffset", "anchorYOffset" }
+function ns.ANCHORS.ResetPlacement(db, f)
+    if not db then return end
+    f = f or PLACEMENT
+    db[f[1]], db[f[2]], db[f[3]], db[f[4]] = "CENTER", "CENTER", 0, 0
 end
 
 ns.ANCHORS.SHARED_ANCHOR_VALUES = STATIC_VALUES

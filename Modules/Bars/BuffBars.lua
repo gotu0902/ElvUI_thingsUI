@@ -17,6 +17,15 @@ local anchoringContainer = false
 local AnchorBuffBarContainer
 local HookBuffBarEditMode
 
+local NotSecret = ns.CDHelpers.NotSecret
+local ChildrenInto = ns.CDHelpers.ChildrenInto
+local scanKids, procKids = {}, {}
+
+-- bumped on anything that changes a bar's inner layout; bars re-lay only on a new stamp
+local layoutVersion = 0
+local laidOut = setmetatable({}, { __mode = "k" })
+local function InvalidateBarLayouts() layoutVersion = layoutVersion + 1 end
+
 
 local function OnBuffChildPointChanged(child)
     if applyingLayout then return end
@@ -45,13 +54,9 @@ end
 local function ScanAndHookBuffChildren()
     if not BuffBarCooldownViewer then return false end
     if not viewerReadyHooked then
-        local hookedAny = false
-        if type(BuffBarCooldownViewer.RefreshLayout) == "function" then
-            hooksecurefunc(BuffBarCooldownViewer, "RefreshLayout", function()
-                if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
-            end)
-            hookedAny = true
-        end
+        local hookedAny = ns.ViewerHooks.On(BuffBarCooldownViewer, "RefreshLayout", "BuffBars", function()
+            if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
+        end)
         if type(BuffBarCooldownViewer.Layout) == "function" then
             hooksecurefunc(BuffBarCooldownViewer, "Layout", function()
                 if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
@@ -73,17 +78,22 @@ local function ScanAndHookBuffChildren()
         if type(BuffBarCooldownViewer.OnAcquireItemFrame) == "function" then
             hooksecurefunc(BuffBarCooldownViewer, "OnAcquireItemFrame", function(_, itemFrame)
                 HookBuffChild(itemFrame)
+                -- acquire re-runs Blizzard's SetBarContent/SetBarWidth on the bar
+                if itemFrame then laidOut[itemFrame] = nil end
+                if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
+            end)
+        end
+        if type(BuffBarCooldownViewer.SetBarContent) == "function" then
+            hooksecurefunc(BuffBarCooldownViewer, "SetBarContent", function()
+                InvalidateBarLayouts()
                 if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
             end)
         end
         if hookedAny then viewerReadyHooked = true end
     end
 
-    local n = BuffBarCooldownViewer:GetNumChildren()
-    if n > 0 then
-        local kids = { BuffBarCooldownViewer:GetChildren() }
-        for i = 1, n do HookBuffChild(kids[i]) end
-    end
+    local n = ChildrenInto(BuffBarCooldownViewer, scanKids)
+    for i = 1, n do HookBuffChild(scanKids[i]) end
     return n > 0
 end
 
@@ -156,6 +166,7 @@ local function SkinBuffBar(childFrame)
 
     local texture = LSM:Fetch("statusbar", db.statusBarTexture)
     bar:SetStatusBarTexture(texture)
+    bar:SetReverseFill(db.reverseFill and true or false)
     if db.useClassColor then
         bar:SetStatusBarColor(GetClassColor())
     else
@@ -196,6 +207,10 @@ local function LayoutBuffBar(childFrame)
             if aw and aw > 0 then effectiveWidth = aw + (db.inheritWidthOffset or 0) end
         end
     end
+    local s = laidOut[childFrame]
+    if s and s.v == layoutVersion and s.w == effectiveWidth then return end
+    if not s then s = {}; laidOut[childFrame] = s end
+    s.v, s.w = layoutVersion, effectiveWidth
     childFrame:SetSize(effectiveWidth, db.height)
 
     local barOffset = 0
@@ -250,7 +265,19 @@ end
 local function ApplyContainerStrata()
     if not BuffBarCooldownViewer then return end
     local db = E.db.thingsUI.buffBars
-    BuffBarCooldownViewer:SetFrameStrata((db and db.frameStrata) or "MEDIUM")
+    local want = (db and db.frameStrata) or "MEDIUM"
+    -- a strata change re-sorts every descendant, so only on a real change
+    if BuffBarCooldownViewer:GetFrameStrata() ~= want then
+        BuffBarCooldownViewer:SetFrameStrata(want)
+    end
+end
+
+local function AnchoredAsWanted(frame, point, rel, relPoint, x, y)
+    if frame:GetNumPoints() ~= 1 then return false end
+    local p, r, rp, px, py = frame:GetPoint(1)
+    if not (NotSecret(p) and NotSecret(rp) and NotSecret(px) and NotSecret(py)) then return false end
+    return p == point and r == rel and rp == relPoint
+        and math.abs(px - (x or 0)) < 0.01 and math.abs(py - (y or 0)) < 0.01
 end
 
 function AnchorBuffBarContainer()
@@ -262,6 +289,10 @@ function AnchorBuffBarContainer()
     local anchorFrame = (ns.SpecialBars and ns.SpecialBars.ResolveAnchorTarget
         and ns.SpecialBars.ResolveAnchorTarget(db.anchorFrame)) or _G[db.anchorFrame]
     if not anchorFrame then return end
+    if AnchoredAsWanted(BuffBarCooldownViewer, db.anchorPoint, anchorFrame, db.anchorRelativePoint,
+        db.anchorXOffset, db.anchorYOffset) then
+        return
+    end
     anchoringContainer = true
     BuffBarCooldownViewer:ClearAllPoints()
     BuffBarCooldownViewer:SetPoint(db.anchorPoint, anchorFrame, db.anchorRelativePoint, db.anchorXOffset, db.anchorYOffset)
@@ -283,6 +314,20 @@ local function ApplyAuraBorderHide(childFrame)
     if cdm and cdm.hideAuraBorder then b:SetAlpha(0) end
 end
 
+-- an aura our own icons or bars already show: kept out of the row
+local function MarkDuplicate(child)
+    local CI = ns.CDMIcons
+    local dup = (CI and CI.IsAuraDuplicate and CI.IsAuraDuplicate(child)) and true or false
+    if dup ~= (child._tui_hidden == true) then
+        child._tui_hidden = dup or nil
+        child:SetAlpha(dup and 0 or 1)
+    end
+end
+
+local function ByLayoutIndex(a, b)
+    return (a.layoutIndex or 0) < (b.layoutIndex or 0)
+end
+
 local function ProcessUpdate()
     if not BuffBarCooldownViewer then return end
     if not E.db.thingsUI then return end
@@ -291,27 +336,37 @@ local function ProcessUpdate()
     if HookBuffBarEditMode then HookBuffBarEditMode() end
 
     local buffBarsEnabled = E.db.thingsUI.buffBars and E.db.thingsUI.buffBars.enabled
-    if not buffBarsEnabled then return end
+    if not buffBarsEnabled then
+        -- Blizzard lays the row out again: give back what we hid
+        for i = 1, ChildrenInto(BuffBarCooldownViewer, procKids) do
+            local c = procKids[i]
+            if c and c._tui_hidden then c._tui_hidden = nil; c:SetAlpha(1) end
+        end
+        return
+    end
 
     local db = E.db.thingsUI.buffBars
     wipe(sortedBars)
-    local children = { BuffBarCooldownViewer:GetChildren() }
 
-    for _, childFrame in ipairs(children) do
+    for i = 1, ChildrenInto(BuffBarCooldownViewer, procKids) do
+        local childFrame = procKids[i]
         if childFrame then ApplyAuraBorderHide(childFrame) end
+        if childFrame and childFrame.Bar and not yoinkedBars[childFrame] then MarkDuplicate(childFrame) end
         if childFrame and childFrame:IsShown() and childFrame.Bar
            and not yoinkedBars[childFrame] and not childFrame._tui_hidden then
+            -- a bar that gets skinned again (skinnedBars wiped anywhere) is laid out again too
+            if not skinnedBars[childFrame] then laidOut[childFrame] = nil end
             SkinBuffBar(childFrame)
             LayoutBuffBar(childFrame)
             sortedBars[#sortedBars + 1] = childFrame
+        elseif childFrame then
+            laidOut[childFrame] = nil
         end
     end
 
     AnchorBuffBarContainer()
     if #sortedBars == 0 then return end
-    tsort(sortedBars, function(a, b)
-        return (a.layoutIndex or 0) < (b.layoutIndex or 0)
-    end)
+    tsort(sortedBars, ByLayoutIndex)
 
     local spacing = db.spacing
     local height = db.height
@@ -413,11 +468,12 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         MarkDirtyThrottled()
     elseif event == "PLAYER_REGEN_ENABLED" then
         wipe(skinnedBars)
+        InvalidateBarLayouts()
         MarkDirty()
     elseif event == "PLAYER_ENTERING_WORLD" then
         StartViewerReadyTicker()
-        C_Timer.After(0.5, function() wipe(skinnedBars); MarkDirty() end)
-        C_Timer.After(1.5, function() wipe(skinnedBars); MarkDirty() end)
+        C_Timer.After(0.5, function() wipe(skinnedBars); InvalidateBarLayouts(); MarkDirty() end)
+        C_Timer.After(1.5, function() wipe(skinnedBars); InvalidateBarLayouts(); MarkDirty() end)
     elseif event == "UPDATE_SHAPESHIFT_FORM" then
         MarkDirty()
     end
@@ -432,6 +488,7 @@ function TUI:UpdateBuffBars()
         eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
         eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
         wipe(skinnedBars)
+        InvalidateBarLayouts()
         MarkDirty()
     else
         isEnabled = false

@@ -23,6 +23,9 @@ end
 ns.SB_OpenIconEditor = function(key)
     if E.ToggleOptions and key then E:ToggleOptions("thingsUI,modulesTab,specialIcons,iconsTab," .. key .. "Group") end
 end
+ns.SB_OpenBarEditor = function(key)
+    if E.ToggleOptions and key then E:ToggleOptions("thingsUI,modulesTab,specialBars,barsTab," .. key .. "Group") end
+end
 ns.SB_CloseIconEditor = function()
     if E.ToggleOptions then E:ToggleOptions("thingsUI,modulesTab,specialIcons,controlGroup") end
 end
@@ -42,14 +45,21 @@ local function ComputeIconLayout()
         if d and d.spellID then
             local gid = d.customGroup
             local g = gid and ns.CustomGroups and ns.CustomGroups.GroupByID and ns.CustomGroups.GroupByID(gid)
-            local b = g and bucket("g" .. gid, g.name or ("Group " .. gid)) or bucket("standalone", "Standalone")
+            local row = not g and d.cdmRow
+            local b = (g and bucket("g" .. gid, g.name or ("Group " .. gid)))
+                or (row and bucket("row" .. row, (row == "utility" and "Utility" or "Essential") .. " Cooldowns"))
+                or bucket("standalone", "Standalone")
             b.icons[#b.icons + 1] = { key = ikey, name = SpellName(d.spellID) }
         elseif d then
             local b = bucket("unconfigured", "Unconfigured")
             b.icons[#b.icons + 1] = { key = ikey, name = ("Icon %d"):format(i) }
         end
     end
-    local function rank(k) return (k == "standalone") and 0 or (k == "unconfigured") and 2 or 1 end
+    local function rank(k)
+        if k == "standalone" then return 0 end
+        if k:sub(1, 3) == "row" then return 0.5 end
+        return (k == "unconfigured") and 2 or 1
+    end
     table.sort(dests, function(a, b)
         if rank(a.key) ~= rank(b.key) then return rank(a.key) < rank(b.key) end
         return (a.name or ""):lower() < (b.name or ""):lower()
@@ -524,7 +534,7 @@ local function BuildStylesTab(kind)
             order = 4, type = "execute", name = "Delete Style",
             disabled = function() return sel() == "Global" end,
             confirm = function()
-                return ("Delete style '%s'? Specials keep their current look but lose the style link."):format(sel() or "?")
+                return ("Delete style '%s'? Aura icons and bars keep their current look but lose the style link."):format(sel() or "?")
             end,
             func = function()
                 if SB.Styles.Delete(kind, sel()) then
@@ -558,7 +568,7 @@ local function BuildStylesTab(kind)
                 return t
             end,
             confirm = function(_, v)
-                return ("Overwrite style '%s' with '%s'? Every special using '%s' follows."):format(sel() or "?", v, sel() or "?")
+                return ("Overwrite style '%s' with '%s'? Everything using '%s' follows."):format(sel() or "?", v, sel() or "?")
             end,
             get = function() return "" end,
             set = function(_, v)
@@ -572,11 +582,11 @@ local function BuildStylesTab(kind)
             end,
         },
         copyFromSpecial = {
-            order = 12, type = "select", name = ("...A Special %s's Settings"):format(noun), width = "double",
+            order = 12, type = "select", name = ("...An Aura %s's Settings"):format(noun), width = "double",
             values = function() return (SpecialCopyEntries(kind, sel())) end,
             sorting = function() return select(2, SpecialCopyEntries(kind, sel())) end,
             confirm = function()
-                return ("This will overwrite style '%s' and every special using it. If you're updating the style for all your specs' %ss, you're in the right place. Full send it?"):format(sel() or "?", noun:lower())
+                return ("This will overwrite style '%s' and everything using it. If you're updating the style for all your specs' %ss, you're in the right place. Full send it?"):format(sel() or "?", noun:lower())
             end,
             get = function() return "" end,
             set = function(_, v)
@@ -614,13 +624,13 @@ local function BuildSpecialBarsGroup()
     return {
         order = 1,
         type = "group",
-        name = "Special Bars",
+        name = "Aura Bars",
         childGroups = "tab",
         args = {
             addBarForEdited = {
                 order = 0.5, type = "execute", width = "double",
                 hidden = function() return not (SB and SB.EditingSpec()) end,
-                name = function() return "|cFF40FF40+ New Special Bar for |r" .. SpecTag(SB.EditingSpec()) end,
+                name = function() return "|cFF40FF40+ New Aura Bar for |r" .. SpecTag(SB.EditingSpec()) end,
                 disabled = function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) >= (SB.MAX_SLOTS or 12) end,
                 func = function()
                     local s = SB.GetSpecRoot(SB.EditingSpec()); local c = s.barCount or 3
@@ -633,7 +643,7 @@ local function BuildSpecialBarsGroup()
             },
             addBar = {
                 order = 1, type = "execute", width = "double",
-                name = function() return "|cFF40FF40+ New Special Bar for |r" .. SpecTag(CurSpecNum()) end,
+                name = function() return "|cFF40FF40+ New Aura Bar for |r" .. SpecTag(CurSpecNum()) end,
                 disabled = function() return not SB or (SB.GetSpecRoot().barCount or 3) >= (SB.MAX_SLOTS or 12) end,
                 func = function()
                     if not SB then return end
@@ -681,13 +691,13 @@ local function BuildSpecialIconsGroup()
     return {
         order = 2,
         type = "group",
-        name = "Special Icons",
+        name = "Aura Icons",
         childGroups = "tab",
         args = {
             addIconForEdited = {
                 order = 0.5, type = "execute", width = "double",
                 hidden = function() return not (SB and SB.EditingSpec()) end,
-                name = function() return "|cFF40FF40+ New Special Icon for |r" .. SpecTag(SB.EditingSpec()) end,
+                name = function() return "|cFF40FF40+ New Aura Icon for |r" .. SpecTag(SB.EditingSpec()) end,
                 disabled = function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).iconCount or 3) >= (SB.MAX_SLOTS or 12) end,
                 func = function()
                     local s = SB.GetSpecRoot(SB.EditingSpec()); local c = s.iconCount or 3
@@ -701,7 +711,7 @@ local function BuildSpecialIconsGroup()
             },
             addIcon = {
                 order = 1, type = "execute", width = "double",
-                name = function() return "|cFF40FF40+ New Special Icon for |r" .. SpecTag(CurSpecNum()) end,
+                name = function() return "|cFF40FF40+ New Aura Icon for |r" .. SpecTag(CurSpecNum()) end,
                 disabled = function() return not SB or (SB.GetSpecRoot().iconCount or 3) >= (SB.MAX_SLOTS or 12) end,
                 func = function()
                     if not SB then return end

@@ -1,8 +1,8 @@
-## Interface: 120100
+## Interface: 120100, 120105
 ## Title: |cFF8080FFElvUI_thingsUI|r
 ## Notes: ElvUI plugin for doing things
 ## Author: geir, Dan G, pat_skr, Claude
-## Version: 4.1.8
+## Version: 4.2.0
 ## RequiredDeps: ElvUI
 ## OptionalDeps: MinimapButtonButton, Details! Damage Meter, Grid2
 ## DefaultState: Enabled

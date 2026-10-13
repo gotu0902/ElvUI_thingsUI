@@ -1,5 +1,5 @@
 local _, ns = ...
 ns.InstallStrings = ns.InstallStrings or {}
 ns.InstallStrings.ALT_PRESETS = [==[
-!TUIALT2!XY5RDoIwEESv0iOo4QYCBSOERC5Q0m3dWGnZthiOgx+e0xoTEv2ctzOzs/IclIgmPGtHdkYJ5F8FmDniyhNRaODYVj0fUD9Q+x9YaEJ52FBXVj27TFEQeJYLujVDVIrgjuOndvOV4Yqj9jx9cYTzxtsuKRGAfe8nZ0RYRhEs/UdbkBgaK+EsFhtDnbawfZbt3Bs=
+!TUIALT2!dY9BDoIwEEWv4hE04QIobcEAMQbWpoQBGwtt2oLhOCJXZG8NCLpwN//Pm5k/PfGgoA03fSCVaFkOSg8IeNuwB7FOwTgcYj8hGSvvrNS/puWkYu1ixierqIGNubK61EfJqelqaoRaEOIh7KZhEkPOTCRyCGknGhPYdZud42wlvijBQQ8EappxyMewAlVCQuubJ/W4xnxOMXviuZFL0PmdCPvIDW2J/eTr+ILgKddMzerz2r9Fe6iWVjCNoDSYgdV4AQ==
 ]==]

@@ -1,6 +1,7 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
 	<Script file="Core.lua"/>
 	<Script file="Anchors.lua"/>
+	<Script file="Visibility.lua"/>
 	<Script file="Pixel.lua"/>
 	<Script file="Widgets\CascadeWidget.lua"/>
 	<Script file="Widgets\CascadeDropdown.lua"/>

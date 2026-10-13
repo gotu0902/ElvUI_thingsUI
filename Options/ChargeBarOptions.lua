@@ -707,7 +707,13 @@ function TUI:ChargeBarOptions()
                                 order = 1, type = "select", name = "Anchor Frame",
                                 values = ns.ANCHORS.FilteredValues,
                                 get = function() return E.db.thingsUI.chargeBar.anchorFrame or "UIParent" end,
-                                set = function(_, v) E.db.thingsUI.chargeBar.anchorFrame = v; Update() end,
+                                set = function(_, v)
+                                    local cb = E.db.thingsUI.chargeBar
+                                    if v ~= cb.anchorFrame then
+                                        ns.ANCHORS.ResetPlacement(cb, { "anchorPoint", "anchorRelativePoint", "fhtXOffset", "fhtYOffset" })
+                                    end
+                                    cb.anchorFrame = v; Update()
+                                end,
                             },
                             anchorPoint = {
                                 order = 2, type = "select", name = "Anchor From",

@@ -245,7 +245,7 @@ local CG_UP   = "|TInterface\\Buttons\\Arrow-Up-Up:16:16:0:2|t"
 local CG_DOWN = "|TInterface\\Buttons\\Arrow-Up-Up:16:16:0:-2:32:32:0:32:32:0|t"
 local CG_X    = "|TInterface\\RaidFrame\\ReadyCheck-NotReady:13|t"
 local CURATED_ITEMS = {
-    5512, 241304, 271884, 271887, 271890, 241308, 241300, 241294, 241288, 241292,
+    5512, 241304, 271884, 271887, 271890, 241308, 241300, 241294, 241288, 241292, 241296,
 }
 local editSpec, editClass
 
@@ -312,7 +312,7 @@ local function CopySpecialToLive(srcSpec, srcIconKey, groupID)
     local s = SB.GetSpecRoot()
     if not s then return end
     local c = s.iconCount or 3
-    if c >= (SB.MAX_SLOTS or 12) then E:Print(("All %d Special Icon slots are in use on this spec."):format(SB.MAX_SLOTS or 12)) return end
+    if c >= (SB.MAX_SLOTS or 12) then E:Print(("All %d Aura Icon slots are in use on this spec."):format(SB.MAX_SLOTS or 12)) return end
     if ns.SB_RebuildSlotPages then C_Timer.After(0, ns.SB_RebuildSlotPages) end
     local copy = ns.DeepCopy(src)
     copy.customGroup = groupID
@@ -436,12 +436,14 @@ function TUI:CustomGroupsOptions()
                     tex  = (C_Item.GetItemIconByID and C_Item.GetItemIconByID(id)) or select(10, C_Item.GetItemInfo(id)) or 134400 }
             end
             for uid, d in pairs(root.auras or {}) do
-                local spells = ns.AuraLane.SpellList(d)
-                local first = spells[1]
+                local AC = ns.AuraCollections
+                local ed = AC and AC.Effective(uid, d) or d
+                local spells = ns.AuraLane.SpellList(ed)
+                local first = spells[1] or ed.preview
                 out[#out + 1] = { kind = "aura", id = first or 0, auraUID = tostring(uid), def = d,
                     li = d.layoutIndex or 999, uid = "aura:" .. tostring(uid),
                     setCount = (#spells > 1) and #spells or nil,
-                    name = d.name or (first and C_Spell.GetSpellName and C_Spell.GetSpellName(first)) or "Aura",
+                    name = ed.name or (first and C_Spell.GetSpellName and C_Spell.GetSpellName(first)) or "Aura",
                     tex  = (first and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(first)) or 134400 }
             end
         end
@@ -508,7 +510,7 @@ function TUI:CustomGroupsOptions()
         local extra = raceDim and " |cFF555555(other race)|r" or ""
         local idShown = (e.kind == "timer" and e.realID) or e.id
         if e.kind == "timer" then extra = extra .. " |cFF8AC8FF(Timer)|r" end
-        if e.kind == "specialicon" then extra = extra .. " |cFFFF80C0(Special Icon)|r" end
+        if e.kind == "specialicon" then extra = extra .. " |cFFFF80C0(Aura Icon)|r" end
         if e.kind == "trinket" then
             return ("|T%d:14:14:0:0|t %s |cFFFFD200(Trinket %d)|r"):format(e.tex or 134400, name, e.id == 13 and 1 or 2)
         end
@@ -641,8 +643,7 @@ function TUI:CustomGroupsOptions()
                     if not CG then return end
                     local pkey = v:match("^p:(.+)")
                     if pkey then
-                        local p = auraPresetByKey(pkey)
-                        if p then CG.AddAuraSet(group, scope, getKey(), "preset:" .. pkey, p) end
+                        CG.AddAuraCollection(group, scope, getKey(), pkey)
                     else
                         local id = tonumber(v)
                         if id then CG.AddAura(group, scope, getKey(), id) end
@@ -707,77 +708,16 @@ function TUI:CustomGroupsOptions()
                 end,
             },
             addSpecialIcon = {
-                order = 13, type = "select", name = "|cFFFF80C0Add Special Icon|r", width = "double",   -- special icons = pink
-                hidden = function()
-                    if scope ~= "spec" then return true end
-                    local SB = ns.SpecialBars
-                    if not (SB and SB.GetSpecRoot) then return true end
-                    local root = SB.GetSpecRoot(getKey())
-                    for _, idb in pairs((root and root.icons) or {}) do
-                        if type(idb) == "table" and idb.enabled and idb.spellID then return false end
-                    end
-                    return true
-                end,
-                values = function()
-                    local v, SB = {}, ns.SpecialBars
-                    local root = SB and SB.GetSpecRoot and SB.GetSpecRoot(getKey())
-                    for i = 1, (root and (root.iconCount or 3)) or 0 do
-                        local ikey = "icon" .. i
-                        local idb = root.icons and root.icons[ikey]
-                        if type(idb) == "table" and idb.enabled and idb.spellID then
-                            local nm = (C_Spell.GetSpellName and C_Spell.GetSpellName(idb.spellID)) or ("Spell " .. tostring(idb.spellID))
-                            local where = (idb.customGroup == group.id) and "  |cFF888888(here)|r"
-                                or (idb.customGroup and ns.CustomGroups.GroupByID(idb.customGroup) and "  |cFFFF8040(in another group)|r") or ""
-                            v[ikey] = ("|T%d:16:16|t %s%s"):format((C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(idb.spellID)) or 134400, nm, where)
-                        end
-                    end
-                    return v
-                end,
+                order = 13, type = "select", name = "|cFFFF80C0Add Aura Icon|r", width = "double",   -- aura icons = pink
+                hidden = function() return scope ~= "spec" or not ns.SpecialBars end,
+                values = function() return (ns.SB_GroupPickValues and ns.SB_GroupPickValues(false, getKey())) or {} end,
+                sorting = function() return ns.SB_GroupPickSorting and ns.SB_GroupPickSorting(false, getKey()) or nil end,
                 get = function() return "" end,
                 set = function(_, v)
-                    local SB = ns.SpecialBars
-                    local idb = SB and SB.GetIconDB and SB.GetIconDB(v, getKey())
-                    if idb then
-                        idb.customGroup = group.id
-                        if getKey() == curSpecID() and SB.ReleaseIcon then SB.ReleaseIcon(v) end
+                    local id = tonumber(v)
+                    if id and ns.SB_PlaceSpell and ns.SB_PlaceSpell(false, id, getKey(), group.id) then
                         TUI:UpdateSpecialBars(); TUI:UpdateCustomGroups(); NotifyChange()
                     end
-                end,
-            },
-            newSpecialIcon = {
-                order = 13.5, type = "select", name = "|cFFFF80C0New Special Icon (from spell)|r", width = "double",
-                hidden = function()
-                    return scope ~= "spec" or not ns.SpecialBars
-                end,
-                values = function()
-                    return (ns.SB_SpellChoices and ns.SB_SpellChoices(nil, false, getKey())) or {}
-                end,
-                sorting = function()
-                    return ns.SB_SpellChoicesSorting and ns.SB_SpellChoicesSorting(getKey()) or nil
-                end,
-                get = function() return "" end,
-                set = function(_, v)
-                    local SB = ns.SpecialBars
-                    local id = tonumber(v)
-                    if not (SB and id and SB.GetSpecRoot and SB.GetIconDB) then return end
-                    local es = getKey()
-                    local usage = SB.GetSpellUsageInfo and SB.GetSpellUsageInfo(id, nil, nil, es)
-                    if usage then E:Print("This spell is already used by " .. usage .. "!") return end
-                    local s = SB.GetSpecRoot(es)
-                    local c = s.iconCount or 3
-                    if c >= (SB.MAX_SLOTS or 12) then E:Print(("All %d Special Icon slots are in use on this spec."):format(SB.MAX_SLOTS or 12)) return end
-    if ns.SB_RebuildSlotPages then C_Timer.After(0, ns.SB_RebuildSlotPages) end
-                    s.iconCount = c + 1
-                    local idb = SB.GetIconDB("icon" .. (c + 1), es)
-                    if SB.Styles and SB.Styles.ApplyToDB then
-                        SB.Styles.ApplyToDB("icons", SB.Styles.EffectiveDefault("icons"), idb)
-                    end
-                    local raw = SB.GetRawSpellList and SB.GetRawSpellList() or {}
-                    idb.spellID = id
-                    idb.spellName = (raw[id] and raw[id].name) or ""
-                    idb.enabled = true
-                    idb.customGroup = group.id
-                    TUI:UpdateSpecialBars(); TUI:UpdateCustomGroups(); NotifyChange()
                 end,
             },
             entriesBox = {
@@ -892,7 +832,7 @@ function TUI:CustomGroupsOptions()
                             hidden = function() local e = entry(); return not (e and e.kind == "specialicon") end,
                             confirm = function()
                                 local e = entry()
-                                return ("Delete special icon '%s' PERMANENTLY? It is removed from Special Icons too."):format(e and e.name or "?")
+                                return ("Delete aura icon '%s' PERMANENTLY? It is removed from Aura Icons too."):format(e and e.name or "?")
                             end,
                             func = function()
                                 local e = entry(); if not e then return end
@@ -910,6 +850,10 @@ function TUI:CustomGroupsOptions()
                         box["r" .. i .. "_bstyle"] = {
                             order = base + 4.5, type = "select", name = "", width = 1.2,
                             hidden = function() local e = entry(); return not (e and (e.kind == "aura" or e.kind == "timer")) end,
+                            disabled = function()
+                                local e = entry()
+                                return e and e.kind == "aura" and ((group.auras and group.auras.sortMode) or "manual") ~= "manual"
+                            end,
                             values = function()
                                 local SBm = ns.SpecialBars
                                 return (SBm and SBm.Styles and SBm.Styles.DropdownValues("icons", "|cFF888888- No Style -|r")) or {}
@@ -1113,14 +1057,35 @@ function TUI:CustomGroupsOptions()
                     if m == "manual" then
                         return "|cff888888Manual: blocks keep the order below, each entry keeps its own max & sort.|r\n"
                     end
-                    return "|cFFFFD200Sorted: manual order disabled. Spec, class and global order won't matter shit now be-te-dubs.|r\n"
+                    return "|cFFFFD200Sorted: manual order disabled. Spec, class and global order won't matter shit now be-te-dubs. The auras share one Style below instead of their own.|r\n"
                 end,
             },
             desc = { order = 3, type = "description", name = "Order of the entry blocks (^/v). Each block keeps its own internal order.\n",
                 hidden = function() return ((group.auras and group.auras.sortMode) or "manual") ~= "manual" end },
+            sortStyle = {
+                order = 2.05, type = "select", name = "Style", width = 1.3,
+                hidden = function() return ((group.auras and group.auras.sortMode) or "manual") == "manual" end,
+                values = function()
+                    local SBm = ns.SpecialBars
+                    return (SBm and SBm.Styles and SBm.Styles.DropdownValues("icons", "|cFF888888- No Style -|r")) or {}
+                end,
+                sorting = function()
+                    local SBm = ns.SpecialBars
+                    return (SBm and SBm.Styles and SBm.Styles.DropdownSorting("icons", true)) or {}
+                end,
+                get = function() return (group.auras and group.auras.sortStyle) or "" end,
+                set = function(_, v)
+                    group.auras = group.auras or {}
+                    group.auras.sortStyle = (v ~= "") and v or nil
+                    TUI:UpdateCustomGroups(); NotifyChange()
+                end,
+            },
             sortGlow = {
                 order = 2.1, type = "toggle", name = "Glow Active Icons",
-                hidden = function() return ((group.auras and group.auras.sortMode) or "manual") == "manual" end,
+                hidden = function()
+                    local au = group.auras
+                    return ((au and au.sortMode) or "manual") == "manual" or (au and au.sortStyle) ~= nil
+                end,
                 get = function() return group.auras and group.auras.sortGlow end,
                 set = function(_, v)
                     group.auras = group.auras or {}
@@ -1130,7 +1095,10 @@ function TUI:CustomGroupsOptions()
             },
             sortGlowStyle = {
                 order = 2.2, type = "select", name = "Glow Style",
-                hidden = function() return ((group.auras and group.auras.sortMode) or "manual") == "manual" end,
+                hidden = function()
+                    local au = group.auras
+                    return ((au and au.sortMode) or "manual") == "manual" or (au and au.sortStyle) ~= nil
+                end,
                 disabled = function() return not (group.auras and group.auras.sortGlow) end,
                 values = { pulse = "Pulse Ring", pixel = "Pixel Glow", proc = "Proc Glow", ants = "Marching Ants" },
                 sorting = { "pulse", "pixel", "proc", "ants" },
@@ -1142,7 +1110,10 @@ function TUI:CustomGroupsOptions()
             },
             sortGlowColor = {
                 order = 2.3, type = "color", name = "Glow Color",
-                hidden = function() return ((group.auras and group.auras.sortMode) or "manual") == "manual" end,
+                hidden = function()
+                    local au = group.auras
+                    return ((au and au.sortMode) or "manual") == "manual" or (au and au.sortStyle) ~= nil
+                end,
                 disabled = function() return not (group.auras and group.auras.sortGlow) end,
                 get = function()
                     local c = (group.auras and group.auras.sortGlowColor) or { r = 1, g = 1, b = 0.25 }
@@ -1157,7 +1128,7 @@ function TUI:CustomGroupsOptions()
         do
             local function pxHidden()
                 local au = group.auras
-                if ((au and au.sortMode) or "manual") == "manual" then return true end
+                if ((au and au.sortMode) or "manual") == "manual" or (au and au.sortStyle) then return true end
                 return ((au and au.sortGlowStyle) or "pulse") ~= "pixel"
             end
             local function pxDisabled() return not (group.auras and group.auras.sortGlow) end
@@ -1226,11 +1197,16 @@ function TUI:CustomGroupsOptions()
         local aurasArgs = {
             desc = {
                 order = 1, type = "description",
-                name = "Buffs and debuffs drawn at the end of this group, using its icon size, spacing, growth, font and border.\n|cff888888Add single auras with Add Buff in the Spec, Class or Global tab. They appear in that tab's list. The buttons below add a whole set at once.|r\n",
+                name = "Buffs and debuffs drawn at the end of this group, using its icon size, spacing, growth, font and border.\n|cff888888Add single auras with Add Buff in the Spec, Class or Global tab. They appear in that tab's list. The buttons below add an Aura Collection, which stays linked: edit it under Aura Collections.|r\n",
             },
             presets = {
-                order = 20, type = "group", inline = true, name = "Ready-Made Sets",
-                args = {},
+                order = 20, type = "group", inline = true, name = "Aura Collections",
+                args = {
+                    edit = {
+                        order = 100, type = "execute", name = "|cFFB0A0FFEdit Collections|r", width = 1.1,
+                        func = function() if E.ToggleOptions then E:ToggleOptions("thingsUI,modulesTab,auraCollections") end end,
+                    },
+                },
             },
             display = {
                 order = 30, type = "group", inline = true, name = "Display",
@@ -1278,13 +1254,13 @@ function TUI:CustomGroupsOptions()
             },
         }
 
-        for pi, preset in ipairs(ns.AURA_PRESETS or {}) do
-            local p = preset
-            aurasArgs.presets.args[p.key] = {
-                order = pi, type = "execute", name = p.name, width = 1.1,
+        for pi, col in ipairs((ns.AuraCollections and ns.AuraCollections.List()) or {}) do
+            local c = col
+            aurasArgs.presets.args["c_" .. c.key] = {
+                order = pi, type = "execute", name = c.name, width = 1.1,
                 func = function()
-                    AskScope(p.name, group.name or ("Group " .. group.id), function(sc)
-                        CG.AddAuraSet(group, sc, nil, "preset:" .. p.key, p)
+                    AskScope(c.name, group.name or ("Group " .. group.id), function(sc)
+                        CG.AddAuraCollection(group, sc, nil, c.key)
                         if CG._rebuildOptions then CG._rebuildOptions() end
                         TUI:UpdateCustomGroups(); NotifyChange()
                     end)
@@ -1314,15 +1290,6 @@ function TUI:CustomGroupsOptions()
                         TUI:UpdateCustomGroups()
                         if CG._rebuildOptions then CG._rebuildOptions() end
                         NotifyChange()
-                    end,
-                },
-                centeredLaneWarn = {
-                    order = 0.9, type = "description", fontSize = "medium", width = "full",
-                    name = "|cFFFF6060Buffs/debuffs can't auto-center with Centered growth - Blizzard's aura layout only grows from a corner, so live icons won't recenter like the preview does.|r",
-                    hidden = function()
-                        local g = group.growth or ""
-                        if not g:find("CENTERED") then return true end
-                        return not (ns.AuraLane and ns.AuraLane.HasSets and ns.AuraLane.HasSets(group))
                     end,
                 },
                 gname = {
@@ -1405,41 +1372,10 @@ function TUI:CustomGroupsOptions()
                 orderTab  = { order = 14, type = "group", name = "Order", args = orderArgs },
                 visibilityTab = {
                     order = 16.5, type = "group", name = "Visibility",
-                    args = {
-                        enabled = {
-                            order = 1, type = "toggle", name = "Limit Visibility", width = "full",
-                            desc = "When off the group follows its normal rules and shows everywhere.",
-                            get = function() return group.visibility and group.visibility.enabled or false end,
-                            set = function(_, v)
-                                group.visibility = group.visibility or {}
-                                group.visibility.enabled = v
-                                TUI:UpdateCustomGroups()
-                            end,
-                        },
-                        desc = {
-                            order = 2, type = "description",
-                            name = "Pick the group sizes the group is allowed to show in.\n",
-                            hidden = function() return not (group.visibility and group.visibility.enabled) end,
-                        },
-                        solo = {
-                            order = 3, type = "toggle", name = "Solo",
-                            hidden = function() return not (group.visibility and group.visibility.enabled) end,
-                            get = function() return group.visibility.solo ~= false end,
-                            set = function(_, v) group.visibility.solo = v; TUI:UpdateCustomGroups() end,
-                        },
-                        party = {
-                            order = 4, type = "toggle", name = "Party",
-                            hidden = function() return not (group.visibility and group.visibility.enabled) end,
-                            get = function() return group.visibility.party ~= false end,
-                            set = function(_, v) group.visibility.party = v; TUI:UpdateCustomGroups() end,
-                        },
-                        raid = {
-                            order = 5, type = "toggle", name = "Raid",
-                            hidden = function() return not (group.visibility and group.visibility.enabled) end,
-                            get = function() return group.visibility.raid ~= false end,
-                            set = function(_, v) group.visibility.raid = v; TUI:UpdateCustomGroups() end,
-                        },
-                    },
+                    args = ns.VisibilityArgs(function()
+                        group.visibility = group.visibility or {}
+                        return group.visibility
+                    end, function() TUI:UpdateCustomGroups() end),
                 },
                 layoutTab = {
                     order = 15, type = "group", name = "Layout & Position",
@@ -1543,11 +1479,19 @@ function TUI:CustomGroupsOptions()
                                 moveHint = { order = 0, type = "description",
                                     name = "UIParent = free (move via |cFFFFD200/emove|r). Pick a frame to snap to it.\n" },
                                 anchorFrame = { order = 1, type = "select", name = "Anchor To", values = ns.ANCHORS.GetSharedAnchorValues, sorting = ns.ANCHORS.GetSharedAnchorOrder,
-                                    get = function() return group.anchorFrame or "UIParent" end, set = function(_, v) gset("anchorFrame", v) end },
+                                    get = function() return group.anchorFrame or "UIParent" end,
+                                    set = function(_, v)
+                                        if v ~= group.anchorFrame then ns.ANCHORS.ResetPlacement(group) end
+                                        gset("anchorFrame", v)
+                                    end },
                                 anchorCustom = { order = 1.5, type = "input", name = "Custom Frame Name", width = "double",
                                     hidden = function() return group.anchorFrame ~= "CUSTOM" end,
                                     get = function() return group.anchorFrameCustom or "" end,
-                                    set = function(_, v) gset("anchorFrameCustom", (v or ""):gsub("%s", "")) end },
+                                    set = function(_, v)
+                                        v = (v or ""):gsub("%s", "")
+                                        if v ~= group.anchorFrameCustom then ns.ANCHORS.ResetPlacement(group) end
+                                        gset("anchorFrameCustom", v)
+                                    end },
                                 anchorPoint = { order = 2, type = "select", name = "Anchor From (self)", values = ns.POINTS.VALUES, sorting = ns.POINTS.ORDER,
                                     hidden = isUIParent, get = function() return group.anchorPoint end, set = function(_, v) gset("anchorPoint", v) end },
                                 anchorRelativePoint = { order = 3, type = "select", name = "Anchor To (target)", values = ns.POINTS.VALUES, sorting = ns.POINTS.ORDER,

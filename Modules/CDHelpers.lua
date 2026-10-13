@@ -17,6 +17,16 @@ local function NotSecret(v)
 end
 H.NotSecret = NotSecret
 
+-- one engine call into a reused table instead of select(i, frame:GetChildren()) per index
+local function PackInto(out, ...)
+    local n = select("#", ...)
+    for i = 1, n do out[i] = (select(i, ...)) end
+    for i = n + 1, #out do out[i] = nil end
+    return n
+end
+function H.ChildrenInto(frame, out) return PackInto(out, frame:GetChildren()) end
+function H.RegionsInto(frame, out) return PackInto(out, frame:GetRegions()) end
+
 local desatCurve
 local function GetDesatCurve()
     if desatCurve ~= nil then return desatCurve or nil end

@@ -101,12 +101,11 @@ local function GetIconSize(vdb)
     return w, h
 end
 
+local collectKids = {}
 local function CollectAndHook(viewer, out, hookFn)
     for i = #out, 1, -1 do out[i] = nil end
-    local n = viewer:GetNumChildren()
-    if n == 0 then return out end
-    local kids = { viewer:GetChildren() }
-    for i = 1, n do
+    local kids = collectKids
+    for i = 1, H.ChildrenInto(viewer, kids) do
         local c = kids[i]
         if c and c.GetCooldownID then
             if hookFn then hookFn(c, viewer) end
@@ -152,6 +151,79 @@ local function PlainID(v)
     return v
 end
 
+-- a buff's own ids and the ones CDM links to it, against the auras we already show
+-- a filter collection's token (set key) -> the client's test for one spell
+local TOKEN_TEST = {
+    BIG_DEFENSIVE      = C_UnitAuras and C_UnitAuras.AuraIsBigDefensive,
+    EXTERNAL_DEFENSIVE = C_Spell and C_Spell.IsExternalDefensive,
+    IMPORTANT          = C_Spell and C_Spell.IsSpellImportant,
+    CROWD_CONTROL      = C_Spell and C_Spell.IsSpellCrowdControl,
+}
+
+local function AuraDup(info, sid, base, set)
+    if (sid and set[sid]) or (base and set[base]) then return true end
+    if sid then
+        for token, test in pairs(TOKEN_TEST) do
+            if set[token] then
+                local r = test(sid)
+                if NotSecret(r) and r then return true end
+            end
+        end
+    end
+    local linked = info and info.linkedSpellIDs
+    if type(linked) == "table" and not IsSecret(linked) then
+        for _, lid in ipairs(linked) do
+            local id = PlainID(lid)
+            if id and set[id] then return true end
+        end
+    end
+    return false
+end
+
+-- shared with BuffBars, which lays out the bar row itself
+local auraDupSet, auraDupSig
+local function SetAuraDupSet(set)
+    local keys = {}
+    for id in pairs(set or {}) do keys[#keys + 1] = tostring(id) end
+    table.sort(keys)
+    local sig = table.concat(keys, ",")
+    auraDupSet = set
+    if sig ~= auraDupSig then
+        auraDupSig = sig
+        if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
+    end
+end
+
+-- the spell a CDM frame shows right now (Blizzard re-uses frames across spells)
+function M.ChildSpell(child)
+    local info = child and child.cooldownInfo
+    if not info then return nil end
+    local base = PlainID(info.spellID)
+    local sid = PlainID(info.overrideTooltipSpellID) or PlainID(info.overrideSpellID) or base
+    return sid, base
+end
+
+-- Spell Editor settings for a CDM frame, or nil
+function M.SpellSettings(child)
+    local cdm = E.db.thingsUI.cdmIcons
+    local buff = child and child.GetParent and child:GetParent() == _G.BuffIconCooldownViewer
+    local ps
+    if cdm then
+        if buff then ps = cdm.perBuff else ps = cdm.perSpell end
+    end
+    if not (ps and next(ps)) then return nil end
+    local sid, base = M.ChildSpell(child)
+    return (sid and ps[sid]) or (base and ps[base]) or nil
+end
+
+function M.IsAuraDuplicate(child)
+    local info = auraDupSet and child and child.cooldownInfo
+    if not info then return false end
+    local base = PlainID(info.spellID)
+    local sid = PlainID(info.overrideTooltipSpellID) or PlainID(info.overrideSpellID) or base
+    return AuraDup(info, sid, base, auraDupSet)
+end
+
 local function RebuildPassiveCache()
     local inCombat = InCombatLockdown()
     passiveDirty = inCombat
@@ -162,9 +234,29 @@ local function RebuildPassiveCache()
         end
     end
     local changed = false
+    -- shown by a custom group: the CDM copy is a duplicate
+    local CG = ns.CustomGroups
+    local cdm = E.db.thingsUI.cdmIcons
+    local dupSpells, dupTrinkets, dupAuras
+    if cdm and cdm.hideGroupedDuplicates ~= false then
+        if CG and CG.ShownSets then dupSpells, dupTrinkets, dupAuras = CG.ShownSets() end
+        local CBm = ns.ChargeBar
+        local cbRaw, cbLive = CBm and CBm.TrackedSpells and CBm.TrackedSpells()
+        if cbRaw then
+            dupSpells = dupSpells or {}
+            dupSpells[cbRaw] = true
+            if cbLive then dupSpells[cbLive] = true end
+        end
+        dupAuras = dupAuras or {}
+        if ns.SpecialBars and ns.SpecialBars.AuraSet then
+            for id in pairs(ns.SpecialBars.AuraSet()) do dupAuras[id] = true end
+        end
+    end
+    SetAuraDupSet(dupAuras)
     for name in pairs(VIEWERS) do
         local viewer = _G[name]
         local vdb = GetViewerDB(name)
+        local isBuff = VIEWERS[name] == "buffIcon"
         if viewer and vdb then
             local wantHide = vdb.hidePassive and C_Spell and C_Spell.IsSpellPassive
             local kids = { viewer:GetChildren() }
@@ -196,18 +288,23 @@ local function RebuildPassiveCache()
                         and ns.RacialsCDM.ShouldHideNativeSpell(sid) then
                         hide = true
                     end
+                    if not hide and not isBuff and dupSpells and sid and (dupSpells[sid] or (base and dupSpells[base])) then
+                        hide = true
+                    end
+                    if not hide and isBuff and dupAuras and AuraDup(info, sid, base, dupAuras) then
+                        hide = true
+                    end
                     local slot = info and PlainID(info.equipSlot)
                     if slot then
-                        local bl = E.db.thingsUI.cdmIcons and E.db.thingsUI.cdmIcons.trinketBlacklist
+                        local bl = cdm and cdm.trinketBlacklist
                         local itemID = GetInventoryItemID and GetInventoryItemID("player", slot)
                         local ent = itemID and bl and bl[itemID]
                         if ent == true then ent = { use = true, buff = true } end
-                        if ent then
-                            local isBuff = VIEWERS[name] == "buffIcon"
-                            hide = ((isBuff and ent.buff) or (not isBuff and ent.use)) and true or false
-                        else
-                            hide = false
-                        end
+                        -- a slot moved to a group or drawn by TrinketsCDM: its cooldown shows there
+                        local moved = not isBuff and ((dupTrinkets and dupTrinkets[slot])
+                            or (ns.TrinketsCDM and ns.TrinketsCDM.ShowsSlot(slot)))
+                        local listed = ent and ((isBuff and ent.buff) or (not isBuff and ent.use))
+                        hide = (moved or listed) and true or false
                     end
                     if hide ~= nil then
                         if (passiveHidden[c] and true or false) ~= hide then changed = true end
@@ -235,6 +332,15 @@ local function QueuePassiveRebuild()
 end
 
 function M.IsPassiveHidden(child) return passiveHidden[child] == true end
+
+-- the trinket in this slot is on the Trinkets blacklist for its cooldown (or buff)
+function M.TrinketHidden(slot, buff)
+    local bl = E.db.thingsUI.cdmIcons and E.db.thingsUI.cdmIcons.trinketBlacklist
+    local itemID = bl and GetInventoryItemID("player", slot)
+    local ent = itemID and bl[itemID]
+    if ent == true then return true end
+    return (ent and ((buff and ent.buff) or (not buff and ent.use))) and true or false
+end
 M.QueuePassiveRebuild = function() QueuePassiveRebuild() end
 
 local dataRefreshQueued = false
@@ -248,12 +354,12 @@ local function OnViewerDataRefresh()
     end)
 end
 
+local function ByLayoutIndex(a, b)
+    return (a.layoutIndex or math.huge) < (b.layoutIndex or math.huge)
+end
+
 local function SortByCooldownID(children)
-    table.sort(children, function(a, b)
-        local ai = a.layoutIndex or math.huge
-        local bi = b.layoutIndex or math.huge
-        return ai < bi
-    end)
+    table.sort(children, ByLayoutIndex)
 end
 
 local cdmRebuilding = false
@@ -290,8 +396,7 @@ local function OverlayEligible(child)
     if not child then return false end
     if ns.yoinkedBars and ns.yoinkedBars[child] then return false end
     local v = child._tuiViewer
-    local vn = v and v.GetName and v:GetName()
-    if vn ~= "EssentialCooldownViewer" and vn ~= "UtilityCooldownViewer" then return false end
+    if not v or (v ~= _G.EssentialCooldownViewer and v ~= _G.UtilityCooldownViewer) then return false end
     local info = child.cooldownInfo
     if not info then return false end
     if type(child.GetEquipSlot) == "function" then
@@ -311,15 +416,29 @@ local function SetCDFromDur(cd, durObj)
     return pcall(cd.SetCooldownFromDurationObject, cd, durObj)
 end
 
+local overlayRegions = setmetatable({}, { __mode = "k" })
+
 local function StripOverlayTextures(frame)
-    for _, r in ipairs({ frame:GetRegions() }) do
-        if r.IsObjectType and r:IsObjectType("Texture") then
-            local a = r.GetAtlas and r:GetAtlas()
-            local t = r.GetTexture and r:GetTexture()
-            if (NotSecret(a) and a == OVERLAY_ATLAS) or (NotSecret(t) and t == OVERLAY_TEX_ID) then
-                r:SetAlpha(0); r:Hide()
+    local list = overlayRegions[frame]
+    if not list then
+        list = {}
+        local clean = true
+        for _, r in ipairs({ frame:GetRegions() }) do
+            if r.IsObjectType and r:IsObjectType("Texture") then
+                local a = r.GetAtlas and r:GetAtlas()
+                local t = r.GetTexture and r:GetTexture()
+                if IsSecret(a) or IsSecret(t) then clean = false end
+                if (NotSecret(a) and a == OVERLAY_ATLAS) or (NotSecret(t) and t == OVERLAY_TEX_ID) then
+                    list[#list + 1] = r
+                end
             end
         end
+        -- template regions never change; only a fully readable scan is kept
+        if clean then overlayRegions[frame] = list end
+    end
+    for i = 1, #list do
+        local r = list[i]
+        r:SetAlpha(0); r:Hide()
     end
 end
 
@@ -334,16 +453,26 @@ local function ApplyCooldownStyle(cd)
     if cd.SetHideCountdownNumbers then cd:SetHideCountdownNumbers(false) end
 end
 
+-- the value the last full pass painted, reused by a desaturation write in the same frame
+local lastDesat   = setmetatable({}, { __mode = "k" })
+local lastDesatAt = setmetatable({}, { __mode = "k" })
+
+local function PutDesat(icon, v)
+    if not icon then return end
+    SetDesat(icon, v)
+    lastDesat[icon], lastDesatAt[icon] = v, GetTime()
+end
+
 local function UpdateIconDesat(icon, cdInfo, durObj, hasCharge)
     if not icon then return end
-    if cdInfo and NotSecret(cdInfo.isOnGCD) and cdInfo.isOnGCD then SetDesat(icon, 0); return end
+    if cdInfo and NotSecret(cdInfo.isOnGCD) and cdInfo.isOnGCD then PutDesat(icon, 0); return end
     if durObj and not hasCharge and type(durObj.EvaluateRemainingDuration) == "function" then
         local curve = GetDesatCurve()
-        if curve then SetDesat(icon, durObj:EvaluateRemainingDuration(curve, 0) or 0)
-        else SetDesat(icon, 0) end
+        if curve then PutDesat(icon, durObj:EvaluateRemainingDuration(curve, 0) or 0)
+        else PutDesat(icon, 0) end
         return
     end
-    SetDesat(icon, 0)
+    PutDesat(icon, 0)
 end
 
 local function ApplyAuraState(child, cd, spellID)
@@ -419,19 +548,24 @@ local function UpdateOverrideGlow(child)
     end
 end
 
-local function ProcessCooldownFrame(child)
+local function OverlayActive(child)
     local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
-    if not (cdm and cdm.hideAuraOverlay) then return end
+    if not (cdm and cdm.hideAuraOverlay) then return false end
     local cvs = _G.CooldownViewerSettings
-    if cvs and cvs:IsShown() then return end
-    local kind = OverlayEligible(child)
+    if cvs and cvs:IsShown() then return false end
+    return OverlayEligible(child)
+end
+
+local function ProcessCooldownFrame(child)
+    local cd = child.Cooldown
+    -- our own writes below re-enter through the hooks
+    if not cd or applyingOverlay[cd] then return end
+    local kind = OverlayActive(child)
     if not kind then return end
     if kind == "spell" then
         EnforceSpellTexture(child)
         UpdateOverrideGlow(child)
     end
-    local cd = child.Cooldown
-    if not cd or applyingOverlay[cd] then return end
 
     applyingOverlay[cd] = true
     StripOverlayTextures(child)
@@ -444,10 +578,10 @@ local function ProcessCooldownFrame(child)
         end
         if start and dur and dur > 0 then
             cd:SetCooldown(start, dur)
-            SetDesat(child.Icon, 1)
+            PutDesat(child.Icon, 1)
         else
             if cd.Clear then cd:Clear() end
-            SetDesat(child.Icon, 0)
+            PutDesat(child.Icon, 0)
         end
     else
         local info = child.cooldownInfo
@@ -456,13 +590,36 @@ local function ProcessCooldownFrame(child)
             ApplyAuraState(child, cd, spellID)
         else
             if cd.Clear then cd:Clear() end
-            SetDesat(child.Icon, 0)
+            PutDesat(child.Icon, 0)
         end
     end
     applyingOverlay[cd] = nil
 end
 
 local function HideAuraOverlay(child)
+    ProcessCooldownFrame(child)
+end
+
+-- Blizzard writes the swipe color right before its SetCooldown/Clear, which runs the full pass
+local function ReassertSwipe(child)
+    local cd = child.Cooldown
+    if not cd or applyingOverlay[cd] or not OverlayActive(child) then return end
+    applyingOverlay[cd] = true
+    cd:SetSwipeColor(0, 0, 0, 0.8)
+    applyingOverlay[cd] = nil
+end
+
+local function ReassertDesat(child)
+    local cd = child.Cooldown
+    if not cd or applyingOverlay[cd] then return end
+    local icon = child.Icon
+    if icon and lastDesatAt[icon] == GetTime() then
+        if not OverlayActive(child) then return end
+        applyingOverlay[cd] = true
+        SetDesat(icon, lastDesat[icon])
+        applyingOverlay[cd] = nil
+        return
+    end
     ProcessCooldownFrame(child)
 end
 
@@ -478,12 +635,14 @@ local function EnsureOverlayHooks(child)
     local function reapply() ProcessCooldownFrame(child) end
     hooksecurefunc(cd, "SetCooldown", reapply)
     if cd.SetCooldownFromDurationObject then hooksecurefunc(cd, "SetCooldownFromDurationObject", reapply) end
-    if cd.SetSwipeColor then hooksecurefunc(cd, "SetSwipeColor", reapply) end
+    if cd.Clear then hooksecurefunc(cd, "Clear", reapply) end
+    if cd.SetSwipeColor then hooksecurefunc(cd, "SetSwipeColor", function() ReassertSwipe(child) end) end
     local icon = child.Icon
     if icon and not icon._tuiOverlayHooked then
         icon._tuiOverlayHooked = true
-        if icon.SetDesaturated  then hooksecurefunc(icon, "SetDesaturated",  reapply) end
-        if icon.SetDesaturation then hooksecurefunc(icon, "SetDesaturation", reapply) end
+        local desat = function() ReassertDesat(child) end
+        if icon.SetDesaturated  then hooksecurefunc(icon, "SetDesaturated",  desat) end
+        if icon.SetDesaturation then hooksecurefunc(icon, "SetDesaturation", desat) end
     end
 end
 
@@ -569,15 +728,20 @@ local function ReapplyViewerAnchor(viewer)
     local tname = target.GetName and target:GetName()
     if tname and VIEWERS[tname] then target = GetProxy(target) end
 
+    local point, relPoint = vdb.anchorPoint or "CENTER", vdb.anchorRelativePoint or "CENTER"
+    local x, y = vdb.anchorXOffset or 0, vdb.anchorYOffset or 0
+    -- re-anchoring an unchanged proxy only makes the engine re-place every icon on it
+    if proxy:GetNumPoints() == 1 then
+        local p, rel, rp, px, py = proxy:GetPoint(1)
+        if p == point and rel == target and rp == relPoint and NotSecret(px) and NotSecret(py)
+            and math.abs(px - x) < 0.01 and math.abs(py - y) < 0.01 then
+            return
+        end
+    end
+
     applyingViewerAnchor[proxy] = true
     proxy:ClearAllPoints()
-    proxy:SetPoint(
-        vdb.anchorPoint or "CENTER",
-        target,
-        vdb.anchorRelativePoint or "CENTER",
-        vdb.anchorXOffset or 0,
-        vdb.anchorYOffset or 0
-    )
+    proxy:SetPoint(point, target, relPoint, x, y)
     applyingViewerAnchor[proxy] = nil
 end
 
@@ -679,6 +843,11 @@ end
 local function MirrorProxyToViewer(proxy, viewer)
     local fl, fb = viewer:GetLeft(), viewer:GetBottom()
     if not fl or not fb then return end
+    local pl, pb = proxy:GetLeft(), proxy:GetBottom()
+    if pl and pb and NotSecret(fl) and NotSecret(fb) and NotSecret(pl) and NotSecret(pb)
+        and math.abs(pl - fl) < 0.01 and math.abs(pb - fb) < 0.01 then
+        return
+    end
     proxy:ClearAllPoints()
     proxy:SetPoint("BOTTOMLEFT", _G.UIParent, "BOTTOMLEFT", fl, fb)
 end
@@ -700,7 +869,9 @@ end
 LayoutViewer = function(viewer)
 
     if cdmRebuilding then return end
-    if _G.EditModeManagerFrame and _G.EditModeManagerFrame:IsShown() then return end
+    -- Edit Mode: step aside only while the viewers can be dragged (lock off)
+    local emm = _G.EditModeManagerFrame
+    if emm and emm:IsShown() and not (ns.EditModeLock and ns.EditModeLock.IsLocked()) then return end
     local vdb = GetViewerDB(viewer:GetName())
     if not vdb then return end
 
@@ -718,6 +889,16 @@ LayoutViewer = function(viewer)
     if RC and RC.GetInlineButtonsFor then
         local rcb = RC.GetInlineButtonsFor(viewer)
         if rcb then for i = 1, #rcb do visible[#visible + 1] = rcb[i] end end
+    end
+    local TR = ns.TrinketsCDM
+    if TR and TR.GetInlineButtonsFor then
+        local trb = TR.GetInlineButtonsFor(viewer)
+        if trb then for i = 1, #trb do visible[#visible + 1] = trb[i] end end
+    end
+    local SBI = ns.SpecialBars
+    if SBI and SBI.GetInlineIconsFor then
+        local sib = SBI.GetInlineIconsFor(viewer)
+        if sib then for i = 1, #sib do visible[#visible + 1] = sib[i] end end
     end
 
     SortByCooldownID(visible)
@@ -803,6 +984,7 @@ LayoutViewer = function(viewer)
             proxy._tuiLastIconW, proxy._tuiLastIconH = w, h
             local T = ns.TUI
             if T and T.UpdateCustomGroups then T:UpdateCustomGroups() end
+            if T and T.QueueSpecialBarsUpdate then T:QueueSpecialBarsUpdate() end
         end
         viewer._tuiLayoutSig = nil
         return
@@ -830,13 +1012,23 @@ LayoutViewer = function(viewer)
     if cdmRoot and cdmRoot.hideAuraOverlay then
         for i = 1, #visible do EnsureOverlayHooks(visible[i]); HideAuraOverlay(visible[i]) end
     end
+    -- per-spell glow and text follow the spell, not the re-used frame
+    local glowSync = ns.CDMGlow and ns.CDMGlow.Sync
+    local textSync = ns.CDMText and ns.CDMText.SyncChild
+    for i = 1, #visible do
+        local c = visible[i]
+        if c.cooldownInfo then
+            if glowSync then glowSync(c) end
+            if textSync then textSync(c, myName) end
+        end
+    end
 
     local sizeW, sizeH = GetIconSize(vdb)
     if sizeW and sizeH then
         for i = 1, #visible do
             local c = visible[i]
             local cw, ch = c:GetSize()
-            if math.abs((cw or 0) - sizeW) > 0.5 or math.abs((ch or 0) - sizeH) > 0.5 then
+            if not c._tuiOwnSize and (math.abs((cw or 0) - sizeW) > 0.5 or math.abs((ch or 0) - sizeH) > 0.5) then
                 Pixel.SetSize(c, sizeW, sizeH)
             end
         end
@@ -848,11 +1040,17 @@ LayoutViewer = function(viewer)
         if cd and cd.SetReverse then cd:SetReverse(wantRev) end
     end
 
+    -- the cell size comes from a real icon, never from one that sizes itself
+    local sample = visible[1]
+    for i = 1, #visible do
+        if not visible[i]._tuiOwnSize then sample = visible[i] break end
+    end
+
     local zoom = tonumber(vdb.iconZoom) or 0
     local lockTex = vdb.iconLockAspectRatio ~= false
     if zoom > 0 or lockTex then
-        local frameW = sizeW or (visible[1] and visible[1]:GetWidth() or 0)
-        local frameH = sizeH or (visible[1] and visible[1]:GetHeight() or 0)
+        local frameW = sizeW or (sample and sample:GetWidth() or 0)
+        local frameH = sizeH or (sample and sample:GetHeight() or 0)
 
         local left, right, top, bottom
         if lockTex and frameW > 0 and frameH > 0 then
@@ -878,8 +1076,8 @@ LayoutViewer = function(viewer)
         end
     end
 
-    local iconW = (sizeW) or visible[1]:GetWidth() or 36
-    local iconH = (sizeH) or visible[1]:GetHeight() or 36
+    local iconW = (sizeW) or sample:GetWidth() or 36
+    local iconH = (sizeH) or sample:GetHeight() or 36
     local spacing  = (vdb.spacing or 0) + (ns.CDM_SPACING_INSET or 2)
     local growth   = GROWTH[vdb.growthDirection] or GROWTH.CENTERED_H
     local perLine  = math.max(1, vdb.iconsPerRow or 20)
@@ -1033,6 +1231,7 @@ LayoutViewer = function(viewer)
             proxy._tuiLastIconW, proxy._tuiLastIconH = iconW, iconH
             local T = ns.TUI
             if T and T.UpdateCustomGroups then T:UpdateCustomGroups() end
+            if T and T.QueueSpecialBarsUpdate then T:QueueSpecialBarsUpdate() end
         end
     end
 
@@ -1072,7 +1271,7 @@ local function HookViewer(name)
     if type(viewer.RefreshData) == "function" then
         hooksecurefunc(viewer, "RefreshData", OnViewerDataRefresh)
     end
-    hooksecurefunc(viewer, "RefreshLayout", function(v)
+    ns.ViewerHooks.On(viewer, "RefreshLayout", "CDMIcons", function(v)
         if rebuildFinish then
             local f = rebuildFinish
             rebuildFinish = nil
@@ -1150,7 +1349,7 @@ local function EnsureUtilityMover()
     if not (v and ms and ms.CreateManaged) then return end
     utilityMoverCreated = true
     ms.CreateManaged(GetProxy(v), "TUI_UtilityMover", "Utility Cooldowns", {
-        configString      = "thingsUI,modulesTab,cdm,utilityTab",
+        configString      = "thingsUI,modulesTab,cdm,layoutTab,utilityTab",
         ignoreSizeChanged = true,
         shouldDisable = function()
             local vdb = GetViewerDB("UtilityCooldownViewer")
@@ -1220,13 +1419,14 @@ end
 function M.MaybeAutoEnableCDM()
     if InCombatLockdown() then return end
     local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
-    if not (cdm and cdm.autoEnableCDM) then return end
+    if not cdm then return end
+    local auto = cdm.autoEnableCDM
     local gdb = _G.thingsUIGlobalDB
     local guid = UnitGUID and UnitGUID("player")
     if not (gdb and guid) then return end
 
     local skins = E.private and E.private.skins and E.private.skins.blizzard
-    if skins and not skins.cooldownManager then
+    if auto and skins and not skins.cooldownManager then
         gdb.cdmSkinEnabled = gdb.cdmSkinEnabled or {}
         if not gdb.cdmSkinEnabled[guid] then
             gdb.cdmSkinEnabled[guid] = true
@@ -1239,11 +1439,16 @@ function M.MaybeAutoEnableCDM()
     if GetCVarBool and GetCVarBool("cooldownViewerEnabled") then return end
     if not (C_CooldownViewer and C_CooldownViewer.IsCooldownViewerAvailable
             and C_CooldownViewer.IsCooldownViewerAvailable()) then return end
-    gdb.cdmAutoEnabled = gdb.cdmAutoEnabled or {}
-    if gdb.cdmAutoEnabled[guid] then return end
-    gdb.cdmAutoEnabled[guid] = true
+    -- auto-enable keeps it on; without it, say once per character why the rows are empty
+    if not auto then
+        gdb.cdmOffNotice = gdb.cdmOffNotice or {}
+        if gdb.cdmOffNotice[guid] then return end
+        gdb.cdmOffNotice[guid] = true
+        print("|cFF8080FFthingsUI|r: the Cooldown Manager is turned off (Options > Gameplay Enhancements), so the CDM rows stay empty. Turn it on there, or tick Auto-enable Cooldown Manager in thingsUI > CDM > Settings.")
+        return
+    end
     pcall(SetCVar, "cooldownViewerEnabled", "1")
-    print("|cFF8080FFthingsUI|r enabled the Cooldown Manager (required). Turn off auto-enable in the CDM options.")
+    print("|cFF8080FFthingsUI|r turned the Cooldown Manager on (Options > Gameplay Enhancements). To keep it off, untick Auto-enable Cooldown Manager in thingsUI > CDM > Settings.")
     for _, t in ipairs({ 0.5, 1.0, 2.0 }) do C_Timer.After(t, M.RefreshAll) end
 end
 
@@ -1311,8 +1516,7 @@ local function DumpVal(v)
     return tostring(v)
 end
 
-SLASH_TUICDM1 = "/tuicdm"
-SlashCmdList.TUICDM = function()
+ns.SlashCommand("cdm", function()
     local emm = _G.EditModeManagerFrame
     local cvs = _G.CooldownViewerSettings
     print(("|cFF8080FFtuicdm|r editmode=%s cvs=%s rebuilding=%s"):format(
@@ -1408,4 +1612,4 @@ SlashCmdList.TUICDM = function()
                 DumpVal(s), DumpVal(d), DumpVal(en)))
         end
     end
-end
+end)

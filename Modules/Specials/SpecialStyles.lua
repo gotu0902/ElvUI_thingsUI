@@ -14,14 +14,14 @@ local EXCLUDE = {
         anchorMode = true, anchorFrame = true, anchorPoint = true,
         anchorRelativePoint = true, anchorXOffset = true, anchorYOffset = true,
         customGroup = true, customGroupOrder = true,
-        totemTimer = true,
+        totemTimer = true, cdmRow = true, cdmIndex = true, auraKind = true, visibility = true,
     },
     bars = {
         spellID = true, spellName = true, enabled = true, styleName = true,
         anchorMode = true, anchorFrame = true, anchorPoint = true,
         anchorRelativePoint = true, anchorXOffset = true, anchorYOffset = true,
         totemTimer = true, totemTicks = true, totemTickThickness = true,
-        totemTickLength = true, totemTickColor = true,
+        totemTickLength = true, totemTickColor = true, auraKind = true, visibility = true,
     },
 }
 

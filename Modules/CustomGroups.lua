@@ -20,11 +20,7 @@ local function GetCurrentClassFile()
 end
 
 function M.VisibilityOK(group)
-    local v = group and group.visibility
-    if not (v and v.enabled) then return true end
-    if IsInRaid() then return v.raid ~= false end
-    if IsInGroup() then return v.party ~= false end
-    return v.solo ~= false
+    return ns.Visibility.Shown(group and group.visibility)
 end
 
 function M.SlotPoint(frame, slotIndex)
@@ -157,26 +153,30 @@ local function ResolveItemID(id)
     return id
 end
 
--- Fleeting-r1, r1 (gold), Fleeting-r2, r2 (silver).
+-- best first: Fleeting gold, gold, Fleeting silver, silver (where they exist)
 local POTION_GROUPS = {
     { 245916, 241300, 245917, 241301 },  -- Lightfused Mana Potion
     { 245904, 241294, 245905, 241295 },  -- Potion of Devoured Dreams
     { 245902, 241288, 245903, 241289 },  -- Potion of Recklessness
     { 245898, 241308, 245897, 241309 },  -- Light's Potential
-    { 271884, 271883 },                  -- Concentrated Silvermoon Health Potion (No fleeting?)
+    { 271884, 271883 },                  -- Concentrated Silvermoon Health Potion (no Fleeting)
     { 245918, 241304, 245919, 241305 },  -- Silvermoon Health Potion
     { 245910, 241292, 245911, 241293 },  -- Draught of Rampant Abandon
     { 274764, 271887, 274763, 271886 },  -- Liquid Luster
-    { 274765, 271890, 271889 },          -- Alluring Nostrum (No silver fleeting?)
+    { 274765, 271890, 271889 },          -- Alluring Nostrum (no Fleeting silver)
+    { 245901, 241296, 245900, 241297 },  -- Potion of Zealotry
+}
+-- the Fleeting versions by ID: not every potion has them, so never by position
+local FLEETING_IDS = {
+    245916, 245917, 245904, 245905, 245902, 245903, 245898, 245897,
+    245918, 245919, 245910, 245911, 274764, 274763, 274765, 245901, 245900,
 }
 local POTION_OF = {}
 local FLEETING  = {}
 for gi, grp in ipairs(POTION_GROUPS) do
-    for ri, id in ipairs(grp) do
-        POTION_OF[id] = gi
-        if ri == 1 or ri == 3 then FLEETING[id] = true end
-    end
+    for _, id in ipairs(grp) do POTION_OF[id] = gi end
 end
+for _, id in ipairs(FLEETING_IDS) do FLEETING[id] = true end
 M.POTION_OF = POTION_OF
 M.FLEETING  = FLEETING
 M.POTION_GROUPS = POTION_GROUPS
@@ -570,16 +570,25 @@ local function EnsureContainer(group)
     container:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
     gs.container = container
 
+    -- ids repeat across profiles: the mover looks its group up by id, never keeps the table
+    local id = group.id
     local ms = ns.MoverSync
     if ms and ms.CreateManaged then
-        ms.CreateManaged(container, "TUI_CustomGroupMover" .. group.id, group.name or ("Custom Group " .. group.id), {
+        ms.CreateManaged(container, "TUI_CustomGroupMover" .. id, group.name or ("Custom Group " .. id), {
             configString  = "thingsUI,modulesTab,customGroups",
-            shouldDisable = function() local g = GroupByID(group.id); return not (g and g.enabled) end,
+            shouldDisable = function() local g = GroupByID(id); return not (g and g.enabled) end,
             onSave = function(point, relPoint, x, y)
-                group.anchorPoint = point
-                group.anchorRelativePoint = relPoint
-                group.anchorXOffset = x
-                group.anchorYOffset = y
+                local g = GroupByID(id)
+                if not g then return end
+                g.anchorPoint = point
+                g.anchorRelativePoint = relPoint
+                g.anchorXOffset = x
+                g.anchorYOffset = y
+                if QueueLayout then QueueLayout() end
+                ns.NotifyChange()
+            end,
+            onNudge = function(dx, dy)
+                ms.ShiftOffsets(GroupByID(id), dx, dy)
                 if QueueLayout then QueueLayout() end
                 ns.NotifyChange()
             end,
@@ -619,7 +628,43 @@ function M.SetTestMode(on)
     QueueLayout()
     if TUI.UpdateSpecialBars then TUI:UpdateSpecialBars() end
     if TUI.UpdateCustomBars then TUI:UpdateCustomBars() end
+    if ns.CDMText and ns.CDMText.SetPreview then ns.CDMText.SetPreview(on) end
+    if ns.CDMGlow and ns.CDMGlow.SetPreview then ns.CDMGlow.SetPreview(on) end
 end
+
+-- previews stay on while anything wants them: an options section, Blizzard's Cooldown Settings
+local testReasons = {}
+function M.SetTestReason(reason, on)
+    testReasons[reason] = on and true or nil
+    M.SetTestMode(next(testReasons) ~= nil)
+end
+
+-- the settings dialog, never the viewers: hooking those taints
+local cvsHooked = false
+local function HookCooldownSettings()
+    local cvs = _G.CooldownViewerSettings
+    if cvsHooked or not cvs then return end
+    cvsHooked = true
+    -- next frame: never do our work inside Blizzard's ShowUIPanel call
+    cvs:HookScript("OnShow", function()
+        C_Timer.After(0, function()
+            if cvs:IsShown() and not InCombatLockdown() then M.SetTestReason("cdm", true) end
+        end)
+    end)
+    cvs:HookScript("OnHide", function()
+        C_Timer.After(0, function()
+            if not cvs:IsShown() then M.SetTestReason("cdm", false) end
+        end)
+    end)
+    if cvs:IsShown() and not InCombatLockdown() then M.SetTestReason("cdm", true) end
+end
+local cvsEv = CreateFrame("Frame")
+cvsEv:RegisterEvent("PLAYER_ENTERING_WORLD")
+cvsEv:RegisterEvent("ADDON_LOADED")
+cvsEv:SetScript("OnEvent", function(self)
+    HookCooldownSettings()
+    if cvsHooked then self:UnregisterAllEvents() end
+end)
 
 local function RenderTestLane(gs, group, frame)
     local pool = gs.testIcons
@@ -641,6 +686,8 @@ local function RenderTestLane(gs, group, frame)
     local counts, lists, total = {}, {}, 0
     for ei, entry in ipairs(entries) do
         local sl = ns.AuraLane.SpellListUnique(entry.def)
+        -- a filter collection has no list: its sample stands in
+        if #sl == 0 and entry.def.preview then sl = { entry.def.preview } end
         lists[ei] = sl
         local n = entry.def.previewSkip and 0 or math.max(1, entry.def.max or 1)
         if #sl > 1 then n = math.min(n, #sl) end
@@ -880,7 +927,8 @@ local function CollectScopeInto(group, scope, root, shown)
     if scope == "global" then
         for _, slot in ipairs({ 13, 14 }) do
             local d = TrinketDestFor(slot)
-            if d and d.group == group.id then
+            local hidden = ns.CDMIcons and ns.CDMIcons.TrinketHidden and ns.CDMIcons.TrinketHidden(slot)
+            if d and d.group == group.id and not hidden then
                 list[#list + 1] = { kind = "trinket", id = slot, li = d.order or 15000 }
             end
         end
@@ -905,6 +953,9 @@ end
 
 local function ApplyGroup(group, force)
     local gs = EnsureContainer(group)
+    if ns.MoverSync and ns.MoverSync.SetManagedLabel then
+        ns.MoverSync.SetManagedLabel("TUI_CustomGroupMover" .. group.id, group.name or ("Custom Group " .. group.id))
+    end
     local frame = gs.container
 
     if not group.enabled then
@@ -1143,18 +1194,63 @@ local function ApplyGroup(group, force)
     gs._applied = true
 end
 
+-- what the enabled groups show on this character: their CDM copies are duplicates
+function M.ShownSets()
+    local spells, trinkets, auras = {}, {}, {}
+    for _, gs in pairs(groupState) do
+        if gs._applied and gs.shown then
+            for _, e in ipairs(gs.shown) do
+                if e.kind == "spell" then spells[e.id] = true
+                elseif e.kind == "trinket" then trinkets[e.id] = true end
+            end
+        end
+    end
+    local AL = ns.AuraLane
+    if AL and AL.Entries then
+        for _, g in ipairs(GetGroups()) do
+            if g.enabled then
+                for _, e in ipairs(AL.Entries(g)) do
+                    for id in pairs(e.def.spells or {}) do
+                        local n = tonumber(id)
+                        if n then auras[n] = true end
+                    end
+                    if e.def.filterToken then auras[e.def.filterToken] = true end
+                end
+            end
+        end
+    end
+    return spells, trinkets, auras
+end
+
+local lastShownSig
+local function NotifyShownChanged()
+    local spells, trinkets, auras = M.ShownSets()
+    local keys = {}
+    for id in pairs(spells) do keys[#keys + 1] = "s" .. id end
+    for slot in pairs(trinkets) do keys[#keys + 1] = "t" .. slot end
+    for id in pairs(auras) do keys[#keys + 1] = "a" .. id end
+    table.sort(keys)
+    local sig = table.concat(keys, ",")
+    if sig == lastShownSig then return end
+    lastShownSig = sig
+    if ns.CDMIcons and ns.CDMIcons.QueuePassiveRebuild then ns.CDMIcons.QueuePassiveRebuild() end
+    if ns.RacialsCDM and ns.RacialsCDM.Refresh then ns.RacialsCDM.Refresh() end
+end
+
 local function ApplyAll(force)
     local groups = GetGroups()
     local live = {}
     for _, g in ipairs(groups) do live[g.id] = true end
     for id, gs in pairs(groupState) do
         if not live[id] and gs.container then
+            gs._applied = false
             HideGroupIcons(gs)
             gs.container:Hide()
             if ns.AuraLane and ns.AuraLane.Release then ns.AuraLane.Release(id) end
         end
     end
     for _, g in ipairs(groups) do ApplyGroup(g, force) end
+    NotifyShownChanged()
     if ns.MoverSync and ns.MoverSync.Queue then ns.MoverSync.Queue() end
 end
 
@@ -1172,6 +1268,7 @@ QueueLayout = function(force)
     end)
 end
 M.QueueLayout = QueueLayout
+ns.Visibility.OnChange(function() QueueLayout(false) end)
 
 if ns.Timers and ns.Timers.AddHostRefresh then
     ns.Timers.AddHostRefresh(function() QueueLayout(false) end)
@@ -1321,17 +1418,15 @@ function M.AddAura(group, scope, key, spellID)
     return uid
 end
 
-function M.AddAuraSet(group, scope, key, uid, def)
-    local root = M.GetScopeRoot(group, scope, key, true); if not (root and uid) then return end
-    if root.auras[uid] then return end
-    local spells = {}
-    for _, id in ipairs(def.spells or {}) do spells[id] = true end
+function M.AddAuraCollection(group, scope, key, ckey)
+    local AC = ns.AuraCollections
+    local c = AC and AC.Get(ckey)
+    local root = M.GetScopeRoot(group, scope, key, true); if not (root and c) then return end
+    local uid = "col:" .. ckey
+    if root.auras[uid] or root.auras["preset:" .. ckey] then return end
     root.auras[uid] = {
-        enabled = true, layoutIndex = NextIndex(root),
-        name = def.name, spells = spells,
-        unit = def.unit or "player", kind = def.kind or "HELPFUL",
-        max = def.max or 1, sort = "instance",
-        showSource = def.showSource or false,
+        enabled = true, layoutIndex = NextIndex(root), collection = ckey,
+        unit = "player", kind = c.kind or "HELPFUL", max = c.max or 10, sort = "instance",
     }
     QueueLayout()
     return uid

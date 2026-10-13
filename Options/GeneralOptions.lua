@@ -122,6 +122,40 @@ local function ApplyABPreset(name, apply)
     print("|cFF8080FFthingsUI|r - Applied " .. name .. "'s ActionBars.")
 end
 
+local GROUP_ANCHOR_VALUES = {
+    ELVUI = "ElvUI (default)", GROWTH = "Growth Corner",
+    TOPLEFT = "TOPLEFT", TOP = "TOP", TOPRIGHT = "TOPRIGHT",
+    LEFT = "LEFT", CENTER = "CENTER", RIGHT = "RIGHT",
+    BOTTOMLEFT = "BOTTOMLEFT", BOTTOM = "BOTTOM", BOTTOMRIGHT = "BOTTOMRIGHT",
+}
+local GROUP_ANCHOR_ORDER = {
+    "ELVUI", "GROWTH", "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT",
+    "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT",
+}
+
+-- one select per group header: the corner its frames stay pinned to
+local function GroupAnchorArgs()
+    local args = {
+        desc = {
+            order = 0, type = "description",
+            name = "Keeps the frames on this corner of their mover, also near the screen edge.\n",
+        },
+    }
+    local GA = ns.GroupAnchor
+    for i, group in ipairs(GA and GA.GROUPS or {}) do
+        args[group] = {
+            order = i, type = "select", name = GA.LABELS[group],
+            values = GROUP_ANCHOR_VALUES, sorting = GROUP_ANCHOR_ORDER,
+            get = function() return E.db.thingsUI.groupAnchor[group] or "ELVUI" end,
+            set = function(_, v)
+                E.db.thingsUI.groupAnchor[group] = v
+                TUI:UpdateGroupAnchor()
+            end,
+        }
+    end
+    return args
+end
+
 function TUI:PositioningTweaksOptions()
     return {
         order = 20,
@@ -353,6 +387,14 @@ function TUI:PositioningTweaksOptions()
                             },
                         },
                     },
+                    groupAnchorGroup = {
+                        order = 4,
+                        type = "group",
+                        name = "Group Frame Anchor",
+                        inline = true,
+                        args = GroupAnchorArgs(),
+                    },
+                    barCopyGroup = TUI.BarCopyGroup and TUI:BarCopyGroup(5) or nil,
         },
     }
 end

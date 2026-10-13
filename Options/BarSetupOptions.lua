@@ -307,7 +307,12 @@ local function BarRows(setup)
                     hidden = function() return not isFHT() end,
                     disabled = disabledWhenOff(),
                     get = function() local b = bar(); return b and b.anchorFrame end,
-                    set = function(_, v) local b = bar(); if b then b.anchorFrame = v; ApplyStack() end end,
+                    set = function(_, v)
+                        local b = bar()
+                        if not b then return end
+                        if v ~= b.anchorFrame then ns.ANCHORS.ResetPlacement(b, { "anchorPoint", "anchorTo", "xOffset", "yOffset" }) end
+                        b.anchorFrame = v; ApplyStack()
+                    end,
                 },
                 fhtFrom = {
                     order = 11, type = "select", name = "From", width = 0.7,
@@ -501,7 +506,7 @@ local function SetupEditor(idx)
             },
             addSpecialBars = {
                 order = 1, type = "multiselect",
-                name = "Include Special Bars",
+                name = "Include Aura Bars",
                 values = function()
                     local out = {}
                     local SB = ns.SpecialBars
@@ -554,7 +559,10 @@ local function SetupEditor(idx)
                 values  = function() return ns.ANCHORS.GetSharedAnchorValues() end,
                 sorting = function() return ns.ANCHORS.GetSharedAnchorOrder()  end,
                 get = function() return setup.anchorFrame end,
-                set = function(_, v) setup.anchorFrame = v; ApplyStack() end,
+                set = function(_, v)
+                    if v ~= setup.anchorFrame then ns.ANCHORS.ResetPlacement(setup, { "anchorPoint", "anchorTo", "xOffset", "yOffset" }) end
+                    setup.anchorFrame = v; ApplyStack()
+                end,
             },
             anchorPoint = {
                 order = 3, type = "select", name = "Anchor From (stack)",

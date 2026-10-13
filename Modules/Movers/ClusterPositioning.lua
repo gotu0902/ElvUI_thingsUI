@@ -10,14 +10,15 @@ local lastGeoSig = nil
 local forceClusterUpdate = true
 local MarkDirty
 local clusterProxy
+local kids = {}
 
 local function CountVisibleChildren(frame)
     if not frame then return 0 end
 
     local hiddenCheck = ns.CDMIcons and ns.CDMIcons.IsPassiveHidden
     local count = 0
-    for i = 1, frame:GetNumChildren() do
-        local child = select(i, frame:GetChildren())
+    for i = 1, ns.CDHelpers.ChildrenInto(frame, kids) do
+        local child = kids[i]
         if child and child:IsShown() and not (hiddenCheck and hiddenCheck(child)) then
             count = count + 1
         end
@@ -36,7 +37,7 @@ local function HookViewerChildren(viewer)
     if not viewer or hookedViewers[viewer] then return end
     if type(viewer.RefreshLayout) ~= "function" then return end
     hookedViewers[viewer] = true
-    hooksecurefunc(viewer, "RefreshLayout", function() MarkDirty() end)
+    ns.ViewerHooks.On(viewer, "RefreshLayout", "ClusterPositioning", function() MarkDirty() end)
     hooksecurefunc(viewer, "SetSize",   function() MarkDirty() end)
     hooksecurefunc(viewer, "SetWidth",  function() MarkDirty() end)
     hooksecurefunc(viewer, "SetHeight", function() MarkDirty() end)
@@ -90,7 +91,7 @@ function TUI:QueueClusterUpdate()
     end)
 end
 
-local INLINE_SOURCES = { "TimersCDM", "RacialsCDM" }
+local INLINE_SOURCES = { "TimersCDM", "RacialsCDM", "TrinketsCDM" }
 
 local function CountClusterIcons()
     local essentialCount = EssentialCooldownViewer and CountVisibleChildren(EssentialCooldownViewer) or 0
@@ -104,6 +105,14 @@ local function CountClusterIcons()
             local ub = m.GetInlineButtonsFor(UtilityCooldownViewer)
             if ub then utilityCount = utilityCount + #ub end
         end
+    end
+    -- special icons placed in a row
+    local SBI = ns.SpecialBars
+    if SBI and SBI.GetInlineIconsFor then
+        local eb = SBI.GetInlineIconsFor(EssentialCooldownViewer)
+        if eb then essentialCount = essentialCount + #eb end
+        local ub = SBI.GetInlineIconsFor(UtilityCooldownViewer)
+        if ub then utilityCount = utilityCount + #ub end
     end
 
     return essentialCount, utilityCount
@@ -120,12 +129,25 @@ end
 
 local STATIC_UTILITY_ANCHORS = { [""] = true, UIParent = true, EssentialCooldownViewer = true }
 
+-- what the unit frames hang off: the essential row, widened to Bar Setup's
+-- width like SyncProxyToViewer does, so overflow is not counted twice
+local function ClusterBounds(src)
+    local l, r = GetBoundsInUIParent(src)
+    if not l then return end
+    local bw = ns.BarSetup and ns.BarSetup.GetInheritedWidth and ns.BarSetup.GetInheritedWidth()
+    if bw and bw > (r - l) then
+        local c = (l + r) / 2
+        l, r = c - bw / 2, c + bw / 2
+    end
+    return l, r
+end
+
 local function ComputeUtilityOverflow(db, src, essentialCount, utilityCount)
     if not db.accountForUtility or essentialCount == 0 or utilityCount == 0 then return 0, 0 end
     if (utilityCount - essentialCount) < (db.utilityThreshold or 3) then return 0, 0 end
     local uv = UtilityCooldownViewer
     local up = uv and ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(uv)
-    local eL, eR = GetBoundsInUIParent(src)
+    local eL, eR = ClusterBounds(src)
     local uL, uR = GetBoundsInUIParent(up or uv)
     if not (eL and uL) then return 0, 0 end
     local off = db.utilityOverflowOffset or 10

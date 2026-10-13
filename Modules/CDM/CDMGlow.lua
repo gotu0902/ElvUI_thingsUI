@@ -30,7 +30,15 @@ local function ManagedChild(frame)
     return false
 end
 
-local function GlowColor(g)
+-- Spell Editor settings of a CDM frame
+local function Override(frame)
+    local get = ns.CDMIcons and ns.CDMIcons.SpellSettings
+    return get and get(frame)
+end
+
+local function GlowColor(g, o)
+    local oc = o and o.glowColor
+    if oc then return { oc.r or 1, oc.g or 1, oc.b or 1, 1 } end
     if not g.useColor then return nil end
     local c = g.customColor or {}
     return { c.r or 1, c.g or 0.85, c.b or 0.1, c.a or 1 }
@@ -45,7 +53,7 @@ local function StopAll(frame)
     lib.ProcGlow_Stop(frame)
 end
 
-local function ShowFX(frame)
+local function ShowFX(frame, o)
     local g, lib = DB(), Lib()
     if not (g and lib) then return end
     local st = state[frame]
@@ -58,7 +66,7 @@ local function ShowFX(frame)
     local style = g.style or "pixel"
     if st.style and st.style ~= style then StopAll(frame) end
     st.style = style
-    local color = GlowColor(g)
+    local color = GlowColor(g, o)
     local off = g.offset or 0
     if style == "autocast" then
         lib.AutoCastGlow_Start(frame, color, g.particles or 4, g.frequency or 0.125, g.scale or 1, off, off)
@@ -89,11 +97,70 @@ local function OnShowAlert(_, frame)
     local g = DB()
     if not (g and g.enabled) then return end
     if not (state[frame] or ManagedChild(frame)) then return end
-    ShowFX(frame)
+    local st = state[frame]
+    if not st then st = {} state[frame] = st end
+    st.proc = true
+    local o = Override(frame)
+    if o and o.glow == "never" then
+        -- the proc stays dark; HideFX gives the native alert back
+        local alert = frame.SpellActivationAlert
+        if alert then
+            alert:SetAlpha(0)
+            st.nativeAlert = alert
+        end
+        return
+    end
+    if not st.always then ShowFX(frame, o) end
 end
 
 local function OnHideAlert(_, frame)
-    if state[frame] then HideFX(frame) end
+    local st = state[frame]
+    if not st then return end
+    st.proc = nil
+    -- an Always glow outlives the proc
+    if st.always then
+        if st.nativeAlert then st.nativeAlert:SetAlpha(1); st.nativeAlert = nil end
+        return
+    end
+    HideFX(frame)
+end
+
+local preview = false
+
+-- Always glow from the Spell Editor, re-checked on every CDM layout pass; while the
+-- options preview runs, a spell with its own glow color shows it too
+function ns.CDMGlow.Sync(frame)
+    local g = DB()
+    local o = Override(frame)
+    local want = g and g.enabled and o
+        and (o.glow == "always" or (preview and o.glow ~= "never" and o.glowColor ~= nil))
+    local st = state[frame]
+    if want then
+        if not st then st = {} state[frame] = st end
+        local c = o.glowColor
+        local sig = c and (("%s,%s,%s"):format(c.r, c.g, c.b)) or ""
+        if not st.always or st.alwaysSig ~= sig then
+            st.always, st.alwaysSig = true, sig
+            ShowFX(frame, o)
+        end
+    elseif st and st.always then
+        st.always, st.alwaysSig = nil, nil
+        if st.proc and o and o.glow == "never" then
+            StopAll(frame)
+            st.glowing = false
+        elseif st.proc then
+            ShowFX(frame, o)
+        else
+            HideFX(frame)
+        end
+    end
+end
+
+function ns.CDMGlow.SetPreview(on)
+    on = on and true or false
+    if preview == on then return end
+    preview = on
+    TUI:UpdateCDMGlow()
 end
 
 function TUI:UpdateCDMGlow()
@@ -105,9 +172,28 @@ function TUI:UpdateCDMGlow()
     end
     if g and g.enabled then
         for frame, st in pairs(state) do
-            if st.glowing or st.nativeAlert then ShowFX(frame) end
+            if st.glowing or st.nativeAlert then
+                local o = Override(frame)
+                if o and o.glow == "never" and not st.always then
+                    if st.glowing then StopAll(frame); st.glowing = false end
+                else
+                    ShowFX(frame, o)
+                end
+            end
         end
     else
-        for frame in pairs(state) do HideFX(frame) end
+        for frame, st in pairs(state) do
+            st.always, st.alwaysSig = nil, nil
+            HideFX(frame)
+        end
+    end
+    -- Always glows for frames that never procced yet
+    for name in pairs(VIEWERS) do
+        local v = _G[name]
+        if v then
+            for _, c in ipairs({ v:GetChildren() }) do
+                if c.cooldownInfo then ns.CDMGlow.Sync(c) end
+            end
+        end
     end
 end

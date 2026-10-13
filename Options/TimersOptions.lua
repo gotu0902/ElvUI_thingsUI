@@ -36,8 +36,8 @@ end
 
 local function DestLink(t)
     if not t.destination then return end
-    if t.destination == "essential" then return "Open: CDM Essential", { "thingsUI", "modulesTab", "cdm", "essentialTab" } end
-    if t.destination == "utility"   then return "Open: CDM Utility",   { "thingsUI", "modulesTab", "cdm", "utilityTab" } end
+    if t.destination == "essential" then return "Open: CDM Essential", { "thingsUI", "modulesTab", "cdm", "layoutTab", "essentialTab" } end
+    if t.destination == "utility"   then return "Open: CDM Utility",   { "thingsUI", "modulesTab", "cdm", "layoutTab", "utilityTab" } end
     local groups = ns.CustomGroups and ns.CustomGroups.GetGroups and ns.CustomGroups.GetGroups()
     if not groups then return end
     for i, g in ipairs(groups) do
@@ -288,13 +288,20 @@ local function TimerTab(t, id, order, Rebuild)
             order = 33, type = "select", name = "Anchor To", width = 1.3,
             values = ns.ANCHORS.GetSharedAnchorValues, sorting = ns.ANCHORS.GetSharedAnchorOrder,
             get = function() return t.anchorFrame or "UIParent" end,
-            set = function(_, v) t.anchorFrame = v; T.Update() end,
+            set = function(_, v)
+                if v ~= (t.anchorFrame or "UIParent") then ns.ANCHORS.ResetPlacement(t) end
+                t.anchorFrame = v; T.Update()
+            end,
         }
         args.saAnchorCustom = {
             order = 33.5, type = "input", name = "Custom Frame Name", width = 1.5,
             hidden = function() return t.anchorFrame ~= "CUSTOM" end,
             get = function() return t.anchorFrameCustom or "" end,
-            set = function(_, v) t.anchorFrameCustom = (v or ""):gsub("%s", ""); T.Update() end,
+            set = function(_, v)
+                v = (v or ""):gsub("%s", "")
+                if v ~= t.anchorFrameCustom then ns.ANCHORS.ResetPlacement(t) end
+                t.anchorFrameCustom = v; T.Update()
+            end,
         }
         args.saAnchorPoint = {
             order = 34, type = "select", name = "Point", width = 1.0,

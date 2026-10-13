@@ -18,6 +18,10 @@ ns.AURA_COMMON = {
 
 ns.AURA_PRESETS = {
     {
+        key = "defensives", name = "Defensives", kind = "HELPFUL", unit = "player", max = 10,
+        filter = "BIG_DEFENSIVE", spells = {},
+    },
+    {
         key = "externals", name = "Externals", kind = "HELPFUL", unit = "player", max = 10,
         spells = {
             6940,   -- Blessing of Sacrifice

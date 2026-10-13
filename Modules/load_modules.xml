@@ -1,5 +1,6 @@
 ﻿<Ui xmlns="http://www.blizzard.com/wow/ui/">
 	<Script file="CDHelpers.lua"/>
+	<Script file="CDM\ViewerHooks.lua"/>
 	<Script file="Specials\SpecialDB.lua"/>
 	<Script file="Specials\SpecialStyles.lua"/>
 	<Script file="Specials\SpecialCache.lua"/>
@@ -22,6 +23,9 @@
 	<Script file="Timers\TimersStandalone.lua"/>
 	<Script file="Timers\TimersCDM.lua"/>
 	<Script file="CDM\RacialsCDM.lua"/>
+	<Script file="CDM\TrinketsCDM.lua"/>
+	<Script file="Bars\BarCopy.lua"/>
+	<Script file="AuraCollections.lua"/>
 	<Script file="CustomGroups.lua"/>
 	<Script file="AuraLane.lua"/>
 	<Script file="Glow.lua"/>
@@ -29,5 +33,6 @@
 	<Script file="TUIMeter.lua"/>
 	<Script file="MBB.lua"/>
 	<Script file="MinimapDifficulty.lua"/>
+	<Script file="Movers\GroupAnchor.lua"/>
 	<Script file="Movers\MoverSync.lua"/>
 </Ui>

@@ -410,23 +410,46 @@ local function FollowOverride(id)
     return id
 end
 
-local function ResolveSpellID(entry)
+local function RawSpellID(entry)
     if not entry then return nil end
     if entry.spellName and type(entry.spellName) == "string" and entry.spellName ~= "" then
         if C_Spell and C_Spell.GetSpellIDForSpellIdentifier then
             local id = C_Spell.GetSpellIDForSpellIdentifier(entry.spellName)
-            if id then return FollowOverride(id) end
+            if id then return id end
         end
     end
     local raw = entry.spellID
-    if type(raw) == "number" and raw > 0 then return FollowOverride(raw) end
+    if type(raw) == "number" and raw > 0 then return raw end
     if type(raw) == "string" then
         local n = tonumber(raw)
-        if n then return FollowOverride(n) end
-        local id = C_Spell and C_Spell.GetSpellIDForSpellIdentifier and C_Spell.GetSpellIDForSpellIdentifier(raw)
-        if id then return FollowOverride(id) end
+        if n then return n end
+        return C_Spell and C_Spell.GetSpellIDForSpellIdentifier and C_Spell.GetSpellIDForSpellIdentifier(raw) or nil
     end
     return nil
+end
+
+local function ResolveSpellID(entry)
+    local id = RawSpellID(entry)
+    return id and FollowOverride(id)
+end
+
+-- the spell this spec's bar tracks (as set, and its live override): its CDM copy is a duplicate
+function CB.TrackedSpells()
+    if not CB.IsActiveForCurrentSpec() then return nil end
+    local raw = RawSpellID(GetSpecEntry())
+    if not raw then return nil end
+    local live = FollowOverride(raw)
+    if issecretvalue and issecretvalue(live) then live = nil end
+    return raw, live
+end
+
+local lastTracked
+local function NotifyTracked()
+    local a, b = CB.TrackedSpells()
+    local sig = tostring(a) .. ":" .. tostring(b)
+    if sig == lastTracked then return end
+    lastTracked = sig
+    if ns.CDMIcons and ns.CDMIcons.QueuePassiveRebuild then ns.CDMIcons.QueuePassiveRebuild() end
 end
 
 local function _UpdateChargeStateInner()
@@ -509,6 +532,7 @@ local function HideAll()
 end
 
 local function UpdateNow()
+    NotifyTracked()
     if not isEnabled or not playerEntered then
         HideAll() return
     end
@@ -625,12 +649,7 @@ local function MarkDirtyFromCluster()
 end
 
 HookCluster = function()
-    local f = _G["EssentialCooldownViewer"]
-    if not f or f._TUI_chargeBarHooked then return end
-    f._TUI_chargeBarHooked = true
-    if type(f.RefreshLayout) == "function" then
-        hooksecurefunc(f, "RefreshLayout", MarkDirtyFromCluster)
-    end
+    ns.ViewerHooks.On("EssentialCooldownViewer", "RefreshLayout", "ChargeBar", MarkDirtyFromCluster)
 end
 
 function TUI:UpdateChargeBar()
@@ -657,6 +676,7 @@ function TUI:UpdateChargeBar()
         eventFrame:UnregisterAllEvents()
         textTicker:Hide()
         HideAll()
+        NotifyTracked()
     end
 end
 

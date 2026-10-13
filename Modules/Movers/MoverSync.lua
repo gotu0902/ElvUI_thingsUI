@@ -233,7 +233,8 @@ local function SyncMoverToFrame(mover, frame)
     mover:SetPoint("BOTTOMLEFT", anchorParent, "BOTTOMLEFT", fl * k, fb * k)
 end
 
-local function SetMoverLock(mover, locked)
+-- locked: no dragging; fixed: thingsUI computes the position, so nudges are undone too
+local function SetMoverLock(mover, locked, fixed)
     if not mover then return end
     if not mover._tuiLockHooked then
         mover._tuiLockHooked = true
@@ -244,6 +245,7 @@ local function SetMoverLock(mover, locked)
         end)
     end
     mover._tuiLocked = locked and true or nil
+    mover._tuiFixed = fixed and true or nil
 end
 
 local SHORT_ANCHOR = {
@@ -305,16 +307,44 @@ if E and E.ToggleMoveMode and not M._moverHook then
     end)
 end
 
-local nudgeHandlers = {}
+-- ElvUI's nudge (arrows, the X/Y boxes, mouse wheel over a mover) re-anchors
+-- the mover to a screen corner of UIParent and saves that to E.db.movers.
+-- Our elements keep their own anchor frame and points: a nudge only shifts
+-- their offsets (onNudge). A fixed mover gets its saved ElvUI position back
+-- and snaps onto its frame again.
+local nudgeHandlers, nudgeSaved = {}, {}
 function M.RegisterNudge(moverName, fn)
     if moverName and type(fn) == "function" then nudgeHandlers[moverName] = fn end
 end
+
+function M.ShiftOffsets(db, dx, dy)
+    if not db then return end
+    db.anchorXOffset = (db.anchorXOffset or 0) + dx
+    db.anchorYOffset = (db.anchorYOffset or 0) + dy
+end
+
 if E and E.NudgeMover and not M._nudgeHook then
     M._nudgeHook = true
+    -- hovering assigns the nudge window, before any nudge lands
+    if E.AssignFrameToNudge then
+        hooksecurefunc(E, "AssignFrameToNudge", function(frame)
+            local name = frame and frame.name
+            if name then nudgeSaved[name] = { v = E.db.movers and E.db.movers[name] } end
+        end)
+    end
     hooksecurefunc(E, "NudgeMover", function(_, x, y)
         local mover = E.MoverNudgeFrame and E.MoverNudgeFrame.child
-        local fn = mover and mover.name and nudgeHandlers[mover.name]
-        if fn then fn(mover, x, y) end
+        local name = mover and mover.name
+        if not name then return end
+        local fn = nudgeHandlers[name]
+        if mover._tuiFixed or (mover._tuiLocked and not fn) then
+            local saved = nudgeSaved[name]
+            if saved and E.db.movers then E.db.movers[name] = saved.v end
+            M.SyncAll()
+            if E.UpdateNudgeFrame then E:UpdateNudgeFrame(mover) end
+        elseif fn then
+            fn(mover, x or 0, y or 0)
+        end
     end)
 end
 
@@ -353,11 +383,18 @@ function M.CreateManaged(frame, moverName, label, opts)
         mv:HookScript("OnDragStart", function() _managedDragging[moverName] = true end)
     end
     M.RegisterNudge(moverName, function(self, nx, ny)
-        if opts.onNudge then opts.onNudge(nx or 0, ny or 0) else save(self) end
+        if opts.onNudge then opts.onNudge(nx, ny) else save(self) end
     end)
 
     _managedCreated[moverName] = true
     return mv
+end
+
+function M.SetManagedLabel(moverName, label)
+    local mv = _G[moverName]
+    if not (mv and label) or mv.textString == label then return end
+    mv.textString = label
+    if mv.text then mv.text:SetText(label) end
 end
 
 function M.RemoveManaged(moverName, frame)
@@ -415,7 +452,8 @@ function M.SyncAll()
                     if tag then label = label .. " " .. tag end
                     mover.text:SetText(label)
                 end
-                SetMoverLock(mover, tag ~= nil)
+                -- tagged = placed by thingsUI; only movers with offsets of their own take nudges
+                SetMoverLock(mover, tag ~= nil, tag ~= nil and not nudgeHandlers[t.moverName])
             end
         end
     end
@@ -451,7 +489,7 @@ function M.SyncAll()
                 end
             end
             if mover.text and mover.text.SetText then mover.text:SetText(label) end
-            SetMoverLock(mover, lock)
+            SetMoverLock(mover, lock, inBarSetup)
 
             if inBarSetup then
                 local wrapper = _G["TUI_SpecialBar_bar" .. i]
@@ -628,3 +666,4 @@ end)
 if E and E.ToggleMoveMode then
     hooksecurefunc(E, "ToggleMoveMode", function() M.Queue() end)
 end
+ns.LoadMark("defaults + modules")

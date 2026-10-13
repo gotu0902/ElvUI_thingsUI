@@ -31,8 +31,8 @@ local function EnsureMover(wrapper, barKey, displayName)
     if _moverCreated[barKey] then return end
     local ms = ns.MoverSync
     if not (ms and ms.CreateManaged) then return end
-    ms.CreateManaged(wrapper, "TUI_SpecialBarMover_" .. barKey, displayName or ("Special Bar " .. barKey), {
-        configString  = "thingsUI,modulesTab,specialBars," .. barKey .. "Group,anchorGroup",
+    ms.CreateManaged(wrapper, "TUI_SpecialBarMover_" .. barKey, displayName or ("Aura Bar " .. barKey), {
+        configString  = "thingsUI,modulesTab,specialBars,barsTab," .. barKey .. "Group,anchorGroup",
         shouldDisable = function() return not (E.db.thingsUI and E.db.thingsUI.specialBars) end,
         onSave = function(point, relPoint, x, y)
             local db = SB.GetBarDB(barKey)
@@ -41,6 +41,11 @@ local function EnsureMover(wrapper, barKey, displayName)
             db.anchorRelativePoint = relPoint
             db.anchorXOffset = x
             db.anchorYOffset = y
+            ns.NotifyChange()
+        end,
+        onNudge = function(dx, dy)
+            ms.ShiftOffsets(SB.GetBarDB(barKey), dx, dy)
+            TUI:QueueSpecialBarsUpdate()
             ns.NotifyChange()
         end,
     })
@@ -120,6 +125,7 @@ local function RenderTestBar(wrapper, db, w, h)
     fx.bar:SetPoint("TOPLEFT", fx, "TOPLEFT", off + 1, -1)
     fx.bar:SetPoint("BOTTOMRIGHT", fx, "BOTTOMRIGHT", -1, 1)
     fx.bar:SetStatusBarTexture(LSM:Fetch("statusbar", db.statusBarTexture))
+    fx.bar:SetReverseFill(db.reverseFill and true or false)
     if db.useClassColor then
         local c = E:ClassColor(E.myclass, true)
         fx.bar:SetStatusBarColor(c.r, c.g, c.b)
@@ -132,6 +138,7 @@ local function RenderTestBar(wrapper, db, w, h)
     local font = LSM:Fetch("font", db.font or "Expressway")
     if db.showName then
         E:SetFont(fx.name, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
+        ns.TextColor(fx.name, db.nameColor)
         fx.name:ClearAllPoints()
         fx.name:SetPoint(db.namePoint or "LEFT", fx.bar, db.namePoint or "LEFT",
             db.nameXOffset or 2, db.nameYOffset or 0)
@@ -142,6 +149,7 @@ local function RenderTestBar(wrapper, db, w, h)
     end
     if db.showDuration then
         E:SetFont(fx.dur, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
+        ns.TextColor(fx.dur, db.durationColor)
         fx.dur:ClearAllPoints()
         fx.dur:SetPoint(db.durationPoint or "RIGHT", fx.bar, db.durationPoint or "RIGHT",
             db.durationXOffset or -4, db.durationYOffset or 0)
@@ -152,6 +160,7 @@ local function RenderTestBar(wrapper, db, w, h)
     end
     if db.showStacks then
         E:SetFont(fx.stacks, font, db.stackFontSize or 14, db.stackFontOutline or "OUTLINE")
+        ns.TextColor(fx.stacks, db.stackColor)
         fx.stacks:ClearAllPoints()
         local anchorTo = (db.stackAnchor == "BAR" or not db.iconEnabled) and fx.bar or fx.iconBD
         fx.stacks:SetPoint(db.stackPoint or "CENTER", anchorTo, db.stackPoint or "CENTER",
@@ -243,7 +252,13 @@ local function RenderTotemBar(wrapper, db, w, h, start, dur)
         fx.fill:SetVertexColor(c.r, c.g, c.b)
     end
     fx.fill:ClearAllPoints()
-    fx.fill:SetPoint("TOPLEFT", fx, "TOPLEFT", left, -1)
+    local rev = db.reverseFill and true or false
+    if rev then
+        fx.fill:SetPoint("TOPRIGHT", fx, "TOPRIGHT", -1, -1)
+    else
+        fx.fill:SetPoint("TOPLEFT", fx, "TOPLEFT", left, -1)
+    end
+    fx.anim:SetOrigin(rev and "RIGHT" or "LEFT", 0, 0)
     fx.fill:SetSize(areaW * frac, math.max(1, h - 2))
     fx.slide:Stop()
     fx.anim:SetDuration(remaining)
@@ -277,9 +292,13 @@ local function RenderTotemBar(wrapper, db, w, h, start, dur)
                         tex:SetColorTexture(tc.r or 1, tc.g or 1, tc.b or 1, tc.a or 1)
                         tex.ag:Stop()
                         tex:ClearAllPoints()
-                        tex:SetPoint("LEFT", fx, "LEFT", left + x, 0)
+                        if rev then
+                            tex:SetPoint("RIGHT", fx, "RIGHT", -1 - x, 0)
+                        else
+                            tex:SetPoint("LEFT", fx, "LEFT", left + x, 0)
+                        end
                         tex:SetSize(tw, tlen)
-                        tex.move:SetOffset(-x, 0)
+                        tex.move:SetOffset(rev and x or -x, 0)
                         tex.move:SetDuration(trem)
                         tex:Show()
                         tex.ag:Play()
@@ -298,6 +317,7 @@ local function RenderTotemBar(wrapper, db, w, h, start, dur)
     local font = LSM:Fetch("font", db.font or "Expressway")
     if db.showName then
         E:SetFont(fx.name, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
+        ns.TextColor(fx.name, db.nameColor)
         fx.name:ClearAllPoints()
         fx.name:SetPoint(db.namePoint or "LEFT", fx, db.namePoint or "LEFT",
             (db.nameXOffset or 2) + left, db.nameYOffset or 0)
@@ -313,6 +333,7 @@ local function RenderTotemBar(wrapper, db, w, h, start, dur)
         local fs = CooldownText(fx.cdText)
         if fs then
             E:SetFont(fs, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
+            ns.TextColor(fs, db.durationColor)
             fs:ClearAllPoints()
             fs:SetPoint(db.durationPoint or "RIGHT", fx, db.durationPoint or "RIGHT",
                 db.durationXOffset or -4, db.durationYOffset or 0)
@@ -339,6 +360,39 @@ local function IsManagedByBarSetup(barKey)
     local b = setup.bars[target]
     return b ~= nil and b.enabled == true
 end
+
+-- visibility rules for standalone and Bar Setup bars; a grouped bar follows its group's
+local function VisibleNow(db)
+    return (ns.CustomGroups and ns.CustomGroups.testMode) or ns.Visibility.Shown(db.visibility)
+end
+
+local function Restack()
+    local BS = ns.BarSetup
+    if not BS then return end
+    if InCombatLockdown() then
+        if BS.PositionStack then BS.PositionStack(true) end
+    elseif BS.ApplyStack then
+        BS.ApplyStack()
+    end
+end
+
+function SB.RefreshBarVisibility()
+    local changed = false
+    for i = 1, (SB.GetBarCount and SB.GetBarCount() or 0) do
+        local key = "bar" .. i
+        local db = SB.GetBarDB(key)
+        local wrapper = _G["TUI_SpecialBar_" .. key]
+        local gid = db and db.customGroup
+        local g = type(gid) == "number" and gid > 0 and ns.CustomBars and ns.CustomBars.GroupByID
+            and ns.CustomBars.GroupByID(gid)
+        if wrapper and db and db.enabled and db.spellID and not g then
+            local want = VisibleNow(db) and true or false
+            if wrapper:IsShown() ~= want then wrapper:SetShown(want); changed = true end
+        end
+    end
+    if changed then Restack() end
+end
+ns.Visibility.OnChange(function() SB.RefreshBarVisibility() end)
 
 local function UpdateBarSlot(barKey)
     local db = SB.GetBarDB(barKey)
@@ -422,7 +476,7 @@ local function UpdateBarSlot(barKey)
         ns.BarSetup.ApplyStack()
     end
 
-    wrapper:Show()
+    wrapper:SetShown(VisibleNow(db) and true or false)
     if E and E.DisabledMovers and E.DisabledMovers[moverName] and E.EnableMover then
         E:EnableMover(moverName)
     end

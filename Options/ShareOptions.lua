@@ -102,7 +102,7 @@ function TUI:ShareOptions()
                 args = {
                     accountDesc = {
                         order = 1, type = "description", width = "full",
-                        name = "Standalone pieces of the full setup.\n|cFFFFFFFFPrivate|r = per character (fonts, skins, chat bubbles) - |cFFFFFFFFGlobal|r = account (datatext panels) - |cFFFFFFFFAlt Presets|r = /tuialt profile combos.\n",
+                        name = "Standalone pieces of the full setup.\n|cFFFFFFFFPrivate|r = per character (fonts, skins, chat bubbles) - |cFFFFFFFFGlobal|r = account (datatext panels) - |cFFFFFFFFAlt Presets|r = /tui alt profile combos.\n",
                     },
                     importPrivate = {
                         order = 2, type = "execute", width = 1.13, name = "ElvUI Private",

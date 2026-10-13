@@ -33,9 +33,9 @@ function M.GetBarLabel(key)
             end
         end
         if hint and hint ~= "" then
-            return string.format("Special Bar %s (%s)", tostring(idx), hint)
+            return string.format("Aura Bar %s (%s)", tostring(idx), hint)
         end
-        return string.format("Special Bar %s", tostring(idx))
+        return string.format("Aura Bar %s", tostring(idx))
     end
     return key
 end

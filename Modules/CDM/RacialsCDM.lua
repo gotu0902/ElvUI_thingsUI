@@ -10,6 +10,7 @@ local ipairs, pairs, wipe, tconcat = ipairs, pairs, wipe, table.concat
 local buttons   = {}
 local synthetic = {}
 local listFor   = { essential = {}, utility = {} }
+local kids      = {}
 local lastSig   = ""
 
 local function DB() return E.db and E.db.thingsUI and E.db.thingsUI.racialsCDM end
@@ -39,8 +40,8 @@ local function ResolveDynamic()
     local hidden = ns.CDMIcons and ns.CDMIcons.IsPassiveHidden
     local count = 0
     if ev then
-        for i = 1, ev:GetNumChildren() do
-            local c = select(i, ev:GetChildren())
+        for i = 1, ns.CDHelpers.ChildrenInto(ev, kids) do
+            local c = kids[i]
             if c and c:IsShown() and c.GetCooldownID and not (hidden and hidden(c)) then
                 count = count + 1
             end
@@ -102,9 +103,12 @@ function M.Refresh()
     local dest = db.dest or {}
     local sig = {}
 
+    -- a racial a custom group already shows gets no second copy here
+    local CG = ns.CustomGroups
+    local grouped = CG and CG.ShownSets and CG.ShownSets() or {}
     for _, spellID in ipairs(ns.Racials or {}) do
         local d = dest[spellID]
-        if not db.customGroupsOnly and d and d ~= "off" and HasRacial(spellID) then
+        if not db.customGroupsOnly and d and d ~= "off" and HasRacial(spellID) and not grouped[spellID] then
             local key = (d == "dynamic") and ResolveDynamic() or d
             local list = listFor[key]
             if list then

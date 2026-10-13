@@ -58,14 +58,14 @@ local function FindAnchorsTargetingFrame(targetFrame)
         local key = "bar" .. i
         local bdb = SB and SB.GetBarDB and SB.GetBarDB(key)
         if bdb and (bdb.anchorMode == targetFrame or bdb.anchorFrame == targetFrame) then
-            out[#out + 1] = "Special Bar " .. i
+            out[#out + 1] = "Aura Bar " .. i
         end
     end
     for i = 1, iconCount do
         local key = "icon" .. i
         local idb = SB and SB.GetIconDB and SB.GetIconDB(key)
         if idb and (idb.anchorMode == targetFrame or idb.anchorFrame == targetFrame) then
-            out[#out + 1] = "Special Icon " .. i
+            out[#out + 1] = "Aura Icon " .. i
         end
     end
 
@@ -209,10 +209,20 @@ local function GetChoicesTable(currentKey, isBar)
             local tagColor  = isIconUsage and "|cFFCC8844" or "|cFFAA6600"
             local where = ""
             local iconNum = usage:match("^Icon (%d+)")
+            local barNum = usage:match("^Bar (%d+)")
             if iconNum then
                 local idb = SB.GetIconDB("icon" .. iconNum, ESpec())
                 local gid = idb and idb.customGroup
                 local g = gid and ns.CustomGroups and ns.CustomGroups.GroupByID and ns.CustomGroups.GroupByID(gid)
+                if g and g.name then where = " |cFF8AC8FF[" .. g.name .. "]|r"
+                elseif idb and idb.cdmRow then
+                    where = " |cFF80FF80[" .. (idb.cdmRow == "utility" and "Utility" or "Essential") .. " Cooldowns]|r"
+                else where = " |cFF888888[standalone]|r" end
+            elseif barNum then
+                local bdb = SB.GetBarDB("bar" .. barNum, ESpec())
+                local gid = bdb and bdb.customGroup
+                local g = type(gid) == "number" and gid > 0 and ns.CustomBars and ns.CustomBars.GroupByID
+                    and ns.CustomBars.GroupByID(gid)
                 if g and g.name then where = " |cFF8AC8FF[" .. g.name .. "]|r" end
             end
             choices[tostring(id)] = iconStr .. nameColor .. displayName .. "|r " .. tagColor .. "(In use: " .. usage .. ")|r" .. where
@@ -273,6 +283,83 @@ function ns.SB_SpellChoices(currentKey, isBar, specID)
     forceCurrentSpec = false
     return res
 end
+-- the group pickers list every spell; one that already has a slot of the kind moves
+-- into the group, any other gets a new one. Slots on spells outside the CDM list too.
+local function AddSlotSpells(values, sorting, isBar, specID)
+    local s = SB.GetSpecRoot(tonumber(specID))
+    local kind = isBar and "bars" or "icons"
+    local has = {}
+    for _, k in ipairs(sorting or {}) do has[k] = true end
+    for i = 1, (isBar and (s.barCount or 3) or (s.iconCount or 3)) do
+        local d = s[kind] and s[kind][(isBar and "bar" or "icon") .. i]
+        local k = type(d) == "table" and d.spellID and tostring(d.spellID)
+        if k and values and not values[k] then
+            local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(d.spellID)) or 134400
+            values[k] = ("|T%d:16:16|t |cFFFFB347%s|r |cFFCC8844(In use: %s %d)|r"):format(
+                tex, (C_Spell.GetSpellName and C_Spell.GetSpellName(d.spellID)) or k, isBar and "Bar" or "Icon", i)
+        end
+        if k and sorting and not has[k] then
+            table.insert(sorting, 1, k)
+            has[k] = true
+        end
+    end
+end
+
+function ns.SB_GroupPickValues(isBar, specID)
+    local v = ns.SB_SpellChoices(nil, isBar, specID) or {}
+    AddSlotSpells(v, nil, isBar, specID)
+    return v
+end
+
+function ns.SB_GroupPickSorting(isBar, specID)
+    local s = ns.SB_SpellChoicesSorting(specID) or {}
+    AddSlotSpells(nil, s, isBar, specID)
+    return s
+end
+
+-- true when the spell's bar/icon moved into the group (or, icons, a CDM row) or a new one was made there
+function ns.SB_PlaceSpell(isBar, spellID, specID, groupID, row)
+    local kind = isBar and "bars" or "icons"
+    local function slotDB(key) return isBar and SB.GetBarDB(key, specID) or SB.GetIconDB(key, specID) end
+    local key = SB.FindSlotForSpell and SB.FindSlotForSpell(kind, spellID, specID)
+    if key then
+        local d = slotDB(key)
+        d.customGroup, d.enabled = groupID, true
+        if not isBar then d.cdmRow = row end
+        if tostring(specID) == tostring(SB.GetCurrentSpecID()) then
+            if isBar and SB.ReleaseBar then SB.ReleaseBar(key)
+            elseif not isBar and SB.ReleaseIcon then SB.ReleaseIcon(key) end
+        end
+        return true
+    end
+    local usage = SB.GetSpellUsageInfo and SB.GetSpellUsageInfo(spellID, nil, nil, specID)
+    if usage then
+        E:Print(("%s is already used by %s."):format((C_Spell.GetSpellName and C_Spell.GetSpellName(spellID)) or spellID, usage))
+        return false
+    end
+    local s = SB.GetSpecRoot(specID)
+    local countKey = isBar and "barCount" or "iconCount"
+    local c = s[countKey] or 3
+    if c >= (SB.MAX_SLOTS or 12) then
+        E:Print(("All %d Aura %s slots are in use on this spec."):format(SB.MAX_SLOTS or 12, isBar and "Bar" or "Icon"))
+        return false
+    end
+    if ns.SB_RebuildSlotPages then C_Timer.After(0, ns.SB_RebuildSlotPages) end
+    s[countKey] = c + 1
+    local d = slotDB((isBar and "bar" or "icon") .. (c + 1))
+    if SB.Styles and SB.Styles.ApplyToDB and SB.Styles.EffectiveDefault then
+        SB.Styles.ApplyToDB(kind, SB.Styles.EffectiveDefault(kind), d)
+    end
+    local raw = SB.GetRawSpellList and SB.GetRawSpellList() or {}
+    d.spellID = spellID
+    d.spellName = (raw[spellID] and raw[spellID].name)
+        or (isBar and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID)) or ""
+    d.enabled = true
+    d.customGroup = groupID
+    if not isBar then d.cdmRow = row end
+    return true
+end
+
 function ns.SB_SpellChoicesSorting(specID)
     forceSpecID = tonumber(specID)
     forceCurrentSpec = not forceSpecID
@@ -593,7 +680,7 @@ local function StyleArgs(kind, db, ignoreFn)
             order = 5.4, type = "execute", name = "|cFF40FF40Update Style|r", width = 0.9,
             hidden = function() return not warnShown() end,
             confirm = function()
-                return ("Overwrite style '%s' with this %s's settings? Every special using the style follows."):format(styleName() or "?", noun)
+                return ("Overwrite style '%s' with this %s's settings? Everything using the style follows."):format(styleName() or "?", noun)
             end,
             func = function()
                 db()._styleDriftAck = nil
@@ -907,9 +994,28 @@ function TUI:SpecialBarOptions(barKey, ctx)
             NotifyChange()
         end,
     }
+    commonArgs.copyBar = {
+        order = 4.4, type = "execute", name = "|cFF8AC8FFCopy Bar|r",
+        hidden = function() return not db().spellID end,
+        disabled = function() local s = SB.GetSpecRoot(ESpec()); return (s.barCount or 3) >= (SB.MAX_SLOTS or 12) end,
+        func = function()
+            local s = SB.GetSpecRoot(ESpec()); local c = s.barCount or 3
+            if c >= (SB.MAX_SLOTS or 12) then return end
+            local copy = ns.DeepCopy(db())
+            copy.spellID, copy.spellName = nil, nil   -- can't track one spell twice; keep the style, pick a new spell
+            copy.enabled = false
+            local newKey = "bar" .. (c + 1)
+            s.bars = s.bars or {}
+            s.bars[newKey] = copy
+            s.barCount = c + 1
+            if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end
+            TUI:UpdateSpecialBars(); NotifyChange()
+            if ns.SB_OpenBarEditor then ns.SB_OpenBarEditor(newKey) end
+        end,
+    }
     commonArgs.deleteBar = {
         order = 4.6, type = "execute", name = "Delete Bar",
-        confirm = function() return "Delete this Special Bar?" end,
+        confirm = function() return "Delete this Aura Bar?" end,
         func = function()
             local idx = tonumber(barKey:match("%d+"))
             if SB.RemoveBarSlot then SB.RemoveBarSlot(idx, ESpec()) end
@@ -986,6 +1092,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
                         statusBarTexture = { order = 1, type = "select", name = "Texture", dialogControl = "LSM30_Statusbar", values = LSM:HashTable("statusbar"), get = function() return get("statusBarTexture") end, set = function(_, v) set("statusBarTexture", v) end },
                         useClassColor = { order = 2, type = "toggle", name = "Use Class Color", get = function() return get("useClassColor") end, set = function(_, v) set("useClassColor", v) end },
                         customColor = { order = 3, type = "color", name = "Custom Color", hasAlpha = false, disabled = function() return get("useClassColor") end, get = function() return unpackColor(get("customColor"), false) end, set = function(_, r, g, b) set("customColor", { r=r, g=g, b=b }) end },
+                        reverseFill = { order = 3.5, type = "toggle", name = "Reverse Fill", get = function() return get("reverseFill") end, set = function(_, v) set("reverseFill", v) end },
                         frameStrata = {
                             order = 4, type = "select", name = "Frame Strata",
                             values = STRATA_VALUES, sorting = STRATA_ORDER,
@@ -1034,6 +1141,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
                         namePoint = { order = 2, type = "select", name = "Align", values = { ["LEFT"]="Left", ["CENTER"]="Center", ["RIGHT"]="Right" }, disabled = function() return not get("showName") end, get = function() return get("namePoint") end, set = function(_, v) set("namePoint", v) end },
                         nameXOffset = { order = 3, type = "range", name = "X Offset", min = -50, max = 50, step = 0.5, disabled = function() return not get("showName") end, get = function() return get("nameXOffset") end, set = function(_, v) set("nameXOffset", v) end },
                         nameYOffset = { order = 4, type = "range", name = "Y Offset", min = -20, max = 20, step = 0.5, disabled = function() return not get("showName") end, get = function() return get("nameYOffset") end, set = function(_, v) set("nameYOffset", v) end },
+                        nameColor = { order = 5, type = "color", name = "Color", hasAlpha = false, disabled = function() return not get("showName") end, get = function() return unpackColor(get("nameColor"), false) end, set = function(_, r, g, b) set("nameColor", { r=r, g=g, b=b }) end },
                     },
                 },
                 durationGroup = {
@@ -1043,6 +1151,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
                         durationPoint = { order = 2, type = "select", name = "Align", values = { ["LEFT"]="Left", ["CENTER"]="Center", ["RIGHT"]="Right" }, disabled = function() return not get("showDuration") end, get = function() return get("durationPoint") end, set = function(_, v) set("durationPoint", v) end },
                         durationXOffset = { order = 3, type = "range", name = "X Offset", min = -50, max = 50, step = 0.5, disabled = function() return not get("showDuration") end, get = function() return get("durationXOffset") end, set = function(_, v) set("durationXOffset", v) end },
                         durationYOffset = { order = 4, type = "range", name = "Y Offset", min = -20, max = 20, step = 0.5, disabled = function() return not get("showDuration") end, get = function() return get("durationYOffset") end, set = function(_, v) set("durationYOffset", v) end },
+                        durationColor = { order = 5, type = "color", name = "Color", hasAlpha = false, disabled = function() return not get("showDuration") end, get = function() return unpackColor(get("durationColor"), false) end, set = function(_, r, g, b) set("durationColor", { r=r, g=g, b=b }) end },
                     },
                 },
                 stackGroup = {
@@ -1055,9 +1164,19 @@ function TUI:SpecialBarOptions(barKey, ctx)
                         stackPoint = { order = 5, type = "select", name = "Stack Position", values = POINT_VALUES, sorting = POINT_ORDER, disabled = function() return not get("showStacks") end, get = function() return get("stackPoint") end, set = function(_, v) set("stackPoint", v) end },
                         stackXOffset = { order = 6, type = "range", name = "Stack X Offset", min = -20, max = 20, step = 0.5, disabled = function() return not get("showStacks") end, get = function() return get("stackXOffset") end, set = function(_, v) set("stackXOffset", v) end },
                         stackYOffset = { order = 7, type = "range", name = "Stack Y Offset", min = -20, max = 20, step = 0.5, disabled = function() return not get("showStacks") end, get = function() return get("stackYOffset") end, set = function(_, v) set("stackYOffset", v) end },
+                        stackColor = { order = 8, type = "color", name = "Color", hasAlpha = false, disabled = function() return not get("showStacks") end, get = function() return unpackColor(get("stackColor"), false) end, set = function(_, r, g, b) set("stackColor", { r=r, g=g, b=b }) end },
                     },
                 },
             }),
+        },
+        visibilityGroup = {
+            order = 35, type = "group", name = "Visibility",
+            hidden = function() return styleMode or IsGrouped() end,
+            args = ns.VisibilityArgs(function()
+                local d = db()
+                d.visibility = d.visibility or {}
+                return d.visibility
+            end, function() QueueUpdate() end),
         },
         anchorGroup = {
             order = 30, type = "group", name = "Anchor & Position",
@@ -1082,7 +1201,10 @@ function TUI:SpecialBarOptions(barKey, ctx)
                             sorting = function() return BuildAnchorSorting(true, true, barName) end,
                             disabled = function() return IsInBarSetup() end,
                             get = function() return get("anchorMode") or "UIParent" end,
-                            set = function(_, v) db().anchorMode = v; if v ~= "CUSTOM" then db().anchorFrame = v end; QueueUpdate() end },
+                            set = function(_, v)
+                                if v ~= (db().anchorMode or "UIParent") then ns.ANCHORS.ResetPlacement(db()) end
+                                db().anchorMode = v; if v ~= "CUSTOM" then db().anchorFrame = v end; QueueUpdate()
+                            end },
                         anchoredToHint = {
                             order = 0.5, type = "description", width = "full", fontSize = "medium",
                             name = function()
@@ -1094,7 +1216,11 @@ function TUI:SpecialBarOptions(barKey, ctx)
                                 return #FindAnchorsTargetingFrame(barName) == 0
                             end,
                         },
-                        anchorFrame = { order = 2, type = "input", name = "Custom Frame Name", width = "double", hidden = function() return get("anchorMode") ~= "CUSTOM" end, disabled = function() return IsInBarSetup() end, get = function() return get("anchorFrame") end, set = function(_, v) set("anchorFrame", v) end },
+                        anchorFrame = { order = 2, type = "input", name = "Custom Frame Name", width = "double", hidden = function() return get("anchorMode") ~= "CUSTOM" end, disabled = function() return IsInBarSetup() end, get = function() return get("anchorFrame") end,
+                            set = function(_, v)
+                                if v ~= db().anchorFrame then ns.ANCHORS.ResetPlacement(db()) end
+                                set("anchorFrame", v)
+                            end },
                         anchorPoint = { order = 3, type = "select", name = "Anchor From", values = POINT_VALUES, sorting = POINT_ORDER, disabled = function() return IsInBarSetup() end, get = function() return get("anchorPoint") end, set = function(_, v) set("anchorPoint", v) end },
                         anchorRelativePoint = { order = 4, type = "select", name = "Anchor To", values = POINT_VALUES, sorting = POINT_ORDER, disabled = function() return IsInBarSetup() end, get = function() return get("anchorRelativePoint") end, set = function(_, v) set("anchorRelativePoint", v) end },
                         anchorXOffset = { order = 5, type = "range", name = "X Offset", min = -500, max = 500, step = 0.5, bigStep = 1, disabled = function() return IsInBarSetup() end, get = function() return get("anchorXOffset") end, set = function(_, v) set("anchorXOffset", v) end },
@@ -1132,6 +1258,9 @@ function TUI:SpecialIconOptions(keyArg, ctx)
         local g = ns.CustomGroups and ns.CustomGroups.GroupByID and ns.CustomGroups.GroupByID(gid)
         return (g and g.enabled) and true or false
     end
+    -- a CDM row owns size, zoom and position like a group does
+    local function inRow() return not styleMode and db().cdmRow ~= nil end
+    local function placed() return isGrouped() or inRow() end
 
     local commonArgs = {}
     if not styleMode then
@@ -1174,14 +1303,12 @@ function TUI:SpecialIconOptions(keyArg, ctx)
     }
     commonArgs.customGroup = {
         order = 3.5, type = "select",
-        name = "|cFF8AC8FFCustom Group|r",
-        hidden = function()
-            if not db().spellID then return true end
-            local groups = ns.CustomGroups and ns.CustomGroups.GetGroups and ns.CustomGroups.GetGroups()
-            return not (groups and #groups > 0)
-        end,
+        name = "|cFF8AC8FFShow In|r",
+        hidden = function() return not db().spellID end,
         values = function()
-            local t = { [0] = "|cFF888888Standalone|r" }
+            local t = { [0] = "|cFF888888Standalone|r",
+                ["cdm:essential"] = "|cFF80FF80Essential Cooldowns|r",
+                ["cdm:utility"]   = "|cFF80FF80Utility Cooldowns|r" }
             local groups = ns.CustomGroups and ns.CustomGroups.GetGroups and ns.CustomGroups.GetGroups() or {}
             for _, g in ipairs(groups) do t[g.id] = g.name or ("Group " .. g.id) end
             return t
@@ -1191,18 +1318,41 @@ function TUI:SpecialIconOptions(keyArg, ctx)
             local sorted = {}
             for _, g in ipairs(groups) do sorted[#sorted + 1] = g end
             table.sort(sorted, function(a, b) return (a.name or "") < (b.name or "") end)
-            local order = { 0 }   -- Standalone first
+            local order = { 0, "cdm:essential", "cdm:utility" }
             for _, g in ipairs(sorted) do order[#order + 1] = g.id end
             return order
         end,
-        get = function() return db().customGroup or 0 end,
+        get = function()
+            if db().cdmRow then return "cdm:" .. db().cdmRow end
+            return db().customGroup or 0
+        end,
         set = function(_, v)
-            db().customGroup = (v ~= 0) and v or nil
+            local row = type(v) == "string" and v:match("^cdm:(%a+)$")
+            db().cdmRow = row or nil
+            db().customGroup = (not row and v ~= 0) and v or nil
             if not ESpec() then SB.ReleaseIcon(curKey()) end
             QueueUpdate()
             if ns.CustomGroups and ns.CustomGroups.QueueLayout then ns.CustomGroups.QueueLayout() end
             NotifyChange()
         end,
+    }
+    commonArgs.auraKind = {
+        order = 3.52, type = "select", name = "Aura Type",
+        hidden = function() return not db().spellID end,
+        values = { BOTH = "Buff or Debuff", HELPFUL = "Buff (on you)", HARMFUL = "Debuff (on target)" },
+        sorting = { "BOTH", "HELPFUL", "HARMFUL" },
+        get = function() return db().auraKind or "BOTH" end,
+        set = function(_, v)
+            db().auraKind = (v ~= "BOTH") and v or nil
+            QueueUpdate()
+            if ns.CustomGroups and ns.CustomGroups.QueueLayout then ns.CustomGroups.QueueLayout() end
+        end,
+    }
+    commonArgs.cdmIndex = {
+        order = 3.55, type = "range", name = "Position in Row", min = 1, max = 30, step = 1,
+        hidden = function() return not inRow() end,
+        get = function() return db().cdmIndex or 30 end,
+        set = function(_, v) db().cdmIndex = v; QueueUpdate() end,
     }
     commonArgs.customGroupLink = {
         order = 3.6, type = "execute", name = "|cFF8AC8FFGo to Custom Group|r",
@@ -1255,7 +1405,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
     }
     commonArgs.deleteIcon = {
         order = 4.6, type = "execute", name = "Delete Icon",
-        confirm = function() return "Delete this Special Icon?" end,
+        confirm = function() return "Delete this Aura Icon?" end,
         func = function()
             local idx = tonumber(curKey():match("%d+"))
             if SB.RemoveIconSlot then SB.RemoveIconSlot(idx, ESpec()) end
@@ -1295,7 +1445,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                     order = 10, type = "group", name = "Size & Style", inline = true,
                     args = {
                         keepAspectRatio = { order = 1, type = "toggle", name = "Square Icons",
-                            disabled = function() return isGrouped() end,
+                            disabled = function() return placed() end,
                             get = function() return get("keepAspectRatio") ~= false end,
                             set = function(_, v)
                                 if v then set("height", get("width") or 36) end
@@ -1303,29 +1453,29 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             end },
                         size = { order = 2, type = "range", name = "Size", min = 16, max = 128, step = 0.01, bigStep = 1,
                             hidden = function() return get("keepAspectRatio") == false end,
-                            disabled = function() return isGrouped() end,
+                            disabled = function() return placed() end,
                             get = function() return get("width") or 36 end,
                             set = function(_, v) set("width", v); set("height", v) end },
                         width  = { order = 3, type = "range", name = "Width",  min = 16, max = 128, step = 0.01, bigStep = 1,
                             hidden = function() return get("keepAspectRatio") ~= false end,
-                            disabled = function() return isGrouped() end,
+                            disabled = function() return placed() end,
                             get = function() return get("width") or 36 end,
                             set = function(_, v) set("width", v) end },
                         height = { order = 4, type = "range", name = "Height", min = 16, max = 128, step = 0.01, bigStep = 1,
                             hidden = function() return get("keepAspectRatio") ~= false end,
-                            disabled = function() return isGrouped() end,
+                            disabled = function() return placed() end,
                             get = function() return get("height") or 36 end,
                             set = function(_, v) set("height", v) end },
                         iconLockAspectRatio = { order = 4.5, type = "toggle", name = "Lock Icon Aspect Ratio",
                             hidden = function() return get("keepAspectRatio") ~= false end,
-                            disabled = function() return isGrouped() end,
+                            disabled = function() return placed() end,
                             get = function() return get("iconLockAspectRatio") ~= false end,
                             set = function(_, v) set("iconLockAspectRatio", v) end },
                         zoom   = { order = 5, type = "range", name = "Zoom", min = 0, max = 0.45, step = 0.01, bigStep = 0.05, isPercent = true,
-                            disabled = function() return isGrouped() end,
+                            disabled = function() return placed() end,
                             get = function() return get("zoom") end, set = function(_, v) set("zoom", v) end },
                         desaturate = { order = 6, type = "toggle", name = "Show when Idle",
-                            disabled = function() return isGrouped() end,
+                            disabled = function() return placed() end,
                             get = function() return get("desaturateWhenInactive") end, set = function(_, v) set("desaturateWhenInactive", v) end },
                         frameStrata = {
                             order = 7, type = "select", name = "Frame Strata",
@@ -1455,15 +1605,23 @@ function TUI:SpecialIconOptions(keyArg, ctx)
             order = 15, type = "group", name = "Text",
             args = merge({
                 overrideGroupText = {
-                    order = 5, type = "toggle", name = "|cFF8AC8FFOverride Custom Group Text|r", width = "full",
-                    hidden = function() return not isGrouped() end,
+                    order = 5, type = "toggle", width = "full",
+                    name = function()
+                        return inRow() and "|cFF8AC8FFOverride CDM Row Text|r" or "|cFF8AC8FFOverride Custom Group Text|r"
+                    end,
+                    hidden = function() return not (isGrouped() or inRow()) end,
                     get = function() return get("overrideGroupText") end,
                     set = function(_, v) set("overrideGroupText", v) end,
                 },
                 groupTextNote = {
                     order = 6, type = "description", width = "full", fontSize = "medium",
-                    hidden = function() return not isGrouped() or get("overrideGroupText") end,
-                    name = "|cFF888888Cooldown text follows the Custom Group. Enable the toggle above to set your own.|r\n",
+                    hidden = function() return not (isGrouped() or inRow()) or get("overrideGroupText") end,
+                    name = function()
+                        if inRow() then
+                            return "|cFF888888Duration and stack text follow the row (CDM > Layout > Essential/Utility > Text). Enable the toggle above to set your own.|r\n"
+                        end
+                        return "|cFF888888Cooldown text follows the Custom Group. Enable the toggle above to set your own.|r\n"
+                    end,
                 },
                 stackGroup = {
                     order = 10, type = "group", name = "Stack Count", inline = true,
@@ -1545,9 +1703,18 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                 },
             }),
         },
+        visibilityGroup = {
+            order = 25, type = "group", name = "Visibility",
+            hidden = function() return styleMode or isGrouped() end,
+            args = ns.VisibilityArgs(function()
+                local d = db()
+                d.visibility = d.visibility or {}
+                return d.visibility
+            end, function() QueueUpdate() end),
+        },
         anchorGroup = {
             order = 20, type = "group", name = "Anchor & Position",
-            hidden = function() return isGrouped() or styleMode end,
+            hidden = function() return placed() or styleMode end,
             args = merge({
                 anchorSettingsGroup = {
                     order = 50, type = "group", name = "Anchor & Position", inline = true,
@@ -1562,7 +1729,10 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             values  = function() return BuildAnchorValues(true, true, iconName()) end,
                             sorting = function() return BuildAnchorSorting(true, true, iconName()) end,
                             get = function() return get("anchorMode") or "UIParent" end,
-                            set = function(_, v) db().anchorMode = v; if v ~= "CUSTOM" then db().anchorFrame = v end; QueueUpdate() end },
+                            set = function(_, v)
+                                if v ~= (db().anchorMode or "UIParent") then ns.ANCHORS.ResetPlacement(db()) end
+                                db().anchorMode = v; if v ~= "CUSTOM" then db().anchorFrame = v end; QueueUpdate()
+                            end },
                         anchoredToHint = {
                             order = 0.5, type = "description", width = "full", fontSize = "medium",
                             name = function()
@@ -1574,7 +1744,11 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                                 return #FindAnchorsTargetingFrame(iconName()) == 0
                             end,
                         },
-                        anchorFrame = { order = 2, type = "input", name = "Custom Frame Name", width = "double", hidden = function() return get("anchorMode") ~= "CUSTOM" end, get = function() return get("anchorFrame") end, set = function(_, v) set("anchorFrame", v) end },
+                        anchorFrame = { order = 2, type = "input", name = "Custom Frame Name", width = "double", hidden = function() return get("anchorMode") ~= "CUSTOM" end, get = function() return get("anchorFrame") end,
+                            set = function(_, v)
+                                if v ~= db().anchorFrame then ns.ANCHORS.ResetPlacement(db()) end
+                                set("anchorFrame", v)
+                            end },
                         anchorPoint = { order = 3, type = "select", name = "Anchor From",
                             values = POINT_VALUES, sorting = POINT_ORDER,
                             get = function() return get("anchorPoint") end, set = function(_, v) set("anchorPoint", v) end },

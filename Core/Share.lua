@@ -16,12 +16,13 @@ M.SECTIONS = {
     { name = "Classbar",             keys = { "classbarMode" },                               color = "6FB7FF" },
     { name = "Groups - Icons",       keys = { "customGroups" }, collection = "customGroups",  color = "F20553" },
     { name = "Groups - Bars",        keys = { "customBars" },                                 color = "F27D2A" },
-    { name = "Special Bars & Icons", keys = { "specialBars" },  collection = "specialBars",   color = "80FF80" },
-    { name = "Special Styles",       keys = { "specialStyles" }, collection = "specialStyles", color = "FF80C0" },
+    { name = "Aura Collections",     keys = { "auraCollections" },                            color = "B0A0FF" },
+    { name = "Aura Bars & Icons", keys = { "specialBars" },  collection = "specialBars",   color = "80FF80" },
+    { name = "Aura Styles",       keys = { "specialStyles" }, collection = "specialStyles", color = "FF80C0" },
     { name = "Timers",               keys = { "timers" },                                     color = "FFC04D" },
     { name = "Racials",              keys = { "racialsCDM" } },
     { name = "Cluster Positioning",  keys = { "clusterPositioning" } },
-    { name = "Movers & General",     keys = { "essentialMover", "autoSetAudioChannels", "rightChatAsBackground", "rightChatWidthOffset", "rightChatHeightOffset" } },
+    { name = "Movers & General",     keys = { "essentialMover", "groupAnchor", "actionBarCopy", "autoSetAudioChannels", "rightChatAsBackground", "rightChatWidthOffset", "rightChatHeightOffset" } },
 }
 
 local COMPRESS = Enum.CompressionMethod and Enum.CompressionMethod.Deflate or 0

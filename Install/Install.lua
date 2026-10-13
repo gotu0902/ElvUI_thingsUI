@@ -56,6 +56,8 @@ local function FinishElvProfileImport(key, data)
     ns.SuppressNewProfileAsk = GetTime()
     D:SetImportedProfile("profile", key, data, true)
     E.db.thingsUI = keep
+    -- ElvUI keeps this out of profile strings (Distributor blacklist)
+    E.db.chat.hideVoiceButtons = true
     if E.StaggeredUpdateAll then E:StaggeredUpdateAll() end
     DrainPendingPreset()
     return true
@@ -281,6 +283,8 @@ function ns.EnsureAltPresets()
             end
         end
     end
+    -- this character's spec profiles from the role presets (healer = FHT)
+    if AI.ApplyRoleProfiles then AI.ApplyRoleProfiles(true) end
     return n
 end
 
@@ -418,7 +422,7 @@ ns.installTable = {
         function()
             local f = PIF()
             f.SubTitle:SetText("Plugin things")
-            f.Desc1:SetText("Import the thingsUI plugin layout (custom groups, special bars/icons, timers, bar setup).")
+            f.Desc1:SetText("Import the thingsUI plugin layout (custom groups, aura bars/icons, timers, bar setup).")
             for i, p in ipairs(PRESETS) do
                 local opt = f["Option" .. i]
                 if opt then
@@ -460,7 +464,7 @@ ns.installTable = {
             local f = PIF()
             f.SubTitle:SetText("Account Settings")
             f.Desc1:SetText("|cFFFFFFFFPrivate|r (per character: fonts, skins, chat bubbles) \n |cFFFFFFFFGlobal|r (datatext panels).")
-            f.Desc2:SetText("Alt Presets fill the Alt Profile Setup (/tuialt) with ready profile combos.")
+            f.Desc2:SetText("Alt Presets fill the Alt Profile Setup (/tui alt) with ready profile combos.")
             f.Desc3:SetText("Applies on the reload at the end.")
             local strs = ns.InstallStrings or {}
             f.Option1:Show(); f.Option1:Enable(); f.Option1:SetText("Private + Global")
@@ -632,6 +636,7 @@ function ns.OpenInstaller()
         C_Timer.After(0.5, function() E:StaticPopup_Show("TUI_BCM_WARNING") end)
     end
 end
+ns.SlashCommand("install", ns.OpenInstaller)
 
 local boot = CreateFrame("Frame")
 boot:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -654,3 +659,4 @@ boot:SetScript("OnEvent", function(self)
         end
     end)
 end)
+ns.LoadMark("install")
