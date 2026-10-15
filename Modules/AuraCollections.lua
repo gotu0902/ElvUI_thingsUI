@@ -158,7 +158,20 @@ function M.RemoveSpell(key, id)
 end
 
 -- the collection as the groups see it
+-- a layout pass asks several times (Entries, ShownSets, previews): build it once per frame
+local getCache, getStamp = {}, nil
+
 function M.Get(key)
+    local now = GetTime()
+    if getStamp ~= now then wipe(getCache); getStamp = now end
+    local hit = getCache[key]
+    if hit ~= nil then return hit or nil end
+    local c = M.Build(key)
+    getCache[key] = c or false
+    return c
+end
+
+function M.Build(key)
     local p = Preset(key)
     local raw = M.Raw(key)
     if not (p or raw) then return nil end
@@ -292,6 +305,7 @@ function M.Reset(key)
 end
 
 function M.Changed()
+    wipe(getCache)
     if TUI.UpdateCustomGroups then TUI:UpdateCustomGroups() end
     if TUI.UpdateCustomBars then TUI:UpdateCustomBars() end
     if ns.CustomGroups and ns.CustomGroups._rebuildOptions then ns.CustomGroups._rebuildOptions() end

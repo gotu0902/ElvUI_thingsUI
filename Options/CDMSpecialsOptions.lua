@@ -752,19 +752,6 @@ local function BuildSpecialIconsGroup()
     }
 end
 
-function TUI:CDMSpecialsOptions()
-    return {
-        order = 50,
-        type = "group",
-        name = "CDM Specials",
-        childGroups = "tab",
-        args = {
-            specialBarsTab  = BuildSpecialBarsGroup(),
-            specialIconsTab = BuildSpecialIconsGroup(),
-        },
-    }
-end
-
 function TUI:SpecialBarsOptions()
     return BuildSpecialBarsGroup()
 end

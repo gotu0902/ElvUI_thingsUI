@@ -63,8 +63,19 @@ local function GroupType()
     return IsInGroup() and "party" or "solo"
 end
 
+-- what any rule has asked about: the state signature only covers those
+local used = {}
+
 function V.Shown(v)
     if not (v and v.enabled) then return true end
+    used.any = true
+    if v.combat then used.combat = true end
+    if v.solo == false or v.party == false or v.raid == false then used.group = true end
+    if v.places and next(v.places) then used.place = true end
+    if v.forms and next(v.forms) then used.form = true end
+    if v.hideMounted then used.mount = true end
+    if v.hideNoTarget or v.hideNoEnemy then used.target = true end
+    if v.hideResting then used.rest = true end
     local c = v.combat or "always"
     if c == "never" then return false end
     if c == "in" and not inCombat then return false end
@@ -86,10 +97,16 @@ function V.OnChange(fn) listeners[#listeners + 1] = fn end
 
 local lastSig
 local function Check()
-    local target = UnitExists("target")
+    if not used.any then return end
+    local target = used.target and UnitExists("target")
     local sig = table.concat({
-        tostring(inCombat), GroupType(), Place(), FormKey(), tostring(Mounted()), tostring(target),
-        tostring(target and UnitCanAttack("player", "target")), tostring(IsResting()),
+        used.combat and tostring(inCombat) or "",
+        used.group and GroupType() or "",
+        used.place and Place() or "",
+        used.form and FormKey() or "",
+        used.mount and tostring(Mounted()) or "",
+        used.target and (tostring(target) .. tostring(target and UnitCanAttack("player", "target"))) or "",
+        used.rest and tostring(IsResting()) or "",
     }, "|")
     if sig == lastSig then return end
     lastSig = sig

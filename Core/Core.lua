@@ -64,6 +64,17 @@ function ns.TextColor(fs, c)
     fs:SetTextColor(c and c.r or 1, c and c.g or 1, c and c.b or 1)
 end
 
+-- 12.1.5+: a cap of 0 also disables the group, so it stops parsing UNIT_AURA
+function ns.SetAuraGroupCap(container, key, cap)
+    if container.SetAuraGroupEnabled then
+        if cap > 0 then container:SetAuraGroupEnabled(key, true) end
+        container:SetAuraGroupMaxFrameCount(key, cap)
+        if cap <= 0 then container:SetAuraGroupEnabled(key, false) end
+        return
+    end
+    container:SetAuraGroupMaxFrameCount(key, cap)
+end
+
 function ns.SolidDialog(f)
     local fr = f and f.frame
     if not fr then return end

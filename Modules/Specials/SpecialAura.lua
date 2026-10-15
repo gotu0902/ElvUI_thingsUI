@@ -124,7 +124,7 @@ end
 local function ApplyGroupTo(c, key, filter, spells, w, h, styler)
     local layout = { elementWidth = w, elementHeight = h, elementSpacing = 0, lineSpacing = 0 }
     if c:HasAuraGroup(key) then
-        c:SetAuraGroupMaxFrameCount(key, 1)
+        ns.SetAuraGroupCap(c, key, 1)
         c:SetAuraGroupFilterString(key, filter)
         c:SetAuraGroupCandidateFilters(key, { includeSpellIDs = spells })
         c:SetAuraGroupLayout(key, layout)
@@ -143,13 +143,6 @@ local function ApplyGroupTo(c, key, filter, spells, w, h, styler)
     for button, r in pairs(c._tuiRegions) do
         if not pcall(styler, button, r) then pending = true end
     end
-end
-
-local function IconTexture(spellID)
-    local raw = SB.GetRawSpellList and SB.GetRawSpellList()[spellID]
-    if raw and raw.icon then return raw.icon end
-    local si = SB.GetCachedSpellInfo and SB.GetCachedSpellInfo(spellID)
-    return si and si.iconID or nil
 end
 
 function SA.StyleIconButton(button, r, wrapper, key)
@@ -454,7 +447,7 @@ local function Attach(wrapper, key, spellID, w, h, styler, kind)
         cp:SetShown(PlayerAssistOK())
     else
         local cp = wrapper._tuiAuraP
-        if cp and cp:HasAuraGroup(gkey) then cp:SetAuraGroupMaxFrameCount(gkey, 0) end
+        if cp and cp:HasAuraGroup(gkey) then ns.SetAuraGroupCap(cp, gkey, 0) end
     end
 
     if kind ~= "HELPFUL" then
@@ -465,7 +458,7 @@ local function Attach(wrapper, key, spellID, w, h, styler, kind)
         ct:SetShown(HarmfulTargetOK())
     else
         local ct = wrapper._tuiAuraT
-        if ct and ct:HasAuraGroup(gkey) then ct:SetAuraGroupMaxFrameCount(gkey, 0) end
+        if ct and ct:HasAuraGroup(gkey) then ns.SetAuraGroupCap(ct, gkey, 0) end
     end
 
     attached[key] = wrapper
@@ -488,8 +481,8 @@ function SA.Detach(wrapper, key)
     if InCombatLockdown() then pending = true return end
     local gkey = "S" .. key
     local cp, ct = wrapper._tuiAuraP, wrapper._tuiAuraT
-    if cp and cp.HasAuraGroup and cp:HasAuraGroup(gkey) then cp:SetAuraGroupMaxFrameCount(gkey, 0) end
-    if ct and ct.HasAuraGroup and ct:HasAuraGroup(gkey) then ct:SetAuraGroupMaxFrameCount(gkey, 0) end
+    if cp and cp.HasAuraGroup and cp:HasAuraGroup(gkey) then ns.SetAuraGroupCap(cp, gkey, 0) end
+    if ct and ct.HasAuraGroup and ct:HasAuraGroup(gkey) then ns.SetAuraGroupCap(ct, gkey, 0) end
     attached[key] = nil
 end
 

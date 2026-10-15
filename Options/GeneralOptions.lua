@@ -114,14 +114,6 @@ function ns.SetAutoScale()
     return best
 end
 
-local function ApplyABPreset(name, apply)
-    apply()
-    local AB = E:GetModule("ActionBars", true)
-    if AB and AB.UpdateButtonSettings then AB:UpdateButtonSettings() end
-    if E.UpdateMoverPositions then E:UpdateMoverPositions() end
-    print("|cFF8080FFthingsUI|r - Applied " .. name .. "'s ActionBars.")
-end
-
 local GROUP_ANCHOR_VALUES = {
     ELVUI = "ElvUI (default)", GROWTH = "Growth Corner",
     TOPLEFT = "TOPLEFT", TOP = "TOP", TOPRIGHT = "TOPRIGHT",

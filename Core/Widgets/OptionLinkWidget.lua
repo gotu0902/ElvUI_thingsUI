@@ -176,22 +176,6 @@ function ns.OptionLink(order, label, ...)
     }
 end
 
--- ns.OptionLinkRow
-function ns.OptionLinkRow(order, links)
-    local L = {}
-    for i = 1, #links do
-        local lk = links[i]
-        local path = {}
-        for j = 2, #lk do path[#path + 1] = lk[j] end
-        L[i] = { label = lk[1], path = path }
-    end
-    return {
-        order = order, type = "description", dialogControl = "TUI_OptionLink",
-        width = "full", name = "",
-        arg = { links = L },
-    }
-end
-
 function ns.OptionLinkRowDynamic(order, provider)
     return {
         order = order, type = "description", dialogControl = "TUI_OptionLink",

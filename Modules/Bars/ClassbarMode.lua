@@ -55,27 +55,6 @@ function CM.GetActiveAnchorFrame()
     return nil
 end
 
-local function GetAnchorTarget(slot)
-    local essential = _G["EssentialCooldownViewer"]
-    essential = (essential and ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(essential)) or essential
-    if slot == "ABOVE_CHARGEBAR" then
-        local cb = ns.ChargeBar and ns.ChargeBar.GetActiveAnchorFrame and ns.ChargeBar.GetActiveAnchorFrame()
-        if cb then return cb, "TOP" end
-    end
-
-    if essential then return essential, "TOP" end
-    return nil
-end
-
-local function GetClusterBounds()
-    local essential = _G["EssentialCooldownViewer"]
-    local p = (essential and ns.CDMIcons and ns.CDMIcons.GetProxy and ns.CDMIcons.GetProxy(essential)) or essential
-    if not p then return nil end
-    local left, right = p:GetLeft(), p:GetRight()
-    if not left or not right then return nil end
-    return left, right
-end
-
 local function PlayerFrameClassBarReady()
     local frame = _G.ElvUF_Player
     if not frame then return false end

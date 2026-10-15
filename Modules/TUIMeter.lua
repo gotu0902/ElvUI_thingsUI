@@ -187,7 +187,8 @@ end
 
 local function DrillInfo(src)
     if not src then return nil end
-    if not (src.sourceGUID or src.sourceCreatureID) then return nil end
+    local g, cid = src.sourceGUID, src.sourceCreatureID
+    if not (Secret(g) or g or Secret(cid) or cid) then return nil end
     local recap = src.deathRecapID
     if Secret(recap) or type(recap) ~= "number" or recap <= 0 then recap = nil end
     local si = src.specIconID

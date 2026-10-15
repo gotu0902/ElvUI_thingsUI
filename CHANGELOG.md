@@ -1,4 +1,15 @@
 # Changelog
+## 4.2.1
+- Groups - Icons: Show Caster Name works now (Blizzard shipped it under another name than on the PTR), with a new Class Color Caster toggle
+- Hidden or unused aura groups in Groups, Aura Icons/Bars and Groups - Bars are switched fully off, so they do no work when your auras change
+- Damage Meter (thingsUI): fixed a possible error opening a breakdown now that the game can hide who a row belongs to
+### General
+- Aura Icons in an Essential/Utility row or on their own show sample duration and stacks text in the options preview, like Groups do (row text, or their own with Override CDM Row Text)
+- Groups - Icons preview uses an Aura Icon's own text when it has Override Custom Group Text ticked
+- Standalone Timers got the Visibility tab, like Aura Icons and Aura Bars
+- Visibility rules only watch what your rules ask about (no work on target or zone changes when no rule uses them)
+- Aura Collections are built once per frame instead of once per lookup
+- Removed unused code, and the old buff cache the CDM spell picker no longer reads
 
 ## 4.2.0
 - Special Icons and Special Bars renamed to **Aura Icons** and **Aura Bars**, makes more sense or something maybe idno.

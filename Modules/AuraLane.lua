@@ -188,11 +188,34 @@ local function ThresholdColour(group)
     return hit
 end
 
+-- an Aura Icon in a group that overrides the group's text, in group-text shape
+function A.IconOverrideText(idb)
+    if not (idb and idb.overrideGroupText) then return nil end
+    return {
+        showCooldown = idb.showDuration ~= false,
+        cooldownFont = idb.durationFont,
+        cooldownFontSize = idb.durationFontSize,
+        cooldownFontOutline = idb.durationFontOutline,
+        cooldownColor = idb.durationColor,
+        cooldownPoint = idb.durationPoint,
+        cooldownXOffset = idb.durationXOffset,
+        cooldownYOffset = idb.durationYOffset,
+        showStacks = idb.showStacks and true or false,
+        stacksFont = idb.stackFont,
+        stacksFontSize = idb.stackFontSize,
+        stacksFontOutline = idb.stackFontOutline,
+        stacksColor = idb.stackColor,
+        stacksPoint = idb.stackPoint,
+        stacksXOffset = idb.stackXOffset,
+        stacksYOffset = idb.stackYOffset,
+    }
+end
+
 local sourceOK
 function A.CanShowSource(button)
     if sourceOK == nil and button then
-        sourceOK = type(button.SetSourceName) == "function"
-            and type(button.ClearSourceName) == "function"
+        sourceOK = type(button.SetCasterName) == "function"
+            and type(button.ClearCasterName) == "function"
     end
     return sourceOK == true
 end
@@ -242,27 +265,7 @@ local function StyleButton(button, group, lane)
     local idb = def and def.iconDB
     local au = group.auras or {}
 
-    local t = S.text or group.text or {}
-    if idb and idb.overrideGroupText then
-        t = {
-            showCooldown = idb.showDuration ~= false,
-            cooldownFont = idb.durationFont,
-            cooldownFontSize = idb.durationFontSize,
-            cooldownFontOutline = idb.durationFontOutline,
-            cooldownColor = idb.durationColor,
-            cooldownPoint = idb.durationPoint,
-            cooldownXOffset = idb.durationXOffset,
-            cooldownYOffset = idb.durationYOffset,
-            showStacks = idb.showStacks and true or false,
-            stacksFont = idb.stackFont,
-            stacksFontSize = idb.stackFontSize,
-            stacksFontOutline = idb.stackFontOutline,
-            stacksColor = idb.stackColor,
-            stacksPoint = idb.stackPoint,
-            stacksXOffset = idb.stackXOffset,
-            stacksYOffset = idb.stackYOffset,
-        }
-    end
+    local t = A.IconOverrideText(idb) or S.text or group.text or {}
 
     local bShow, bSize, bInset, bColor = group.showBorder,
         group.borderSize or 1, group.borderInset or 0, group.borderColor
@@ -365,12 +368,9 @@ local function StyleButton(button, group, lane)
         local sc = def.sourceColor or {}
         r.source:SetTextColor(sc.r or 1, sc.g or 1, sc.b or 1)
         r.source:Show()
-        button:SetSourceName(r.source, {})
-        if button.SetSourceNameShortened then
-            button:SetSourceNameShortened(def.sourceShortened ~= false)
-        end
+        button:SetCasterName(r.source, { useClassColors = def.sourceClassColor ~= false })
     else
-        if A.CanShowSource(button) then button:ClearSourceName() end
+        if A.CanShowSource(button) then button:ClearCasterName() end
         if r.source then r.source:SetText("") r.source:Hide() end
     end
 
@@ -516,7 +516,7 @@ local function ApplyEntry(lane, group, entry, ord, c)
     c = c or lane.container
     local key, def = entry.key, entry.def
     local prev = lane.keys[key]
-    if prev and prev ~= true and prev ~= c then prev:SetAuraGroupMaxFrameCount(key, 0) end
+    if prev and prev ~= true and prev ~= c then ns.SetAuraGroupCap(prev, key, 0) end
     local filter, cf = A.FilterFor(def)
 
     local layout = {
@@ -531,7 +531,7 @@ local function ApplyEntry(lane, group, entry, ord, c)
 
     lane.defByKey[key] = def
     if c:HasAuraGroup(key) then
-        c:SetAuraGroupMaxFrameCount(key, maxCount)
+        ns.SetAuraGroupCap(c, key, maxCount)
         c:SetAuraGroupFilterString(key, filter)
         c:SetAuraGroupCandidateFilters(key, cf)
         c:SetAuraGroupLayout(key, layout)
@@ -558,7 +558,7 @@ function Teardown(groupID)
     if InCombatLockdown() then pendingSync = true return end
     for key, owner in pairs(lane.keys) do
         if owner == true then owner = lane.container end
-        owner:SetAuraGroupMaxFrameCount(key, 0)
+        ns.SetAuraGroupCap(owner, key, 0)
     end
     lane.container:Hide()
     if lane.containerT then lane.containerT:Hide() end
@@ -611,7 +611,7 @@ function A.Sync(group, frame)
         if lane then
             for key, owner in pairs(lane.keys) do
                 if owner == true then owner = lane.container end
-                owner:SetAuraGroupMaxFrameCount(key, 0)
+                ns.SetAuraGroupCap(owner, key, 0)
             end
             lane.container:Hide()
             if lane.containerT then lane.containerT:Hide() end
@@ -803,7 +803,7 @@ function A.Sync(group, frame)
     for key, owner in pairs(lane.keys) do
         if not wanted[key] then
             if owner == true then owner = lane.container end
-            owner:SetAuraGroupMaxFrameCount(key, 0)
+            ns.SetAuraGroupCap(owner, key, 0)
         end
     end
 

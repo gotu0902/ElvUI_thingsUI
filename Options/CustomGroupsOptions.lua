@@ -68,7 +68,7 @@ local function EditAura(def, title, onChange, group)
     f:SetStatusText("Applies to this entry only")
     f:SetLayout("Flow")
     f:SetWidth(400)
-    f:SetHeight(420)
+    f:SetHeight(460)
     f:EnableResize(false)
 
     local on = AceGUI:Create("CheckBox")
@@ -116,12 +116,25 @@ local function EditAura(def, title, onChange, group)
     f:AddChild(mine)
 
     local AL = ns.AuraLane
+    local casterCC
     local caster = AceGUI:Create("CheckBox")
     caster:SetLabel("Show Caster Name")
     caster:SetWidth(170)
     caster:SetValue(def.showSource and true or false)
-    caster:SetCallback("OnValueChanged", function(_, _, v) def.showSource = v; onChange() end)
+    caster:SetCallback("OnValueChanged", function(_, _, v)
+        def.showSource = v
+        if casterCC then casterCC:SetDisabled(not v) end
+        onChange()
+    end)
     f:AddChild(caster)
+
+    casterCC = AceGUI:Create("CheckBox")
+    casterCC:SetLabel("Class Color Caster")
+    casterCC:SetWidth(170)
+    casterCC:SetValue(def.sourceClassColor ~= false)
+    casterCC:SetDisabled(not def.showSource)
+    casterCC:SetCallback("OnValueChanged", function(_, _, v) def.sourceClassColor = v; onChange() end)
+    f:AddChild(casterCC)
     if AL.SourceProbed() and not AL.CanShowSource() then
         local note = AceGUI:Create("Label")
         note:SetFullWidth(true)

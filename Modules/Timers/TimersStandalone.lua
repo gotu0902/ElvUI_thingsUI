@@ -77,6 +77,8 @@ local function EnsureContainer(timer)
     return st
 end
 
+ns.Visibility.OnChange(function() M.Refresh() end)
+
 function M.Refresh()
     if not (ns.Timers and ns.TimersRender) then return end
     local now = GetTime()
@@ -89,7 +91,9 @@ function M.Refresh()
             ns.Pixel.SetSize(st.btn, size, size)
             PositionContainer(timer, st.container)
             local idle = timer.showIdle
-            local show = idle or ns.TimersRender.TimerActive(timer, now) or (E and E.ConfigurationMode)
+            local preview = (E and E.ConfigurationMode) or (ns.CustomGroups and ns.CustomGroups.testMode)
+            local show = preview or ((idle or ns.TimersRender.TimerActive(timer, now))
+                and ns.Visibility.Shown(timer.visibility))
             if show then
                 st.container:Show()
                 ns.TimersRender.Update(st.btn, timer)

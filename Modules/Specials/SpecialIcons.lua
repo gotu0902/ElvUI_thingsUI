@@ -243,6 +243,38 @@ local function HideWrapperVisuals(wrapper)
     if wrapper.tuiBorderHost then wrapper.tuiBorderHost:Hide() end
 end
 
+-- options preview: sample duration and stacks in the icon's real text style (row text unless overridden)
+local function PreviewText(wrapper, db, test)
+    local p = wrapper._tuiPrevText
+    if not test then
+        if p then p.layer:Hide() end
+        return
+    end
+    if not p then
+        p = { layer = CreateFrame("Frame", nil, wrapper) }
+        p.layer:SetAllPoints(wrapper)
+        p.dur = p.layer:CreateFontString(nil, "OVERLAY")
+        p.count = p.layer:CreateFontString(nil, "OVERLAY")
+        wrapper._tuiPrevText = p
+    end
+    p.layer:SetFrameLevel(wrapper:GetFrameLevel() + 10)
+    p.layer:Show()
+    local tx = SB.IconTextDB(db)
+    local function stamp(fs, shown, font, size, outline, color, point, x, y, text)
+        if not shown then fs:Hide() return end
+        E:SetFont(fs, ns.LSM:Fetch("font", font or "Expressway"), size or 14, outline or "OUTLINE")
+        ns.TextColor(fs, color)
+        fs:ClearAllPoints()
+        fs:SetPoint(point, wrapper, point, x or 0, y or 0)
+        fs:SetText(text)
+        fs:Show()
+    end
+    stamp(p.dur, tx.showDuration ~= false, tx.durationFont, tx.durationFontSize, tx.durationFontOutline,
+        tx.durationColor, tx.durationPoint or "CENTER", tx.durationXOffset, tx.durationYOffset, "12")
+    stamp(p.count, tx.showStacks, tx.stackFont, tx.stackFontSize, tx.stackFontOutline,
+        tx.stackColor, tx.stackPoint or "BOTTOMRIGHT", tx.stackXOffset, tx.stackYOffset, "3")
+end
+
 local function ReleaseIcon(iconKey)
     local wrapper = _G["TUI_SpecialIcon_" .. iconKey]
     if wrapper then
@@ -380,6 +412,7 @@ local function UpdateIconSlot(iconKey)
     else
         HideWrapperVisuals(wrapper)
     end
+    PreviewText(wrapper, db, test)
 
     local TM = ns.Timers
     if db.totemTimer and db.spellID and TM and TM.RegisterTotemSpell then

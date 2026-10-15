@@ -84,18 +84,6 @@ local function Decode(str)
 end
 M.Decode = Decode
 
-function M.SectionsInString(str)
-    local data = Decode(str)
-    if not data then return nil end
-    local out = {}
-    for _, sec in ipairs(M.SECTIONS) do
-        for _, k in ipairs(sec.keys) do
-            if data[k] ~= nil then out[#out + 1] = sec.name; break end
-        end
-    end
-    return out
-end
-
 function M.Import(str)
     if not Tools() then return false, "Serialization unavailable." end
     local s = tostring(str or ""):gsub("%s", "")

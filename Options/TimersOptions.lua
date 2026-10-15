@@ -412,6 +412,13 @@ local function TimerTab(t, id, order, Rebuild)
                 set = function(_, v) txt().countYOffset = v; T.Update() end,
             }
         end
+        args.saVisibility = {
+            order = 60, type = "group", inline = true, name = "Visibility",
+            args = ns.VisibilityArgs(function()
+                t.visibility = t.visibility or {}
+                return t.visibility
+            end, function() T.Update() end),
+        }
     end
     return {
         order = order, type = "group",

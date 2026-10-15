@@ -82,11 +82,6 @@ end
 -- Old name kept for any caller that still uses it.
 local GetSpecialBarKeys = GetSpecialSlots
 
-function ns.ANCHORS.MigrateAnchorName(name)
-    if name == "ElvUF_Player_CastBar.Holder" then return "ElvUF_Player_CastBar" end
-    return name
-end
-
 function ns.ANCHORS.ResolveAnchorTarget(anchorName)
     if not anchorName or anchorName == "" then return nil end
     if anchorName == "BARSETUP_TOP" then

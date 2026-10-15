@@ -33,11 +33,6 @@ local function EnsureBarSetupDB()
     if ns.BarSetup and ns.BarSetup.EnsureDB then ns.BarSetup.EnsureDB() end
 end
 
-local function CurrentEditIndex()
-    EnsureBarSetupDB()
-    return E.db.thingsUI.barSetup.active or 1
-end
-
 local function GetSetups()
     EnsureBarSetupDB()
     return E.db.thingsUI.barSetup.setups

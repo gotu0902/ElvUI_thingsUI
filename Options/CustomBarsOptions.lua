@@ -343,9 +343,6 @@ local function GroupTab(gi)
             local g = grp()
             return not g or (CB() and #CB().ScopeEntries(g, scope, keyFor(scope)) >= maxRows)
         end
-        local function editingOtherSpec()
-            return scope == "spec" and getEditSpec() ~= curSpecID()
-        end
         local args = {
             addAura = {
                 order = 1, type = "select", name = "|cFF60E0A0Add Buff|r", width = "double",

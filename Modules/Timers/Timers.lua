@@ -85,13 +85,6 @@ function M.RemoveTimer(index)
     M.Update()
 end
 
-function M.GetTriggerSpellID(timer)
-    if timer.kind == "spell" then return timer.spellID end
-    if timer.kind == "item" and timer.itemID then
-        return select(2, C_Item.GetItemSpell(timer.itemID))
-    end
-end
-
 function M.GetAllTriggerSpellIDs(timer)
     local out = {}
     if timer.kind == "spell" then

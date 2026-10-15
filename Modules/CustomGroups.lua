@@ -758,7 +758,7 @@ local function RenderTestLane(gs, group, frame)
             end
 
             -- fake numbers
-            local tc = S.text or group.text or {}
+            local tc = AL.IconOverrideText(idb) or S.text or group.text or {}
             if not f.txtHost then
                 f.txtHost = CreateFrame("Frame", nil, f)
                 f.txtHost:SetAllPoints(f)

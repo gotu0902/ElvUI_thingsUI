@@ -197,11 +197,6 @@ SB.knownBarSpells         = knownBarSpells
 SB.knownIconSpells        = knownIconSpells
 SB.yoinkedBars            = yoinkedBars
 
-function SB.GetIconWrapper(iconKey)
-    local st = iconKey and iconGroupState[iconKey]
-    return st and st.wrapper or nil
-end
-
 local function GetSpellUsageInfo(spellID, excludeBarKey, excludeIconKey, specID)
     if not spellID then return nil end
     local s = GetSpecRoot(specID)

@@ -51,7 +51,7 @@ function M.RemoveGroup(index)
         if InCombatLockdown() then
             pendingSync = true
         elseif st.container then
-            for key in pairs(st.keys) do st.container:SetAuraGroupMaxFrameCount(key, 0) end
+            for key in pairs(st.keys) do ns.SetAuraGroupCap(st.container, key, 0) end
         end
         if st.frame then st.frame:Hide() end
     end
@@ -620,7 +620,7 @@ local function ApplyEntryTo(st, group, entry, ord)
     end
     st.defByKey[key] = def
     if st.container:HasAuraGroup(key) then
-        st.container:SetAuraGroupMaxFrameCount(key, maxCount)
+        ns.SetAuraGroupCap(st.container, key, maxCount)
         st.container:SetAuraGroupFilterString(key, filter)
         st.container:SetAuraGroupCandidateFilters(key, cf)
         st.container:SetAuraGroupLayout(key, layout)
@@ -748,7 +748,7 @@ local function SyncGroup(group)
 
     local entries = M.Entries(group)
     if not group.enabled or #entries == 0 then
-        for key in pairs(st.keys) do c:SetAuraGroupMaxFrameCount(key, 0) end
+        for key in pairs(st.keys) do ns.SetAuraGroupCap(c, key, 0) end
         c:Hide()
         return
     end
@@ -820,7 +820,7 @@ local function SyncGroup(group)
         wanted[ApplyEntryTo(st, group, entry, i)] = true
     end
     for key in pairs(st.keys) do
-        if not wanted[key] then c:SetAuraGroupMaxFrameCount(key, 0) end
+        if not wanted[key] then ns.SetAuraGroupCap(c, key, 0) end
     end
 
     local unit = group.unit or "player"
@@ -867,7 +867,7 @@ function TUI:UpdateCustomBars()
             if InCombatLockdown() then
                 pendingSync = true
             elseif st.container then
-                for key in pairs(st.keys) do st.container:SetAuraGroupMaxFrameCount(key, 0) end
+                for key in pairs(st.keys) do ns.SetAuraGroupCap(st.container, key, 0) end
             end
             st.frame:Hide()
         end
