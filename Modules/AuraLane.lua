@@ -211,6 +211,31 @@ function A.IconOverrideText(idb)
     }
 end
 
+-- a custom icon gets a texture of its own over the aura's: the engine keeps
+-- re-stamping the icon it owns. r.fixed is made with r.icon (creation window)
+function A.ShowFixedIcon(r, icon, crop)
+    local f = r.fixed
+    if not (f and r.icon) then return end
+    if icon then
+        f:SetTexture(icon)
+        if crop then f:SetTexCoord(crop[1], crop[2], crop[3], crop[4]) else f:SetTexCoord(0, 1, 0, 1) end
+        f:Show()
+        r.icon:SetAlpha(0)
+        r.fixedOn = true
+    -- our own flag: getters on an aura button's regions answer with secrets
+    elseif r.fixedOn then
+        f:Hide()
+        r.icon:SetAlpha(1)
+        r.fixedOn = nil
+    end
+end
+
+function A.MakeFixedIcon(parent, r)
+    r.fixed = parent:CreateTexture(nil, "ARTWORK", nil, 1)
+    r.fixed:SetAllPoints(r.icon)
+    r.fixed:Hide()
+end
+
 local sourceOK
 function A.CanShowSource(button)
     if sourceOK == nil and button then
@@ -252,6 +277,7 @@ local function StyleButton(button, group, lane)
         A.NoSnap(r.icon)
         r.icon:SetAllPoints(button)
         button:SetIcon(r.icon)
+        A.MakeFixedIcon(button, r)
         r.overlay = CreateFrame("Frame", nil, button)
         r.overlay:SetAllPoints(button)
         lane.regions[button] = r
@@ -264,6 +290,7 @@ local function StyleButton(button, group, lane)
 
     local idb = def and def.iconDB
     local au = group.auras or {}
+    A.ShowFixedIcon(r, idb and idb.customIcon, S.crop)
 
     local t = A.IconOverrideText(idb) or S.text or group.text or {}
 
@@ -274,10 +301,12 @@ local function StyleButton(button, group, lane)
         and (gau.sortGlowStyle or "pulse") == "pixel" then
         bSize = gau.sortGlowThickness or bSize
     end
+    -- an Aura Icon's own border (or its style's) sits outside it; the group's sits inside
     if idb and idb.showBorder then
         bShow, bSize, bInset, bColor = true,
             idb.borderSize or 1, idb.borderInset or 0, idb.borderColor
         if idb.glowBorderStroke and idb.showGlow and A.MapGlowStyle(idb.glowType) == "pixel" then bSize = idb.glowThickness or bSize end
+        bInset = bInset - bSize
     end
     local SBm = ns.SpecialBars
     local st = (not idb) and def and def.styleName and SBm and SBm.Styles
@@ -287,6 +316,7 @@ local function StyleButton(button, group, lane)
         if bShow and st.glowBorderStroke and st.showGlow and A.MapGlowStyle(st.glowType) == "pixel" then
             bSize = st.glowThickness or bSize
         end
+        bInset = bInset - bSize
     end
 
     if bShow then
@@ -355,7 +385,7 @@ local function StyleButton(button, group, lane)
     fx.w, fx.h = S.iw, S.ih
     fx.anchor = r.icon
     fx.pandemic = (idb and idb.showPandemic) or (def and def.showPandemic) or false
-    fx.pandemicColor = def and def.pandemicColor
+    A.PandemicLook(fx, idb or def)
     A.ApplyButtonFX(button, r, fx)
 
     if def and def.showSource and A.CanShowSource(button) then

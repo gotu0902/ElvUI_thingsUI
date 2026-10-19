@@ -160,6 +160,7 @@ function TUI:Initialize()
         end
     end)
     self:UpdateBuffBars()
+    ns.SpecialBars.Styles.MigrateBorders()
     self:UpdateSpecialBars()
     self:UpdateClusterPositioning()
     self:UpdateBarSetup()
@@ -178,6 +179,7 @@ function TUI:Initialize()
     if self.UpdateMBB then self:UpdateMBB() end
     if self.UpdateInstanceDifficulty then self:UpdateInstanceDifficulty() end
     if self.UpdateGroupAnchor then self:UpdateGroupAnchor() end
+    if self.UpdateRaidOrder then self:UpdateRaidOrder() end
     self:UpdateMoverSync()
 
     self:RegisterEvent("PLAYER_ENTERING_WORLD", function()
@@ -228,6 +230,7 @@ end
 function TUI:ProfileUpdate()
     wipe(ns.skinnedBars)
     wipe(ns.yoinkedBars)
+    ns.SpecialBars.Styles.MigrateBorders()
     self:UpdateBuffBars()
     self:UpdateSpecialBars()
     self:UpdateClusterPositioning()
@@ -261,6 +264,7 @@ function TUI:ProfileUpdate()
     local sb = E.db.thingsUI and E.db.thingsUI.specialBars
     if sb then sb.globalIcons = nil end
     if self.UpdateGroupAnchor then self:UpdateGroupAnchor() end
+    if self.UpdateRaidOrder then self:UpdateRaidOrder() end
     self:UpdateMoverSync()
 end
 

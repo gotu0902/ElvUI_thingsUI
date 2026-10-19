@@ -8,20 +8,22 @@ local DeepCopy = ns.DeepCopy
 local M = {}
 SB.Styles = M
 
+local EachSpecial
+
 local EXCLUDE = {
     icons = {
         spellID = true, spellName = true, enabled = true, styleName = true,
         anchorMode = true, anchorFrame = true, anchorPoint = true,
         anchorRelativePoint = true, anchorXOffset = true, anchorYOffset = true,
         customGroup = true, customGroupOrder = true,
-        totemTimer = true, cdmRow = true, cdmIndex = true, auraKind = true, visibility = true,
+        totemTimer = true, cdmRow = true, cdmIndex = true, auraKind = true, visibility = true, customIcon = true,
     },
     bars = {
         spellID = true, spellName = true, enabled = true, styleName = true,
         anchorMode = true, anchorFrame = true, anchorPoint = true,
         anchorRelativePoint = true, anchorXOffset = true, anchorYOffset = true,
         totemTimer = true, totemTicks = true, totemTickThickness = true,
-        totemTickLength = true, totemTickColor = true, auraKind = true, visibility = true,
+        totemTickLength = true, totemTickColor = true, auraKind = true, visibility = true, customIcon = true,
     },
 }
 
@@ -37,6 +39,33 @@ local function DeepEqual(a, b)
     return true
 end
 
+-- Aura Icon borders moved outside the icon (like the CDM's). Icons and styles from
+-- before keep their look: the inset moves in by the border's width, once.
+local function BorderWidth(t)
+    local bs = t.borderSize or 1
+    local AL = ns.AuraLane
+    if t.glowBorderStroke and t.showGlow and AL and AL.MapGlowStyle(t.glowType) == "pixel" then
+        bs = t.glowThickness or bs
+    end
+    return bs
+end
+
+local function MigrateBorder(t)
+    if t._borderOut then return end
+    t._borderOut = true
+    if t.showBorder then t.borderInset = (t.borderInset or 0) + BorderWidth(t) end
+end
+
+function M.MigrateBorders()
+    local db = E.db and E.db.thingsUI
+    if not db then return end
+    EachSpecial("icons", MigrateBorder)
+    local st = db.specialStyles and db.specialStyles.icons
+    for _, s in pairs(st or {}) do
+        if type(s) == "table" then MigrateBorder(s) end
+    end
+end
+
 function M.Capture(kind, fromDB)
     local out = {}
     local ex = EXCLUDE[kind]
@@ -45,6 +74,7 @@ function M.Capture(kind, fromDB)
             out[k] = type(v) == "table" and DeepCopy(v) or v
         end
     end
+    if kind == "icons" then out._borderOut = true end
     return out
 end
 
@@ -84,7 +114,7 @@ function M.IsDirty(kind, name, db, ignore)
     return false
 end
 
-local function EachSpecial(kind, fn)
+function EachSpecial(kind, fn)
     local sb = E.db.thingsUI and E.db.thingsUI.specialBars
     local specs = sb and sb.specs
     if not specs then return end

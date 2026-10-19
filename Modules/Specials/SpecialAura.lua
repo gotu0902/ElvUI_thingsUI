@@ -21,9 +21,11 @@ local function PlainID(v)
 end
 
 local expandCache = {}
+local provisional = {}
 
 function SA.InvalidateSpellExpansion()
     wipe(expandCache)
+    wipe(provisional)
 end
 
 function SA.ExpandSpellIDs(spellID)
@@ -33,38 +35,68 @@ function SA.ExpandSpellIDs(spellID)
     local map = { [spellID] = true }
     local base = SB.GetBaseSpellID and SB.GetBaseSpellID(spellID)
     if base then map[base] = true end
-    if C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCategorySet then
-        local row = {}
-        for _, cat in ipairs({ CAT_BUFF, CAT_BAR }) do
-            local ids = cat and C_CooldownViewer.GetCooldownViewerCategorySet(cat, true)
-            if ids then
-                for _, cdID in ipairs(ids) do
-                    local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
-                    if info then
-                        wipe(row)
-                        local o = PlainID(info.overrideSpellID)
-                        local s = PlainID(info.spellID)
-                        if o then row[#row + 1] = o end
-                        if s then row[#row + 1] = s end
-                        if info.linkedSpellIDs then
-                            for _, lid in ipairs(info.linkedSpellIDs) do
-                                local pl = PlainID(lid)
-                                if pl then row[#row + 1] = pl end
-                            end
-                        end
-                        local match = false
-                        for _, id in ipairs(row) do
-                            if id == spellID or id == base then match = true break end
-                        end
-                        if match then
-                            for _, id in ipairs(row) do map[id] = true end
-                        end
-                    end
-                end
+    -- a patch can re-ID a buff (12.1.5: Lifebloom 1227806 lost its link to the 33763 HoT),
+    -- so a tracked row with the same name counts too
+    local myName = PlainID(C_Spell.GetSpellName(spellID))
+    local row = {}
+    local function consider(info)
+        if not info then return end
+        wipe(row)
+        local o = PlainID(info.overrideSpellID)
+        local s = PlainID(info.spellID)
+        if o then row[#row + 1] = o end
+        if s then row[#row + 1] = s end
+        if info.linkedSpellIDs then
+            for _, lid in ipairs(info.linkedSpellIDs) do
+                local pl = PlainID(lid)
+                if pl then row[#row + 1] = pl end
             end
         end
+        local match = false
+        for _, id in ipairs(row) do
+            if id == spellID or id == base then match = true break end
+        end
+        if not match and myName then
+            match = (s and PlainID(C_Spell.GetSpellName(s)) == myName)
+                or (o and PlainID(C_Spell.GetSpellName(o)) == myName) or false
+        end
+        if match then
+            for _, id in ipairs(row) do map[id] = true end
+        end
     end
-    if not InCombatLockdown() then expandCache[spellID] = map end
+    if C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCategorySet then
+        for _, cat in ipairs({ CAT_BUFF, CAT_BAR }) do
+            local ids = cat and C_CooldownViewer.GetCooldownViewerCategorySet(cat, true)
+            for _, cdID in ipairs(ids or {}) do consider(C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)) end
+        end
+    end
+    -- those sets are Blizzard's defaults; a buff the layout moved in lives in the viewers
+    for _, name in ipairs({ "BuffIconCooldownViewer", "BuffBarCooldownViewer" }) do
+        local v = _G[name]
+        if v then
+            for _, c in ipairs({ v:GetChildren() }) do consider(c.cooldownInfo) end
+        end
+    end
+    -- a CDM entry can carry another ID than the aura it tracks: the spell you know by
+    -- that name, and what each ID resolves to while its aura is up (Lifebloom 1227806 -> 33763)
+    if myName then
+        local known = C_Spell.GetSpellInfo(myName)
+        local kid = known and PlainID(known.spellID)
+        if kid then map[kid] = true end
+    end
+    if not InCombatLockdown() then
+        local ids = {}
+        for id in pairs(map) do ids[#ids + 1] = id end
+        for _, id in ipairs(ids) do
+            -- restricted auras make the lookup throw
+            local ok, aura = pcall(C_UnitAuras.GetPlayerAuraBySpellID, id)
+            local aid = ok and aura and PlainID(aura.spellId)
+            if aid then map[aid] = true end
+        end
+    end
+    -- in combat some IDs read as secrets: keep it for now, rebuild once combat ends
+    expandCache[spellID] = map
+    if InCombatLockdown() then provisional[spellID] = true end
     return map
 end
 
@@ -159,11 +191,13 @@ function SA.StyleIconButton(button, r, wrapper, key)
         if ns.AuraLane and ns.AuraLane.NoSnap then ns.AuraLane.NoSnap(r.icon) end
         r.icon:SetAllPoints(button)
         button:SetIcon(r.icon)
+        if ns.AuraLane then ns.AuraLane.MakeFixedIcon(button, r) end
         r.overlay = CreateFrame("Frame", nil, button)
         r.overlay:SetAllPoints(button)
     end
     r.overlay:SetFrameLevel(button:GetFrameLevel() + 3)
     r.icon:SetTexCoord(SB.ComputeIconTexCoord(db))
+    if ns.AuraLane then ns.AuraLane.ShowFixedIcon(r, db.customIcon, { SB.ComputeIconTexCoord(db) }) end
 
     local AL0 = ns.AuraLane
     if db.showBorder and AL0 then
@@ -173,7 +207,8 @@ function SA.StyleIconButton(button, r, wrapper, key)
         end
         local bs = db.borderSize or 1
         if db.glowBorderStroke and db.showGlow and AL0.MapGlowStyle(db.glowType) == "pixel" then bs = db.glowThickness or bs end
-        local bi = db.borderInset or 0
+        -- outside the icon like the CDM's; Inset moves it in
+        local bi = (db.borderInset or 0) - bs
         AL0.EdgeRing(button, r.border, bs, bi, db.borderColor or { r = 0, g = 0, b = 0, a = 1 })
         if r.borderIn then
             for i = 1, 4 do r.borderIn[i]:Hide() r.borderOut[i]:Hide() end
@@ -236,7 +271,7 @@ function SA.StyleIconButton(button, r, wrapper, key)
     end
 
     if AL then
-        AL.ApplyButtonFX(button, r, {
+        AL.ApplyButtonFX(button, r, AL.PandemicLook({
             style = db.showGlow and AL.MapGlowStyle(db.glowType) or nil,
             color = db.glowColor,
             anchor = r.icon,
@@ -246,7 +281,7 @@ function SA.StyleIconButton(button, r, wrapper, key)
             offset = db.glowOffset, frequency = db.glowSpeed,
             w = w, h = h,
             pandemic = db.showPandemic and true or false,
-        })
+        }, db))
     end
 
     button:SetMouseMotionEnabled(true)
@@ -269,6 +304,8 @@ function SA.StyleBarButton(button, r, wrapper, key)
     end
     r.bd:SetFrameLevel(button:GetFrameLevel())
     r.overlay:SetFrameLevel(button:GetFrameLevel() + 3)
+    -- the tick layer sits between fill and text (read here, before any aura makes the button secret)
+    wrapper._tuiTickLevel = button:GetFrameLevel() + 2
     r.bd:SetBackdropColor(0, 0, 0, 0.6)
     r.bd:SetBackdropBorderColor(0, 0, 0, 1)
 
@@ -281,6 +318,7 @@ function SA.StyleBarButton(button, r, wrapper, key)
             r.iconBD:SetBackdropBorderColor(0, 0, 0, 1)
             r.icon = r.iconBD:CreateTexture(nil, "ARTWORK")
             button:SetIcon(r.icon)
+            if ns.AuraLane then ns.AuraLane.MakeFixedIcon(r.iconBD, r) end
         end
         r.iconBD:SetFrameLevel(button:GetFrameLevel())
         r.iconBD:ClearAllPoints()
@@ -288,6 +326,7 @@ function SA.StyleBarButton(button, r, wrapper, key)
         r.iconBD:SetSize(h, h)
         local z = db.iconZoom or 0.1
         r.icon:SetTexCoord(z, 1 - z, z, 1 - z)
+        if ns.AuraLane then ns.AuraLane.ShowFixedIcon(r, db.customIcon, { z, 1 - z, z, 1 - z }) end
         r.icon:ClearAllPoints()
         r.icon:SetPoint("TOPLEFT", r.iconBD, "TOPLEFT", 1, -1)
         r.icon:SetPoint("BOTTOMRIGHT", r.iconBD, "BOTTOMRIGHT", -1, 1)
@@ -324,58 +363,6 @@ function SA.StyleBarButton(button, r, wrapper, key)
         r.barBound = true
     end
 
-    if db.totemTicks and db.spellID then
-        local TM = ns.Timers
-        if TM and TM.RegisterTotemSpell then TM.RegisterTotemSpell(db.spellID) end
-        local list, tdur = nil, nil
-        if TM and TM.GetTotemCasts then list, tdur = TM.GetTotemCasts(db.spellID) end
-        r.ticks = r.ticks or {}
-        local shown = 0
-        if list and tdur and #list > 0 then
-            local barW = w - barOffset - 2
-            local tc = db.totemTickColor or { r = 1, g = 1, b = 1, a = 1 }
-            local tw = db.totemTickThickness or 2
-            local tlen = math.min(db.totemTickLength or (h - 2), h - 2)
-            local now = GetTime()
-            for _, t in ipairs(list) do
-                do
-                    local rem = (t + tdur) - now
-                    local x = barW * (rem / tdur)
-                    if rem > 0 and x <= barW then
-                        shown = shown + 1
-                        local tex = r.ticks[shown]
-                        if not tex then
-                            tex = r.overlay:CreateTexture(nil, "OVERLAY")
-                            tex.ag = tex:CreateAnimationGroup()
-                            tex.move = tex.ag:CreateAnimation("Translation")
-                            tex.ag:SetScript("OnFinished", function() tex:Hide() end)
-                            r.ticks[shown] = tex
-                        end
-                        tex:SetColorTexture(tc.r or 1, tc.g or 1, tc.b or 1, tc.a or 1)
-                        tex.ag:Stop()
-                        tex:ClearAllPoints()
-                        -- ticks ride the shrinking end of the fill
-                        if db.reverseFill then
-                            tex:SetPoint("RIGHT", r.bd, "RIGHT", -1 - x, 0)
-                        else
-                            tex:SetPoint("LEFT", r.bd, "LEFT", 1 + x, 0)
-                        end
-                        tex:SetSize(tw, tlen)
-                        tex.move:SetOffset(db.reverseFill and x or -x, 0)
-                        tex.move:SetDuration(rem)
-                        tex:Show()
-                        tex.ag:Play()
-                    end
-                end
-            end
-        end
-        for i = shown + 1, #r.ticks do
-            if r.ticks[i].ag then r.ticks[i].ag:Stop() end
-            r.ticks[i]:Hide()
-        end
-    elseif r.ticks then
-        for _, tex in ipairs(r.ticks) do tex:Hide() end
-    end
 
     local font = LSM:Fetch("font", db.font or "Expressway")
     r.name = r.name or r.overlay:CreateFontString(nil, "OVERLAY")
@@ -521,6 +508,8 @@ ev:SetScript("OnEvent", function(_, event)
         return
     end
     if event == "PLAYER_REGEN_ENABLED" then
+        for id in pairs(provisional) do expandCache[id] = nil end
+        wipe(provisional)
         if not pending then return end
         pending = false
         if TUI and TUI.QueueSpecialBarsUpdate then TUI:QueueSpecialBarsUpdate() end
@@ -533,6 +522,48 @@ ev:SetScript("OnEvent", function(_, event)
             ct:SetShown(tOK)
             ct:SetUnit("target")
             if ct.UpdateAllAuras then ct:UpdateAllAuras() end
+        end
+    end
+end)
+
+local function DumpVal(v)
+    if issecretvalue and issecretvalue(v) then return "secret" end
+    return tostring(v)
+end
+
+-- each Aura Icon: what it filters on (* = on you now) and the state of its containers
+ns.SlashCommand("icons", function()
+    print(("|cFF8080FFtui icons|r combat=%s testMode=%s"):format(
+        tostring(InCombatLockdown()), tostring(ns.CustomGroups and ns.CustomGroups.testMode or false)))
+    for i = 1, (SB.GetIconCount and SB.GetIconCount() or 0) do
+        local key = "icon" .. i
+        local db = SB.GetIconDB(key)
+        if db and db.spellID then
+            local w = _G["TUI_SpecialIcon_" .. key]
+            local gkey = "S" .. key
+            local function cstate(c)
+                if not c then return "none" end
+                local has = c:HasAuraGroup(gkey)
+                local en = has and c.IsAuraGroupEnabled and c:IsAuraGroupEnabled(gkey)
+                return ("shown=%s vis=%s unit=%s group=%s enabled=%s"):format(DumpVal(c:IsShown()),
+                    DumpVal(c:IsVisible()), tostring(c._tuiUnit), tostring(has), DumpVal(en))
+            end
+            local ids = {}
+            for id in pairs(SA.ExpandSpellIDs(db.spellID) or {}) do
+                -- restricted auras make the lookup throw in combat
+                local ok, aura = pcall(C_UnitAuras.GetPlayerAuraBySpellID, id)
+                local aid = ok and aura and PlainID(aura.spellId)
+                ids[#ids + 1] = ("%d%s%s"):format(id, (ok and aura) and "*" or "",
+                    (aid and aid ~= id) and ("->" .. aid) or "")
+            end
+            table.sort(ids)
+            print(("  %s %d %s en=%s kind=%s grp=%s row=%s attached=%s wrapper=%s/%s"):format(key, db.spellID,
+                C_Spell.GetSpellName(db.spellID) or "?", tostring(db.enabled), tostring(db.auraKind or "BOTH"),
+                tostring(db.customGroup), tostring(db.cdmRow), tostring(attached[key] ~= nil),
+                DumpVal(w and w:IsShown()), DumpVal(w and w:IsVisible())))
+            print("    ids: " .. table.concat(ids, ", "))
+            print("    P: " .. cstate(w and w._tuiAuraP))
+            print("    T: " .. cstate(w and w._tuiAuraT))
         end
     end
 end)

@@ -12,6 +12,7 @@ local SetDesat            = H.SetDesat
 local ItemCooldownChanged = H.ItemCooldownChanged
 local SpellDesat          = H.SpellDesat
 local TimerActive         = H.TimerActive
+local ItemCooldown        = H.ItemCooldown
 R.TimerActive = TimerActive
 
 local STYLE_MAP = { pixel = "pixel", autocast = "ants", proc = "proc", button = "proc", pulse = "pulse" }
@@ -164,11 +165,10 @@ function R.Update(btn, timer)
         if ItemCooldownChanged(btn.cooldown, false) then btn.cooldown:Clear() end
         SetDesat(btn.icon, 0)
     elseif timer.kind == "item" and timer.itemID then
-        local start, dur = C_Item.GetItemCooldown(timer.itemID)
-        local active = (start and dur and dur > 0) or false
+        local start, dur, active, real = ItemCooldown(timer.itemID)
         if active then
             if ItemCooldownChanged(btn.cooldown, true, start, dur) then btn.cooldown:SetCooldown(start, dur) end
-            SetDesat(btn.icon, 1)
+            SetDesat(btn.icon, real and 1 or 0)
         else
             if ItemCooldownChanged(btn.cooldown, false, start, dur) then btn.cooldown:Clear() end
             SetDesat(btn.icon, 0)

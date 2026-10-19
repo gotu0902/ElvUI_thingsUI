@@ -22,6 +22,14 @@ local function GetTextDB(viewerName)
     return v and v.text or nil
 end
 
+-- an icon overflowed into another row takes that row's text
+local function ShownName(child)
+    local CI = ns.CDMIcons
+    if CI and CI.ShownIn then return CI.ShownIn(child) end
+    local p = child:GetParent()
+    return p and p.GetName and p:GetName()
+end
+
 local function FetchFont(name)
     if LSM then
         local p = LSM:Fetch("font", name)
@@ -212,8 +220,7 @@ local function ReassertCountText(_, text)
         if not child then return end
         local t = child._tuiTextConfig
         if not t then
-            local p = child:GetParent()
-            local vn = p and p.GetName and p:GetName()
+            local vn = ShownName(child)
             if vn and VIEWERS[vn] then
                 t = GetTextDB(vn)
                 if t then child._tuiTextConfig = t end
@@ -258,7 +265,8 @@ local function ApplyToViewer(viewerName)
     for i = 1, H.ChildrenInto(viewer, kids) do
         local c = kids[i]
         if c and not (ns.yoinkedBars and ns.yoinkedBars[c]) then
-            StyleChild(c, t)
+            local shown = ShownName(c)
+            StyleChild(c, (shown ~= viewerName and VIEWERS[shown] and GetTextDB(shown)) or t)
         end
     end
 
@@ -289,8 +297,7 @@ end
 function M.SyncChild(child)
     local sid = ns.CDMIcons and ns.CDMIcons.ChildSpell and ns.CDMIcons.ChildSpell(child)
     if child._tuiTextSpell == sid then return end
-    local p = child:GetParent()
-    local vn = p and p.GetName and p:GetName()
+    local vn = ShownName(child)
     local t = vn and VIEWERS[vn] and GetTextDB(vn)
     if t then StyleChild(child, t) end
 end
@@ -302,6 +309,13 @@ function M.RefreshAll()
         ns.ViewerHooks.On(name, "RefreshLayout", "CDMText", OnViewerRefresh)
         ApplyToViewer(name)
     end
+end
+
+local refreshQueued = false
+function M.QueueRefresh()
+    if refreshQueued then return end
+    refreshQueued = true
+    C_Timer.After(0, function() refreshQueued = false; M.RefreshAll() end)
 end
 
 function TUI:UpdateCDMText()

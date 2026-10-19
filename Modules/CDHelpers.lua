@@ -59,6 +59,16 @@ local function SetCooldownFromDuration(cd, durationObject)
 end
 H.SetCooldownFromDuration = SetCooldownFromDuration
 
+-- an item's GCD reads as a short cooldown: keep its swipe, desaturate only past it (Blizzard CDM does the same)
+local ITEM_GCD_MAX = 1.5
+H.ITEM_GCD_MAX = ITEM_GCD_MAX
+local function ItemCooldown(itemID)
+    local start, dur = C_Item.GetItemCooldown(itemID)
+    local active = (start and dur and dur > 0) or false
+    return start, dur, active, active and dur > ITEM_GCD_MAX
+end
+H.ItemCooldown = ItemCooldown
+
 local function ItemCooldownChanged(cd, active, start, dur)
     if not cd then return false end
     local oldStart, oldDur = cd:GetCooldownTimes()
@@ -103,8 +113,7 @@ local function TimerActive(timer, now)
     if T.GetActiveBuff(timer, now) then return true end
     if timer.trackCooldown == false then return false end
     if timer.kind == "item" and timer.itemID then
-        local _, dur = C_Item.GetItemCooldown(timer.itemID)
-        return (dur or 0) > 0
+        return (select(4, ItemCooldown(timer.itemID)))
     elseif timer.kind == "spell" and timer.spellID then
         local durObj = C_Spell.GetSpellCooldownDuration and C_Spell.GetSpellCooldownDuration(timer.spellID)
         local curve = GetDesatCurve()

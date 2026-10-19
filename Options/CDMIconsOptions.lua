@@ -473,6 +473,39 @@ local function ViewerGroup(order, key, label, opts)
     }
 end
 
+local GLOW_STYLES = { pixel = "Pixel Glow", autocast = "Autocast Shine", proc = "Proc Glow", button = "Action Button Glow" }
+local GLOW_STYLE_ORDER = { "pixel", "autocast", "proc", "button" }
+
+-- the glow look, shared by Layout > Glow and a Spell Editor spell's own style
+local function GlowStyleArgs(base, get, set, disabled, hidden)
+    local function style() return get("style") or "pixel" end
+    local function only(hide)
+        return function() return (hidden and hidden()) or hide(style()) end
+    end
+    local function range(order, key, name, min, max, step, def, hide)
+        return {
+            order = base + order, type = "range", name = name, min = min, max = max, step = step,
+            hidden = only(hide), disabled = disabled,
+            get = function() return get(key) or def end,
+            set = function(_, v) set(key, v) end,
+        }
+    end
+    return {
+        style = {
+            order = base + 2, type = "select", name = "Style", values = GLOW_STYLES, sorting = GLOW_STYLE_ORDER,
+            hidden = hidden, disabled = disabled,
+            get = function() return style() end,
+            set = function(_, v) set("style", v) end,
+        },
+        lines = range(5, "lines", "Lines", 4, 16, 1, 8, function(s) return s ~= "pixel" end),
+        thickness = range(6, "thickness", "Thickness", 1, 4, 1, 2, function(s) return s ~= "pixel" end),
+        particles = range(7, "particles", "Particles", 1, 8, 1, 4, function(s) return s ~= "autocast" end),
+        scale = range(8, "scale", "Scale", 0.5, 2, 0.05, 1, function(s) return s ~= "autocast" end),
+        frequency = range(9, "frequency", "Speed", 0.05, 0.5, 0.01, 0.25, function(s) return s == "proc" end),
+        offset = range(10, "offset", "Offset", -8, 8, 1, 0, function(s) return s == "button" end),
+    }
+end
+
 local function GlowTab(order)
     local function gdb()
         local db = E.db.thingsUI.cdmIcons
@@ -482,88 +515,118 @@ local function GlowTab(order)
     local function Update()
         if TUI.UpdateCDMGlow then TUI:UpdateCDMGlow() end
     end
-    return {
-        order = order, type = "group", name = "Glow",
-        args = {
-            desc = {
-                order = 0, type = "description",
-                name = "Replace Blizzard's proc glow on Essential and Utility icons with a thingsUI style.\n",
-            },
-            enabled = {
-                order = 1, type = "toggle", name = "Custom Glow",
-                get = function() return gdb().enabled end,
-                set = function(_, v) gdb().enabled = v; Update() end,
-            },
-            style = {
-                order = 2, type = "select", name = "Style",
-                disabled = function() return not gdb().enabled end,
-                values = { pixel = "Pixel Glow", autocast = "Autocast Shine", proc = "Proc Glow", button = "Action Button Glow" },
-                sorting = { "pixel", "autocast", "proc", "button" },
-                get = function() return gdb().style or "pixel" end,
-                set = function(_, v) gdb().style = v; Update() end,
-            },
-            useColor = {
-                order = 3, type = "toggle", name = "Custom Color",
-                disabled = function() return not gdb().enabled end,
-                get = function() return gdb().useColor end,
-                set = function(_, v) gdb().useColor = v; Update() end,
-            },
-            customColor = {
-                order = 4, type = "color", name = "Color",
-                disabled = function() return not (gdb().enabled and gdb().useColor) end,
-                get = function()
-                    local c = gdb().customColor or { r = 1, g = 0.85, b = 0.1 }
-                    return c.r, c.g, c.b
-                end,
-                set = function(_, r, g, b) gdb().customColor = { r = r, g = g, b = b }; Update() end,
-            },
-            lines = {
-                order = 5, type = "range", name = "Lines", min = 4, max = 16, step = 1,
-                hidden = function() return (gdb().style or "pixel") ~= "pixel" end,
-                disabled = function() return not gdb().enabled end,
-                get = function() return gdb().lines or 8 end,
-                set = function(_, v) gdb().lines = v; Update() end,
-            },
-            thickness = {
-                order = 6, type = "range", name = "Thickness", min = 1, max = 4, step = 1,
-                hidden = function() return (gdb().style or "pixel") ~= "pixel" end,
-                disabled = function() return not gdb().enabled end,
-                get = function() return gdb().thickness or 2 end,
-                set = function(_, v) gdb().thickness = v; Update() end,
-            },
-            particles = {
-                order = 7, type = "range", name = "Particles", min = 1, max = 8, step = 1,
-                hidden = function() return (gdb().style or "pixel") ~= "autocast" end,
-                disabled = function() return not gdb().enabled end,
-                get = function() return gdb().particles or 4 end,
-                set = function(_, v) gdb().particles = v; Update() end,
-            },
-            scale = {
-                order = 8, type = "range", name = "Scale", min = 0.5, max = 2, step = 0.05,
-                hidden = function() return (gdb().style or "pixel") ~= "autocast" end,
-                disabled = function() return not gdb().enabled end,
-                get = function() return gdb().scale or 1 end,
-                set = function(_, v) gdb().scale = v; Update() end,
-            },
-            frequency = {
-                order = 9, type = "range", name = "Speed", min = 0.05, max = 0.5, step = 0.01,
-                hidden = function()
-                    local s = gdb().style or "pixel"
-                    return s == "proc"
-                end,
-                disabled = function() return not gdb().enabled end,
-                get = function() return gdb().frequency or 0.25 end,
-                set = function(_, v) gdb().frequency = v; Update() end,
-            },
-            offset = {
-                order = 10, type = "range", name = "Offset", min = -8, max = 8, step = 1,
-                hidden = function() return (gdb().style or "pixel") == "button" end,
-                disabled = function() return not gdb().enabled end,
-                get = function() return gdb().offset or 0 end,
-                set = function(_, v) gdb().offset = v; Update() end,
-            },
+    local args = {
+        desc = {
+            order = 0, type = "description",
+            name = "Replace Blizzard's proc glow on Essential and Utility icons with a thingsUI style. Spell Editor glows use it too, unless a spell has its own style.\n",
+        },
+        enabled = {
+            order = 1, type = "toggle", name = "Custom Glow",
+            get = function() return gdb().enabled end,
+            set = function(_, v) gdb().enabled = v; Update() end,
+        },
+        useColor = {
+            order = 3, type = "toggle", name = "Custom Color",
+            disabled = function() return not gdb().enabled end,
+            get = function() return gdb().useColor end,
+            set = function(_, v) gdb().useColor = v; Update() end,
+        },
+        customColor = {
+            order = 4, type = "color", name = "Color",
+            disabled = function() return not (gdb().enabled and gdb().useColor) end,
+            get = function()
+                local c = gdb().customColor or { r = 1, g = 0.85, b = 0.1 }
+                return c.r, c.g, c.b
+            end,
+            set = function(_, r, g, b) gdb().customColor = { r = r, g = g, b = b }; Update() end,
         },
     }
+    local look = GlowStyleArgs(0, function(k) return gdb()[k] end,
+        function(k, v) gdb()[k] = v; Update() end,
+        function() return not gdb().enabled end)
+    for k, v in pairs(look) do args[k] = v end
+    return { order = order, type = "group", name = "Glow", args = args }
+end
+
+local PANDEMIC_MODES = { blizzard = "Blizzard", hide = "Hidden", custom = "Custom Glow" }
+
+-- Blizzard's aura display on cooldown icons: the overlay, its swipe and the pandemic glow
+local function AuraOverlayTab(order)
+    local function cdm() return E.db.thingsUI.cdmIcons end
+    local function Update() TUI:UpdateCDMIcons() end
+    local function Pandemic()
+        if ns.CDMIcons and ns.CDMIcons.ClearPandemicAll then ns.CDMIcons.ClearPandemicAll() end
+    end
+    local function mode() local c = cdm() return c.pandemicMode or (c.hidePandemic and "hide") or "blizzard" end
+    local function notCustom() return mode() ~= "custom" end
+    local function fx()
+        local c = cdm()
+        c.pandemicFX = c.pandemicFX or {}
+        return c.pandemicFX
+    end
+    local args = {
+        desc = {
+            order = 0, type = "description",
+            name = "Blizzard's aura display on Essential and Utility icons: the overlay while a spell's aura runs, its swipe, and the pandemic glow.\n",
+        },
+        hideAuraOverlay = {
+            order = 1, type = "toggle", width = "full",
+            name = "Hide Aura Overlay on all spells (Spell Editor can change it per spell)",
+            get = function() return cdm().hideAuraOverlay end,
+            set = function(_, v) cdm().hideAuraOverlay = v; Update() end,
+        },
+        swipeHeader = { order = 10, type = "header", name = "Aura Swipe" },
+        swipeColorOn = {
+            order = 11, type = "toggle", name = "Own Swipe Color",
+            get = function() return cdm().auraSwipeColor ~= nil end,
+            set = function(_, v) cdm().auraSwipeColor = v and { r = 1, g = 0.82, b = 0, a = 0.6 } or nil; Update() end,
+        },
+        swipeColor = {
+            order = 12, type = "color", name = "Color", hasAlpha = true,
+            hidden = function() return cdm().auraSwipeColor == nil end,
+            get = function()
+                local c = cdm().auraSwipeColor
+                return c.r, c.g, c.b, c.a or 0.6
+            end,
+            set = function(_, r, g, b, a) cdm().auraSwipeColor = { r = r, g = g, b = b, a = a }; Update() end,
+        },
+        swipeReverse = {
+            order = 13, type = "toggle", name = "Reverse Swipe",
+            get = function() return cdm().auraSwipeReverse end,
+            set = function(_, v) cdm().auraSwipeReverse = v or nil; Update() end,
+        },
+        pandemicHeader = { order = 20, type = "header", name = "Pandemic Glow" },
+        pandemicMode = {
+            order = 21, type = "select", name = "Pandemic Glow",
+            values = PANDEMIC_MODES, sorting = { "blizzard", "hide", "custom" },
+            get = mode,
+            set = function(_, v)
+                local c = cdm()
+                c.pandemicMode = (v ~= "blizzard") and v or nil
+                c.hidePandemic = nil
+                Pandemic()
+            end,
+        },
+        pandemicColorOn = {
+            order = 22, type = "toggle", name = "Own Color", hidden = notCustom,
+            get = function() return cdm().pandemicColor ~= nil end,
+            set = function(_, v) cdm().pandemicColor = v and { r = 1, g = 0.3, b = 0.3 } or nil; Pandemic() end,
+        },
+        pandemicColor = {
+            order = 23, type = "color", name = "Color",
+            hidden = function() return notCustom() or cdm().pandemicColor == nil end,
+            get = function()
+                local c = cdm().pandemicColor
+                return c.r, c.g, c.b
+            end,
+            set = function(_, r, g, b) cdm().pandemicColor = { r = r, g = g, b = b }; Pandemic() end,
+        },
+        pandemicBrk = { order = 24, type = "description", name = "", width = "full", hidden = notCustom },
+    }
+    local look = GlowStyleArgs(30, function(k) return fx()[k] end,
+        function(k, v) fx()[k] = v; Pandemic() end, nil, notCustom)
+    for k, v in pairs(look) do args["pandemic_" .. k] = v end
+    return { order = order, type = "group", name = "Aura Overlay", args = args }
 end
 
 -- Racials -> CDM
@@ -732,6 +795,7 @@ local function SpellEditorPage(order, buffs)
         if sel and ps[sel] and not next(ps[sel]) then ps[sel] = nil end
         if TUI.UpdateCDMGlow then TUI:UpdateCDMGlow() end
         if ns.CDMText and ns.CDMText.RefreshAll then ns.CDMText.RefreshAll() end
+        if ns.CDMIcons and ns.CDMIcons.RefreshCustomIcons then ns.CDMIcons.RefreshCustomIcons() end
         ns.NotifyChange()
     end
     local function setField(k, v)
@@ -749,12 +813,17 @@ local function SpellEditorPage(order, buffs)
         if buffs then
             -- this spec's tracked buffs, keyed by base spell like the lookup
             local out = {}
-            local cat = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.TrackedBuff
-            local ids = cat and C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCategorySet(cat, false)
-            for _, cdID in ipairs(ids or {}) do
-                local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
+            local function add(info)
                 local sid = info and info.spellID
                 if sid and not (issecretvalue and issecretvalue(sid)) then out[sid] = true end
+            end
+            local cat = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.TrackedBuff
+            local ids = cat and C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCategorySet(cat, false)
+            for _, cdID in ipairs(ids or {}) do add(C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)) end
+            -- that set is Blizzard's default; a buff dragged in from another category lives in the viewer
+            local v = _G.BuffIconCooldownViewer
+            if v then
+                for _, c in ipairs({ v:GetChildren() }) do add(c.cooldownInfo) end
             end
             return out
         end
@@ -763,6 +832,10 @@ local function SpellEditorPage(order, buffs)
         return (ns.CDMSpells and ns.CDMSpells.GetForSpec and ns.CDMSpells.GetForSpec(specID)) or {}
     end
     local function byName(a, b) return spellName(a) < spellName(b) end
+    -- spells set up on another class or spec stay out of the list (Spell ID still reaches them)
+    local function listed(id, spec)
+        return spec[id] or id == sel or (IsPlayerSpell and IsPlayerSpell(id)) or false
+    end
     -- Aura Icons in a row (cooldowns), or every Aura Icon/Bar drawing a tracked buff (buffs,
     -- Blizzard's copy hidden): they keep their look in their own settings.
     -- covered = the buff spells they take over
@@ -842,6 +915,45 @@ local function SpellEditorPage(order, buffs)
         }
     end
     local cdBrk, cdPoint, cdX, cdY = place("cooldown", "hideCooldownText")
+    -- swipe and pandemic changes need a layout pass and the pandemic frames redone
+    local function lookField(k, v)
+        setField(k, v)
+        TUI:UpdateCDMIcons()
+        if ns.CDMIcons and ns.CDMIcons.ClearPandemicAll then ns.CDMIcons.ClearPandemicAll() end
+    end
+    local function cdmDB() return E.db.thingsUI.cdmIcons end
+    local function globalPandemic()
+        local c = cdmDB()
+        return c.pandemicMode or (c.hidePandemic and "hide") or "blizzard"
+    end
+    local function pandemicMode() local e = entry() return (e and e.pandemicMode) or globalPandemic() end
+    local function notCustom() return pandemicMode() ~= "custom" end
+    local function noOwnPandemicLook() local e = entry() return notCustom() or not (e and e.pandemicFX) end
+    local pandemicLook = GlowStyleArgs(10,
+        function(k) local e = entry() return e and e.pandemicFX and e.pandemicFX[k] end,
+        function(k, v)
+            local e = entry(true)
+            e.pandemicFX = e.pandemicFX or {}
+            e.pandemicFX[k] = v
+            lookField("pandemicFX", e.pandemicFX)
+        end,
+        nil, noOwnPandemicLook)
+    local PANDEMIC_NAMES = { blizzard = "Blizzard", hide = "Hidden", custom = "Custom Glow" }
+    local function glowOff()
+        local e = entry()
+        if buffs then return (e and e.glow) ~= "always" end
+        return (e and e.glow) == "never"
+    end
+    local function noOwnLook() local e = entry() return not (e and e.glowFX) end
+    local look = GlowStyleArgs(10,
+        function(k) local e = entry() return e and e.glowFX and e.glowFX[k] end,
+        function(k, v)
+            local e = entry(true)
+            e.glowFX = e.glowFX or {}
+            e.glowFX[k] = v
+            apply()
+        end,
+        glowOff, noOwnLook)
     local countBrk, countPoint, countX, countY = place("count", "hideCount")
 
     return {
@@ -849,18 +961,22 @@ local function SpellEditorPage(order, buffs)
         args = {
             desc = {
                 order = 0, type = "description",
-                name = buffs and "Text for one buff in Buff Icons. Buffs set up here are green, buffs an Aura Icon or Aura Bar already shows are pink.\n"
-                    or "Glow and text for one cooldown in Essential or Utility. Spells set up here are green, Aura Icons in a row are pink. Glow needs Custom Glow on in Layout > Glow.\n",
+                name = buffs and "Glow and text for one buff in Buff Icons. Buffs set up here are green, buffs an Aura Icon or Aura Bar already shows are pink. Glow needs Custom Glow on in CDM > Layout > Glow.\n"
+                    or "Glow and text for one cooldown in Essential or Utility. Spells set up here are green, Aura Icons in a row are pink. Glow needs Custom Glow on in CDM > Layout > Glow.\n",
             },
             spell = {
                 order = 1, type = "select", name = "Spell", width = "double",
                 values = function()
                     local out = {}
                     local ri, covered = rowIcons()
-                    for id in pairs(specSpells()) do
+                    local spec = specSpells()
+                    for id in pairs(spec) do
                         if not covered[id] then out[id] = spellLabel(id) end
                     end
-                    for id in pairs(store()) do out[id] = "|cFF40FF40" .. spellLabel(id) .. "|r" end
+                    for id in pairs(store()) do
+                        if listed(id, spec) then out[id] = "|cFF40FF40" .. spellLabel(id) .. "|r" end
+                    end
+                    if isSpell() and not out[sel] then out[sel] = spellLabel(sel) end
                     for k, d in pairs(ri) do
                         out[k] = "|cFFFF80C0" .. spellLabel(d.spellID)
                             .. (k:sub(1, 3) == "sb:" and " (Aura Bar)|r" or " (Aura Icon)|r")
@@ -869,12 +985,16 @@ local function SpellEditorPage(order, buffs)
                 end,
                 sorting = function()
                     local set, icons, other = {}, {}, {}
-                    for id in pairs(store()) do set[#set + 1] = id end
+                    local spec = specSpells()
+                    for id in pairs(store()) do
+                        if listed(id, spec) then set[#set + 1] = id end
+                    end
                     local ri, covered = rowIcons()
                     for k in pairs(ri) do icons[#icons + 1] = k end
-                    for id in pairs(specSpells()) do
+                    for id in pairs(spec) do
                         if not store()[id] and not covered[id] then other[#other + 1] = id end
                     end
+                    if isSpell() and not store()[sel] and (not spec[sel] or covered[sel]) then other[#other + 1] = sel end
                     table.sort(set, byName)
                     table.sort(icons, function(a, b) return spellName(ri[a].spellID) < spellName(ri[b].spellID) end)
                     table.sort(other, byName)
@@ -907,19 +1027,128 @@ local function SpellEditorPage(order, buffs)
                 name = function() return isSpell() and spellLabel(sel) or "" end,
                 hidden = function() return not isSpell() end,
                 args = {
+                    overlayGrp = {
+                        order = 0.6, type = "group", inline = true, name = buffs and "Swipe" or "Aura Overlay",
+                        args = {
+                            auraOverlay = {
+                                order = 1, type = "select", name = "Aura Overlay", width = 1.4, hidden = buffs,
+                                values = function()
+                                    local on = E.db.thingsUI.cdmIcons.hideAuraOverlay
+                                    return { default = on and "Settings (hidden)" or "Settings (shown)", hide = "Hide", show = "Show" }
+                                end,
+                                sorting = { "default", "hide", "show" },
+                                get = function() local e = entry() return (e and e.auraOverlay) or "default" end,
+                                set = function(_, v)
+                                    setField("auraOverlay", (v ~= "default") and v or nil)
+                                    TUI:UpdateCDMIcons()
+                                end,
+                            },
+                            swipeDir = {
+                                order = 2, type = "select", width = 1.2,
+                                name = buffs and "Invert Swipe" or "Aura Swipe Direction",
+                                values = function()
+                                    local on
+                                    if buffs then
+                                        local v = cdmDB().buffIcon
+                                        on = v and v.invertSwipe
+                                    else
+                                        on = cdmDB().auraSwipeReverse
+                                    end
+                                    return { default = on and "Settings (reversed)" or "Settings (normal)", on = "Reversed", off = "Normal" }
+                                end,
+                                sorting = { "default", "on", "off" },
+                                get = function()
+                                    local e = entry()
+                                    return (e and (buffs and e.invertSwipe or e.swipeReverse)) or "default"
+                                end,
+                                set = function(_, v)
+                                    lookField(buffs and "invertSwipe" or "swipeReverse", (v ~= "default") and v or nil)
+                                end,
+                            },
+                            swipeBrk = { order = 3, type = "description", name = "", width = "full" },
+                            swipeColorOn = {
+                                order = 4, type = "toggle", name = "Own Swipe Color",
+                                get = function() local e = entry() return (e and e.swipeColor) ~= nil end,
+                                set = function(_, v)
+                                    lookField("swipeColor", v and { r = 1, g = 0.82, b = 0, a = 0.6 } or nil)
+                                end,
+                            },
+                            swipeColor = {
+                                order = 5, type = "color", name = "Color", hasAlpha = true,
+                                hidden = function() local e = entry() return not (e and e.swipeColor) end,
+                                get = function()
+                                    local c = entry().swipeColor
+                                    return c.r, c.g, c.b, c.a or 0.6
+                                end,
+                                set = function(_, r, g, b, a) lookField("swipeColor", { r = r, g = g, b = b, a = a }) end,
+                            },
+                        },
+                    },
+                    pandemicGrp = {
+                        order = 0.7, type = "group", inline = true, name = "Pandemic Glow",
+                        args = {
+                            pandemicMode = {
+                                order = 1, type = "select", name = "Pandemic Glow", width = 1.4,
+                                values = function()
+                                    return { default = "Settings (" .. PANDEMIC_NAMES[globalPandemic()] .. ")",
+                                        blizzard = "Blizzard", hide = "Hidden", custom = "Custom Glow" }
+                                end,
+                                sorting = { "default", "blizzard", "hide", "custom" },
+                                get = function() local e = entry() return (e and e.pandemicMode) or "default" end,
+                                set = function(_, v) lookField("pandemicMode", (v ~= "default") and v or nil) end,
+                            },
+                            pandemicColorOn = {
+                                order = 2, type = "toggle", name = "Own Color", hidden = notCustom,
+                                get = function() local e = entry() return (e and e.pandemicColor) ~= nil end,
+                                set = function(_, v) lookField("pandemicColor", v and { r = 1, g = 0.3, b = 0.3 } or nil) end,
+                            },
+                            pandemicColor = {
+                                order = 3, type = "color", name = "Color",
+                                hidden = function() local e = entry() return notCustom() or not (e and e.pandemicColor) end,
+                                get = function()
+                                    local c = entry().pandemicColor
+                                    return c.r, c.g, c.b
+                                end,
+                                set = function(_, r, g, b) lookField("pandemicColor", { r = r, g = g, b = b }) end,
+                            },
+                            pandemicStyleOn = {
+                                order = 4, type = "toggle", name = "Own Glow Style", hidden = notCustom,
+                                get = function() local e = entry() return (e and e.pandemicFX) ~= nil end,
+                                set = function(_, v)
+                                    -- starts from Layout > Aura Overlay
+                                    lookField("pandemicFX", v and ns.DeepCopy(cdmDB().pandemicFX or {}) or nil)
+                                end,
+                            },
+                            pandemicBrk = { order = 5, type = "description", name = "", width = "full", hidden = noOwnPandemicLook },
+                            style = pandemicLook.style,
+                            lines = pandemicLook.lines,
+                            thickness = pandemicLook.thickness,
+                            particles = pandemicLook.particles,
+                            scale = pandemicLook.scale,
+                            frequency = pandemicLook.frequency,
+                            offset = pandemicLook.offset,
+                        },
+                    },
+                    iconGrp = {
+                        order = 0.5, type = "group", inline = true, name = "Icon",
+                        args = ns.CustomIconArgs(function() local e = entry() return e and e.customIcon end,
+                            function(v) setField("customIcon", v) end, 1),
+                    },
                     glowGrp = {
-                        order = 1, type = "group", inline = true, name = "Glow", hidden = buffs,
+                        order = 1, type = "group", inline = true, name = "Glow",
                         args = {
                             glow = {
                                 order = 1, type = "select", name = "Glow",
-                                values = { default = "On Proc", always = "Always", never = "Never" },
-                                sorting = { "default", "always", "never" },
+                                -- a buff never procs: off, or on while its icon shows
+                                values = buffs and { default = "Off", always = "While Shown" }
+                                    or { default = "On Proc", always = "Always", never = "Never" },
+                                sorting = buffs and { "default", "always" } or { "default", "always", "never" },
                                 get = function() local e = entry() return (e and e.glow) or "default" end,
                                 set = function(_, v) setField("glow", (v ~= "default") and v or nil) end,
                             },
                             glowColorOn = {
                                 order = 2, type = "toggle", name = "Own Glow Color",
-                                disabled = function() local e = entry() return (e and e.glow) == "never" end,
+                                disabled = glowOff,
                                 get = function() local e = entry() return (e and e.glowColor) ~= nil end,
                                 set = function(_, v) setField("glowColor", v and { r = 1, g = 0.85, b = 0.1 } or nil) end,
                             },
@@ -932,6 +1161,27 @@ local function SpellEditorPage(order, buffs)
                                 end,
                                 set = function(_, r, g, b) setField("glowColor", { r = r, g = g, b = b }) end,
                             },
+                            glowStyleOn = {
+                                order = 4, type = "toggle", name = "Own Glow Style",
+                                disabled = glowOff,
+                                get = function() return not noOwnLook() end,
+                                set = function(_, v)
+                                    -- starts from Layout > Glow
+                                    local g = E.db.thingsUI.cdmIcons.glow or {}
+                                    setField("glowFX", v and {
+                                        style = g.style, lines = g.lines, thickness = g.thickness, particles = g.particles,
+                                        scale = g.scale, frequency = g.frequency, offset = g.offset,
+                                    } or nil)
+                                end,
+                            },
+                            glowBrk = { order = 5, type = "description", name = "", width = "full", hidden = noOwnLook },
+                            style = look.style,
+                            lines = look.lines,
+                            thickness = look.thickness,
+                            particles = look.particles,
+                            scale = look.scale,
+                            frequency = look.frequency,
+                            offset = look.offset,
                         },
                     },
                     cooldownGrp = {
@@ -991,9 +1241,10 @@ local function SpellEditorPage(order, buffs)
     }
 end
 
-local function PerSpellTab(order)
+-- its own Modules entry: per-spell look for Essential/Utility cooldowns and Buff Icons
+function TUI:SpellEditorOptions()
     return {
-        order = order, type = "group", name = "Spell Editor", childGroups = "tab",
+        type = "group", name = "CDM Spell Editor", childGroups = "tab",
         args = {
             cooldowns = SpellEditorPage(1, false),
             buffs = SpellEditorPage(2, true),
@@ -1178,9 +1429,9 @@ function TUI:CDMIconsOptions()
                                     { includeAnchor = true, alwaysOnAnchor = true,
                                       minIconSize = 10, maxIconSize = 60 }),
                     glowSubTab   = GlowTab(40),
+                    auraSubTab   = AuraOverlayTab(45),
                 },
             },
-            spellEditorTab = PerSpellTab(20),
             racialsToCDMSubTab = RacialsToCDMTab(30),
             trinketBlacklistSubTab = TrinketsTab(40),
             clusterPositioningSubTab = (function()
@@ -1209,23 +1460,9 @@ function TUI:CDMIconsOptions()
                             if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
                         end,
                     },
-                    hideAuraOverlay = {
-                        order = 3, type = "toggle", width = "full",
-                        name = "Hide Aura Overlay",
-                        get = function() return E.db.thingsUI.cdmIcons.hideAuraOverlay end,
-                        set = function(_, v)
-                            E.db.thingsUI.cdmIcons.hideAuraOverlay = v
-                            TUI:UpdateCDMIcons()
-                        end,
-                    },
-                    hidePandemic = {
-                        order = 4, type = "toggle", width = "full",
-                        name = "Hide Pandemic Glow",
-                        get = function() return E.db.thingsUI.cdmIcons.hidePandemic end,
-                        set = function(_, v)
-                            E.db.thingsUI.cdmIcons.hidePandemic = v
-                            if ns.CDMIcons and ns.CDMIcons.ClearPandemicAll then ns.CDMIcons.ClearPandemicAll() end
-                        end,
+                    auraOverlayLink = {
+                        order = 3, type = "description", width = "full",
+                        name = "|cFF888888Hide Aura Overlay and the pandemic glow live in Layout > Aura Overlay.|r",
                     },
                     hideGroupedDuplicates = {
                         order = 4.5, type = "toggle", width = "full",

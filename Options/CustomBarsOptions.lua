@@ -512,7 +512,7 @@ local function GroupTab(gi)
 
     return {
         order = 10 + gi, type = "group", childGroups = "tab",
-        name = function() local g = grp(); return g and g.name or ("Group " .. gi) end,
+        name = function() local g = grp(); return ns.TabName(g and g.name or ("Group " .. gi), g and g.tabColor) end,
         hidden = function() return grp() == nil end,
         args = {
             enabled = {
@@ -524,6 +524,21 @@ local function GroupTab(gi)
                 order = 2, type = "input", name = "Group Name",
                 get = function() return gget("name") or "" end,
                 set = function(_, v) gset("name", v) end,
+            },
+            tabColorOn = (ns.TabColorArgs(grp, NotifyChange, 2.5)),
+            tabColor = select(2, ns.TabColorArgs(grp, NotifyChange, 2.5)),
+            copy = {
+                order = 2.9, type = "execute", name = "Copy Group",
+                disabled = function() return CB() and #CB().GetGroups() >= MAX_GROUPS end,
+                func = function()
+                    if not CB() then return end
+                    local _, ni = CB().CopyGroup(gi)
+                    if not ni then return end
+                    if ns.CustomBars._rebuildOptions then ns.CustomBars._rebuildOptions() end
+                    Refresh()
+                    local ACD = E.Libs and E.Libs.AceConfigDialog
+                    if ACD then ACD:SelectGroup("ElvUI", "thingsUI", "modulesTab", "customBars", "group" .. ni) end
+                end,
             },
             delete = {
                 order = 3, type = "execute", name = "Delete Group", confirm = true,

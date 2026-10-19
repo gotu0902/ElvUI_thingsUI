@@ -49,6 +49,7 @@ function ns.VisibilityArgs(vis, onChange)
         party = toggle("party", 6, "Party", true),
         raid = toggle("raid", 7, "Raid", true),
         places = multi("places", 10, "Only In", V.PLACES),
+        roles = multi("roles", 15, "Only As", V.ROLES),
         forms = multi("forms", 20, "Only in Form", function() return V.FormChoices(vis().forms) end,
             function() return off() or not (V.HasForms() or vis().forms) end),
         hideGrp = {

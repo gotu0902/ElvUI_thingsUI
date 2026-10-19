@@ -7,12 +7,27 @@ local function Colorize(tab, hex)
     return tab
 end
 
-local curSection, weOpenedCDM
+local curSection, weOpenedCDM, userClosedCDM, closingCDM
+
+local CDM_SECTIONS = { cdm = true, spellEditor = true, buffBars = true, customGroups = true, customBars = true,
+    specialIcons = true, specialBars = true }
+
+-- closed by hand on one of our CDM pages: it stays closed until the options close
+local cvsHooked = false
+local function HookCDMClose(cvs)
+    if cvsHooked then return end
+    cvsHooked = true
+    cvs:HookScript("OnHide", function()
+        if not closingCDM and curSection and CDM_SECTIONS[curSection] then userClosedCDM = true end
+        weOpenedCDM = nil
+    end)
+end
 
 local function OpenCDMSettings()
-    if InCombatLockdown() then return end
+    if InCombatLockdown() or userClosedCDM then return end
     local cvs = _G.CooldownViewerSettings
     if cvs and cvs.ShowUIPanel and not cvs:IsShown() then
+        HookCDMClose(cvs)
         weOpenedCDM = true
         cvs:ShowUIPanel()
     end
@@ -23,11 +38,12 @@ local function CloseCDMSettings()
     weOpenedCDM = nil
     if InCombatLockdown() then return end
     local cvs = _G.CooldownViewerSettings
-    if cvs and cvs:IsShown() then HideUIPanel(cvs) end
+    if cvs and cvs:IsShown() then
+        closingCDM = true
+        HideUIPanel(cvs)
+        closingCDM = nil
+    end
 end
-
-local CDM_SECTIONS = { cdm = true, buffBars = true, customGroups = true, customBars = true,
-    specialIcons = true, specialBars = true }
 
 local watchTicker
 local function StopSectionWatch()
@@ -39,6 +55,7 @@ end
 
 local function OnConfigClosed()
     curSection = nil
+    userClosedCDM = nil
     StopSectionWatch()
     if ns.CustomGroups and ns.CustomGroups.SetTestReason then
         ns.CustomGroups.SetTestReason("options", false)
@@ -86,6 +103,7 @@ local TEST_SECTIONS = { customGroups = true, customBars = true, specialIcons = t
 local function SectionShown(key)
     EnsureCloseHook()
     StartSectionWatch()
+    if _G.CooldownViewerSettings then HookCDMClose(_G.CooldownViewerSettings) end
     if key == curSection then return end
     local prev = curSection
     curSection = key
@@ -131,6 +149,8 @@ function TUI.ConfigTable()
             damageMeter  = WithSentinel(withOrder(Colorize(TUI:DamageMeterOptions(),  "FF5C5C"), 5.5), "damageMeter"),
             specialBars  = WithSentinel(withOrder(Colorize(TUI:SpecialBarsOptions(),  "80FF80"), 0.4), "specialBars"),
             specialIcons = WithSentinel(withOrder(Colorize(TUI:SpecialIconsOptions(), "FF80C0"), 0.6), "specialIcons"),
+            raidOrder    = WithSentinel(withOrder(Colorize(TUI:RaidOrderOptions(),    "4DD2A6"), 7), "raidOrder"),
+            spellEditor  = WithSentinel(withOrder(Colorize(TUI:SpellEditorOptions(),  "FFE9A8"), 3.5), "spellEditor"),
             timers       = WithSentinel(withOrder(Colorize(TUI:TimersOptions(),       "FFC04D"), 9), "timers"),
         },
     }

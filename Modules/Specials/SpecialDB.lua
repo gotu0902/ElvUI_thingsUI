@@ -52,7 +52,7 @@ local function GetIconDB(iconKey, specID)
     local s = GetSpecRoot(specID)
     if not s then return nil end
     if not s.icons[iconKey] then
-        s.icons[iconKey] = {}
+        s.icons[iconKey] = { _borderOut = true }
         FillDefaults(s.icons[iconKey], SPECIAL_ICON_DEFAULTS)
     end
     return s.icons[iconKey]

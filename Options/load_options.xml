@@ -14,6 +14,7 @@
 	<Script file="CustomBarsOptions.lua"/>
 	<Script file="AuraCollectionsOptions.lua"/>
 	<Script file="TimersOptions.lua"/>
+	<Script file="RaidOrderOptions.lua"/>
 	<Script file="DamageMeterOptions.lua"/>
 	<Script file="ShareOptions.lua"/>
 	<Script file="Grid2Options.lua"/>

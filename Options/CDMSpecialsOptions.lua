@@ -49,6 +49,7 @@ local function ComputeIconLayout()
             local b = (g and bucket("g" .. gid, g.name or ("Group " .. gid)))
                 or (row and bucket("row" .. row, (row == "utility" and "Utility" or "Essential") .. " Cooldowns"))
                 or bucket("standalone", "Standalone")
+            if g then b.color = g.tabColor end
             b.icons[#b.icons + 1] = { key = ikey, name = SpellName(d.spellID) }
         elseif d then
             local b = bucket("unconfigured", "Unconfigured")
@@ -430,7 +431,7 @@ local function BuildIconTreeArgs()
         local kk = k
         box["h" .. kk] = {
             type = "group", disabled = true, order = kk * 1000, args = {},
-            name   = function() local d = ComputeIconLayout()[kk]; return d and d.name or "" end,
+            name   = function() local d = ComputeIconLayout()[kk]; return d and ns.TabName(d.name, d.color) or "" end,
             hidden = function() return not ComputeIconLayout()[kk] end,
         }
     end

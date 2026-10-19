@@ -10,17 +10,27 @@ local function Store()
     return _G.thingsUIGlobalDB
 end
 
+-- 1440p strings carry the plain name, other resolutions a suffix (NHT_PROFILE_1080P)
+local RES_BOUND = { NHT_PROFILE = true, FHT_PROFILE = true, NHT_PLUGIN = true, FHT_PLUGIN = true }
+function ns.InstallString(key, res)
+    local strs = ns.InstallStrings or {}
+    if RES_BOUND[key] and res and res ~= "1440p" then key = key .. "_" .. res:upper() end
+    local s = strs[key]
+    s = s and strtrim(s)
+    if s and s ~= "" then return s end
+end
+
+local function Res() return ns.Setup and ns.Setup.Res and ns.Setup.Res() or "1440p" end
+
 local PRESETS = {
-    { key = "NHT", label = "|cFFff0000NHT|r ", str = ns.InstallStrings and ns.InstallStrings.NHT_PLUGIN or "" },
-    { key = "FHT", label = "|cFF00ff17FHT|r", str = ns.InstallStrings and ns.InstallStrings.FHT_PLUGIN or "" },
+    { key = "NHT", label = "|cFFff0000NHT|r " },
+    { key = "FHT", label = "|cFF00ff17FHT|r" },
 }
 
-local function PresetStr(key)
-    for _, p in ipairs(PRESETS) do if p.key == key then return p.str end end
-end
+local function PresetStr(key, res) return ns.InstallString(key .. "_PLUGIN", res or Res()) end
 function ns.PresetString(key) return PresetStr(key) end
-function ns.ImportPreset(key)
-    local s = PresetStr(key)
+function ns.ImportPreset(key, res)
+    local s = PresetStr(key, res)
     if not s or s == "" then print("|cFF8080FFthingsUI|r: preset '" .. tostring(key) .. "' not set.") return end
     local ok, err = ns.Share and ns.Share.Import(s)
     if ok then print("|cFF8080FFthingsUI|r - Imported " .. key .. " defaults.")
@@ -80,6 +90,36 @@ E.PopupDialogs["TUI_IMPORT_PROFILE_NAME"] = {
     end,
     timeout = 0, whileDead = 1, hideOnEscape = true, preferredIndex = 3,
 }
+
+local function DecodeProfileStr(key, res)
+    local s = ns.InstallString(key .. "_PROFILE", res or Res())
+    local D = E:GetModule("Distributor", true)
+    if not (s and D and D.Decode) then return end
+    local ptype, name, data = D:Decode(s)
+    if ptype == "profile" and name and type(data) == "table" then return name, data end
+end
+
+local function HasElvProfile(name)
+    return name and _G.ElvDB and _G.ElvDB.profiles and _G.ElvDB.profiles[name] and true or false
+end
+
+-- both profiles with their thingsUI layout; the one this spec uses ends active
+function ns.InstallElvProfiles(res, overwrite)
+    local main = ns.Setup and ns.Setup.SpecPackKey and ns.Setup.SpecPackKey() or "NHT"
+    local order = (main == "FHT") and { "NHT", "FHT" } or { "FHT", "NHT" }
+    local n = 0
+    for _, key in ipairs(order) do
+        local name, data = DecodeProfileStr(key, res)
+        if name and (overwrite or not HasElvProfile(name)) then
+            FinishElvProfileImport(name, data)
+            ns.ImportPreset(key, res)
+            n = n + 1
+        end
+    end
+    local mname = DecodeProfileStr(main, res)
+    if HasElvProfile(mname) and E.data:GetCurrentProfile() ~= mname then E.data:SetProfile(mname) end
+    return n
+end
 
 function ns.ImportElvProfile(s)
     local D = E:GetModule("Distributor", true)
@@ -261,32 +301,6 @@ function ns.EnsureDetailsProfile()
     return true
 end
 
--- import shipped alt presets; set as default unless the user already has a valid one
-function ns.EnsureAltPresets()
-    local s = ns.InstallStrings and ns.InstallStrings.ALT_PRESETS
-    local AI = ns.AltInstall
-    if not (s and s ~= "" and AI and AI.ImportPresets) then return 0 end
-    local n = AI.ImportPresets(s) or 0
-    if n > 0 then
-        local g = _G.thingsUIGlobalDB
-        if g and g.altPresets and not (g.altPresetDefault and g.altPresets[g.altPresetDefault]) then
-            local data = ns.Share and ns.Share.DecodeTable
-                and ns.Share.DecodeTable(tostring(s):gsub("%s", ""), "!TUIALT2!")
-            if type(data) == "table" then
-                local pick = data.default and "default"
-                if not pick then
-                    for name in pairs(data) do
-                        if not pick or name < pick then pick = name end
-                    end
-                end
-                g.altPresetDefault = pick
-            end
-        end
-    end
-    -- this character's spec profiles from the role presets (healer = FHT)
-    if AI.ApplyRoleProfiles then AI.ApplyRoleProfiles(true) end
-    return n
-end
 
 function ns.ImportElvExtras()
     local strs = ns.InstallStrings or {}
@@ -296,39 +310,33 @@ function ns.ImportElvExtras()
     return okP or false, okG or false
 end
 
+-- spec profiles, Cooldown Manager, then BigWigs (its popups wait for the user)
+local function SetupRest()
+    local S = ns.Setup
+    if not S then return end
+    S.ApplySpecProfiles()
+    S.InstallCDM(function() S.InstallBigWigs() end)
+end
+
 local function QuickSetup(key)
-    local strs = ns.InstallStrings or {}
-    local ps = strs[key .. "_PROFILE"]
+    local ps = ns.InstallString(key .. "_PROFILE", Res())
     local ok, pending
-    if ps and ps ~= "" then ok, pending = ns.ImportElvProfile(ps) end
+    if ps then ok, pending = ns.ImportElvProfile(ps) end
     if pending then ns.__afterProfilePreset = key else ns.ImportPreset(key) end
     ns.ImportElvExtras()
     if ns.SetAutoScale then ns.SetAutoScale() end
     if ns.ApplyDarkMode then ns.ApplyDarkMode() end
     ns.SetDamageMeterProvider("TUI")
     E.db.thingsUI.rightChatAsBackground = true
-    ns.EnsureAltPresets()
     if IsInstalled("Grid2") then ns.UseGrid2() else ns.UseElvUF() end
+    SetupRest()
 end
 
-local function DecodeProfileStr(key)
-    local strs = ns.InstallStrings or {}
-    local s = strs[key .. "_PROFILE"]
-    local D = E:GetModule("Distributor", true)
-    if not (s and s ~= "" and D and D.Decode) then return end
-    local ptype, name, data = D:Decode(s)
-    if ptype == "profile" and name and type(data) == "table" then return name, data end
-end
-
-local function HasElvProfile(name)
-    return name and _G.ElvDB and _G.ElvDB.profiles and _G.ElvDB.profiles[name] and true or false
-end
-
--- healer spec = FHT, everything else = NHT
+-- healer spec (or Augmentation) = FHT, everything else = NHT
 function ns.QuickSetupAuto()
     local spec = GetSpecialization and GetSpecialization()
     local role = spec and GetSpecializationRole and GetSpecializationRole(spec)
-    local mainKey = (role == "HEALER") and "FHT" or "NHT"
+    local mainKey = ns.Setup and ns.Setup.SpecPackKey and ns.Setup.SpecPackKey() or ((role == "HEALER") and "FHT" or "NHT")
     local otherKey = (mainKey == "FHT") and "NHT" or "FHT"
 
     local oname, odata = DecodeProfileStr(otherKey)
@@ -349,8 +357,8 @@ function ns.QuickSetupAuto()
     if ns.ApplyDarkMode then ns.ApplyDarkMode() end
     ns.SetDamageMeterProvider("TUI")
     E.db.thingsUI.rightChatAsBackground = true
-    ns.EnsureAltPresets()
     if IsInstalled("Grid2") then ns.UseGrid2() else ns.UseElvUF() end
+    SetupRest()
     return mainKey, role
 end
 
@@ -395,7 +403,7 @@ ns.installTable = {
                         geterrorhandler()(err)
                         print("|cFF8080FFthingsUI|r - Quick setup hit an error (see BugSack); parts may not have applied.")
                     end
-                    StepDone(d.key .. " quick setup done - click Finished")
+                    StepDone(d.key .. " done - accept BigWigs' popups, then Finished")
                     local fr = PIF()
                     if PI.SetPage and fr and fr.CurrentPage then
                         PI:SetPage(#ns.installTable.Pages, fr.CurrentPage)
@@ -411,7 +419,7 @@ ns.installTable = {
                     print("|cFF8080FFthingsUI|r - Quick setup hit an error (see BugSack); parts may not have applied.")
                     key = nil
                 end
-                StepDone((key or "Quick") .. " setup done - click Finished")
+                StepDone((key or "Quick") .. " done - accept BigWigs' popups, then Finished")
                 local fr = PIF()
                 if PI.SetPage and fr and fr.CurrentPage then
                     PI:SetPage(#ns.installTable.Pages, fr.CurrentPage)
@@ -428,7 +436,7 @@ ns.installTable = {
                 if opt then
                     opt:Show(); opt:Enable(); opt:SetText("Import " .. p.label)
                     opt:SetScript("OnClick", function()
-                        local ok, err = ns.ImportPreset(p.key)
+                        local ok, err = ns.ImportPreset(p.key, Res())
                         StepDone(ok and (p.label .. " imported") or ("Import failed: " .. (err or "?")))
                     end)
                 end
@@ -440,7 +448,6 @@ ns.installTable = {
             f.SubTitle:SetText("ElvUI Profile")
             f.Desc1:SetText("Import the ElvUI profile.")
             f.Desc2:SetText("Your imported thingsUI layout is carried over to the new profile.")
-            local strs = ns.InstallStrings or {}
             local defs = {
                 { key = "NHT_PROFILE", label = "|cFFff0000NHT|r Profile" },
                 { key = "FHT_PROFILE", label = "|cFF00ff17FHT|r Profile" },
@@ -450,8 +457,8 @@ ns.installTable = {
                 if opt then
                     opt:Show(); opt:Enable(); opt:SetText("Import " .. d.label)
                     opt:SetScript("OnClick", function()
-                        local s = strs[d.key]
-                        if not s or s == "" then StepDone("Profile string not set yet") return end
+                        local s = ns.InstallString(d.key, Res())
+                        if not s then StepDone("Profile string not set yet") return end
                         local ok, pending = ns.ImportElvProfile(s)
                         StepDone(ok and (pending and "Name exists - pick one in the popup" or (d.label .. " imported"))
                             or "Import failed")
@@ -464,19 +471,37 @@ ns.installTable = {
             local f = PIF()
             f.SubTitle:SetText("Account Settings")
             f.Desc1:SetText("|cFFFFFFFFPrivate|r (per character: fonts, skins, chat bubbles) \n |cFFFFFFFFGlobal|r (datatext panels).")
-            f.Desc2:SetText("Alt Presets fill the Alt Profile Setup (/tui alt) with ready profile combos.")
+            f.Desc2:SetText("Spec Profiles: ElvUI and BigWigs use FHT on healer specs (and Augmentation), NHT on the rest.")
             f.Desc3:SetText("Applies on the reload at the end.")
-            local strs = ns.InstallStrings or {}
             f.Option1:Show(); f.Option1:Enable(); f.Option1:SetText("Private + Global")
             f.Option1:SetScript("OnClick", function()
                 local okP, okG = ns.ImportElvExtras()
                 StepDone((okP and okG) and "Private + Global imported" or "Import failed")
             end)
-            f.Option2:Show(); f.Option2:Enable(); f.Option2:SetText("Alt Profiles")
+            f.Option2:Show(); f.Option2:Enable(); f.Option2:SetText("Spec Profiles")
             f.Option2:SetScript("OnClick", function()
-                local n = ns.EnsureAltPresets()
-                StepDone(n > 0 and ("Imported " .. n .. " alt preset(s)") or "Import failed")
+                local S = ns.Setup
+                StepDone((S and S.ApplySpecProfiles()) and "Spec profiles set" or "No NHT/FHT profiles yet")
             end)
+        end,
+        -- BigWigs + Cooldown Manager
+        function()
+            local f = PIF()
+            local S = ns.Setup
+            f.SubTitle:SetText("Boss Mods & Cooldowns")
+            f.Desc1:SetText("|cFFFFFFFFBigWigs|r: the NHT and FHT profiles (BigWigs asks once per profile).\n|cFFFFFFFFCooldown Manager|r: Blizzard's layouts for your class, one per spec.")
+            f.Desc2:SetText("Character Setup (/tui alt) shows what each character uses and loads it.")
+            f.Desc3:SetText("")
+            f.Option1:Show(); f.Option1:Enable(); f.Option1:SetText("BigWigs")
+            f.Option1:SetScript("OnClick", function()
+                StepDone((S and S.InstallBigWigs()) and "Accept BigWigs' popups" or "BigWigs is not loaded")
+            end)
+            f.Option2:Show(); f.Option2:Enable(); f.Option2:SetText("Cooldown Manager")
+            f.Option2:SetScript("OnClick", function()
+                StepDone((S and S.InstallCDM()) and "Cooldown Manager layouts installed" or "No layouts for your class")
+            end)
+            f.Option3:Show(); f.Option3:Enable(); f.Option3:SetText("Character Setup")
+            f.Option3:SetScript("OnClick", function() if S then S.Open() end end)
         end,
         -- 3: UI Scale
         function()
@@ -598,7 +623,7 @@ ns.installTable = {
         end,
     },
     StepTitles = {
-        "Quick Setup", "Plugin things", "ElvUI Profile", "Account Settings", "Scale", "Coloring", "Positions", "Damage Meter", "ActionBars", "Unit Frames", "Finished",
+        "Quick Setup", "Plugin things", "ElvUI Profile", "Account Settings", "Boss Mods", "Scale", "Coloring", "Positions", "Damage Meter", "ActionBars", "Unit Frames", "Finished",
     },
     StepTitlesColorSelected = { 0.5, 0.5, 1 },
 }

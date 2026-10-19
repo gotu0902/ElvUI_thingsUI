@@ -291,6 +291,7 @@ end
 local USES_ITEMS = { [5512] = true, [224464] = true }  -- Healthstone / Demonic (Gluttony) Healthstone
 
 local ItemCooldownChanged = H.ItemCooldownChanged
+local ItemCooldown = H.ItemCooldown
 
 local function UpdateItemIcon(btn, force)
     local id = btn._id
@@ -321,14 +322,13 @@ local function UpdateItemIcon(btn, force)
     local bStart, bDur
     if timer and ns.Timers.IsActive(timer) and timer.showCDTimer then bStart, bDur = ns.Timers.GetActiveBuff(timer, GetTime()) end
 
-    local start, dur = C_Item.GetItemCooldown(id)
-    local active = (start and dur and dur > 0) or false
+    local start, dur, active, real = ItemCooldown(id)
     if bStart then
         if ItemCooldownChanged(btn.cooldown, true, bStart, bDur) then btn.cooldown:SetCooldown(bStart, bDur) end
         if btn.icon and btn.icon.SetDesaturated then btn.icon:SetDesaturated(false) end
     elseif active and not (timer and ns.Timers.IsActive(timer) and timer.trackCooldown == false) then
         if ItemCooldownChanged(btn.cooldown, true, start, dur) then btn.cooldown:SetCooldown(start, dur) end
-        if btn.icon and btn.icon.SetDesaturated then btn.icon:SetDesaturated(true) end
+        if btn.icon and btn.icon.SetDesaturated then btn.icon:SetDesaturated(real) end
     else
         if ItemCooldownChanged(btn.cooldown, false, start, dur) then btn.cooldown:Clear() end
         if btn.icon and btn.icon.SetDesaturated then btn.icon:SetDesaturated(false) end
@@ -365,11 +365,10 @@ local function UpdateTimerIcon(btn)
         if ItemCooldownChanged(btn.cooldown, false) then btn.cooldown:Clear() end
         SetDesat(btn.icon, 0)
     elseif timer.kind == "item" and timer.itemID then
-        local start, dur = C_Item.GetItemCooldown(timer.itemID)
-        local active = (start and dur and dur > 0) or false
+        local start, dur, active, real = ItemCooldown(timer.itemID)
         if active then
             if ItemCooldownChanged(btn.cooldown, true, start, dur) then btn.cooldown:SetCooldown(start, dur) end
-            SetDesat(btn.icon, 1)
+            SetDesat(btn.icon, real and 1 or 0)
         else
             if ItemCooldownChanged(btn.cooldown, false, start, dur) then btn.cooldown:Clear() end
             SetDesat(btn.icon, 0)
@@ -669,7 +668,13 @@ end)
 local function RenderTestLane(gs, group, frame)
     local pool = gs.testIcons
     if not M.testMode then
-        if pool then for _, f in ipairs(pool) do f:Hide() end end
+        if pool then
+            for _, f in ipairs(pool) do
+                f:Hide()
+                -- a hidden frame's animations keep running: stop the preview glow
+                if f.fxr and f.fxr.on then ns.AuraLane.ApplyButtonFX(f, f.fxr, {}); f.fxr.on = nil end
+            end
+        end
         return
     end
     gs.testIcons = gs.testIcons or {}
@@ -713,7 +718,8 @@ local function RenderTestLane(gs, group, frame)
                 pool[idx] = f
             end
             local sid = spells[((k - 1) % math.max(1, #spells)) + 1]
-            f.tex:SetTexture((sid and C_Spell.GetSpellTexture(sid)) or 134400)
+            local cidb = entry.def and entry.def.iconDB
+            f.tex:SetTexture((cidb and cidb.customIcon) or (sid and C_Spell.GetSpellTexture(sid)) or 134400)
             f.tex:SetAlpha(0.9)
             M.ApplyIconSkin(f, f.tex, S.crop, S.skin)
 
@@ -802,6 +808,7 @@ local function RenderTestLane(gs, group, frame)
             fx.anchor = f.tex
             f.fxr = f.fxr or {}
             AL.ApplyButtonFX(f, f.fxr, fx)
+            f.fxr.on = fx.style and true or nil
 
             ns.Pixel.SetSize(f, S.iw, S.ih)
             f:ClearAllPoints()
@@ -825,7 +832,11 @@ local function RenderTestLane(gs, group, frame)
             slot = slot + 1
         end
     end
-    for k = idx + 1, #pool do pool[k]:Hide() end
+    for k = idx + 1, #pool do
+        local f = pool[k]
+        f:Hide()
+        if f.fxr and f.fxr.on then ns.AuraLane.ApplyButtonFX(f, f.fxr, {}); f.fxr.on = nil end
+    end
 end
 
 local function PlayerHasRacial(id)
@@ -1547,6 +1558,19 @@ function M.AddGroup()
     db.groups[#db.groups + 1] = g
     QueueLayout()
     return g
+end
+-- links pointing at a group (Aura Icons, timers, trinkets) stay with the original
+function M.CopyGroup(index)
+    local db = EnsureDB(); if not db then return end
+    local src = db.groups[index]
+    if not src then return end
+    local g = ns.DeepCopy(src)
+    g.id = db.nextID
+    g.name = (src.name or ("Group " .. src.id)) .. " Copy"
+    db.nextID = db.nextID + 1
+    db.groups[#db.groups + 1] = g
+    QueueLayout()
+    return g, #db.groups
 end
 function M.RemoveGroup(index)
     local db = EnsureDB(); if not db then return end

@@ -3,8 +3,11 @@
 	<Script file="FHT_Plugin.lua"/>
 	<Script file="NHT_Profile.lua"/>
 	<Script file="FHT_Profile.lua"/>
-	<Script file="AltPresets.lua"/>
 	<Script file="Elv_Extras.lua"/>
 	<Script file="Details_Profile.lua"/>
+	<Script file="Res1080p.lua"/>
+	<Script file="BigWigs.lua"/>
+	<Script file="CooldownManager.lua"/>
 	<Script file="Install.lua"/>
+	<Script file="Setup.lua"/>
 </Ui>

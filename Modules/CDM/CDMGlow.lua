@@ -6,6 +6,8 @@ ns.CDMGlow = ns.CDMGlow or {}
 
 local LCG
 local VIEWERS = { EssentialCooldownViewer = true, UtilityCooldownViewer = true }
+-- Spell Editor "Always" / "While Shown" glows, buffs included
+local SYNC_VIEWERS = { "EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer" }
 local state = setmetatable({}, { __mode = "k" })
 local hooked = false
 
@@ -63,19 +65,21 @@ local function ShowFX(frame, o)
         alert:SetAlpha(0)
         st.nativeAlert = alert
     end
-    local style = g.style or "pixel"
+    -- a Spell Editor spell with its own style wins over Layout > Glow
+    local fx = (o and o.glowFX) or g
+    local style = fx.style or "pixel"
     if st.style and st.style ~= style then StopAll(frame) end
     st.style = style
     local color = GlowColor(g, o)
-    local off = g.offset or 0
+    local off = fx.offset or 0
     if style == "autocast" then
-        lib.AutoCastGlow_Start(frame, color, g.particles or 4, g.frequency or 0.125, g.scale or 1, off, off)
+        lib.AutoCastGlow_Start(frame, color, fx.particles or 4, fx.frequency or 0.125, fx.scale or 1, off, off)
     elseif style == "proc" then
         lib.ProcGlow_Start(frame, { color = color, xOffset = off, yOffset = off })
     elseif style == "button" then
-        lib.ButtonGlow_Start(frame, color, g.frequency or 0.125)
+        lib.ButtonGlow_Start(frame, color, fx.frequency or 0.125)
     else
-        lib.PixelGlow_Start(frame, color, g.lines or 8, g.frequency or 0.25, nil, g.thickness or 2, off, off)
+        lib.PixelGlow_Start(frame, color, fx.lines or 8, fx.frequency or 0.25, nil, fx.thickness or 2, off, off)
     end
     st.glowing = true
 end
@@ -132,13 +136,17 @@ local preview = false
 function ns.CDMGlow.Sync(frame)
     local g = DB()
     local o = Override(frame)
+    -- a buff only glows While Shown; its own color alone previews nothing
+    local buff = frame:GetParent() == _G.BuffIconCooldownViewer
     local want = g and g.enabled and o
-        and (o.glow == "always" or (preview and o.glow ~= "never" and o.glowColor ~= nil))
+        and (o.glow == "always" or (preview and not buff and o.glow ~= "never" and o.glowColor ~= nil))
     local st = state[frame]
     if want then
         if not st then st = {} state[frame] = st end
-        local c = o.glowColor
-        local sig = c and (("%s,%s,%s"):format(c.r, c.g, c.b)) or ""
+        local c, fx = o.glowColor, o.glowFX
+        local sig = (c and (("%s,%s,%s"):format(c.r, c.g, c.b)) or "")
+            .. (fx and ("|%s,%s,%s,%s,%s,%s,%s"):format(tostring(fx.style), tostring(fx.lines), tostring(fx.thickness),
+                tostring(fx.particles), tostring(fx.scale), tostring(fx.frequency), tostring(fx.offset)) or "")
         if not st.always or st.alwaysSig ~= sig then
             st.always, st.alwaysSig = true, sig
             ShowFX(frame, o)
@@ -188,7 +196,7 @@ function TUI:UpdateCDMGlow()
         end
     end
     -- Always glows for frames that never procced yet
-    for name in pairs(VIEWERS) do
+    for _, name in ipairs(SYNC_VIEWERS) do
         local v = _G[name]
         if v then
             for _, c in ipairs({ v:GetChildren() }) do

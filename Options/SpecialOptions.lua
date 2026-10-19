@@ -796,6 +796,8 @@ function TUI:SpecialBarOptions(barKey, ctx)
             QueueUpdate()
         end
     end
+    local barIcon = ns.CustomIconArgs(function() return get("customIcon") end, function(v) set("customIcon", v) end, 4,
+        function() return styleMode end, function() return not get("iconEnabled") end)
 
     local function IsGrouped()
         if styleMode then return false end
@@ -1002,7 +1004,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
             local s = SB.GetSpecRoot(ESpec()); local c = s.barCount or 3
             if c >= (SB.MAX_SLOTS or 12) then return end
             local copy = ns.DeepCopy(db())
-            copy.spellID, copy.spellName = nil, nil   -- can't track one spell twice; keep the style, pick a new spell
+            copy.spellID, copy.spellName, copy.customIcon = nil, nil, nil   -- can't track one spell twice; keep the style, pick a new spell
             copy.enabled = false
             local newKey = "bar" .. (c + 1)
             s.bars = s.bars or {}
@@ -1119,6 +1121,10 @@ function TUI:SpecialBarOptions(barKey, ctx)
                         iconEnabled = { order = 1, type = "toggle", name = "Show Icon on Bar", get = function() return get("iconEnabled") end, set = function(_, v) set("iconEnabled", v) end },
                         iconSpacing = { order = 2, type = "range", name = "Icon Spacing", min = 0, max = 20, step = 1, disabled = function() return not get("iconEnabled") end, get = function() return get("iconSpacing") end, set = function(_, v) set("iconSpacing", v) end },
                         iconZoom = { order = 3, type = "range", name = "Icon Zoom", min = 0, max = 0.45, step = 0.01, isPercent = true, disabled = function() return not get("iconEnabled") end, get = function() return get("iconZoom") end, set = function(_, v) set("iconZoom", v) end },
+                        customIcon = barIcon.customIcon,
+                        iconFromSpell = barIcon.iconFromSpell,
+                        iconPreview = barIcon.iconPreview,
+                        iconClear = barIcon.iconClear,
                     },
                 },
             }),
@@ -1251,6 +1257,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
             QueueUpdate()
         end
     end
+    local iconArgs = ns.CustomIconArgs(function() return get("customIcon") end, function(v) set("customIcon", v) end, 1)
     local function isGrouped()
         if styleMode then return false end
         local gid = db().customGroup
@@ -1393,7 +1400,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
             local s = SB.GetSpecRoot(ESpec()); local c = s.iconCount or 3
             if c >= (SB.MAX_SLOTS or 12) then return end
             local copy = ns.DeepCopy(db())
-            copy.spellID, copy.spellName = nil, nil   -- can't track one spell twice; keep the style, pick a new spell
+            copy.spellID, copy.spellName, copy.customIcon = nil, nil, nil   -- can't track one spell twice; keep the style, pick a new spell
             copy.enabled = false
             local newKey = "icon" .. (c + 1)
             s.icons = s.icons or {}
@@ -1440,6 +1447,11 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                     order = 0, type = "description", width = "full", fontSize = "medium",
                     hidden = function() return not styleMode end,
                     name = function() return ("|cFFFFD200Editing style '%s'. Size & border apply when the icon isn't in a Custom Group (the group owns those).|r\n"):format(curStyle() or "?") end,
+                },
+                iconGroup = {
+                    order = 10.5, type = "group", name = "Icon", inline = true,
+                    hidden = function() return styleMode end,
+                    args = iconArgs,
                 },
                 sizeStyleGroup = {
                     order = 10, type = "group", name = "Size & Style", inline = true,
@@ -1501,6 +1513,47 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                         showPandemic = { order = 3, type = "toggle", name = "Pandemic Indicator",
                             get = function() return get("showPandemic") end,
                             set = function(_, v) set("showPandemic", v) end },
+                        pandemicStyle = { order = 3.1, type = "select", name = "Pandemic Style",
+                            disabled = function() return not get("showPandemic") end,
+                            values = { border = "Border", pulse = "Pulse Ring", pixel = "Pixel Glow", proc = "Proc Glow", ants = "Marching Ants" },
+                            sorting = { "border", "pulse", "pixel", "proc", "ants" },
+                            get = function() return get("pandemicStyle") or "border" end,
+                            set = function(_, v) set("pandemicStyle", (v ~= "border") and v or nil) end },
+                        pandemicColor = { order = 3.2, type = "color", name = "Pandemic Color", hasAlpha = true,
+                            disabled = function() return not get("showPandemic") end,
+                            get = function() return unpackColor(get("pandemicColor") or { r = 1, g = 0.35, b = 0.1, a = 1 }, true) end,
+                            set = function(_, r, g, b, a) set("pandemicColor", { r = r, g = g, b = b, a = a }) end },
+                        pandemicBrk = { order = 3.25, type = "description", name = "", width = "full" },
+                        pandemicThickness = { order = 3.3, type = "range", name = "Thickness", min = 1, max = 10, step = 1,
+                            hidden = function() local s = get("pandemicStyle") return s == "proc" or s == "ants" end,
+                            disabled = function() return not get("showPandemic") end,
+                            get = function() return get("pandemicThickness") or 2 end,
+                            set = function(_, v) set("pandemicThickness", v) end },
+                        pandemicBorderStroke = { order = 3.4, type = "toggle", name = "Bordered Stroke",
+                            hidden = function() local s = get("pandemicStyle") or "border" return s ~= "border" and s ~= "pixel" end,
+                            disabled = function() return not get("showPandemic") end,
+                            get = function() return get("pandemicBorderStroke") end,
+                            set = function(_, v) set("pandemicBorderStroke", v or nil) end },
+                        pandemicLines = { order = 3.5, type = "range", name = "Particles", min = 1, max = 12, step = 1,
+                            hidden = function() return get("pandemicStyle") ~= "pixel" end,
+                            disabled = function() return not get("showPandemic") end,
+                            get = function() return get("pandemicLines") or 8 end,
+                            set = function(_, v) set("pandemicLines", v) end },
+                        pandemicLength = { order = 3.6, type = "range", name = "Line Length", min = 1, max = 6, step = 1,
+                            hidden = function() return get("pandemicStyle") ~= "pixel" end,
+                            disabled = function() return not get("showPandemic") end,
+                            get = function() return get("pandemicLength") or 3 end,
+                            set = function(_, v) set("pandemicLength", v) end },
+                        pandemicOffset = { order = 3.7, type = "range", name = "Offset", min = -6, max = 8, step = 0.01, bigStep = 1,
+                            hidden = function() return get("pandemicStyle") ~= "pixel" end,
+                            disabled = function() return not get("showPandemic") end,
+                            get = function() return get("pandemicOffset") or 0 end,
+                            set = function(_, v) set("pandemicOffset", v) end },
+                        pandemicSpeed = { order = 3.8, type = "range", name = "Speed", min = 0.05, max = 1, step = 0.05,
+                            hidden = function() return get("pandemicStyle") ~= "pixel" end,
+                            disabled = function() return not get("showPandemic") end,
+                            get = function() return get("pandemicSpeed") or 0.25 end,
+                            set = function(_, v) set("pandemicSpeed", v) end },
                     },
                 },
                 borderGroup = {
@@ -1531,9 +1584,6 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                 glowGroup = {
                     order = 13, type = "group", name = "Glow While Active", inline = true,
                     args = {
-                        glowNote = {
-                            order = 0, type = "description", width = "full", fontSize = "medium",
-                            name = function() return ("|cFFFFD200Makeshift glows, unfortunately LibCustomGlow doesn't work with aura containers yet|r\n"):format(curStyle() or "?") end, },
                         showGlow = { order = 1, type = "toggle", name = "Show Glow",
                             get = function() return get("showGlow") end,
                             set = function(_, v) set("showGlow", v) end },

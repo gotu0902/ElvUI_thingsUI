@@ -22,7 +22,7 @@ M.SECTIONS = {
     { name = "Timers",               keys = { "timers" },                                     color = "FFC04D" },
     { name = "Racials",              keys = { "racialsCDM" } },
     { name = "Cluster Positioning",  keys = { "clusterPositioning" } },
-    { name = "Movers & General",     keys = { "essentialMover", "groupAnchor", "actionBarCopy", "autoSetAudioChannels", "rightChatAsBackground", "rightChatWidthOffset", "rightChatHeightOffset" } },
+    { name = "Movers & General",     keys = { "essentialMover", "groupAnchor", "raidOrder", "actionBarCopy", "autoSetAudioChannels", "rightChatAsBackground", "rightChatWidthOffset", "rightChatHeightOffset" } },
 }
 
 local COMPRESS = Enum.CompressionMethod and Enum.CompressionMethod.Deflate or 0
@@ -93,6 +93,7 @@ function M.Import(str)
     local data = Decode(s)
     if not data then return false, "Could not decode the string." end
     for k, v in pairs(data) do E.db.thingsUI[k] = v end
+    ns.SpecialBars.Styles.MigrateBorders()
     return true
 end
 
@@ -351,5 +352,6 @@ function M.ApplyPlan(data, plan)
             end
         end
     end
+    ns.SpecialBars.Styles.MigrateBorders()
     return true
 end

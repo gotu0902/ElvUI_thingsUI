@@ -1609,7 +1609,7 @@ local function EnsureConfirm()
     return confirm
 end
 
-local function ShowResetConfirm()
+local function ShowConfirm(text, yesText, noText)
     local db = TDB()
     if not db then return end
     local c = EnsureConfirm()
@@ -1618,9 +1618,9 @@ local function ShowResetConfirm()
     c.text:SetFont(font, (db.fontSize or 12) + 1, flag)
     c.yes.text:SetFont(font, db.fontSize or 12, flag)
     c.no.text:SetFont(font, db.fontSize or 12, flag)
-    c.text:SetText("Reset all damage meter data?")
-    c.yes.text:SetText("|cFFFF5C5CReset|r")
-    c.no.text:SetText("Cancel")
+    c.text:SetText(text)
+    c.yes.text:SetText(yesText)
+    c.no.text:SetText(noText)
     c:ClearAllPoints()
     local p = Panel()
     if E.db.thingsUI.rightChatAsBackground and p then
@@ -1629,6 +1629,32 @@ local function ShowResetConfirm()
         c:SetPoint("CENTER", E.UIParent, "CENTER", 0, -100)
     end
     c:Show()
+end
+
+local function ShowResetConfirm()
+    ShowConfirm("Reset all damage meter data?", "|cFFFF5C5CReset|r", "Cancel")
+end
+
+-- a new dungeon or key: Blizzard can only wipe every session, so ask by default
+local function InstanceResetMode(db)
+    if not db then return "never" end
+    if db.instanceReset then return db.instanceReset end
+    if db.resetOnNewInstance == false then return "never" end
+    return "ask"
+end
+
+local askedMap
+local function OnNewInstance(fromKey)
+    local mode = InstanceResetMode(TDB())
+    if mode == "always" then
+        DoResetData()
+    elseif mode == "ask" then
+        local map = select(8, GetInstanceInfo())
+        -- zoning in already asked: a key start in the same dungeon doesn't ask again
+        if fromKey and askedMap == map then return end
+        askedMap = map
+        ShowConfirm("New instance: reset damage meter data?", "|cFFFF5C5CReset|r", "Keep")
+    end
 end
 
 local function BuildTypeEntries(win)
@@ -2025,13 +2051,27 @@ local function QueueRefresh()
     C_Timer.After(0.1, function() pendingRefresh = false; M.RefreshAll() end)
 end
 
+-- every window onto one session
+local function SwapAll(session)
+    for _, w in ipairs(windows) do
+        if w.cfg then w.cfg.session = session; w.scroll = 0; w.drill = nil end
+    end
+    QueueRefresh()
+end
+
+local function NewInstance(fromKey)
+    OnNewInstance(fromKey)
+    local db = TDB()
+    if db and db.swapCurrentOnInstance then SwapAll("current") end
+end
+
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")
 
 local COMBAT_EVENTS = {
     "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ENCOUNTER_START", "ENCOUNTER_END",
     "DAMAGE_METER_RESET", "DAMAGE_METER_COMBAT_SESSION_UPDATED", "DAMAGE_METER_CURRENT_SESSION_UPDATED",
-    "CHALLENGE_MODE_START",
+    "CHALLENGE_MODE_START", "CHALLENGE_MODE_COMPLETED",
 }
 
 local encounterActive = false
@@ -2144,18 +2184,14 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
             QueueRefresh()
         end
     elseif event == "CHALLENGE_MODE_START" then
+        NewInstance(true)
+    elseif event == "CHALLENGE_MODE_COMPLETED" then
         local db = TDB()
-        if db and db.resetOnNewInstance ~= false and C_DamageMeter.ResetAllCombatSessions then
-            C_DamageMeter.ResetAllCombatSessions()
-        end
+        if db and db.swapOverallOnKeyEnd then SwapAll("overall") end
     elseif event == "PLAYER_ENTERING_WORLD" then
         local inInst = IsInInstance()
         local mapID = inInst and select(8, GetInstanceInfo()) or nil
-        local db = TDB()
-        if mapID and mapID ~= lastInstMap and not arg1 and not arg2
-            and db and db.resetOnNewInstance ~= false and C_DamageMeter.ResetAllCombatSessions then
-            C_DamageMeter.ResetAllCombatSessions()
-        end
+        if mapID and mapID ~= lastInstMap and not arg1 and not arg2 then NewInstance(false) end
         if mapID then lastInstMap = mapID end
         C_Timer.After(1, function() TUI:UpdateTUIMeter() end)
     end

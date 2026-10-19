@@ -188,7 +188,7 @@ local function ApplyIconBorder(wrapper, db)
 
     local size = db.borderSize or 1
     if db.glowBorderStroke and db.showGlow and AL.MapGlowStyle(db.glowType) == "pixel" then size = db.glowThickness or size end
-    local inset = db.borderInset or 0
+    local inset = (db.borderInset or 0) - size
     local bc    = db.borderColor or { r=0, g=0, b=0, a=1 }
 
     if not host then
@@ -398,7 +398,7 @@ local function UpdateIconSlot(iconKey)
     -- a row keeps its cell: idle shows the spell greyed out, like a cooldown
     if test or db.desaturateWhenInactive or row then
         local raw = SB.GetRawSpellList and SB.GetRawSpellList()[db.spellID]
-        local tex = raw and raw.icon
+        local tex = db.customIcon or (raw and raw.icon)
         if not tex then
             local si = SB.GetCachedSpellInfo and SB.GetCachedSpellInfo(db.spellID)
             tex = si and si.iconID
@@ -407,7 +407,7 @@ local function UpdateIconSlot(iconKey)
         wrapper.fallback:SetTexCoord(ComputeIconTexCoord(db))
         wrapper.fallback:SetDesaturated(not test)
         wrapper.fallback:Show()
-        wrapper.fallbackBorder:Show()
+        wrapper.fallbackBorder:SetShown(not db.showBorder)
         ApplyIconBorder(wrapper, db)
     else
         HideWrapperVisuals(wrapper)
@@ -419,20 +419,17 @@ local function UpdateIconSlot(iconKey)
         TM.RegisterTotemSpell(db.spellID)
         if not SB._totemCB and TM.AddTotemCallback then
             SB._totemCB = true
-            TM.AddTotemCallback(function()
-                local T = ns.TUI
-                if T and T.UpdateSpecialBars then T:UpdateSpecialBars() end
-            end)
+            TM.AddTotemCallback(function() if SB.OnTotemChange then SB.OnTotemChange() end end)
         end
         local start, dur = TM.GetTotemState(db.spellID)
         if start then
             local raw = SB.GetRawSpellList and SB.GetRawSpellList()[db.spellID]
-            local ttex = (raw and raw.icon) or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(db.spellID))
+            local ttex = db.customIcon or (raw and raw.icon) or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(db.spellID))
             if ttex then wrapper.fallback:SetTexture(ttex) end
             wrapper.fallback:SetTexCoord(ComputeIconTexCoord(db))
             wrapper.fallback:SetDesaturated(false)
             wrapper.fallback:Show()
-            wrapper.fallbackBorder:Show()
+            wrapper.fallbackBorder:SetShown(not db.showBorder)
             ApplyIconBorder(wrapper, db)
             if not wrapper.totemCD then
                 wrapper.totemCD = CreateFrame("Cooldown", nil, wrapper, "CooldownFrameTemplate")

@@ -34,5 +34,7 @@
 	<Script file="MBB.lua"/>
 	<Script file="MinimapDifficulty.lua"/>
 	<Script file="Movers\GroupAnchor.lua"/>
+	<Script file="RaidOrder.lua"/>
+	<Script file="RaidOrderEditor.lua"/>
 	<Script file="Movers\MoverSync.lua"/>
 </Ui>

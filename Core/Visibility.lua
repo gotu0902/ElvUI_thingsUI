@@ -11,6 +11,14 @@ V.PLACES = {
     world = "Open World", dungeon = "Dungeon", raid = "Raid", delve = "Delve",
     scenario = "Scenario", arena = "Arena", pvp = "Battleground", housing = "Housing",
 }
+V.ROLES = { TANK = "Tank", HEALER = "Healer", DAMAGER = "DPS" }
+
+-- the current spec's role
+local function Role()
+    local spec = GetSpecialization and GetSpecialization()
+    return (spec and GetSpecializationRole(spec)) or "DAMAGER"
+end
+V.Role = Role
 
 local inCombat = InCombatLockdown() and true or false
 
@@ -72,6 +80,7 @@ function V.Shown(v)
     if v.combat then used.combat = true end
     if v.solo == false or v.party == false or v.raid == false then used.group = true end
     if v.places and next(v.places) then used.place = true end
+    if v.roles and next(v.roles) then used.role = true end
     if v.forms and next(v.forms) then used.form = true end
     if v.hideMounted then used.mount = true end
     if v.hideNoTarget or v.hideNoEnemy then used.target = true end
@@ -82,6 +91,7 @@ function V.Shown(v)
     if c == "out" and inCombat then return false end
     if v[GroupType()] == false then return false end
     if v.places and next(v.places) and not v.places[Place()] then return false end
+    if v.roles and next(v.roles) and not v.roles[Role()] then return false end
     if v.forms and next(v.forms) and not v.forms[FormKey()] then return false end
     if v.hideMounted and Mounted() then return false end
     local target = UnitExists("target")
@@ -103,6 +113,7 @@ local function Check()
         used.combat and tostring(inCombat) or "",
         used.group and GroupType() or "",
         used.place and Place() or "",
+        used.role and Role() or "",
         used.form and FormKey() or "",
         used.mount and tostring(Mounted()) or "",
         used.target and (tostring(target) .. tostring(target and UnitCanAttack("player", "target"))) or "",
@@ -126,6 +137,8 @@ for _, e in ipairs({ "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_EN
     "PLAYER_MOUNT_DISPLAY_CHANGED", "PLAYER_TARGET_CHANGED", "PLAYER_UPDATE_RESTING" }) do
     ev:RegisterEvent(e)
 end
+-- it also fires for every group member
+ev:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
 ev:SetScript("OnEvent", function(_, event)
     -- combat flips at once; the rest coalesce (zone loads fire several)
     if event == "PLAYER_REGEN_DISABLED" then inCombat = true; Check()

@@ -35,7 +35,7 @@ local function EnsureButton(slot)
 end
 
 -- nil while the item or its tooltip is still loading
-local function IsOnUse(slot, itemID)
+local function ReadOnUse(slot, itemID)
     if C_Item.IsItemDataCachedByID and not C_Item.IsItemDataCachedByID(itemID) then
         waiting[itemID] = true
         C_Item.RequestLoadItemDataByID(itemID)
@@ -51,6 +51,15 @@ local function IsOnUse(slot, itemID)
         if lt and prefix and lt:sub(1, #prefix) == prefix then return true end
     end
     return false
+end
+
+-- a found Use line never goes away: remember it, the tooltip lags after loading screens
+local onUseKnown = {}
+local function IsOnUse(slot, itemID)
+    if onUseKnown[itemID] then return true end
+    local v = ReadOnUse(slot, itemID)
+    if v then onUseKnown[itemID] = true end
+    return v
 end
 
 function M.ShowsSlot(slot) return shownSlot[slot] or false end

@@ -64,6 +64,71 @@ function ns.TextColor(fs, c)
     fs:SetTextColor(c and c.r or 1, c and c.g or 1, c and c.b or 1)
 end
 
+-- an options list entry in its own tab color, if it has one
+function ns.TabName(name, c)
+    if not c then return name end
+    return ("|cff%02x%02x%02x%s|r"):format(c.r * 255, c.g * 255, c.b * 255, name)
+end
+
+-- "Tab Color" toggle and swatch; tbl(create) returns the entry's table
+function ns.TabColorArgs(tbl, onChange, order)
+    return {
+        order = order, type = "toggle", name = "Tab Color", width = 0.7,
+        get = function() local t = tbl() return (t and t.tabColor) ~= nil end,
+        set = function(_, v)
+            tbl(true).tabColor = v and { r = 0.3, g = 0.82, b = 0.65 } or nil
+            onChange()
+        end,
+    }, {
+        order = order + 0.01, type = "color", name = "", width = 0.3,
+        hidden = function() local t = tbl() return not (t and t.tabColor) end,
+        get = function()
+            local c = tbl().tabColor
+            return c.r, c.g, c.b
+        end,
+        set = function(_, r, g, b)
+            tbl(true).tabColor = { r = r, g = g, b = b }
+            onChange()
+        end,
+    }
+end
+
+-- Custom Icon: a texture file ID or path, or another spell's icon; get() -> icon, set(icon or nil)
+function ns.CustomIconArgs(get, set, base, hidden, disabled)
+    local function none() return (hidden and hidden()) or get() == nil end
+    return {
+        customIcon = {
+            order = base, type = "input", name = "Custom Icon", desc = "Texture file ID or path.",
+            hidden = hidden, disabled = disabled,
+            get = function() local v = get() return v and tostring(v) or "" end,
+            set = function(_, v)
+                v = strtrim(v or "")
+                set(v ~= "" and (tonumber(v) or v) or nil)
+            end,
+        },
+        iconFromSpell = {
+            order = base + 0.01, type = "input", name = "Icon From Spell", desc = "Spell ID or name.",
+            hidden = hidden, disabled = disabled,
+            get = function() return "" end,
+            set = function(_, v)
+                v = strtrim(v or "")
+                local info = v ~= "" and C_Spell.GetSpellInfo(tonumber(v) or v)
+                if info and info.iconID then set(info.iconID) end
+            end,
+        },
+        iconPreview = {
+            order = base + 0.02, type = "description", name = "", width = 0.25, hidden = none,
+            image = function() return get() end, imageWidth = 28, imageHeight = 28,
+            imageCoords = { 0.08, 0.92, 0.08, 0.92 },
+        },
+        iconClear = {
+            order = base + 0.03, type = "execute", name = "Spell's Own Icon", width = 0.9,
+            hidden = none, disabled = disabled,
+            func = function() set(nil) end,
+        },
+    }
+end
+
 -- 12.1.5+: a cap of 0 also disables the group, so it stops parsing UNIT_AURA
 function ns.SetAuraGroupCap(container, key, cap)
     if container.SetAuraGroupEnabled then

@@ -686,10 +686,17 @@ function M.PositionStack(positionOnly)
         end
     end
 
+    -- a druid's classbar hides outside cat form: keep its width current anyway, it can
+    -- only be resized out of combat and may show mid-fight
+    local function SizedWhileHidden(key)
+        if key ~= "classbar" then return false end
+        local CM = ns.ClassbarMode
+        return CM and CM.IsNHTForCurrentSpec and CM.IsNHTForCurrentSpec() or false
+    end
     if baseWidth and not positionOnly then
         for _, key in ipairs(setup.order) do
             local b = setup.bars[key]
-            if b and b.enabled and b.mode == "NHT" and ShouldInclude(key) then
+            if b and b.enabled and b.mode == "NHT" and (ShouldInclude(key) or SizedWhileHidden(key)) then
                 ApplyBarWidth(key, EffectiveWidth(b))
             end
         end

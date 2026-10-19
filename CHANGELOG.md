@@ -1,5 +1,55 @@
 # Changelog
 ## 4.2.1
+### Character Setup (/tui alt)
+- /tui alt is a new window, like the things for EUI installer: one row per addon with Install / Reinstall / Update, what this character uses, Profile... (what your characters should use) and Load. Load for This Character and Load Without CDM at the bottom, 1440p / 1080p up top (1080p once its strings are in)
+- ElvUI and BigWigs switch per spec on their own on classes with a healer spec or Augmentation: FHT there, NHT on the rest (ElvUI's own spec profiles). Warriors and co just use NHT. Profile... picks which profiles that is: Tank & DPS and Healer + Aug, each its own (BuffReminders can do the same)
+- New: BigWigs (NHT + FHT profiles with their Boss Debuff auras) and Blizzard's Cooldown Manager layouts (one per spec, per character) from the things for EUI pack. In the installer's Everything! and quick setups, on their own installer page and as buttons under Import / Install
+- The login check is still a small popup, now with the profile names it loads and the Cooldown Manager layouts this character is missing: Everything, Everything but CDM (keep your own layouts) or Skip (asks again when something changes)
+- Presets, Multi-Spec role profiles and the per-spec Edit Mode switching are gone with the old window
+### Raid Frame Builder
+- New module (Modules → Raid Frame Builder): sorts ElvUI's raid frames by your own name list. Listed names first, everyone else by name
+- Open Builder shows your raid as frames laid out like your ElvUI raid frames: drag one onto another to move it, Sort by Role (click the role order to change it, Tank > DPS > Healer etc.), Stack Classes keeps the same class together in a role, Save writes it to the list
+- Layouts are shared by all your characters and stay out of profiles; Enable is per profile, so it follows spec profiles
+- Export/Import, also between thingsUI and things for EUI
+- Without ElvUI's Raid-Wide Sorting the order applies inside each group. Changes wait until combat ends (someone joining mid-fight shows up after it)
+### More
+- Visibility: new Only As Tank / Healer / DPS (your spec's role) on every Visibility tab: Groups, Aura Icons, Aura Bars and Timers
+- Pandemic Indicator on Aura Icons and Groups entries gets the Glow While Active settings: Thickness (Border, Pulse, Pixel), Bordered Stroke (Border: black lines inside and outside the ring, Pixel: the dark band) and Particles, Line Length, Offset and Speed for Pixel Glow. Styles carry them
+- Damage Meter (Mini Meter): Swap to Current on New Instance (entering a dungeon or starting a key) and Swap to Overall When M+ Ends, both under Windows
+- Copy Group on Groups - Icons and Groups - Bars: duplicates the whole group (spells, auras, look, Visibility, position) and opens the copy. Aura Icons, Timers, trinkets and racials sent to a group stay with the original
+- Aura Collections tabs are sorted by name (built-ins and your own together, renames follow)
+- Tab Color for Groups - Icons, Groups - Bars, Bar Setups and Aura Collections, so your Defensives can always be red or whatever. A group's color also shows on its heading in the Aura Icons list
+- Spell Editor → Buff Icons: glow per buff (While Shown, own color), like Cooldowns already had
+- Spell Editor: Own Glow Style per spell or buff (style, lines, thickness, particles, scale, speed, offset), starting from Layout > Glow
+- Pixel Glow on Aura Icons and Groups - Icons (and the Pixel Glow pandemic style) is rebuilt: the lines now travel the whole border and turn the corners smoothly instead of sliding along each edge and getting cut off at the corners. Same Lines, Line Length, Thickness, Speed and Offset settings
+- Aura Icons and group auras: Pandemic Style (Border, Pulse Ring, Pixel Glow, Proc Glow, Marching Ants) and Pandemic Color for the pandemic indicator. Dropped the old "makeshift glows" note
+- Damage Meter (Mini Meter): Reset on New Instance is Ask / Always / Never and asks by default (Reset or Keep) instead of wiping silently. Blizzard's meter can only wipe everything, so asking is the way to keep a run's data. A key start in the dungeon you just zoned into doesn't ask twice
+- Spell Editor moved out of CDM into its own Modules entry, CDM Spell Editor (right under CDM), easier to find
+- Spell Editor → Cooldowns: Aura Overlay per spell (Settings / Hide / Show), plus the aura swipe's direction and color per spell
+- Spell Editor → Buff Icons: Invert Swipe per buff (Settings / Reversed / Normal) and its swipe color
+- Spell Editor, both pages: Pandemic Glow per spell (Settings / Blizzard / Hidden / Custom Glow) with its own color and Own Glow Style
+- New CDM → Layout → Aura Overlay: Hide Aura Overlay (moved from Settings, now says it covers all spells), Aura Swipe color and Reverse Swipe while a spell's aura runs, and Pandemic Glow as Blizzard / Hidden / Custom Glow with the same style, color and look options as Layout > Glow (Hide Pandemic Glow moved here too)
+- Close Cooldown Settings yourself on a CDM page and it stays closed (no more popping back up) until you close the options
+- Custom Icon for Aura Icons, Aura Bars and Spell Editor spells/buffs: a texture file ID or path, or Icon From Spell (ID or name). Follows them into groups, CDM rows and the previews
+### Performance
+- Glows on Aura Icons and Groups - Icons (and the pandemic styles) now only animate while their aura is actually showing: Blizzard's aura engine starts and stops them (12.1.5). Before, every pooled icon kept animating its glow in the background, even with no aura up
+- Group preview icons stop their glow animations when you close the options (they kept running hidden for the rest of the session)
+- Aura Icon spell lookups are cached in combat too (rebuilt after combat), and the role visibility rule only reacts to your own spec changes
+- A tracked cast (Ironfur with Ticks, totem timers) no longer rebuilds every Aura Bar and Aura Icon: only the bars and icons that use it update, and ticks just move
+### Fixes
+- CDM: an icon that overflows from Essential into Utility (or the other way) now takes that row's text settings instead of keeping its old row's
+- CDM Spell Editor listed spells you set up on other classes and specs (Dream Breath on a monk). It only lists this spec's now; Spell ID still reaches the rest, their settings were never lost
+- Aura Icons measure like the Cooldown Manager: Size and Zoom are the icon itself and its border sits outside it, the way ElvUI draws CDM icons. A 37 / 8% Aura Icon now matches a 37 / 8% CDM icon (it took 39 / 6% before). Inset still moves the border in. Your existing icons and styles keep their exact look: their Inset goes up by the border's width once (and old import strings get the same treatment)
+- Trinkets in CDM no longer vanish for a moment after a loading screen
+- Pixel Glow sat 1.5 px inside the right edge of icons (an old nudge from the previous glow); it now lines up on all four sides
+- Aura Bars: Ticks work in combat again. They now sit on the bar itself instead of on the aura, which the game locks in combat
+- Trinkets and items (CDM, Groups, Timers) no longer turn grey on the GCD; they still show its swipe, like Blizzard's own icons
+- Bar Setup: a druid's classbar now keeps the CDM width while it's hidden (bear form), so going cat mid-combat no longer shows it at an old width until you leave combat
+- Hide Aura Overlay put the spell's own art back over a Spell Editor Custom Icon
+- Aura Icons/Bars: a buff whose CDM entry carries another ID than the aura keeps tracking. 12.1.5 broke Lifebloom set to 1227806 (the HoT on you is 33763); the spell you know by that name, tracked CDM buffs with the same name and buffs your layout moved into Buff Icons/Bars now count too
+- New `/tui icons`: what each Aura Icon tracks and why it might not show
+- Spell Editor (and the CDM spell picker) missed spells and buffs you dragged into Essential, Utility or Buffs from another category in Cooldown Settings, like Incarnation into Buffs. They read Blizzard's default categories; now your layout counts too
+- ElvUI raid frames: the first frame of a new column (the 6th with 5 per column) could sit below the last row instead of at the top of its column after a login, reload or profile change. ElvUI sets the frames up one setting at a time and Blizzard's layout keeps the old spot; thingsUI now lays them out once more when ElvUI is done
 - Groups - Icons: Show Caster Name works now (Blizzard shipped it under another name than on the PTR), with a new Class Color Caster toggle
 - Hidden or unused aura groups in Groups, Aura Icons/Bars and Groups - Bars are switched fully off, so they do no work when your auras change
 - Damage Meter (thingsUI): fixed a possible error opening a breakdown now that the game can hide who a row belongs to

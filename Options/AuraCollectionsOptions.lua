@@ -68,7 +68,7 @@ local function CollectionTab(order, key)
         order = order, type = "group",
         name = function()
             local c = AC.Get(key)
-            return c and c.name or key
+            return ns.TabName(c and c.name or key, (AC.Raw(key) or {}).tabColor)
         end,
         args = {
             name = {
@@ -88,6 +88,8 @@ local function CollectionTab(order, key)
                     AC.Changed()
                 end,
             },
+            tabColorOn = (ns.TabColorArgs(function(create) return AC.Raw(key, create) end, ns.NotifyChange, 1.5)),
+            tabColor = select(2, ns.TabColorArgs(function(create) return AC.Raw(key, create) end, ns.NotifyChange, 1.5)),
             source = {
                 order = 2, type = "select", name = "Source",
                 values = { spells = "Spell List", filter = "Blizzard Filter" }, sorting = { "spells", "filter" },
@@ -166,7 +168,10 @@ function TUI:AuraCollectionsOptions()
         for k in pairs(args) do
             if k:sub(1, 4) == "col_" then args[k] = nil end
         end
-        for i, c in ipairs(AC.List()) do
+        -- tabs by name, built-ins and your own mixed (renames resort on the next rebuild)
+        local list = AC.List()
+        table.sort(list, function(a, b) return (a.name or ""):lower() < (b.name or ""):lower() end)
+        for i, c in ipairs(list) do
             args["col_" .. c.key] = CollectionTab(10 + i, c.key)
         end
     end

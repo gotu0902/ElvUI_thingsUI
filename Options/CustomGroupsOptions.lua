@@ -68,7 +68,7 @@ local function EditAura(def, title, onChange, group)
     f:SetStatusText("Applies to this entry only")
     f:SetLayout("Flow")
     f:SetWidth(400)
-    f:SetHeight(460)
+    f:SetHeight(505)
     f:EnableResize(false)
 
     local on = AceGUI:Create("CheckBox")
@@ -170,6 +170,7 @@ local function EditAura(def, title, onChange, group)
     end
 
     local gstyle
+    local extra = 0
 
     local function PixelOn()
         return not sorted and def.showGlow and (def.glowStyle or "pulse") == "pixel"
@@ -215,7 +216,7 @@ local function EditAura(def, title, onChange, group)
         f:AddChild(gstyle)
 
         if PixelOn() then
-            f:SetHeight(590)
+            extra = extra + 130
             local bstroke = AceGUI:Create("CheckBox")
             bstroke:SetLabel("Bordered Stroke")
             bstroke:SetWidth(170)
@@ -250,8 +251,73 @@ local function EditAura(def, title, onChange, group)
     pand:SetWidth(170)
     pand:SetValue(def.showPandemic and true or false)
     pand:SetDisabled(sorted or (def.kind or "HELPFUL") ~= "HARMFUL")
-    pand:SetCallback("OnValueChanged", function(_, _, v) def.showPandemic = v; onChange() end)
+    local pandStyle, pandColor
+    pand:SetCallback("OnValueChanged", function(_, _, v)
+        def.showPandemic = v
+        onChange()
+        Reopen()
+    end)
     f:AddChild(pand)
+
+    local pandOff = sorted or (def.kind or "HELPFUL") ~= "HARMFUL" or not def.showPandemic
+    pandStyle = AceGUI:Create("Dropdown")
+    pandStyle:SetLabel("Pandemic Style")
+    pandStyle:SetWidth(170)
+    pandStyle:SetList({ border = "Border", pulse = "Pulse Ring", pixel = "Pixel Glow", proc = "Proc Glow", ants = "Marching Ants" },
+        { "border", "pulse", "pixel", "proc", "ants" })
+    pandStyle:SetValue(def.pandemicStyle or "border")
+    pandStyle:SetDisabled(pandOff)
+    pandStyle:SetCallback("OnValueChanged", function(_, _, v)
+        def.pandemicStyle = (v ~= "border") and v or nil
+        onChange()
+        Reopen()
+    end)
+    f:AddChild(pandStyle)
+
+    pandColor = AceGUI:Create("ColorPicker")
+    pandColor:SetLabel("Pandemic Color")
+    pandColor:SetWidth(170)
+    pandColor:SetHasAlpha(true)
+    local pcol = def.pandemicColor or { r = 1, g = 0.35, b = 0.1, a = 1 }
+    pandColor:SetColor(pcol.r or 1, pcol.g or 0.35, pcol.b or 0.1, pcol.a or 1)
+    pandColor:SetDisabled(pandOff)
+    pandColor:SetCallback("OnValueConfirmed", function(_, _, r, g, b, a)
+        def.pandemicColor = { r = r, g = g, b = b, a = a }
+        onChange()
+    end)
+    f:AddChild(pandColor)
+
+    -- the same look settings as Glow While Active
+    local pst = def.pandemicStyle or "border"
+    if not pandOff and pst ~= "proc" and pst ~= "ants" then
+        local function Slider(label, field, mn, mx, step, dflt)
+            local s = AceGUI:Create("Slider")
+            s:SetLabel(label)
+            s:SetWidth(170)
+            s:SetSliderValues(mn, mx, step)
+            s:SetValue(def[field] or dflt)
+            s:SetCallback("OnValueChanged", function(_, _, v) def[field] = v; onChange() end)
+            f:AddChild(s)
+        end
+        Slider("Pandemic Thickness", "pandemicThickness", 1, 10, 1, 2)
+        extra = extra + 55
+        if pst == "border" or pst == "pixel" then
+            local st = AceGUI:Create("CheckBox")
+            st:SetLabel("Bordered Stroke")
+            st:SetWidth(170)
+            st:SetValue(def.pandemicBorderStroke and true or false)
+            st:SetCallback("OnValueChanged", function(_, _, v) def.pandemicBorderStroke = v or nil; onChange() end)
+            f:AddChild(st)
+        end
+        if pst == "pixel" then
+            Slider("Particles", "pandemicLines", 1, 12, 1, 8)
+            Slider("Line Length", "pandemicLength", 1, 6, 1, 3)
+            Slider("Offset", "pandemicOffset", -6, 8, 1, 0)
+            Slider("Speed", "pandemicSpeed", 0.05, 1, 0.05, 0.25)
+            extra = extra + 110
+        end
+    end
+    f:SetHeight(505 + extra)
 end
 
 local CG_UP   = "|TInterface\\Buttons\\Arrow-Up-Up:16:16:0:2|t"
@@ -1285,6 +1351,7 @@ function TUI:CustomGroupsOptions()
             order = 10 + index, type = "group", childGroups = "tab",
             name = function()
                 local nm = group.name or "Group"
+                if group.enabled then nm = ns.TabName(nm, group.tabColor) end
                 local CGm = ns.CustomGroups
                 if CGm and CGm.TrinketDestFor then
                     local a, b = CGm.TrinketDestFor(13), CGm.TrinketDestFor(14)
@@ -1310,6 +1377,20 @@ function TUI:CustomGroupsOptions()
                     get = function() return group.name or "" end,
                     set = function(_, v)
                         if v and v ~= "" then group.name = v; if CG._rebuildOptions then CG._rebuildOptions() end; NotifyChange() end
+                    end,
+                },
+                tabColorOn = (ns.TabColorArgs(function() return group end, NotifyChange, 1.5)),
+                tabColor = select(2, ns.TabColorArgs(function() return group end, NotifyChange, 1.5)),
+                copy = {
+                    order = 1.9, type = "execute", name = "Copy Group",
+                    func = function()
+                        if not CG then return end
+                        local _, ni = CG.CopyGroup(index)
+                        if not ni then return end
+                        if CG._rebuildOptions then CG._rebuildOptions() end
+                        NotifyChange()
+                        local ACD = E.Libs and E.Libs.AceConfigDialog
+                        if ACD then ACD:SelectGroup("ElvUI", "thingsUI", "modulesTab", "customGroups", "group" .. ni) end
                     end,
                 },
                 del = {

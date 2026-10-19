@@ -19,11 +19,66 @@ local VIEWERS = {
     BuffIconCooldownViewer  = "buffIcon",
 }
 
+-- pandemic window: Blizzard's frame, hidden, or a thingsUI glow (CDM > Layout > Aura Overlay)
+local function PandemicMode(cdm)
+    return (cdm and (cdm.pandemicMode or (cdm.hidePandemic and "hide"))) or "blizzard"
+end
+
+local function GlowLib() return LibStub and LibStub("LibCustomGlow-1.0", true) end
+
+local pandemicGlow = setmetatable({}, { __mode = "k" })
+
+local function StopPandemicGlow(child)
+    local h = pandemicGlow[child] and child._tuiPandemicFX
+    pandemicGlow[child] = nil
+    local lib = GlowLib()
+    if not (h and lib) then return end
+    lib.PixelGlow_Stop(h)
+    lib.AutoCastGlow_Stop(h)
+    lib.ProcGlow_Stop(h)
+    lib.ButtonGlow_Stop(h)
+end
+
+-- on a holder of its own, so it never shares LibCustomGlow's slot with the proc glow
+local function StartPandemicGlow(child, cdm, o)
+    local lib = GlowLib()
+    if not lib then return end
+    local h = child._tuiPandemicFX
+    if not h then
+        h = CreateFrame("Frame", nil, child)
+        h:SetAllPoints(child)
+        child._tuiPandemicFX = h
+    end
+    h:SetFrameLevel(child:GetFrameLevel() + 5)
+    -- a Spell Editor spell's own look and color win over Layout > Aura Overlay
+    local fx = (o and o.pandemicFX) or cdm.pandemicFX or {}
+    local style = fx.style or "pixel"
+    if pandemicGlow[child] and pandemicGlow[child] ~= style then StopPandemicGlow(child) end
+    local c = (o and o.pandemicColor) or cdm.pandemicColor
+    local color = c and { c.r or 1, c.g or 1, c.b or 1, 1 } or nil
+    local off = fx.offset or 0
+    if style == "autocast" then
+        lib.AutoCastGlow_Start(h, color, fx.particles or 4, fx.frequency or 0.125, fx.scale or 1, off, off)
+    elseif style == "proc" then
+        lib.ProcGlow_Start(h, { color = color, xOffset = off, yOffset = off })
+    elseif style == "button" then
+        lib.ButtonGlow_Start(h, color, fx.frequency or 0.125)
+    else
+        lib.PixelGlow_Start(h, color, fx.lines or 8, fx.frequency or 0.25, nil, fx.thickness or 2, off, off)
+    end
+    pandemicGlow[child] = style
+end
+
 local function ClearPandemic(child)
-    local p = child and child.PandemicIcon
-    if not p then return end
+    if not child then return end
+    local p = child.PandemicIcon
+    if not p then StopPandemicGlow(child) return end
     local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
-    p:SetAlpha((cdm and cdm.hidePandemic) and 0 or 1)
+    local o = M.SpellSettings and M.SpellSettings(child)
+    local mode = (o and o.pandemicMode) or PandemicMode(cdm)
+    -- the frame is pooled: always set it, another icon may have hidden it
+    p:SetAlpha(mode == "blizzard" and 1 or 0)
+    if mode == "custom" then StartPandemicGlow(child, cdm or {}, o) else StopPandemicGlow(child) end
 end
 
 function M.ClearPandemicAll()
@@ -44,6 +99,17 @@ local VIEWER_BY_KEY = {
 }
 
 local overflowOut = {}
+
+-- the viewer an icon shows in: an overflowed one sits in its target row
+function M.ShownIn(child)
+    for name, list in pairs(overflowOut) do
+        for i = 1, #list do
+            if list[i] == child then return name end
+        end
+    end
+    local p = child:GetParent()
+    return p and p.GetName and p:GetName()
+end
 
 local hookedViewers = {}
 local hookedChildren = {}
@@ -214,6 +280,63 @@ function M.SpellSettings(child)
     if not (ps and next(ps)) then return nil end
     local sid, base = M.ChildSpell(child)
     return (sid and ps[sid]) or (base and ps[base]) or nil
+end
+
+-- Hide Aura Overlay for this frame: its Spell Editor choice, else Settings
+local function WantsOverlayHidden(child)
+    local o = M.SpellSettings(child)
+    if o and o.auraOverlay then return o.auraOverlay == "hide" end
+    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    return (cdm and cdm.hideAuraOverlay) and true or false
+end
+
+-- Spell Editor custom icon. RefreshSpellTexture is Blizzard's only writer of the icon,
+-- so a per-frame post-hook re-stamps after every repaint; no hooks until one is set
+local anyCustomIcon = false
+local iconHooked = setmetatable({}, { __mode = "k" })
+local iconStamped = setmetatable({}, { __mode = "k" })
+
+function M.ApplyCustomIcon(child, fromHook)
+    if not (anyCustomIcon or iconStamped[child]) then return end
+    local tex = child.Icon
+    if not (tex and tex.SetTexture) then return end
+    if not iconHooked[child] and child.RefreshSpellTexture then
+        iconHooked[child] = true
+        hooksecurefunc(child, "RefreshSpellTexture", function(self) M.ApplyCustomIcon(self, true) end)
+    end
+    local o = M.SpellSettings(child)
+    local ci = o and o.customIcon
+    if ci then
+        tex:SetTexture(ci)
+        iconStamped[child] = true
+    elseif iconStamped[child] then
+        -- inside the hook Blizzard has just painted the real one
+        if fromHook then iconStamped[child] = nil return end
+        local sid = M.ChildSpell(child)
+        local real = sid and C_Spell.GetSpellTexture(sid)
+        if real then
+            tex:SetTexture(real)
+            iconStamped[child] = nil
+        end
+    end
+end
+
+function M.RefreshCustomIcons()
+    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    anyCustomIcon = false
+    for _, k in ipairs({ "perSpell", "perBuff" }) do
+        for _, e in pairs((cdm and cdm[k]) or {}) do
+            if type(e) == "table" and e.customIcon then anyCustomIcon = true break end
+        end
+    end
+    for _, name in ipairs({ "EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer" }) do
+        local v = _G[name]
+        if v then
+            for _, c in ipairs({ v:GetChildren() }) do
+                if c.cooldownInfo then M.ApplyCustomIcon(c) end
+            end
+        end
+    end
 end
 
 function M.IsAuraDuplicate(child)
@@ -497,15 +620,16 @@ local function ApplyAuraState(child, cd, spellID)
 end
 
 local function EnforceSpellTexture(child)
-    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
-    if not (cdm and cdm.hideAuraOverlay) then return end
+    if not WantsOverlayHidden(child) then return end
     local cvs = _G.CooldownViewerSettings
     if cvs and cvs:IsShown() then return end
     if OverlayEligible(child) ~= "spell" then return end
     local info = child.cooldownInfo
     local base = info and PlainID(info.spellID) or nil
     if not (type(base) == "number" and base > 0) then return end
-    local tex = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(base)
+    -- the spell's art, or its Spell Editor custom icon
+    local o = M.SpellSettings(child)
+    local tex = (o and o.customIcon) or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(base))
     local icon = child.Icon
     if not (tex and icon and icon.SetTexture) then return end
     local cur = icon:GetTexture()
@@ -549,8 +673,7 @@ local function UpdateOverrideGlow(child)
 end
 
 local function OverlayActive(child)
-    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
-    if not (cdm and cdm.hideAuraOverlay) then return false end
+    if not WantsOverlayHidden(child) then return false end
     local cvs = _G.CooldownViewerSettings
     if cvs and cvs:IsShown() then return false end
     return OverlayEligible(child)
@@ -572,13 +695,13 @@ local function ProcessCooldownFrame(child)
     ApplyCooldownStyle(cd)
     if kind == "equip" then
         local slot = child:GetEquipSlot()
-        local start, dur
+        local start, dur, _, gcd
         if not (issecretvalue and issecretvalue(slot)) and slot and GetInventoryItemCooldown then
-            start, dur = GetInventoryItemCooldown("player", slot)
+            start, dur, _, gcd = GetInventoryItemCooldown("player", slot)
         end
         if start and dur and dur > 0 then
             cd:SetCooldown(start, dur)
-            PutDesat(child.Icon, 1)
+            PutDesat(child.Icon, (gcd or dur <= H.ITEM_GCD_MAX) and 0 or 1)
         else
             if cd.Clear then cd:Clear() end
             PutDesat(child.Icon, 0)
@@ -623,6 +746,45 @@ local function ReassertDesat(child)
     ProcessCooldownFrame(child)
 end
 
+-- Essential/Utility swipe while a spell's aura runs: Blizzard sets ITEM_AURA_COLOR first on
+-- every repaint, so a post-hook restyles it right there (not while the overlay is hidden)
+local swipeRev = setmetatable({}, { __mode = "k" })
+local swipeHooked = setmetatable({}, { __mode = "k" })
+
+local function StyleAuraSwipe(child)
+    local cd = child.Cooldown
+    if not cd or applyingOverlay[cd] then return end
+    -- a buff icon is always its aura; its direction is the layout pass's (Invert Swipe)
+    local buff = child:GetParent() == _G.BuffIconCooldownViewer
+    local consts = _G.CooldownViewerConstants
+    local aura = buff or (consts and child.cooldownSwipeColor == consts.ITEM_AURA_COLOR)
+    -- the common plain-cooldown repaint: nothing to do unless we reversed it before
+    if not aura and not swipeRev[cd] then return end
+    if OverlayActive(child) then return end
+    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    local o = M.SpellSettings(child)
+    local c = aura and ((o and o.swipeColor) or (not buff and cdm and cdm.auraSwipeColor))
+    if c then
+        applyingOverlay[cd] = true
+        cd:SetSwipeColor(c.r or 1, c.g or 1, c.b or 1, c.a or 0.6)
+        applyingOverlay[cd] = nil
+    end
+    if buff then return end
+    local r = o and o.swipeReverse
+    local rev = aura and (r == "on" or (r == nil and cdm and cdm.auraSwipeReverse)) and true or false
+    if (swipeRev[cd] or false) ~= rev then
+        cd:SetReverse(rev)
+        swipeRev[cd] = rev or nil
+    end
+end
+
+local function EnsureSwipeHook(child)
+    local cd = child.Cooldown
+    if not cd or swipeHooked[cd] or not cd.SetSwipeColor then return end
+    swipeHooked[cd] = true
+    hooksecurefunc(cd, "SetSwipeColor", function() StyleAuraSwipe(child) end)
+end
+
 local function EnsureOverlayHooks(child)
     local cd = child and child.Cooldown
     if not cd or cd._tuiOverlayHooked then return end
@@ -653,6 +815,9 @@ local function HookChild(child, viewer)
     ClearPandemic(child)
     if type(child.ShowPandemicStateFrame) == "function" then
         hooksecurefunc(child, "ShowPandemicStateFrame", ClearPandemic)
+    end
+    if type(child.HidePandemicStateFrame) == "function" then
+        hooksecurefunc(child, "HidePandemicStateFrame", StopPandemicGlow)
     end
     hooksecurefunc(child, "SetPoint",        ReapplyChildAnchor)
     hooksecurefunc(child, "ClearAllPoints", ReapplyChildAnchor)
@@ -940,6 +1105,8 @@ LayoutViewer = function(viewer)
         if prevName then overflowOut[prevName] = nil end
         local dirty = _G[prevName or ""]
         if dirty then dirty._tuiLayoutSig = nil; QueueLayout(dirty) end
+        -- text follows the row an icon shows in
+        if ns.CDMText and ns.CDMText.QueueRefresh then ns.CDMText.QueueRefresh() end
     end
     if moved then
         overflowOut[targetName] = moved
@@ -1009,8 +1176,15 @@ LayoutViewer = function(viewer)
             if b then b:SetAlpha(0) end
         end
     end
-    if cdmRoot and cdmRoot.hideAuraOverlay then
-        for i = 1, #visible do EnsureOverlayHooks(visible[i]); HideAuraOverlay(visible[i]) end
+    local buffViewer = VIEWERS[myName] == "buffIcon"
+    local swipeStyled = not buffViewer and cdmRoot and (cdmRoot.auraSwipeColor or cdmRoot.auraSwipeReverse)
+    for i = 1, #visible do
+        local c = visible[i]
+        if WantsOverlayHidden(c) then EnsureOverlayHooks(c); HideAuraOverlay(c) end
+        local o = M.SpellSettings(c)
+        if swipeStyled or swipeHooked[c.Cooldown] or (o and (o.swipeColor or o.swipeReverse)) then
+            EnsureSwipeHook(c); StyleAuraSwipe(c)
+        end
     end
     -- per-spell glow and text follow the spell, not the re-used frame
     local glowSync = ns.CDMGlow and ns.CDMGlow.Sync
@@ -1020,6 +1194,7 @@ LayoutViewer = function(viewer)
         if c.cooldownInfo then
             if glowSync then glowSync(c) end
             if textSync then textSync(c, myName) end
+            M.ApplyCustomIcon(c)
         end
     end
 
@@ -1034,10 +1209,16 @@ LayoutViewer = function(viewer)
         end
     end
     
-    local wantRev = VIEWERS[viewer:GetName()] == "buffIcon" and vdb.invertSwipe or false
-    for i = 1, #visible do
-        local cd = visible[i].Cooldown
-        if cd and cd.SetReverse then cd:SetReverse(wantRev) end
+    if VIEWERS[viewer:GetName()] == "buffIcon" then
+        for i = 1, #visible do
+            local c = visible[i]
+            local cd = c.Cooldown
+            if cd and cd.SetReverse then
+                local o = M.SpellSettings(c)
+                local r = o and o.invertSwipe
+                cd:SetReverse((r == "on" or (r == nil and vdb.invertSwipe)) and true or false)
+            end
+        end
     end
 
     -- the cell size comes from a real icon, never from one that sizes itself
@@ -1392,9 +1573,8 @@ function M.RefreshAllSoft()
     HookEditModeExit()
     EnsureUtilityMover()
     HealViewerVisibility()
-    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
-    if not (cdm and cdm.hideAuraOverlay) then
-        for c in pairs(overrideGlow) do StopOverrideGlow(c) end
+    for c in pairs(overrideGlow) do
+        if not WantsOverlayHidden(c) then StopOverrideGlow(c) end
     end
     for name in pairs(VIEWERS) do
         HookViewer(name)
@@ -1410,6 +1590,7 @@ function M.RefreshAll()
 end
 
 function TUI:UpdateCDMIcons()
+    M.RefreshCustomIcons()
     M.RefreshAll()
     if ns.EssentialMover and ns.EssentialMover.OnGrowthDirectionChanged then
         ns.EssentialMover.OnGrowthDirectionChanged()

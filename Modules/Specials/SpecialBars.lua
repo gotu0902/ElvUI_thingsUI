@@ -62,9 +62,70 @@ local function HideBarMover(barKey)
 end
 SB.HideBarMover = HideBarMover
 
+local function HideTicks(layer)
+    if not layer then return end
+    for _, tex in ipairs(layer.ticks) do tex.ag:Stop(); tex:Hide() end
+    layer:Hide()
+end
+
+-- ticks live on the wrapper: in combat an aura button can't be touched while its aura is secret
+local function PaintTicks(wrapper, db, w, h)
+    local TM = ns.Timers
+    local list, tdur
+    if TM and TM.GetTotemCasts then list, tdur = TM.GetTotemCasts(db.spellID) end
+    local layer = wrapper.tickFX
+    if not (list and tdur and #list > 0) then HideTicks(layer); return end
+    if not layer then
+        layer = CreateFrame("Frame", nil, wrapper)
+        layer:SetAllPoints(wrapper)
+        layer.ticks = {}
+        wrapper.tickFX = layer
+    end
+    layer:SetFrameLevel(wrapper._tuiTickLevel or (wrapper:GetFrameLevel() + 4))
+    local left = (db.iconEnabled and (h + (db.iconSpacing or 1)) or 0) + 1
+    local areaW = math.max(1, w - left - 1)
+    local rev = db.reverseFill and true or false
+    local tc = db.totemTickColor or { r = 1, g = 1, b = 1, a = 1 }
+    local tw = db.totemTickThickness or 2
+    local tlen = math.min(db.totemTickLength or (h - 2), h - 2)
+    local now = GetTime()
+    local shown = 0
+    for _, t in ipairs(list) do
+        local rem = (t + tdur) - now
+        local x = areaW * (rem / tdur)
+        if rem > 0 and x <= areaW then
+            shown = shown + 1
+            local tex = layer.ticks[shown]
+            if not tex then
+                tex = layer:CreateTexture(nil, "OVERLAY")
+                tex.ag = tex:CreateAnimationGroup()
+                tex.move = tex.ag:CreateAnimation("Translation")
+                tex.ag:SetScript("OnFinished", function() tex:Hide() end)
+                layer.ticks[shown] = tex
+            end
+            tex:SetColorTexture(tc.r or 1, tc.g or 1, tc.b or 1, tc.a or 1)
+            tex.ag:Stop()
+            tex:ClearAllPoints()
+            if rev then
+                tex:SetPoint("RIGHT", layer, "RIGHT", -1 - x, 0)
+            else
+                tex:SetPoint("LEFT", layer, "LEFT", left + x, 0)
+            end
+            tex:SetSize(tw, tlen)
+            tex.move:SetOffset(rev and x or -x, 0)
+            tex.move:SetDuration(rem)
+            tex:Show()
+            tex.ag:Play()
+        end
+    end
+    for i = shown + 1, #layer.ticks do layer.ticks[i].ag:Stop(); layer.ticks[i]:Hide() end
+    layer:SetShown(shown > 0)
+end
+
 local function ReleaseBar(barKey)
     local wrapper = _G["TUI_SpecialBar_" .. barKey]
     if wrapper then
+        HideTicks(wrapper.tickFX)
         if ns.SpecialAura then ns.SpecialAura.Detach(wrapper, barKey) end
         wrapper.backdrop:Hide()
         if wrapper.testFX then wrapper.testFX:Hide() end
@@ -108,7 +169,7 @@ local function RenderTestBar(wrapper, db, w, h)
         fx.iconBD:SetPoint("LEFT", fx, "LEFT", 0, 0)
         fx.iconBD:SetSize(h, h)
         local raw = SB.GetRawSpellList and SB.GetRawSpellList()[db.spellID]
-        fx.icon:SetTexture((raw and raw.icon)
+        fx.icon:SetTexture(db.customIcon or (raw and raw.icon)
             or (db.spellID and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(db.spellID)) or 134400)
         local z = db.iconZoom or 0.1
         fx.icon:SetTexCoord(z, 1 - z, z, 1 - z)
@@ -227,7 +288,7 @@ local function RenderTotemBar(wrapper, db, w, h, start, dur)
         fx.iconBD:SetPoint("LEFT", fx, "LEFT", 0, 0)
         fx.iconBD:SetSize(h, h)
         local raw = SB.GetRawSpellList and SB.GetRawSpellList()[db.spellID]
-        fx.icon:SetTexture((raw and raw.icon)
+        fx.icon:SetTexture(db.customIcon or (raw and raw.icon)
             or (db.spellID and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(db.spellID)) or 134400)
         local z = db.iconZoom or 0.1
         fx.icon:SetTexCoord(z, 1 - z, z, 1 - z)
@@ -264,55 +325,6 @@ local function RenderTotemBar(wrapper, db, w, h, start, dur)
     fx.anim:SetDuration(remaining)
     fx.fill:Show()
     fx.slide:Play()
-
-    if db.totemTicks then
-        local TM = ns.Timers
-        local list = TM and TM.GetTotemCasts and TM.GetTotemCasts(db.spellID)
-        fx.ticks = fx.ticks or {}
-        local shown = 0
-        if list and #list > 0 then
-            local tc = db.totemTickColor or { r = 1, g = 1, b = 1, a = 1 }
-            local tw = db.totemTickThickness or 2
-            local tlen = math.min(db.totemTickLength or (h - 2), h - 2)
-            local now = GetTime()
-            for _, t in ipairs(list) do
-                do
-                    local trem = (t + dur) - now
-                    local x = areaW * (trem / dur)
-                    if trem > 0 and x <= areaW then
-                        shown = shown + 1
-                        local tex = fx.ticks[shown]
-                        if not tex then
-                            tex = fx:CreateTexture(nil, "ARTWORK", nil, 7)
-                            tex.ag = tex:CreateAnimationGroup()
-                            tex.move = tex.ag:CreateAnimation("Translation")
-                            tex.ag:SetScript("OnFinished", function() tex:Hide() end)
-                            fx.ticks[shown] = tex
-                        end
-                        tex:SetColorTexture(tc.r or 1, tc.g or 1, tc.b or 1, tc.a or 1)
-                        tex.ag:Stop()
-                        tex:ClearAllPoints()
-                        if rev then
-                            tex:SetPoint("RIGHT", fx, "RIGHT", -1 - x, 0)
-                        else
-                            tex:SetPoint("LEFT", fx, "LEFT", left + x, 0)
-                        end
-                        tex:SetSize(tw, tlen)
-                        tex.move:SetOffset(rev and x or -x, 0)
-                        tex.move:SetDuration(trem)
-                        tex:Show()
-                        tex.ag:Play()
-                    end
-                end
-            end
-        end
-        for i = shown + 1, #fx.ticks do
-            if fx.ticks[i].ag then fx.ticks[i].ag:Stop() end
-            fx.ticks[i]:Hide()
-        end
-    elseif fx.ticks then
-        for _, tex in ipairs(fx.ticks) do tex:Hide() end
-    end
 
     local font = LSM:Fetch("font", db.font or "Expressway")
     if db.showName then
@@ -534,18 +546,45 @@ local function UpdateBarSlot(barKey)
         TM.RegisterTotemSpell(db.spellID)
         if not SB._totemCB and TM.AddTotemCallback then
             SB._totemCB = true
-            TM.AddTotemCallback(function()
-                local T = ns.TUI
-                if T and T.UpdateSpecialBars then T:UpdateSpecialBars() end
-            end)
+            TM.AddTotemCallback(SB.OnTotemChange)
         end
         if db.totemTimer then
             RenderTotemBar(wrapper, db, effectiveWidth, effectiveHeight, TM.GetTotemState(db.spellID))
         elseif wrapper.totemFX then
             wrapper.totemFX:Hide()
         end
-    elseif wrapper.totemFX then
-        wrapper.totemFX:Hide()
+        if db.totemTicks then PaintTicks(wrapper, db, effectiveWidth, effectiveHeight) else HideTicks(wrapper.tickFX) end
+    else
+        if wrapper.totemFX then wrapper.totemFX:Hide() end
+        HideTicks(wrapper.tickFX)
+    end
+end
+
+-- a tracked cast or totem change: only the slots that show one, ticks alone just repaint
+function SB.OnTotemChange()
+    if not (E.db.thingsUI and E.db.thingsUI.specialBars) then return end
+    local test = ns.CustomGroups and ns.CustomGroups.testMode
+    for i = 1, (SB.GetBarCount and SB.GetBarCount() or 0) do
+        local key = "bar" .. i
+        local db = SB.GetBarDB(key)
+        if db and db.enabled and db.spellID then
+            if db.totemTimer then
+                UpdateBarSlot(key)
+            elseif db.totemTicks and not test then
+                local wrapper = specialBarState[key] and specialBarState[key].wrapper
+                if wrapper then
+                    local w, h = wrapper:GetSize()
+                    PaintTicks(wrapper, db, w, h)
+                end
+            end
+        end
+    end
+    local updateIcon = SB.UpdateIconSlot
+    if not updateIcon then return end
+    for i = 1, (SB.GetIconCount and SB.GetIconCount() or 0) do
+        local key = "icon" .. i
+        local db = SB.GetIconDB(key)
+        if db and db.enabled and db.spellID and db.totemTimer then updateIcon(key) end
     end
 end
 

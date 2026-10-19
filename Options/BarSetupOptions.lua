@@ -548,6 +548,8 @@ local function SetupEditor(idx)
     local layoutTab = {
         type = "group", order = 3, name = "Layout",
         args = {
+            tabColorOn = (ns.TabColorArgs(function() return setup end, NotifyChange, 0.5)),
+            tabColor = select(2, ns.TabColorArgs(function() return setup end, NotifyChange, 0.5)),
             anchorHeader = { order = 1, type = "header", name = "Stack Anchor" },
             anchorFrame = {
                 order = 2, type = "select", name = "Anchor To",
@@ -618,6 +620,9 @@ local function SetupEditor(idx)
         type = "group",
         name = function()
             local nm = setup.name or ("Setup " .. idx)
+            if setup.tabColor then
+                return ns.TabName(nm, setup.tabColor) .. (setup == ActiveSetup() and " |cFF33FF33(active)|r" or "")
+            end
             if setup == ActiveSetup() then return "|cFF33FF33" .. nm .. "|r" end
             return nm
         end,

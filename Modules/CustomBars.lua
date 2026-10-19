@@ -42,6 +42,18 @@ function M.NewGroup()
     return g
 end
 
+function M.CopyGroup(index)
+    local r = Root(); if not r then return end
+    local src = r.groups[index]
+    if not src then return end
+    local g = DeepCopy(src)
+    g.id = r.nextID
+    g.name = (src.name or ("Bar Group " .. src.id)) .. " Copy"
+    r.nextID = r.nextID + 1
+    r.groups[#r.groups + 1] = g
+    return g, #r.groups
+end
+
 function M.RemoveGroup(index)
     local r = Root(); if not r then return end
     local g = r.groups[index]
@@ -291,6 +303,7 @@ local function StyleBar(button, r, group, def)
             r.iconBD:SetBackdropBorderColor(0, 0, 0, 1)
             r.icon = r.iconBD:CreateTexture(nil, "ARTWORK")
             button:SetIcon(r.icon)
+            if ns.AuraLane then ns.AuraLane.MakeFixedIcon(r.iconBD, r) end
         end
         r.iconBD:SetFrameLevel(button:GetFrameLevel())
         r.iconBD:ClearAllPoints()
@@ -298,6 +311,7 @@ local function StyleBar(button, r, group, def)
         r.iconBD:SetSize(h, h)
         local z = group.iconZoom or 0.1
         r.icon:SetTexCoord(z, 1 - z, z, 1 - z)
+        if ns.AuraLane then ns.AuraLane.ShowFixedIcon(r, def.customIcon, { z, 1 - z, z, 1 - z }) end
         r.icon:ClearAllPoints()
         r.icon:SetPoint("TOPLEFT", r.iconBD, "TOPLEFT", 1, -1)
         r.icon:SetPoint("BOTTOMRIGHT", r.iconBD, "BOTTOMRIGHT", -1, 1)
@@ -482,7 +496,7 @@ local function RenderTestBars(st, group)
                 f.iconBD:ClearAllPoints()
                 f.iconBD:SetPoint("LEFT", f, "LEFT", 0, 0)
                 f.iconBD:SetSize(H, H)
-                f.icon:SetTexture((sid and C_Spell.GetSpellTexture(sid)) or 134400)
+                f.icon:SetTexture((e.def and e.def.customIcon) or (sid and C_Spell.GetSpellTexture(sid)) or 134400)
                 local z = group.iconZoom or 0.1
                 f.icon:SetTexCoord(z, 1 - z, z, 1 - z)
                 f.icon:ClearAllPoints()

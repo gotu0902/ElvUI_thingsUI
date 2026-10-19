@@ -85,9 +85,9 @@ function TUI:ShareOptions()
                 func = function() if ns.OpenInstaller then ns.OpenInstaller() end end,
             },
             runAltSetup = {
-                order = 2.2, type = "execute", name = "|cFF8AC8FFAlt Profile Setup|r", width = "double",
-                hidden = function() return not (ns.AltInstall and ns.AltInstall.Open) end,
-                func = function() ns.AltInstall.Open() end,
+                order = 2.2, type = "execute", name = "|cFF8AC8FFCharacter Setup|r", width = "double",
+                hidden = function() return not (ns.Setup and ns.Setup.Open) end,
+                func = function() ns.Setup.Open() end,
             },
             installerBreak = { order = 3, type = "description", width = "full", name = "\n" },
 
@@ -102,7 +102,7 @@ function TUI:ShareOptions()
                 args = {
                     accountDesc = {
                         order = 1, type = "description", width = "full",
-                        name = "Standalone pieces of the full setup.\n|cFFFFFFFFPrivate|r = per character (fonts, skins, chat bubbles) - |cFFFFFFFFGlobal|r = account (datatext panels) - |cFFFFFFFFAlt Presets|r = /tui alt profile combos.\n",
+                        name = "Standalone pieces of the full setup.\n|cFFFFFFFFPrivate|r = per character (fonts, skins, chat bubbles) - |cFFFFFFFFGlobal|r = account (datatext panels) - |cFFFFFFFFBigWigs|r = NHT + FHT profiles - |cFFFFFFFFCooldown Manager|r = Blizzard's layouts for this class.\n",
                     },
                     importPrivate = {
                         order = 2, type = "execute", width = 1.13, name = "ElvUI Private",
@@ -125,12 +125,16 @@ function TUI:ShareOptions()
                             else print("|cFF8080FFthingsUI|r: global import failed.") end
                         end,
                     },
-                    importAltPresets = {
-                        order = 4, type = "execute", width = 1.13, name = "Alt Presets",
-                        confirm = function() return "Import the Alt Profile Setup presets (overwrites same-named presets)?" end,
+                    importBigWigs = {
+                        order = 4, type = "execute", width = 1.13, name = "BigWigs",
                         func = function()
-                            local n = ns.EnsureAltPresets and ns.EnsureAltPresets() or 0
-                            print(("|cFF8080FFthingsUI|r - %s"):format(n > 0 and ("imported " .. n .. " alt preset(s).") or "alt preset import failed."))
+                            if not ns.Setup.InstallBigWigs() then print("|cFF8080FFthingsUI|r: BigWigs is not loaded.") end
+                        end,
+                    },
+                    importCDM = {
+                        order = 5, type = "execute", width = 1.13, name = "Cooldown Manager",
+                        func = function()
+                            if not ns.Setup.InstallCDM() then print("|cFF8080FFthingsUI|r: no Cooldown Manager layouts for your class.") end
                         end,
                     },
                 },

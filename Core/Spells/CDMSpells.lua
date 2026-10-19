@@ -79,6 +79,17 @@ function M.RefreshCurrentSpec()
     local map = {}
     CollectCategory(CAT_ESSENTIAL, map)
     CollectCategory(CAT_UTILITY, map)
+    -- the category sets are Blizzard's defaults; spells the layout moved in live in the viewers
+    for _, name in ipairs({ "EssentialCooldownViewer", "UtilityCooldownViewer" }) do
+        local v = _G[name]
+        if v then
+            for _, c in ipairs({ v:GetChildren() }) do
+                local info = c.cooldownInfo
+                local sid = info and (PlainID(info.overrideSpellID) or PlainID(info.spellID))
+                if sid then map[sid] = false end
+            end
+        end
+    end
     if next(map) == nil then return end
     liveCache[specID] = map
     local store = Store()

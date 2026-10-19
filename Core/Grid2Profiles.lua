@@ -31,7 +31,6 @@ function ns.ImportGrid2Profile(key)
     local ok = importer(p.name, p.data, true, false)
     if ok then
         print("|cFF8080FFthingsUI|r - Grid2 profile '" .. p.name .. "' imported + activated.")
-        if ns.AltInstall and ns.AltInstall.OfferRoleUpdate then ns.AltInstall.OfferRoleUpdate("grid2", p.name) end
     end
     return ok
 end

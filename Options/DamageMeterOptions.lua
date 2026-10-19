@@ -129,10 +129,18 @@ function TUI:DamageMeterOptions()
                         set = function(_, v) tset("windowBorder", v) end,
                     },
                     resetOnNewInstance = {
-                        order = 3.5, type = "toggle", name = "Reset on New Instance",
-                        desc = "Wipes all meter data when entering a new dungeon or starting a Mythic+ key.",
-                        get = function() return tdb().resetOnNewInstance ~= false end,
-                        set = function(_, v) tset("resetOnNewInstance", v) end,
+                        order = 3.5, type = "select", name = "Reset on New Instance",
+                        desc = "Entering a new dungeon or starting a Mythic+ key. Blizzard's meter can only wipe all data, so Ask lets you keep it.",
+                        values = { ask = "Ask", always = "Always", never = "Never" },
+                        sorting = { "ask", "always", "never" },
+                        get = function()
+                            local d = tdb()
+                            return d.instanceReset or (d.resetOnNewInstance == false and "never") or "ask"
+                        end,
+                        set = function(_, v)
+                            tdb().resetOnNewInstance = nil
+                            tset("instanceReset", v)
+                        end,
                     },
                     windowDivider = {
                         order = 4, type = "toggle", name = "Window Divider",
@@ -174,6 +182,17 @@ function TUI:DamageMeterOptions()
                         order = 9.5, type = "range", name = "Menu Segments", min = 1, max = 50, step = 1,
                         get = function() return tdb().menuSegments or 20 end,
                         set = function(_, v) tset("menuSegments", v) end,
+                    },
+                    swapBrk = { order = 9.55, type = "description", name = "", width = "full" },
+                    swapCurrent = {
+                        order = 9.6, type = "toggle", name = "Swap to Current on New Instance", width = 1.6,
+                        get = function() return tdb().swapCurrentOnInstance end,
+                        set = function(_, v) tset("swapCurrentOnInstance", v or nil) end,
+                    },
+                    swapOverall = {
+                        order = 9.7, type = "toggle", name = "Swap to Overall When M+ Ends", width = 1.6,
+                        get = function() return tdb().swapOverallOnKeyEnd end,
+                        set = function(_, v) tset("swapOverallOnKeyEnd", v or nil) end,
                     },
                     hint = {
                         order = 30, type = "description", fontSize = "medium", width = "full",
