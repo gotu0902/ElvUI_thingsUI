@@ -13,7 +13,7 @@
 - **Charge Bar** - per-spec spell charge tracker, in the CDM cluster or free-floating.
 - **Classbar** - per-spec ElvUI classbar where you anchor it.
 - **Damage Meter** - Details anchored to right chat, or Mini Meter: our own meter on Blizzard's damage data, with split windows, breakdowns and death recaps, anchored to right chat yy you guessed it.
-- **Group Icons\Bars** - movable groups of spells, items, auras and Aura Icons\Bars, with visibility rules (combat, solo/party/raid, zone, form, mounted...).
+- **Group Icons\Bars\Text** - movable groups of spells, items, auras and Aura Icons\Bars, with visibility rules (combat, solo/party/raid, zone, form, mounted...). Text groups write auras and cooldowns as lines your way: [name] [cd], NO WILD CHARGE [cd].
 - **Raid Frame Builder** - put your raid frames in your own order. Drag raid-frame-looking boxes around, sort Tank > DPS > Healer (or however you like it), keep classes together, save. Layouts follow you to every character, export/import works with things for EUI too.
 - **Timers** - cast-triggered static-icon timers with auto & manual durations.
 

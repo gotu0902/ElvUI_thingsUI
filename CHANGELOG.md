@@ -1,5 +1,11 @@
 # Changelog
 ## 4.2.1
+### Groups - Text
+- New module: auras and cooldowns as lines of text. Write a line as [name] [cd], or put anything around them: [name] - [cd], NO WILD CHARGE [cd]. [stacks] shows stacks on an aura and charges on a cooldown
+- Auras work like Groups - Bars: Spec / Class / Global lists, Aura Collections, Blizzard filters, order and sorting, Visibility. Every aura line can have its own text
+- Cooldowns: a list of spells, a line each with its own text if you want. It shows while the spell is on cooldown (the GCD doesn't count), or keeps the line, or swaps to a Ready Text. A character only gets the spells it knows, so one group can serve every class
+- Own colors for name, time, stacks and the text around them; left or right aligned
+- Center align (lined up from a guess of the time and name width, so it doesn't wobble as the numbers tick) and Case: UPPERCASE for your text, cooldown names and one-spell auras. Names the game writes itself in combat stay as they are
 ### Character Setup (/tui alt)
 - /tui alt is a new window, like the things for EUI installer: one row per addon with Install / Reinstall / Update, what this character uses, Profile... (what your characters should use) and Load. Load for This Character and Load Without CDM at the bottom, 1440p / 1080p up top (1080p once its strings are in)
 - ElvUI and BigWigs switch per spec on their own on classes with a healer spec or Augmentation: FHT there, NHT on the rest (ElvUI's own spec profiles). Warriors and co just use NHT. Profile... picks which profiles that is: Tank & DPS and Healer + Aug, each its own (BuffReminders can do the same)
@@ -13,6 +19,11 @@
 - Export/Import, also between thingsUI and things for EUI
 - Without ElvUI's Raid-Wide Sorting the order applies inside each group. Changes wait until combat ends (someone joining mid-fight shows up after it)
 ### More
+- Aura Icons and Aura Bars: Frame Level next to Frame Strata (default 10, as before). Lower it, or pick a lower strata, to let something like Buff Icons' stack text draw over an icon sitting on top of them
+- Aura Icons > Show: While Active, Always (idle greyed) or Only When Missing. Missing shows the icon only while the aura is down (your poison, your DoT on the target...) and also works in a group, where it gets its own slot and the rest closes up. In combat it follows Blizzard's Cooldown Manager, so the aura has to be in its Buffs (or the spell in Essential/Utility); the options say so if it isn't. Desaturate shows it grey, and in a group it keeps its own Visibility rules (combat, target, zone...), in combat too
+- CDM Spell Editor > Aura Icon On Top: put an Aura Icon over a cooldown (pick one or make a new one). It covers the cooldown while its aura is up (Garrote's DoT over Garrote), you see the cooldown again when it isn't. Optional Spell Cooldown On Top: that spell's own cooldown over the aura, with its own size, color and spot, and the icon's border right there too. Also under Aura Icons > Show In > On Top of a Cooldown
+- CDM Spell Editor > Show: per spell Visibility rules (combat, solo/party/raid, zone, role, form, mounted...) take it out of the row, the rest closes up. Cooldown: Only On Cooldown / Only When Ready fades it instead and keeps its spot (the game hides cooldown timing in combat, so the row can't close up there)
+- Stroke (a black line inside and outside the border) on Aura Icon borders, Groups - Icons borders and Aura Icons in groups. Styles carry it
 - Visibility: new Only As Tank / Healer / DPS (your spec's role) on every Visibility tab: Groups, Aura Icons, Aura Bars and Timers
 - Pandemic Indicator on Aura Icons and Groups entries gets the Glow While Active settings: Thickness (Border, Pulse, Pixel), Bordered Stroke (Border: black lines inside and outside the ring, Pixel: the dark band) and Particles, Line Length, Offset and Speed for Pixel Glow. Styles carry them
 - Damage Meter (Mini Meter): Swap to Current on New Instance (entering a dungeon or starting a key) and Swap to Overall When M+ Ends, both under Windows
@@ -37,6 +48,7 @@
 - Aura Icon spell lookups are cached in combat too (rebuilt after combat), and the role visibility rule only reacts to your own spec changes
 - A tracked cast (Ironfur with Ticks, totem timers) no longer rebuilds every Aura Bar and Aura Icon: only the bars and icons that use it update, and ticks just move
 ### Fixes
+- Aura Icons shown in a CDM row with their own border were 2 px too big after the border moved outside the icon
 - CDM: an icon that overflows from Essential into Utility (or the other way) now takes that row's text settings instead of keeping its old row's
 - CDM Spell Editor listed spells you set up on other classes and specs (Dream Breath on a monk). It only lists this spec's now; Spell ID still reaches the rest, their settings were never lost
 - Aura Icons measure like the Cooldown Manager: Size and Zoom are the icon itself and its border sits outside it, the way ElvUI draws CDM icons. A 37 / 8% Aura Icon now matches a 37 / 8% CDM icon (it took 39 / 6% before). Inset still moves the border in. Your existing icons and styles keep their exact look: their Inset goes up by the border's width once (and old import strings get the same treatment)

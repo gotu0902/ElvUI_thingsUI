@@ -318,6 +318,38 @@ function ns.SB_GroupPickSorting(isBar, specID)
 end
 
 -- true when the spell's bar/icon moved into the group (or, icons, a CDM row) or a new one was made there
+-- an Aura Icon on top of a cooldown: that spell's own cooldown text over it while it shows
+function ns.OverCDArgs(idb, refresh, order, hidden)
+    local function o(create)
+        local d = idb()
+        if not d then return nil end
+        if create and not d.overCD then d.overCD = {} end
+        return d.overCD
+    end
+    local function off() local x = o() return not (x and x.show) end
+    local function get(k, dflt) local x = o() local v = x and x[k] if v == nil then return dflt end return v end
+    local function set(k, v) o(true)[k] = v; refresh() end
+    return {
+        order = order, type = "group", inline = true, name = "Spell Cooldown On Top", hidden = hidden,
+        args = {
+            show = { order = 1, type = "toggle", name = "Show",
+                get = function() return get("show", false) end, set = function(_, v) set("show", v or nil) end },
+            size = { order = 2, type = "range", name = "Font Size", min = 6, max = 36, step = 1, disabled = off,
+                get = function() return get("size", 12) end, set = function(_, v) set("size", v) end },
+            color = { order = 3, type = "color", name = "Color", disabled = off,
+                get = function() local c = get("color", {}) return c.r or 1, c.g or 1, c.b or 1 end,
+                set = function(_, r, g, b) set("color", { r = r, g = g, b = b }) end },
+            point = { order = 4, type = "select", name = "Position", disabled = off,
+                values = ns.POINTS and ns.POINTS.VALUES, sorting = ns.POINTS and ns.POINTS.ORDER,
+                get = function() return get("point", "TOPRIGHT") end, set = function(_, v) set("point", v) end },
+            x = { order = 5, type = "range", name = "X Offset", min = -30, max = 30, step = 0.01, bigStep = 1, disabled = off,
+                get = function() return get("x", 0) end, set = function(_, v) set("x", v) end },
+            y = { order = 6, type = "range", name = "Y Offset", min = -30, max = 30, step = 0.01, bigStep = 1, disabled = off,
+                get = function() return get("y", 0) end, set = function(_, v) set("y", v) end },
+        },
+    }
+end
+
 function ns.SB_PlaceSpell(isBar, spellID, specID, groupID, row)
     local kind = isBar and "bars" or "icons"
     local function slotDB(key) return isBar and SB.GetBarDB(key, specID) or SB.GetIconDB(key, specID) end
@@ -625,7 +657,7 @@ local BARSETUP_OWNED = { showBackdrop = true, backdropColor = true, width = true
 local GROUPED_ICON_OWNED = {
     showCooldown = true, invertSwipe = true, width = true, height = true,
     keepAspectRatio = true, zoom = true, iconLockAspectRatio = true,
-    frameStrata = true, desaturateWhenInactive = true,
+    frameStrata = true, frameLevel = true, desaturateWhenInactive = true,
 }
 
 local function StyleArgs(kind, db, ignoreFn)
@@ -912,7 +944,10 @@ function TUI:SpecialBarOptions(barKey, ctx)
         hidden = function()
             if not db().spellID then return true end
             local CBm = ns.CustomBars
-            local hasGroups = CBm and CBm.GetGroups and #CBm.GetGroups() > 0
+            local hasGroups = false
+            for _, g in ipairs((CBm and CBm.GetGroups and CBm.GetGroups()) or {}) do
+                if not CBm.IsText(g) then hasGroups = true break end
+            end
             return not (hasGroups or BarSetupUsesBar())
         end,
         values = function()
@@ -925,7 +960,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
             end
             if db().customGroup == -1 and not out[-1] then out[-1] = "Standalone" end
             for _, g in ipairs((ns.CustomBars and ns.CustomBars.GetGroups and ns.CustomBars.GetGroups()) or {}) do
-                out[g.id] = g.name or ("Bar Group " .. g.id)
+                if not ns.CustomBars.IsText(g) then out[g.id] = g.name or ("Bar Group " .. g.id) end
             end
             return out
         end,
@@ -934,7 +969,9 @@ function TUI:SpecialBarOptions(barKey, ctx)
             if BarSetupUsesBar() or db().customGroup == -1 then out[#out + 1] = -1 end
             local groups = (ns.CustomBars and ns.CustomBars.GetGroups and ns.CustomBars.GetGroups()) or {}
             local ids = {}
-            for _, g in ipairs(groups) do ids[#ids + 1] = g.id end
+            for _, g in ipairs(groups) do
+                if not ns.CustomBars.IsText(g) then ids[#ids + 1] = g.id end
+            end
             table.sort(ids, function(a, b)
                 local ga = ns.CustomBars.GroupByID(a)
                 local gb = ns.CustomBars.GroupByID(b)
@@ -1101,6 +1138,9 @@ function TUI:SpecialBarOptions(barKey, ctx)
                             get = function() return get("frameStrata") or "MEDIUM" end,
                             set = function(_, v) set("frameStrata", v) end,
                         },
+                        frameLevel = { order = 4.1, type = "range", name = "Frame Level", min = 1, max = 100, step = 1,
+                            get = function() return get("frameLevel") or 10 end,
+                            set = function(_, v) set("frameLevel", v) end },
                     },
                 },
                 placeholderGroup = {
@@ -1267,7 +1307,9 @@ function TUI:SpecialIconOptions(keyArg, ctx)
     end
     -- a CDM row owns size, zoom and position like a group does
     local function inRow() return not styleMode and db().cdmRow ~= nil end
-    local function placed() return isGrouped() or inRow() end
+    -- on top of a cooldown: sized and placed by the CDM like a row icon
+    local function onTop() return not styleMode and not db().cdmRow and db().overSpell ~= nil end
+    local function placed() return isGrouped() or inRow() or onTop() end
 
     local commonArgs = {}
     if not styleMode then
@@ -1315,7 +1357,8 @@ function TUI:SpecialIconOptions(keyArg, ctx)
         values = function()
             local t = { [0] = "|cFF888888Standalone|r",
                 ["cdm:essential"] = "|cFF80FF80Essential Cooldowns|r",
-                ["cdm:utility"]   = "|cFF80FF80Utility Cooldowns|r" }
+                ["cdm:utility"]   = "|cFF80FF80Utility Cooldowns|r",
+                over = "|cFFFFD27FOn Top of a Cooldown|r" }
             local groups = ns.CustomGroups and ns.CustomGroups.GetGroups and ns.CustomGroups.GetGroups() or {}
             for _, g in ipairs(groups) do t[g.id] = g.name or ("Group " .. g.id) end
             return t
@@ -1325,18 +1368,20 @@ function TUI:SpecialIconOptions(keyArg, ctx)
             local sorted = {}
             for _, g in ipairs(groups) do sorted[#sorted + 1] = g end
             table.sort(sorted, function(a, b) return (a.name or "") < (b.name or "") end)
-            local order = { 0, "cdm:essential", "cdm:utility" }
+            local order = { 0, "cdm:essential", "cdm:utility", "over" }
             for _, g in ipairs(sorted) do order[#order + 1] = g.id end
             return order
         end,
         get = function()
             if db().cdmRow then return "cdm:" .. db().cdmRow end
+            if db().overSpell then return "over" end
             return db().customGroup or 0
         end,
         set = function(_, v)
             local row = type(v) == "string" and v:match("^cdm:(%a+)$")
             db().cdmRow = row or nil
-            db().customGroup = (not row and v ~= 0) and v or nil
+            db().overSpell = (v == "over") and (db().overSpell or db().spellID) or nil
+            db().customGroup = (not row and v ~= 0 and v ~= "over") and v or nil
             if not ESpec() then SB.ReleaseIcon(curKey()) end
             QueueUpdate()
             if ns.CustomGroups and ns.CustomGroups.QueueLayout then ns.CustomGroups.QueueLayout() end
@@ -1361,6 +1406,25 @@ function TUI:SpecialIconOptions(keyArg, ctx)
         get = function() return db().cdmIndex or 30 end,
         set = function(_, v) db().cdmIndex = v; QueueUpdate() end,
     }
+    commonArgs.overSpell = {
+        order = 3.56, type = "input", name = "Cooldown (spell ID or name)",
+        hidden = function() return not onTop() end,
+        get = function()
+            local id = db().overSpell
+            return id and ((C_Spell.GetSpellName and C_Spell.GetSpellName(id) or "") .. " (" .. id .. ")") or ""
+        end,
+        set = function(_, v)
+            v = strtrim(v or "")
+            local id = tonumber(v) or (v ~= "" and C_Spell.GetSpellInfo(v) and C_Spell.GetSpellInfo(v).spellID)
+            if not (id and C_Spell.GetSpellName and C_Spell.GetSpellName(id)) then return end
+            db().overSpell = id
+            if not ESpec() then SB.ReleaseIcon(curKey()) end
+            QueueUpdate()
+        end,
+    }
+    commonArgs.overCD = ns.OverCDArgs(db, function()
+        if not ESpec() and SB.RestyleOverCD then SB.RestyleOverCD(curKey()) end
+    end, 3.57, function() return not onTop() end)
     commonArgs.customGroupLink = {
         order = 3.6, type = "execute", name = "|cFF8AC8FFGo to Custom Group|r",
         hidden = function() return not isGrouped() end,
@@ -1486,16 +1550,54 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                         zoom   = { order = 5, type = "range", name = "Zoom", min = 0, max = 0.45, step = 0.01, bigStep = 0.05, isPercent = true,
                             disabled = function() return placed() end,
                             get = function() return get("zoom") end, set = function(_, v) set("zoom", v) end },
-                        desaturate = { order = 6, type = "toggle", name = "Show when Idle",
-                            disabled = function() return placed() end,
-                            get = function() return get("desaturateWhenInactive") end, set = function(_, v) set("desaturateWhenInactive", v) end },
+                        desaturate = { order = 6, type = "select", name = "Show",
+                            disabled = function() return onTop() end,
+                            values = function()
+                                local t = { active = "While Active", always = "Always (idle greyed)", missing = "Only When Missing" }
+                                -- a group's auras come and go in its own lane
+                                if isGrouped() then t.always = nil end
+                                if inRow() then t.active = nil end
+                                return t
+                            end,
+                            sorting = function()
+                                if isGrouped() then return { "active", "missing" } end
+                                if inRow() then return { "always", "missing" } end
+                                return { "active", "always", "missing" }
+                            end,
+                            get = function()
+                                if get("showMissing") then return "missing" end
+                                if inRow() or get("desaturateWhenInactive") then return "always" end
+                                return "active"
+                            end,
+                            set = function(_, v)
+                                db().showMissing = (v == "missing") or nil
+                                set("desaturateWhenInactive", v == "always")
+                                if ns.CustomGroups and ns.CustomGroups.QueueLayout then ns.CustomGroups.QueueLayout() end
+                            end },
+                        missingDesat = { order = 6.05, type = "toggle", name = "Desaturate",
+                            hidden = function() return not get("showMissing") end,
+                            get = function() return get("missingDesat") end,
+                            set = function(_, v)
+                                set("missingDesat", v or nil)
+                                if ns.CustomGroups and ns.CustomGroups.QueueLayout then ns.CustomGroups.QueueLayout() end
+                            end },
+                        missingNote = { order = 6.1, type = "description", width = "full",
+                            hidden = function()
+                                return not get("showMissing") or styleMode or not db().spellID
+                                    or (SB.MissingTracked and SB.MissingTracked(db()))
+                            end,
+                            name = "|cFFFFD200Only When Missing follows the aura in combat through Blizzard's Cooldown Manager: add it to Buffs (or have the spell in Essential/Utility). Out of combat it works anyway.|r" },
                         frameStrata = {
                             order = 7, type = "select", name = "Frame Strata",
                             values = STRATA_VALUES, sorting = STRATA_ORDER,
-                            disabled = function() return isGrouped() end,
+                            disabled = function() return isGrouped() or onTop() end,
                             get = function() return get("frameStrata") or "MEDIUM" end,
                             set = function(_, v) set("frameStrata", v) end,
                         },
+                        frameLevel = { order = 7.1, type = "range", name = "Frame Level", min = 1, max = 100, step = 1,
+                            disabled = function() return isGrouped() or onTop() end,
+                            get = function() return get("frameLevel") or 10 end,
+                            set = function(_, v) set("frameLevel", v) end },
                     },
                 },
                 cooldownGroup = {
@@ -1579,6 +1681,10 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             disabled = function() return not get("showBorder") end,
                             get = function() return get("borderInset") end,
                             set = function(_, v) set("borderInset", v) end },
+                        borderStroke = { order = 5, type = "toggle", name = "Stroke",
+                            disabled = function() return not get("showBorder") end,
+                            get = function() return get("borderStroke") end,
+                            set = function(_, v) set("borderStroke", v or nil) end },
                     },
                 },
                 glowGroup = {
@@ -1657,17 +1763,17 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                 overrideGroupText = {
                     order = 5, type = "toggle", width = "full",
                     name = function()
-                        return inRow() and "|cFF8AC8FFOverride CDM Row Text|r" or "|cFF8AC8FFOverride Custom Group Text|r"
+                        return (inRow() or onTop()) and "|cFF8AC8FFOverride CDM Row Text|r" or "|cFF8AC8FFOverride Custom Group Text|r"
                     end,
-                    hidden = function() return not (isGrouped() or inRow()) end,
+                    hidden = function() return not (isGrouped() or inRow() or onTop()) end,
                     get = function() return get("overrideGroupText") end,
                     set = function(_, v) set("overrideGroupText", v) end,
                 },
                 groupTextNote = {
                     order = 6, type = "description", width = "full", fontSize = "medium",
-                    hidden = function() return not (isGrouped() or inRow()) or get("overrideGroupText") end,
+                    hidden = function() return not (isGrouped() or inRow() or onTop()) or get("overrideGroupText") end,
                     name = function()
-                        if inRow() then
+                        if inRow() or onTop() then
                             return "|cFF888888Duration and stack text follow the row (CDM > Layout > Essential/Utility > Text). Enable the toggle above to set your own.|r\n"
                         end
                         return "|cFF888888Cooldown text follows the Custom Group. Enable the toggle above to set your own.|r\n"
@@ -1755,12 +1861,16 @@ function TUI:SpecialIconOptions(keyArg, ctx)
         },
         visibilityGroup = {
             order = 25, type = "group", name = "Visibility",
-            hidden = function() return styleMode or isGrouped() end,
+            -- in a group only an Only When Missing icon is its own (a slot in the grid)
+            hidden = function() return styleMode or (isGrouped() and not get("showMissing")) end,
             args = ns.VisibilityArgs(function()
                 local d = db()
                 d.visibility = d.visibility or {}
                 return d.visibility
-            end, function() QueueUpdate() end),
+            end, function()
+                QueueUpdate()
+                if ns.CustomGroups and ns.CustomGroups.QueueLayout then ns.CustomGroups.QueueLayout() end
+            end),
         },
         anchorGroup = {
             order = 20, type = "group", name = "Anchor & Position",

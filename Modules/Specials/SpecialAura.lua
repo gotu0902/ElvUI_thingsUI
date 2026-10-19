@@ -210,11 +210,13 @@ function SA.StyleIconButton(button, r, wrapper, key)
         -- outside the icon like the CDM's; Inset moves it in
         local bi = (db.borderInset or 0) - bs
         AL0.EdgeRing(button, r.border, bs, bi, db.borderColor or { r = 0, g = 0, b = 0, a = 1 })
+        AL0.StrokeRing(button, r, bs, bi, db.borderStroke)
         if r.borderIn then
             for i = 1, 4 do r.borderIn[i]:Hide() r.borderOut[i]:Hide() end
         end
     else
         if r.border then for _, tex in ipairs(r.border) do tex:Hide() end end
+        if AL0 then AL0.StrokeRing(button, r, 0, 0, false) end
         if r.borderIn then
             for i = 1, 4 do r.borderIn[i]:Hide() r.borderOut[i]:Hide() end
         end

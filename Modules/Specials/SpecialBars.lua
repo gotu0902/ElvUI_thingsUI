@@ -11,7 +11,7 @@ local function GetOrCreateWrapper(barKey)
     local wrapper = _G[name] or CreateFrame("Frame", name, UIParent)
     local db = SB.GetBarDB(barKey)
     wrapper:SetFrameStrata((db and db.frameStrata) or "MEDIUM")
-    wrapper:SetFrameLevel(10)
+    wrapper:SetFrameLevel((db and db.frameLevel) or 10)
     if not wrapper.backdrop then
         local bd = CreateFrame("Frame", nil, wrapper, "BackdropTemplate")
         bd:SetAllPoints(wrapper)

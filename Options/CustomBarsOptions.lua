@@ -60,12 +60,28 @@ local function EditBarAura(def, title, group)
     on:SetCallback("OnValueChanged", function(_, _, v) def.enabled = v; Refresh() end)
     f:AddChild(on)
 
-    local half = AceGUI:Create("CheckBox")
-    half:SetLabel("Half Width")
-    half:SetWidth(170)
-    half:SetValue(def.halfWidth and true or false)
-    half:SetCallback("OnValueChanged", function(_, _, v) def.halfWidth = v; Refresh() end)
-    f:AddChild(half)
+    local text = group and CB().IsText(group)
+    if text then
+        f:SetStatusText("Applies to this line only")
+        local fmt = AceGUI:Create("EditBox")
+        fmt:SetLabel("Text (empty = the group's)")
+        fmt:SetWidth(340)
+        fmt:SetText(def.format or "")
+        fmt:SetCallback("OnEnterPressed", function(_, _, v)
+            v = strtrim(v or "")
+            def.format = (v ~= "") and v or nil
+            Refresh()
+        end)
+        f:AddChild(fmt)
+        f:SetHeight(360)
+    else
+        local half = AceGUI:Create("CheckBox")
+        half:SetLabel("Half Width")
+        half:SetWidth(170)
+        half:SetValue(def.halfWidth and true or false)
+        half:SetCallback("OnValueChanged", function(_, _, v) def.halfWidth = v; Refresh() end)
+        f:AddChild(half)
+    end
 
     local mine
 
@@ -90,7 +106,7 @@ local function EditBarAura(def, title, group)
     f:AddChild(mine)
 
     local max = AceGUI:Create("Slider")
-    max:SetLabel("Max Bars")
+    max:SetLabel(text and "Max Lines" or "Max Bars")
     max:SetWidth(170)
     max:SetSliderValues(1, 10, 1)
     max:SetValue(def.max or 1)
@@ -328,6 +344,228 @@ local function EntryRow(gi, scope, ri)
     }
 end
 
+local function CountOf(text)
+    local n = 0
+    for _, g in ipairs((CB() and CB().GetGroups()) or {}) do
+        if CB().IsText(g) == text then n = n + 1 end
+    end
+    return n
+end
+
+local function SpellLabel(id)
+    local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)) or 134400
+    return ("|T%d:16:16|t %s"):format(tex, (C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or ("Spell " .. id))
+end
+
+local function SpellFrom(v)
+    v = strtrim(v or "")
+    if v == "" then return end
+    local id = tonumber(v)
+    if not id then
+        local info = C_Spell.GetSpellInfo(v)
+        id = info and info.spellID
+    end
+    if id and C_Spell.GetSpellName and C_Spell.GetSpellName(id) then return id end
+end
+
+local MAX_CD = 20
+local function CooldownsArgs(grp)
+    local function list()
+        local g = grp()
+        if not g then return {} end
+        g.cooldowns = g.cooldowns or {}
+        return g.cooldowns
+    end
+    local function add(id)
+        local l = list()
+        if not id or #l >= MAX_CD then return end
+        for _, c in ipairs(l) do if c.id == id then return end end
+        l[#l + 1] = { id = id }
+        Refresh()
+    end
+    local function specSpells()
+        local spec = GetSpecialization and GetSpecialization()
+        local specID = spec and GetSpecializationInfo(spec)
+        return (ns.CDMSpells and ns.CDMSpells.GetForSpec and ns.CDMSpells.GetForSpec(specID)) or {}
+    end
+    local function name(id) return (C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or "" end
+    local args = {
+        desc = {
+            order = 0, type = "description",
+            name = "A line per cooldown, there while the spell is on cooldown (Text > When Ready). Each character only gets the spells it knows.\n",
+        },
+        add = {
+            order = 1, type = "select", name = "|cFF60E0A0Add Cooldown|r", width = "double",
+            disabled = function() return #list() >= MAX_CD end,
+            values = function()
+                local out = {}
+                for id in pairs(specSpells()) do out[id] = SpellLabel(id) end
+                return out
+            end,
+            sorting = function()
+                local out = {}
+                for id in pairs(specSpells()) do out[#out + 1] = id end
+                table.sort(out, function(a, b) return name(a) < name(b) end)
+                return out
+            end,
+            get = function() return "" end,
+            set = function(_, v) add(tonumber(v)) end,
+        },
+        addID = {
+            order = 2, type = "input", name = "|cFF60E0A0...or Spell by ID or name|r",
+            disabled = function() return #list() >= MAX_CD end,
+            get = function() return "" end,
+            set = function(_, v) add(SpellFrom(v)) end,
+        },
+    }
+    local rows = {}
+    for ri = 1, MAX_CD do
+        local i = ri
+        local function cur() return list()[i] end
+        local hidden = function() return cur() == nil end
+        local function move(dir)
+            local l = list()
+            local j = i + dir
+            if l[i] and l[j] then l[i], l[j] = l[j], l[i]; Refresh() end
+        end
+        rows["c" .. i .. "_up"] = { order = i * 10 + 1, type = "execute", name = CB_UP, width = 0.3, hidden = hidden,
+            func = function() move(-1) end }
+        rows["c" .. i .. "_down"] = { order = i * 10 + 2, type = "execute", name = CB_DOWN, width = 0.3, hidden = hidden,
+            func = function() move(1) end }
+        rows["c" .. i .. "_label"] = { order = i * 10 + 3, type = "description", width = 1.2, fontSize = "medium", hidden = hidden,
+            name = function()
+                local c = cur()
+                if not c then return "" end
+                local known = IsPlayerSpell(c.id) or (C_SpellBook and C_SpellBook.IsSpellKnown and C_SpellBook.IsSpellKnown(c.id))
+                return SpellLabel(c.id) .. (known and "" or " |cff888888(not on this character)|r")
+            end }
+        rows["c" .. i .. "_fmt"] = { order = i * 10 + 4, type = "input", name = "", width = 1.1, hidden = hidden,
+            get = function() local c = cur() return c and c.format or "" end,
+            set = function(_, v)
+                local c = cur()
+                if not c then return end
+                v = strtrim(v or "")
+                c.format = (v ~= "") and v or nil
+                Refresh()
+            end }
+        rows["c" .. i .. "_del"] = { order = i * 10 + 5, type = "execute", name = CB_X, width = 0.3, hidden = hidden,
+            func = function() table.remove(list(), i); Refresh() end }
+        rows["c" .. i .. "_brk"] = { order = i * 10 + 6, type = "description", name = "", width = "full", hidden = hidden }
+    end
+    args.rowsGrp = {
+        order = 10, type = "group", inline = true,
+        name = "Cooldowns |cff888888(right box: this line's own text, empty = the group's)|r",
+        args = rows,
+    }
+    return args
+end
+
+local function TextArgs(gget, gset)
+    local function color(k, label, order)
+        return { order = order, type = "color", name = label,
+            get = function() local c = gget(k) or {} return c.r or 1, c.g or 1, c.b or 1 end,
+            set = function(_, r, g, b) gset(k, { r = r, g = g, b = b }) end }
+    end
+    return {
+        font = { order = 1, type = "select", dialogControl = "LSM30_Font", name = "Font",
+            values = ns.FontValues,
+            get = function() return gget("font") or "Expressway" end, set = function(_, v) gset("font", v) end },
+        fontSize = { order = 2, type = "range", name = "Font Size", min = 6, max = 36, step = 1,
+            get = function() return gget("fontSize") or 14 end, set = function(_, v) gset("fontSize", v) end },
+        fontOutline = { order = 3, type = "select", name = "Outline",
+            values = ns.OUTLINE and ns.OUTLINE.VALUES, sorting = ns.OUTLINE and ns.OUTLINE.ORDER,
+            get = function() return gget("fontOutline") or "OUTLINE" end, set = function(_, v) gset("fontOutline", v) end },
+        format = { order = 4, type = "input", name = "Text", width = "double",
+            get = function() return gget("format") or "[name] [cd]" end,
+            set = function(_, v)
+                v = strtrim(v or "")
+                gset("format", (v ~= "") and v or nil)
+            end },
+        justify = { order = 5, type = "select", name = "Align",
+            values = { LEFT = "Left", CENTER = "Center", RIGHT = "Right" }, sorting = { "LEFT", "CENTER", "RIGHT" },
+            get = function() return gget("justify") or "LEFT" end, set = function(_, v) gset("justify", v) end },
+        textCase = { order = 5.5, type = "select", name = "Case",
+            values = { normal = "Normal", upper = "UPPERCASE" }, sorting = { "normal", "upper" },
+            get = function() return gget("textCase") or "normal" end,
+            set = function(_, v) gset("textCase", (v ~= "normal") and v or nil) end },
+        tokens = { order = 6, type = "description", width = "full",
+            name = "|cff888888[name]   [cd]   [stacks] (charges on a cooldown). Anything else shows as you type it.|r\n" },
+        colors = {
+            order = 10, type = "group", inline = true, name = "Colors",
+            args = {
+                nameColor = color("nameColor", "Name", 1),
+                durationColor = color("durationColor", "Time", 2),
+                stackColor = color("stackColor", "Stacks", 3),
+                textColor = color("textColor", "Text", 4),
+            },
+        },
+        ready = {
+            order = 20, type = "group", inline = true, name = "Cooldowns",
+            args = {
+                cdReady = { order = 1, type = "select", name = "When Ready",
+                    values = { hide = "Hide the line", keep = "Keep the line", text = "Ready Text" },
+                    sorting = { "hide", "keep", "text" },
+                    get = function() return gget("cdReady") or "hide" end, set = function(_, v) gset("cdReady", v) end },
+                readyFormat = { order = 2, type = "input", name = "Ready Text", width = 1.5,
+                    hidden = function() return (gget("cdReady") or "hide") ~= "text" end,
+                    get = function() return gget("readyFormat") or "" end,
+                    set = function(_, v) gset("readyFormat", strtrim(v or "")) end },
+            },
+        },
+    }
+end
+
+-- a Groups - Text tab: the Groups - Bars one with text instead of bars
+local function Textify(tab, gi, grp, gget, gset)
+    local a = tab.args
+    for _, k in ipairs({ "specTab", "classTab", "globalTab" }) do
+        local t = a[k] and a[k].args
+        if t then
+            t.addSpecialBar = nil
+            if t.rowsGrp then t.rowsGrp.name = "Auras" end
+            if t.addAura then t.addAura.name = "|cFF60E0A0Add Aura|r" end
+            if t.addAuraID then t.addAuraID.name = "|cFF60E0A0...or Aura by ID or name|r" end
+        end
+    end
+    a.cooldownsTab = { order = 13.5, type = "group", name = function()
+        local g = grp()
+        return "Cooldowns (" .. #((g and g.cooldowns) or {}) .. ")"
+    end, args = CooldownsArgs(grp) }
+    local o = a.orderTab.args
+    o.sortMode.name = "Line Order"
+    o.maxBars.name = "Max Lines (0 = Off)"
+    local lay = a.layoutTab.args
+    lay.barGrp, lay.iconGrp = nil, nil
+    lay.sizeGrp.args.width.get = function() return gget("width") or 200 end
+    lay.sizeGrp.args.height.name = "Line Height"
+    lay.sizeGrp.args.height.get = function() return gget("height") or 16 end
+    lay.linesGrp = {
+        order = 2, type = "group", inline = true, name = "Lines",
+        args = {
+            spacing = { order = 1, type = "range", name = "Spacing", min = 0, max = 20, step = 1,
+                get = function() return gget("spacing") or 2 end, set = function(_, v) gset("spacing", v) end },
+            growth = { order = 2, type = "select", name = "Growth Direction",
+                values = { DOWN = "Grow Down", UP = "Grow Up" }, sorting = { "DOWN", "UP" },
+                get = function() return gget("growth") or "DOWN" end, set = function(_, v) gset("growth", v) end },
+            unit = { order = 3, type = "select", name = "Aura Unit",
+                values = { player = "Player", target = "Target", focus = "Focus", pet = "Pet" },
+                sorting = { "player", "target", "focus", "pet" },
+                get = function() return gget("unit") or "player" end, set = function(_, v) gset("unit", v) end },
+        },
+    }
+    a.textTab.args = TextArgs(gget, gset)
+    a.copy.disabled = function() return CountOf(true) >= MAX_GROUPS end
+    a.copy.func = function()
+        local _, ni = CB().CopyGroup(gi)
+        if not ni then return end
+        if ns.CustomBars._rebuildOptions then ns.CustomBars._rebuildOptions() end
+        Refresh()
+        local ACD = E.Libs and E.Libs.AceConfigDialog
+        if ACD then ACD:SelectGroup("ElvUI", "thingsUI", "modulesTab", "customText", "group" .. ni) end
+    end
+    a.delete.confirmText = "Delete this Text Group?"
+end
+
 local function GroupTab(gi)
     local function grp() return CB() and CB().GetGroups()[gi] or nil end
     local function gget(k) local g = grp(); return g and g[k] end
@@ -510,7 +748,7 @@ local function GroupTab(gi)
         },
     }
 
-    return {
+    local tab = {
         order = 10 + gi, type = "group", childGroups = "tab",
         name = function() local g = grp(); return ns.TabName(g and g.name or ("Group " .. gi), g and g.tabColor) end,
         hidden = function() return grp() == nil end,
@@ -529,7 +767,7 @@ local function GroupTab(gi)
             tabColor = select(2, ns.TabColorArgs(grp, NotifyChange, 2.5)),
             copy = {
                 order = 2.9, type = "execute", name = "Copy Group",
-                disabled = function() return CB() and #CB().GetGroups() >= MAX_GROUPS end,
+                disabled = function() return CB() and CountOf(false) >= MAX_GROUPS end,
                 func = function()
                     if not CB() then return end
                     local _, ni = CB().CopyGroup(gi)
@@ -836,18 +1074,21 @@ local function GroupTab(gi)
             },
         },
     }
+    if CB().IsText(grp()) then Textify(tab, gi, grp, gget, gset) end
+    return tab
 end
 
-local cbArgs
+local cbArgs, ctArgs
 
 local function RebuildGroupTabs()
-    if not cbArgs then return end
-    for k in pairs(cbArgs) do
-        if k:match("^group%d+$") then cbArgs[k] = nil end
+    for _, args in ipairs({ cbArgs or {}, ctArgs or {} }) do
+        for k in pairs(args) do
+            if k:match("^group%d+$") then args[k] = nil end
+        end
     end
-    local n = math.min(#((CB() and CB().GetGroups()) or {}), MAX_GROUPS)
-    for gi = 1, n do
-        cbArgs["group" .. gi] = GroupTab(gi)
+    for gi, g in ipairs((CB() and CB().GetGroups()) or {}) do
+        local dest = CB().IsText(g) and ctArgs or cbArgs
+        if dest then dest["group" .. gi] = GroupTab(gi) end
     end
 end
 
@@ -855,7 +1096,7 @@ function TUI:CustomBarsOptions()
     cbArgs = {
         newGroup = {
             order = 1, type = "execute", name = "+ New Bar Group", width = 1.2,
-            disabled = function() return CB() and #CB().GetGroups() >= MAX_GROUPS end,
+            disabled = function() return CB() and CountOf(false) >= MAX_GROUPS end,
             func = function()
                 if CB() then
                     CB().NewGroup()
@@ -877,5 +1118,33 @@ function TUI:CustomBarsOptions()
         name = "Groups - Bars",
         childGroups = "tab",
         args = cbArgs,
+    }
+end
+
+function TUI:CustomTextOptions()
+    ctArgs = {
+        newGroup = {
+            order = 1, type = "execute", name = "+ New Text Group", width = 1.2,
+            disabled = function() return CB() and CountOf(true) >= MAX_GROUPS end,
+            func = function()
+                if CB() then
+                    CB().NewGroup("text")
+                    RebuildGroupTabs()
+                    Refresh()
+                end
+            end,
+        },
+        desc = {
+            order = 2, type = "description",
+            name = "Auras and cooldowns as lines of text. Write a line as [name] [cd], or put anything around them: NO WILD CHARGE [cd].\n",
+        },
+    }
+    RebuildGroupTabs()
+    return {
+        order = 32,
+        type = "group",
+        name = "Groups - Text",
+        childGroups = "tab",
+        args = ctArgs,
     }
 end

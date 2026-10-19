@@ -123,6 +123,8 @@ function TUI:UpdateSpecialBars()
     local updateIcon = SB.UpdateIconSlot
     if updateIcon then for i = 1, iconCount do updateIcon(_iconKeys[i]) end end
     if SB.NotifyAuraSet then SB.NotifyAuraSet() end
+    -- cooldown frames report aura on/off for icons on top of them or waiting for a missing aura
+    if SB.WatchOverSpells then SB.WatchOverSpells() end
 end
 
 local function OnSpecChanged()

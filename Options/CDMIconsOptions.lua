@@ -792,7 +792,17 @@ local function SpellEditorPage(order, buffs)
     end
     local function apply()
         local ps = store()
+        local e = sel and ps[sel]
+        -- rules switched off with nothing set are no setting
+        if e and e.visibility then
+            local keep = false
+            for k, v in pairs(e.visibility) do
+                if not (k == "enabled" and not v) then keep = true break end
+            end
+            if not keep then e.visibility = nil end
+        end
         if sel and ps[sel] and not next(ps[sel]) then ps[sel] = nil end
+        if ns.CDMIcons and ns.CDMIcons.RefreshSpellRules then ns.CDMIcons.RefreshSpellRules() end
         if TUI.UpdateCDMGlow then TUI:UpdateCDMGlow() end
         if ns.CDMText and ns.CDMText.RefreshAll then ns.CDMText.RefreshAll() end
         if ns.CDMIcons and ns.CDMIcons.RefreshCustomIcons then ns.CDMIcons.RefreshCustomIcons() end
@@ -1133,6 +1143,129 @@ local function SpellEditorPage(order, buffs)
                         order = 0.5, type = "group", inline = true, name = "Icon",
                         args = ns.CustomIconArgs(function() local e = entry() return e and e.customIcon end,
                             function(v) setField("customIcon", v) end, 1),
+                    },
+                    showGrp = {
+                        order = 0.52, type = "group", inline = true, name = "Show",
+                        args = (function()
+                            -- the rules table appears with the first rule set
+                            local function vis()
+                                local e = entry()
+                                if e and e.visibility then return e.visibility end
+                                return setmetatable({}, { __newindex = function(_, k, v)
+                                    local t = entry(true)
+                                    t.visibility = t.visibility or {}
+                                    t.visibility[k] = v
+                                end })
+                            end
+                            local a = {
+                                cdState = {
+                                    order = 0.5, type = "select", name = "Cooldown", hidden = buffs,
+                                    values = { any = "Always", cooldown = "Only On Cooldown", ready = "Only When Ready" },
+                                    sorting = { "any", "cooldown", "ready" },
+                                    get = function() local e = entry() return (e and e.cdState) or "any" end,
+                                    set = function(_, v) setField("cdState", (v ~= "any") and v or nil) end,
+                                },
+                            }
+                            for k, v in pairs(ns.VisibilityArgs(vis, apply)) do a[k] = v end
+                            return a
+                        end)(),
+                    },
+                    onTopGrp = {
+                        order = 0.55, type = "group", inline = true, name = "Aura Icon On Top",
+                        hidden = buffs,
+                        args = (function()
+                            local SB = ns.SpecialBars
+                            local function count() return (SB and SB.GetIconCount and SB.GetIconCount()) or 0 end
+                            -- this spec's Aura Icon sitting on the selected spell
+                            local function linked()
+                                if not (SB and isSpell()) then return nil end
+                                for i = 1, count() do
+                                    local d = SB.GetIconDB("icon" .. i)
+                                    if d and d.overSpell == sel then return "icon" .. i, d end
+                                end
+                            end
+                            local function linkedDB() return select(2, linked()) end
+                            local function noLink() return linked() == nil end
+                            local function refresh() TUI:UpdateSpecialBars(); ns.NotifyChange() end
+                            local function bget(k, dflt) local d = linkedDB() local v = d and d[k] if v == nil then return dflt end return v end
+                            local function bset(k, v) local d = linkedDB() if d then d[k] = v; refresh() end end
+                            return {
+                                pick = {
+                                    order = 1, type = "select", name = "Aura Icon", width = 1.5,
+                                    values = function()
+                                        local out = { [""] = "|cFF888888- None -|r", new = "|cFF40FF40+ New Aura Icon|r" }
+                                        for i = 1, count() do
+                                            local d = SB.GetIconDB("icon" .. i)
+                                            if d and d.spellID then
+                                                local busy = d.overSpell and d.overSpell ~= sel
+                                                out["icon" .. i] = spellLabel(d.spellID) .. (busy and " |cff888888(on another)|r" or "")
+                                            end
+                                        end
+                                        return out
+                                    end,
+                                    sorting = function()
+                                        local out = { "", "new" }
+                                        for i = 1, count() do
+                                            local d = SB.GetIconDB("icon" .. i)
+                                            if d and d.spellID then out[#out + 1] = "icon" .. i end
+                                        end
+                                        return out
+                                    end,
+                                    get = function() return linked() or "" end,
+                                    set = function(_, v)
+                                        -- one icon per cooldown
+                                        for i = 1, count() do
+                                            local d = SB.GetIconDB("icon" .. i)
+                                            if d and d.overSpell == sel then d.overSpell = nil; SB.ReleaseIcon("icon" .. i) end
+                                        end
+                                        if v == "new" then
+                                            local specID = SB.GetCurrentSpecID()
+                                            v = (ns.SB_PlaceSpell and ns.SB_PlaceSpell(false, sel, specID)
+                                                and SB.FindSlotForSpell and SB.FindSlotForSpell("icons", sel, specID)) or ""
+                                        end
+                                        if v ~= "" then
+                                            local d = SB.GetIconDB(v)
+                                            d.overSpell, d.cdmRow, d.customGroup, d.enabled = sel, nil, nil, true
+                                            SB.ReleaseIcon(v)
+                                        end
+                                        if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end
+                                        refresh()
+                                    end,
+                                },
+                                open = {
+                                    order = 2, type = "execute", name = "Open Aura Icon Settings", width = 1.2, hidden = noLink,
+                                    func = function()
+                                        local k = linked()
+                                        if k and ns.SB_OpenIconEditor then ns.SB_OpenIconEditor(k) end
+                                    end,
+                                },
+                                cdText = ns.OverCDArgs(linkedDB, function()
+                                    local k = linked()
+                                    if k and SB.RestyleOverCD then SB.RestyleOverCD(k) end
+                                    ns.NotifyChange()
+                                end, 10, noLink),
+                                border = {
+                                    order = 20, type = "group", inline = true, name = "Aura Icon Border", hidden = noLink,
+                                    args = {
+                                        showBorder = { order = 1, type = "toggle", name = "Show Border",
+                                            get = function() return bget("showBorder", false) end, set = function(_, v) bset("showBorder", v) end },
+                                        borderSize = { order = 2, type = "range", name = "Size", min = 1, max = 16, step = 1,
+                                            disabled = function() return not bget("showBorder", false) end,
+                                            get = function() return bget("borderSize", 1) end, set = function(_, v) bset("borderSize", v) end },
+                                        borderColor = { order = 3, type = "color", name = "Color", hasAlpha = true,
+                                            disabled = function() return not bget("showBorder", false) end,
+                                            get = function() local c = bget("borderColor", {}) return c.r or 0, c.g or 0, c.b or 0, c.a or 1 end,
+                                            set = function(_, r, g, b, a) bset("borderColor", { r = r, g = g, b = b, a = a }) end },
+                                        borderInset = { order = 4, type = "range", name = "Inset", min = -10, max = 10, step = 0.01, bigStep = 1,
+                                            disabled = function() return not bget("showBorder", false) end,
+                                            get = function() return bget("borderInset", 0) end, set = function(_, v) bset("borderInset", v) end },
+                                        borderStroke = { order = 5, type = "toggle", name = "Stroke",
+                                            disabled = function() return not bget("showBorder", false) end,
+                                            get = function() return bget("borderStroke", false) end, set = function(_, v) bset("borderStroke", v or nil) end },
+                                    },
+                                },
+                            }
+                        end)(),
                     },
                     glowGrp = {
                         order = 1, type = "group", inline = true, name = "Glow",

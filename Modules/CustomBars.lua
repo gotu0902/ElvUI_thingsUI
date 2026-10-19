@@ -31,11 +31,15 @@ function M.GroupByID(id)
     end
 end
 
-function M.NewGroup()
+-- Groups - Text lives here too: same lists, lines of text instead of bars
+function M.IsText(g) return g and g.display == "text" or false end
+
+function M.NewGroup(display)
     local r = Root(); if not r then return end
-    local g = DeepCopy(ns.CUSTOM_BAR_GROUP_DEFAULTS or {})
+    local text = display == "text"
+    local g = DeepCopy((text and ns.CUSTOM_TEXT_GROUP_DEFAULTS or ns.CUSTOM_BAR_GROUP_DEFAULTS) or {})
     g.id = r.nextID
-    g.name = "Bar Group " .. g.id
+    g.name = (text and "Text Group " or "Bar Group ") .. g.id
     g.auras = g.auras or {}
     r.nextID = r.nextID + 1
     r.groups[#r.groups + 1] = g
@@ -48,7 +52,7 @@ function M.CopyGroup(index)
     if not src then return end
     local g = DeepCopy(src)
     g.id = r.nextID
-    g.name = (src.name or ("Bar Group " .. src.id)) .. " Copy"
+    g.name = (src.name or ((M.IsText(src) and "Text Group " or "Bar Group ") .. src.id)) .. " Copy"
     r.nextID = r.nextID + 1
     r.groups[#r.groups + 1] = g
     return g, #r.groups
@@ -406,6 +410,16 @@ ns.TextColor(r.count, group.stackColor)
     button:SetMouseMotionEnabled(true)
 end
 
+local function StyleEntry(button, r, group, def)
+    if not M.IsText(group) then return StyleBar(button, r, group, def) end
+    local st = state[group.id]
+    local sid = M.FirstSpell(def)
+    local list = ns.AuraLane and ns.AuraLane.SpellListUnique and ns.AuraLane.SpellListUnique(def)
+    ns.GroupText.StyleAura(button, r, group, def, (st and st.effW) or group.width or 200,
+        (st and st.effH) or group.height or 16, sid and C_Spell.GetSpellName and C_Spell.GetSpellName(sid),
+        list and #list == 1)
+end
+
 local function GroupVisOK(st, unit)
     if unit == "player" then
         if st.pureHarmful then return true end
@@ -581,14 +595,14 @@ local function EnsureMover(st, group)
     if moverMade[group.id] then
         local ms = ns.MoverSync
         if ms and ms.SetManagedLabel then
-            ms.SetManagedLabel("TUI_CustomBarsMover" .. group.id, group.name or ("Bar Group " .. group.id))
+            ms.SetManagedLabel("TUI_CustomBarsMover" .. group.id, group.name or ("Group " .. group.id))
         end
         return
     end
     local ms = ns.MoverSync
     if not (ms and ms.CreateManaged) then return end
-    ms.CreateManaged(st.frame, "TUI_CustomBarsMover" .. group.id, group.name or ("Bar Group " .. group.id), {
-        configString  = "thingsUI,modulesTab,customBars",
+    ms.CreateManaged(st.frame, "TUI_CustomBarsMover" .. group.id, group.name or ("Group " .. group.id), {
+        configString  = M.IsText(group) and "thingsUI,modulesTab,customText" or "thingsUI,modulesTab,customBars",
         shouldDisable = function() return not M.GroupByID(group.id) end,
         onSave = function(point, relPoint, x, y)
             local g = M.GroupByID(group.id)
@@ -617,7 +631,7 @@ local function ApplyEntryTo(st, group, entry, ord)
 
     local sp = group.spacing or 2
     local w = st.effW or group.width or 220
-    if def.halfWidth then w = math.floor((w - sp) / 2) end
+    if def.halfWidth and not M.IsText(group) then w = math.floor((w - sp) / 2) end
 
     local layout = {
         elementWidth = w,
@@ -650,7 +664,7 @@ local function ApplyEntryTo(st, group, entry, ord)
                 st.keyByButton[button] = key
                 local r = st.regions[button]
                 if not r then r = {}; st.regions[button] = r end
-                StyleBar(button, r, st.group or group, st.defByKey[key] or def)
+                StyleEntry(button, r, st.group or group, st.defByKey[key] or def)
             end,
         })
     end
@@ -753,7 +767,17 @@ local function SyncGroup(group)
     EnsureMover(st, group)
     frame:Show()
 
-    if RenderTestBars(st, group) then
+    local text = M.IsText(group)
+    local testOn = ns.CustomGroups and ns.CustomGroups.testMode and true or false
+    local cdH = text and ns.GroupText.SyncCooldowns(st, group, effW, effH, testOn) or 0
+    if text then
+        if ns.GroupText.RenderTest(st, group, cdH, M.Entries(group), function(def)
+            return (ns.AuraLane and ns.AuraLane.SpellListUnique and ns.AuraLane.SpellListUnique(def)) or {}
+        end) then
+            c:Hide()
+            return
+        end
+    elseif RenderTestBars(st, group) then
         c:Hide()
         return
     end
@@ -815,7 +839,7 @@ local function SyncGroup(group)
     local clipOn = capBars > 0
     local clip = st.clip
     clip:ClearAllPoints()
-    clip:SetPoint(pt, frame, pt, 0, 0)
+    clip:SetPoint(pt, frame, pt, 0, up and cdH or -cdH)
     clip:SetSize(effW, clipOn and (capBars * effH + (capBars - 1) * sp) or effH)
     clip:SetClipsChildren(clipOn)
     c:ClearAllPoints()
@@ -853,7 +877,7 @@ local function SyncGroup(group)
         local key = st.keyByButton[button]
         local def = key and st.defByKey[key]
         if def then
-            if not pcall(StyleBar, button, r, group, def) then pendingSync = true end
+            if not pcall(StyleEntry, button, r, group, def) then pendingSync = true end
         end
     end
     c:SetShown(GroupVisOK(st, unit) and ns.Visibility.Shown(group.visibility))
@@ -900,6 +924,11 @@ function M.RefreshVisibility()
         if st.frame:IsShown() then
             st.container:SetShown(GroupVisOK(st, st.unit or "player")
                 and ns.Visibility.Shown(st.group and st.group.visibility))
+            if st.cdHost then
+                local on = st.group and st.group.enabled ~= false and ns.Visibility.Shown(st.group.visibility) or false
+                st.cdHost:SetShown(on)
+                if on then ns.GroupText.UpdateLines(st) end
+            end
         end
     end
 end

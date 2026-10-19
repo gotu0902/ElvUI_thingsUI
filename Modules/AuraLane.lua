@@ -87,7 +87,8 @@ function A.Entries(group)
         for i = 1, SB.GetIconCount() do
             local ikey = "icon" .. i
             local idb = SB.GetIconDB(ikey)
-            if idb and idb.enabled and idb.spellID and idb.customGroup == group.id and not idb.totemTimer then
+            if idb and idb.enabled and idb.spellID and idb.customGroup == group.id and not idb.totemTimer
+                and not idb.showMissing then
                 local spells = (ns.SpecialAura and ns.SpecialAura.ExpandSpellIDs
                     and ns.SpecialAura.ExpandSpellIDs(idb.spellID)) or { [idb.spellID] = true }
                 local rank = siSpec * 100000 + (idb.customGroupOrder or 20000)
@@ -296,6 +297,7 @@ local function StyleButton(button, group, lane)
 
     local bShow, bSize, bInset, bColor = group.showBorder,
         group.borderSize or 1, group.borderInset or 0, group.borderColor
+    local bStroke = group.borderStroke
     local gau = group.auras
     if bShow and gau and gau.sortGlow and gau.sortGlowBorderStroke and (gau.sortMode or "manual") ~= "manual"
         and (gau.sortGlowStyle or "pulse") == "pixel" then
@@ -305,6 +307,7 @@ local function StyleButton(button, group, lane)
     if idb and idb.showBorder then
         bShow, bSize, bInset, bColor = true,
             idb.borderSize or 1, idb.borderInset or 0, idb.borderColor
+        bStroke = idb.borderStroke
         if idb.glowBorderStroke and idb.showGlow and A.MapGlowStyle(idb.glowType) == "pixel" then bSize = idb.glowThickness or bSize end
         bInset = bInset - bSize
     end
@@ -313,6 +316,7 @@ local function StyleButton(button, group, lane)
         and SBm.Styles.Get("icons", def.styleName)
     if st then
         bShow, bSize, bInset, bColor = st.showBorder, st.borderSize or 1, st.borderInset or 0, st.borderColor
+        bStroke = st.borderStroke
         if bShow and st.glowBorderStroke and st.showGlow and A.MapGlowStyle(st.glowType) == "pixel" then
             bSize = st.glowThickness or bSize
         end
@@ -325,8 +329,12 @@ local function StyleButton(button, group, lane)
             for i = 1, 4 do r.border[i] = button:CreateTexture(nil, "OVERLAY") end
         end
         A.EdgeRing(button, r.border, bSize, bInset, bColor or BORDER_BLACK)
-    elseif r.border then
-        for _, tex in ipairs(r.border) do tex:Hide() end
+        A.StrokeRing(button, r, bSize, bInset, bStroke)
+    else
+        if r.border then
+            for _, tex in ipairs(r.border) do tex:Hide() end
+        end
+        A.StrokeRing(button, r, 0, 0, false)
     end
     if r.borderIn then
         for i = 1, 4 do r.borderIn[i]:Hide() r.borderOut[i]:Hide() end

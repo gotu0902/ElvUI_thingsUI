@@ -30,6 +30,7 @@
 	<Script file="AuraLane.lua"/>
 	<Script file="Glow.lua"/>
 	<Script file="CustomBars.lua"/>
+	<Script file="GroupText.lua"/>
 	<Script file="TUIMeter.lua"/>
 	<Script file="MBB.lua"/>
 	<Script file="MinimapDifficulty.lua"/>

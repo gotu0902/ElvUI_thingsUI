@@ -1565,6 +1565,9 @@ function TUI:CustomGroupsOptions()
                                 inset = { order = 4, type = "range", name = "Inset", min = -10, max = 10, step = 0.01, bigStep = 1,
                                     disabled = function() return not group.showBorder end,
                                     get = function() return group.borderInset or 0 end, set = function(_, v) gset("borderInset", v) end },
+                                stroke = { order = 5, type = "toggle", name = "Stroke",
+                                    disabled = function() return not group.showBorder end,
+                                    get = function() return group.borderStroke end, set = function(_, v) gset("borderStroke", v or nil) end },
                             },
                         },
                         positionGroup = {

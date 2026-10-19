@@ -99,6 +99,8 @@ local VIEWER_BY_KEY = {
 }
 
 local overflowOut = {}
+-- any Spell Editor Show rule set (visibility / cooldown state)
+local anySpellRule, anyCDState = false, false
 
 -- the viewer an icon shows in: an overflowed one sits in its target row
 function M.ShownIn(child)
@@ -417,6 +419,11 @@ local function RebuildPassiveCache()
                     if not hide and isBuff and dupAuras and AuraDup(info, sid, base, dupAuras) then
                         hide = true
                     end
+                    -- Spell Editor Show When: out of the row while its rules say no
+                    if not hide and anySpellRule then
+                        local o = M.SpellSettings(c)
+                        if o and o.visibility and not ns.Visibility.Shown(o.visibility) then hide = true end
+                    end
                     local slot = info and PlainID(info.equipSlot)
                     if slot then
                         local bl = cdm and cdm.trinketBlacklist
@@ -455,6 +462,141 @@ local function QueuePassiveRebuild()
 end
 
 function M.IsPassiveHidden(child) return passiveHidden[child] == true end
+
+-- Spell Editor Show rules. Visibility takes a frame out of its row (plain state); the
+-- cooldown state is secret in combat, so it only fades the frame and the slot stays
+local cdFaded = setmetatable({}, { __mode = "k" })
+local readyCurve
+
+function M.RefreshSpellRules()
+    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    anySpellRule, anyCDState = false, false
+    for _, store in ipairs({ cdm and cdm.perSpell or {}, cdm and cdm.perBuff or {} }) do
+        for _, o in pairs(store) do
+            if type(o) == "table" then
+                if o.visibility and o.visibility.enabled then anySpellRule = true end
+                if o.cdState then anyCDState = true end
+            end
+        end
+    end
+    QueuePassiveRebuild()
+    M.ApplyCDStates()
+end
+
+local function CDStateAlpha(sid, mode)
+    local info = C_Spell.GetSpellCooldown(sid)
+    local dur = C_Spell.GetSpellCooldownDuration and C_Spell.GetSpellCooldownDuration(sid)
+    local on = GetDesatCurve()
+    -- the GCD is not this spell's cooldown
+    if not (dur and on) or (info and info.isOnGCD) then return mode == "ready" and 1 or 0 end
+    if mode == "cooldown" then return dur:EvaluateRemainingDuration(on, 0) end
+    if not readyCurve then
+        readyCurve = C_CurveUtil.CreateCurve()
+        readyCurve:SetType(Enum.LuaCurveType.Step)
+        readyCurve:AddPoint(0, 1)
+        readyCurve:AddPoint(0.001, 0)
+    end
+    return dur:EvaluateRemainingDuration(readyCurve, 1)
+end
+
+function M.ApplyCDStates()
+    if not anyCDState and not next(cdFaded) then return end
+    for _, name in ipairs({ "EssentialCooldownViewer", "UtilityCooldownViewer" }) do
+        local v = _G[name]
+        for _, c in ipairs((v and v._tuiVisible) or {}) do
+            if c.cooldownInfo and not passiveHidden[c] then
+                local o = anyCDState and M.SpellSettings(c)
+                local mode = o and o.cdState
+                local sid = mode and M.ChildSpell(c)
+                if sid then
+                    c:SetAlpha(CDStateAlpha(sid, mode))
+                    cdFaded[c] = true
+                elseif cdFaded[c] then
+                    c:SetAlpha(1)
+                    cdFaded[c] = nil
+                end
+            end
+        end
+    end
+end
+
+do
+    local queued = false
+    local ev = CreateFrame("Frame")
+    ev:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+    ev:SetScript("OnEvent", function()
+        if queued or not anyCDState then return end
+        queued = true
+        C_Timer.After(0, function() queued = false; M.ApplyCDStates() end)
+    end)
+    ns.Visibility.OnChange(function() if anySpellRule then QueuePassiveRebuild() end end)
+end
+
+-- whether the CDM shows one of these auras as up: Buff Icons/Bars items (their own
+-- isActive, plain in combat) or a cooldown's aura state; nil when the CDM doesn't track it
+local buffKids = {}
+local activeHooked = setmetatable({}, { __mode = "k" })
+local function HookActive(c)
+    if activeHooked[c] or type(c.OnActiveStateChanged) ~= "function" then return end
+    activeHooked[c] = true
+    hooksecurefunc(c, "OnActiveStateChanged", function() M.FireAuraState(c) end)
+end
+
+function M.AuraUp(ids)
+    local tracked = false
+    for _, name in ipairs({ "BuffIconCooldownViewer", "BuffBarCooldownViewer" }) do
+        local v = _G[name]
+        if v then
+            for i = 1, H.ChildrenInto(v, buffKids) do
+                local c = buffKids[i]
+                if c and c.cooldownInfo then
+                    HookActive(c)
+                    local sid, base = M.ChildSpell(c)
+                    if (sid and ids[sid]) or (base and ids[base]) then
+                        tracked = true
+                        local a = c.isActive
+                        if not (issecretvalue and issecretvalue(a)) and a then return true end
+                    end
+                end
+            end
+        end
+    end
+    for _, name in ipairs({ "EssentialCooldownViewer", "UtilityCooldownViewer" }) do
+        local v = _G[name]
+        if v then
+            for i = 1, H.ChildrenInto(v, buffKids) do
+                local c = buffKids[i]
+                if c and c.cooldownInfo then
+                    local sid, base = M.ChildSpell(c)
+                    if (sid and ids[sid]) or (base and ids[base]) then
+                        tracked = true
+                        if M.ChildAuraActive(c) then return true end
+                    end
+                end
+            end
+        end
+    end
+    if tracked then return false end
+end
+
+-- the Essential/Utility frame showing a spell now, and the row it shows in
+local spellKids = {}
+function M.ChildForSpell(spellID)
+    for _, name in ipairs({ "EssentialCooldownViewer", "UtilityCooldownViewer" }) do
+        local v = _G[name]
+        if v then
+            for i = 1, H.ChildrenInto(v, spellKids) do
+                local c = spellKids[i]
+                if c and c.cooldownInfo and c:IsShown() and not passiveHidden[c] then
+                    local sid, base = M.ChildSpell(c)
+                    if sid == spellID or base == spellID then
+                        return c, (M.ShownIn(c) == "UtilityCooldownViewer") and "utility" or "essential"
+                    end
+                end
+            end
+        end
+    end
+end
 
 -- the trinket in this slot is on the Trinkets blacklist for its cooldown (or buff)
 function M.TrinketHidden(slot, buff)
@@ -778,11 +920,34 @@ local function StyleAuraSwipe(child)
     end
 end
 
+-- whether a cooldown frame shows its spell's aura right now (Blizzard's own field, plain in combat)
+function M.ChildAuraActive(child)
+    local consts = _G.CooldownViewerConstants
+    return (consts and child and child.cooldownSwipeColor == consts.ITEM_AURA_COLOR) and true or false
+end
+
+-- spells whose frame reports aura on/off (an Aura Icon sits on top of them)
+local auraWatch, auraListeners = {}, {}
+local auraOn = setmetatable({}, { __mode = "k" })
+function M.WatchAuraState(set) auraWatch = set or {} end
+function M.OnAuraState(fn) auraListeners[#auraListeners + 1] = fn end
+function M.FireAuraState(c)
+    for i = 1, #auraListeners do auraListeners[i](c) end
+end
+
+local function NoteAuraState(child)
+    if not next(auraWatch) then return end
+    local on = M.ChildAuraActive(child)
+    if auraOn[child] == on then return end
+    auraOn[child] = on
+    for i = 1, #auraListeners do auraListeners[i](child, on) end
+end
+
 local function EnsureSwipeHook(child)
     local cd = child.Cooldown
     if not cd or swipeHooked[cd] or not cd.SetSwipeColor then return end
     swipeHooked[cd] = true
-    hooksecurefunc(cd, "SetSwipeColor", function() StyleAuraSwipe(child) end)
+    hooksecurefunc(cd, "SetSwipeColor", function() StyleAuraSwipe(child); NoteAuraState(child) end)
 end
 
 local function EnsureOverlayHooks(child)
@@ -1185,6 +1350,10 @@ LayoutViewer = function(viewer)
         if swipeStyled or swipeHooked[c.Cooldown] or (o and (o.swipeColor or o.swipeReverse)) then
             EnsureSwipeHook(c); StyleAuraSwipe(c)
         end
+        if next(auraWatch) then
+            local sid, base = M.ChildSpell(c)
+            if (sid and auraWatch[sid]) or (base and auraWatch[base]) then EnsureSwipeHook(c); NoteAuraState(c) end
+        end
     end
     -- per-spell glow and text follow the spell, not the re-used frame
     local glowSync = ns.CDMGlow and ns.CDMGlow.Sync
@@ -1436,6 +1605,10 @@ local function FlushPending(self)
         pendingViewers[viewer] = nil
         M.LayoutViewer(viewer)
     end
+    M.ApplyCDStates()
+    -- Aura Icons on top of a cooldown follow its frame
+    local SB = ns.SpecialBars
+    if SB and SB.RefreshOverIcons then SB.RefreshOverIcons() end
 end
 
 QueueLayout = function(viewer)
@@ -1590,6 +1763,7 @@ function M.RefreshAll()
 end
 
 function TUI:UpdateCDMIcons()
+    M.RefreshSpellRules()
     M.RefreshCustomIcons()
     M.RefreshAll()
     if ns.EssentialMover and ns.EssentialMover.OnGrowthDirectionChanged then

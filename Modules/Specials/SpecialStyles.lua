@@ -17,6 +17,7 @@ local EXCLUDE = {
         anchorRelativePoint = true, anchorXOffset = true, anchorYOffset = true,
         customGroup = true, customGroupOrder = true,
         totemTimer = true, cdmRow = true, cdmIndex = true, auraKind = true, visibility = true, customIcon = true,
+        overSpell = true, overCD = true, showMissing = true, missingDesat = true,
     },
     bars = {
         spellID = true, spellName = true, enabled = true, styleName = true,

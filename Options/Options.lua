@@ -9,7 +9,7 @@ end
 
 local curSection, weOpenedCDM, userClosedCDM, closingCDM
 
-local CDM_SECTIONS = { cdm = true, spellEditor = true, buffBars = true, customGroups = true, customBars = true,
+local CDM_SECTIONS = { cdm = true, spellEditor = true, buffBars = true, customGroups = true, customBars = true, customText = true,
     specialIcons = true, specialBars = true }
 
 -- closed by hand on one of our CDM pages: it stays closed until the options close
@@ -98,7 +98,7 @@ local function EnsureCloseHook()
     end
 end
 
-local TEST_SECTIONS = { customGroups = true, customBars = true, specialIcons = true, specialBars = true }
+local TEST_SECTIONS = { customGroups = true, customBars = true, customText = true, specialIcons = true, specialBars = true }
 
 local function SectionShown(key)
     EnsureCloseHook()
@@ -145,6 +145,7 @@ function TUI.ConfigTable()
             classbar     = WithSentinel(withOrder(Colorize(TUI:ClassbarModeOptions(), "6FB7FF"), 5), "classbar"),
             customGroups = WithSentinel(withOrder(Colorize(TUI:CustomGroupsOptions(), "F20553"), 6), "customGroups"),
             customBars   = WithSentinel(withOrder(Colorize(TUI:CustomBarsOptions(), "F27D2A"), 6.2), "customBars"),
+            customText   = WithSentinel(withOrder(Colorize(TUI:CustomTextOptions(), "F2C12E"), 6.3), "customText"),
             auraCollections = WithSentinel(withOrder(Colorize(TUI:AuraCollectionsOptions(), "B0A0FF"), 0.5), "auraCollections"),
             damageMeter  = WithSentinel(withOrder(Colorize(TUI:DamageMeterOptions(),  "FF5C5C"), 5.5), "damageMeter"),
             specialBars  = WithSentinel(withOrder(Colorize(TUI:SpecialBarsOptions(),  "80FF80"), 0.4), "specialBars"),

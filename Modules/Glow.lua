@@ -483,21 +483,26 @@ end
 
 local STROKE_BLACK = { r = 0, g = 0, b = 0, a = 1 }
 
--- dark lines inside and outside the pandemic border (th = how far it reaches out)
-local function PandemicStroke(pd, th)
-    if not th then
-        if pd.sIn then for i = 1, 4 do pd.sIn[i]:Hide(); pd.sOut[i]:Hide() end end
+-- black lines inside and outside a border ring drawn by EdgeRing(host, _, size, inset)
+function A.StrokeRing(host, store, size, inset, on)
+    if not on then
+        if store.sIn then for i = 1, 4 do store.sIn[i]:Hide(); store.sOut[i]:Hide() end end
         return
     end
-    if not pd.sIn then
-        pd.sIn, pd.sOut = {}, {}
+    if not store.sIn then
+        store.sIn, store.sOut = {}, {}
         for i = 1, 4 do
-            pd.sIn[i] = pd:CreateTexture(nil, "OVERLAY", nil, 5)
-            pd.sOut[i] = pd:CreateTexture(nil, "OVERLAY", nil, 5)
+            store.sIn[i] = host:CreateTexture(nil, "OVERLAY", nil, 7)
+            store.sOut[i] = host:CreateTexture(nil, "OVERLAY", nil, 7)
         end
     end
-    EdgeRing(pd, pd.sIn, 1, 0, STROKE_BLACK)
-    EdgeRing(pd, pd.sOut, 1, -th - 1, STROKE_BLACK)
+    EdgeRing(host, store.sIn, 1, inset + size, STROKE_BLACK)
+    EdgeRing(host, store.sOut, 1, inset - 1, STROKE_BLACK)
+end
+
+-- the pandemic border reaches th out of the button
+local function PandemicStroke(pd, th)
+    A.StrokeRing(pd, pd, th or 0, -(th or 0), th ~= nil)
 end
 
 function A.ApplyButtonFX(button, r, opts)

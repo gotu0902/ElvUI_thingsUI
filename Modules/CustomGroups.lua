@@ -285,7 +285,7 @@ local function ApplyGroupBorder(btn)
     end
     DrawStroke3(bd, inner, outer, btn,
         g.borderSize or 1, g.borderInset or 0,
-        g.borderColor or { r = 0, g = 0, b = 0, a = 1 }, false)
+        g.borderColor or { r = 0, g = 0, b = 0, a = 1 }, g.borderStroke)
 end
 
 local USES_ITEMS = { [5512] = true, [224464] = true }  -- Healthstone / Demonic (Gluttony) Healthstone
@@ -417,6 +417,24 @@ local function FindTotemIconDB(sid, groupID)
     end
 end
 
+-- an Only When Missing aura: just its icon, shown while the aura is down
+local function UpdateMissingIcon(btn)
+    local sid = btn._id
+    local SBm = ns.SpecialBars
+    local idb
+    for i = 1, ((SBm and SBm.GetIconCount and SBm.GetIconCount()) or 0) do
+        local d = SBm.GetIconDB("icon" .. i)
+        if d and d.spellID == sid and d.showMissing then idb = d break end
+    end
+    if btn.icon then
+        local tex = (idb and idb.customIcon) or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid))
+        if tex then btn.icon:SetTexture(tex) end
+        btn.icon:SetDesaturated((idb and idb.missingDesat and not M.testMode) and true or false)
+    end
+    if btn.cooldown then btn.cooldown:Clear() end
+    if btn.count then btn.count:SetText("") end
+end
+
 local function UpdateTotemIcon(btn)
     local sid = btn._id
     local idb = FindTotemIconDB(sid, btn._group and btn._group.id)
@@ -451,6 +469,7 @@ local function UpdateIcon(btn)
     elseif btn._type == "trinket" then UpdateTrinketIcon(btn)
     elseif btn._type == "timer" then UpdateTimerIcon(btn)
     elseif btn._type == "totem" then UpdateTotemIcon(btn)
+    elseif btn._type == "missing" then UpdateMissingIcon(btn)
     else UpdateSpellIcon(btn) end
     ApplyGroupBorder(btn)
 end
@@ -463,10 +482,12 @@ end
 local function CreateIcon(gs, group, kind, id)
     if kind == "trinket" then gs.trinketIcons = gs.trinketIcons or {} end
     if kind == "totem" then gs.totemIcons = gs.totemIcons or {} end
+    if kind == "missing" then gs.missingIcons = gs.missingIcons or {} end
     local pool = (kind == "item") and gs.itemIcons
               or (kind == "timer") and gs.timerIcons
               or (kind == "trinket") and gs.trinketIcons
               or (kind == "totem") and gs.totemIcons
+              or (kind == "missing") and gs.missingIcons
               or gs.spellIcons
     if pool[id] then pool[id]._group = group; return pool[id] end
 
@@ -602,6 +623,7 @@ local function HideGroupIcons(gs)
     if gs.timerIcons then for _, b in pairs(gs.timerIcons) do b:Hide() end end
     if gs.trinketIcons then for _, b in pairs(gs.trinketIcons) do b:Hide() end end
     if gs.totemIcons then for _, b in pairs(gs.totemIcons) do b:Hide() end end
+    if gs.missingIcons then for _, b in pairs(gs.missingIcons) do b:Hide() end end
     if gs.testIcons then for _, b in pairs(gs.testIcons) do b:Hide() end end
 end
 
@@ -930,6 +952,14 @@ local function CollectScopeInto(group, scope, root, shown)
                 if (active or M.testMode) and not _seen["t" .. idb.spellID] then
                     _seen["t" .. idb.spellID] = true
                     list[#list + 1] = { kind = "totem", id = idb.spellID, li = idb.customGroupOrder or 20000 }
+                end
+            elseif idb and idb.enabled and idb.spellID and idb.customGroup == group.id and idb.showMissing then
+                -- Only When Missing: a slot of its own while the aura is down
+                -- its own Visibility rules decide too (it's our button, so in combat as well)
+                if (M.testMode or (not SBm.MissingUp(idb) and ns.Visibility.Shown(idb.visibility)))
+                    and not _seen["m" .. idb.spellID] then
+                    _seen["m" .. idb.spellID] = true
+                    list[#list + 1] = { kind = "missing", id = idb.spellID, li = idb.customGroupOrder or 20000 }
                 end
             end
         end
