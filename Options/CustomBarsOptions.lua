@@ -982,6 +982,18 @@ local function GroupTab(gi)
                             anchorYOffset = { order = 7, type = "range", name = "Y Offset", min = -800, max = 800, step = 0.01, bigStep = 1,
                                 get = function() return gget("anchorYOffset") or 0 end,
                                 set = function(_, v) gset("anchorYOffset", v) end },
+                            strataBrk = { order = 9, type = "description", name = "", width = "full" },
+                            frameStrata = { order = 10, type = "select", name = "Frame Strata",
+                                values = ns.STRATA.VALUES, sorting = ns.STRATA.ORDER,
+                                get = function() return gget("frameStrata") or "MEDIUM" end,
+                                set = function(_, v) gset("frameStrata", (v ~= "MEDIUM") and v or nil) end },
+                            frameLevel = { order = 11, type = "range", name = "Frame Level", min = 1, max = 100, step = 1,
+                                get = function()
+                                    local g = grp()
+                                    local f = g and _G["TUI_CustomBars" .. g.id]
+                                    return gget("frameLevel") or (f and f._tuiBaseLevel) or 1
+                                end,
+                                set = function(_, v) gset("frameLevel", v) end },
                         },
                     },
                 },

@@ -32,7 +32,8 @@ function ns.PresetString(key) return PresetStr(key) end
 function ns.ImportPreset(key, res)
     local s = PresetStr(key, res)
     if not s or s == "" then print("|cFF8080FFthingsUI|r: preset '" .. tostring(key) .. "' not set.") return end
-    local ok, err = ns.Share and ns.Share.Import(s)
+    local ok, err = false, nil
+    if ns.Share then ok, err = ns.Share.Import(s) end
     if ok then print("|cFF8080FFthingsUI|r - Imported " .. key .. " defaults.")
     else print("|cFF8080FFthingsUI|r - " .. key .. " plugin import |cFFFF6060failed|r: " .. tostring(err or "Share module unavailable")) end
     return ok, err

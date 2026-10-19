@@ -1311,6 +1311,44 @@ function TUI:SpecialIconOptions(keyArg, ctx)
     local function onTop() return not styleMode and not db().cdmRow and db().overSpell ~= nil end
     local function placed() return isGrouped() or inRow() or onTop() end
 
+    -- 5 s of the pandemic look on this icon (a style: the first icon wearing it)
+    local function PreviewPandemic()
+        local AL, CG = ns.AuraLane, ns.CustomGroups
+        if not (AL and AL.PreviewPandemic) or ESpec() then return end
+        local look = db()
+        for i = 0, (SB.GetIconCount and SB.GetIconCount() or 0) do
+            local key = (i == 0) and (not styleMode and curKey()) or ("icon" .. i)
+            local d = key and SB.GetIconDB(key)
+            if d and d.enabled and d.spellID and (not styleMode or d.styleName == curStyle()) then
+                local g = d.customGroup and CG and CG.GroupByID and CG.GroupByID(d.customGroup)
+                if g and g.enabled then
+                    if AL.PreviewGroupPandemic(g, { iconDB = d }, look) then return end
+                else
+                    local w = _G["TUI_SpecialIcon_" .. key]
+                    if w and w:IsVisible() then
+                        local bs, bi
+                        if d.showBorder then
+                            bs = d.borderSize or 1
+                            if d.glowBorderStroke and d.showGlow and AL.MapGlowStyle(d.glowType) == "pixel" then bs = d.glowThickness or bs end
+                            bi = (d.borderInset or 0) - bs
+                        elseif not (d.overSpell and not d.cdmRow) then
+                            bs, bi = 1, 0
+                        end
+                        AL.PreviewPandemic(w, AL.PandemicLook({ pandemicInset = bi or 0 }, look), {
+                            tex = d.customIcon or C_Spell.GetSpellTexture(d.spellID),
+                            crop = { SB.ComputeIconTexCoord(d) }, artInset = SB.ArtInset(d),
+                            border = bs and { size = bs, inset = bi, color = d.showBorder and d.borderColor or nil,
+                                stroke = d.showBorder and d.borderStroke } or nil,
+                        }, 5)
+                        return
+                    end
+                end
+            end
+            if not styleMode and i == 0 then break end
+        end
+        E:Print("Preview Pandemic: no icon of this on screen right now.")
+    end
+
     local commonArgs = {}
     if not styleMode then
     commonArgs = CommonHeader("icons")
@@ -1406,8 +1444,46 @@ function TUI:SpecialIconOptions(keyArg, ctx)
         get = function() return db().cdmIndex or 30 end,
         set = function(_, v) db().cdmIndex = v; QueueUpdate() end,
     }
+    local function setOver(id)
+        if not (id and C_Spell.GetSpellName and C_Spell.GetSpellName(id)) then return end
+        db().overSpell = id
+        if not ESpec() then SB.ReleaseIcon(curKey()) end
+        QueueUpdate()
+    end
+    -- the spells this spec shows in Essential/Utility (the ones that have a frame to sit on)
+    local function cdmCooldowns()
+        local map = ns.CDMSpells and ns.CDMSpells.GetForSpec and ns.CDMSpells.GetForSpec(ESpec() or CurSpecID())
+        local out = {}
+        for id, nd in pairs(map or {}) do
+            if not nd then out[id] = true end
+        end
+        local cur = db().overSpell
+        if cur then out[cur] = true end
+        return out
+    end
+    local function spellName(id) return (C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or "" end
+    commonArgs.overPick = {
+        order = 3.555, type = "select", name = "Cooldown",
+        hidden = function() return not onTop() end,
+        values = function()
+            local out = {}
+            for id in pairs(cdmCooldowns()) do
+                local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)) or 134400
+                out[id] = ("|T%d:16:16|t %s"):format(tex, spellName(id))
+            end
+            return out
+        end,
+        sorting = function()
+            local out = {}
+            for id in pairs(cdmCooldowns()) do out[#out + 1] = id end
+            table.sort(out, function(a, b) return spellName(a) < spellName(b) end)
+            return out
+        end,
+        get = function() return db().overSpell end,
+        set = function(_, v) setOver(tonumber(v)) end,
+    }
     commonArgs.overSpell = {
-        order = 3.56, type = "input", name = "Cooldown (spell ID or name)",
+        order = 3.56, type = "input", name = "...or Spell ID / Name",
         hidden = function() return not onTop() end,
         get = function()
             local id = db().overSpell
@@ -1415,11 +1491,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
         end,
         set = function(_, v)
             v = strtrim(v or "")
-            local id = tonumber(v) or (v ~= "" and C_Spell.GetSpellInfo(v) and C_Spell.GetSpellInfo(v).spellID)
-            if not (id and C_Spell.GetSpellName and C_Spell.GetSpellName(id)) then return end
-            db().overSpell = id
-            if not ESpec() then SB.ReleaseIcon(curKey()) end
-            QueueUpdate()
+            setOver(tonumber(v) or (v ~= "" and C_Spell.GetSpellInfo(v) and C_Spell.GetSpellInfo(v).spellID))
         end,
     }
     commonArgs.overCD = ns.OverCDArgs(db, function()
@@ -1625,6 +1697,9 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             disabled = function() return not get("showPandemic") end,
                             get = function() return unpackColor(get("pandemicColor") or { r = 1, g = 0.35, b = 0.1, a = 1 }, true) end,
                             set = function(_, r, g, b, a) set("pandemicColor", { r = r, g = g, b = b, a = a }) end },
+                        pandemicPreview = { order = 3.22, type = "execute", name = "Preview Pandemic",
+                            disabled = function() return not get("showPandemic") end,
+                            func = function() PreviewPandemic() end },
                         pandemicBrk = { order = 3.25, type = "description", name = "", width = "full" },
                         pandemicThickness = { order = 3.3, type = "range", name = "Thickness", min = 1, max = 10, step = 1,
                             hidden = function() local s = get("pandemicStyle") return s == "proc" or s == "ants" end,
@@ -1781,6 +1856,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                 },
                 stackGroup = {
                     order = 10, type = "group", name = "Stack Count", inline = true,
+                    hidden = function() return (inRow() or onTop()) and not get("overrideGroupText") end,
                     args = {
                         showStacks  = { order = 1, type = "toggle", name = "Show Stacks",
                             get = function() return get("showStacks") end,
@@ -1820,6 +1896,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                 },
                 durationGroup = {
                     order = 20, type = "group", name = "Duration", inline = true,
+                    hidden = function() return (inRow() or onTop()) and not get("overrideGroupText") end,
                     args = {
                         showDuration   = { order = 1, type = "toggle", name = "Show Duration",
                             get = function() return get("showDuration") end,

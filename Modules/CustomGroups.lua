@@ -142,6 +142,17 @@ local function UpdateSpellIcon(btn)
     UpdateSpellIconDesaturation(btn, id)
 end
 
+-- Spell Editor > Show follows the spell into its group: out of the grid, the rest closes up
+local function SpellShown(id)
+    if M.testMode then return true end
+    local CI = ns.CDMIcons
+    local o = CI and CI.SpellRuleFor and CI.SpellRuleFor(id)
+    if not o then return true end
+    if o.visibility and not ns.Visibility.Shown(o.visibility) then return false end
+    if o.cdState and CI.CDStateHides(id, o.cdState) then return false end
+    return true
+end
+
 local function ResolveItemID(id)
     if id == 5512 or id == 224464 then
         local _, cf = UnitClass("player")
@@ -890,7 +901,8 @@ local function CollectScopeInto(group, scope, root, shown)
         for id, d in pairs(root.spells or {}) do
             local isRacial = ns.RacialSet and ns.RacialSet[id]
             local known = isRacial and PlayerHasRacial(id) or (not isRacial and PlayerKnowsSpell(id))
-            if d and d.enabled ~= false and not _seen["s" .. id] and known and C_Spell.GetSpellInfo(id) then
+            if d and d.enabled ~= false and not _seen["s" .. id] and known and C_Spell.GetSpellInfo(id)
+                and SpellShown(id) then
                 _seen["s" .. id] = true
                 list[#list + 1] = { kind = "spell", id = id, li = d.layoutIndex or 999 }
             end
@@ -998,6 +1010,7 @@ local function ApplyGroup(group, force)
         ns.MoverSync.SetManagedLabel("TUI_CustomGroupMover" .. group.id, group.name or ("Custom Group " .. group.id))
     end
     local frame = gs.container
+    ns.STRATA.Apply(frame, group.frameStrata, group.frameLevel)
 
     if not group.enabled then
         gs._applied = false
@@ -1655,6 +1668,11 @@ ev:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "BAG_UPDATE_COOLDOWN" then
         RefreshItemsAll()
     end
+end)
+
+ns.Visibility.OnChange(function()
+    local CI = ns.CDMIcons
+    if CI and CI.HasSpellRules and CI.HasSpellRules() and QueueLayout then QueueLayout(false) end
 end)
 
 function TUI:UpdateCustomGroups()

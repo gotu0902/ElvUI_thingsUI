@@ -157,7 +157,10 @@ local function StyleChild(child, t)
     if not child then return end
     child._tuiTextSpell = ns.CDMIcons and ns.CDMIcons.ChildSpell and ns.CDMIcons.ChildSpell(child) or nil
     t = SpellText(child, t)
+    local prev = child._tuiTextConfig
     child._tuiTextConfig = t
+    local SB = ns.SpecialBars
+    if prev ~= t and SB and SB.OverTextChanged then SB.OverTextChanged(child) end
 
     local applications = child.Applications and child.Applications.Applications
     ApplyText(applications,

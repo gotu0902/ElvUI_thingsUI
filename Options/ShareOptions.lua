@@ -31,7 +31,7 @@ local function FullSetup(order, key, label)
         order = order, type = "group", inline = true, name = label,
         args = {
             full = {
-                order = 1, type = "execute", width = 3.4,
+                order = 1, type = "execute", width = 1.13,
                 name = label .. " Full Install",
                 confirm = function()
                     return ("Import the full %s setup? This overwrites your ElvUI profile, global/private settings and thingsUI sections."):format(key)
@@ -45,7 +45,7 @@ local function FullSetup(order, key, label)
                 end,
             },
             profile = {
-                order = 2, type = "execute", width = 1.7,
+                order = 2, type = "execute", width = 1.13,
                 name = label .. " ElvUI Profile",
                 confirm = function()
                     return "Import the " .. profLabel .. " profile? This overwrites your current ElvUI profile."
@@ -56,7 +56,7 @@ local function FullSetup(order, key, label)
                 end,
             },
             plugin = {
-                order = 3, type = "execute", width = 1.7,
+                order = 3, type = "execute", width = 1.13,
                 name = label .. " Plugin Stuff",
                 func = function()
                     local s = ns.PresetString and ns.PresetString(key)
@@ -65,6 +65,13 @@ local function FullSetup(order, key, label)
                     elseif ns.ImportPresetConfirm then
                         ns.ImportPresetConfirm(key, label)
                     end
+                end,
+            },
+            bigwigs = {
+                order = 4, type = "execute", width = 1.13,
+                name = label .. " BigWigs",
+                func = function()
+                    if not ns.Setup.InstallBigWigs(nil, key) then print("|cFF8080FFthingsUI|r: BigWigs is not loaded.") end
                 end,
             },
         },
@@ -102,7 +109,7 @@ function TUI:ShareOptions()
                 args = {
                     accountDesc = {
                         order = 1, type = "description", width = "full",
-                        name = "Standalone pieces of the full setup.\n|cFFFFFFFFPrivate|r = per character (fonts, skins, chat bubbles) - |cFFFFFFFFGlobal|r = account (datatext panels) - |cFFFFFFFFBigWigs|r = NHT + FHT profiles - |cFFFFFFFFCooldown Manager|r = Blizzard's layouts for this class.\n",
+                        name = "Standalone pieces of the full setup.\n|cFFFFFFFFPrivate|r = per character (fonts, skins, chat bubbles) - |cFFFFFFFFGlobal|r = account (datatext panels) - |cFFFFFFFFCooldown Manager|r = Blizzard's layouts for this class.\n",
                     },
                     importPrivate = {
                         order = 2, type = "execute", width = 1.13, name = "ElvUI Private",
@@ -123,12 +130,6 @@ function TUI:ShareOptions()
                             if not s or s == "" then print("|cFF8080FFthingsUI|r: global string not set yet.") return end
                             if D and D.ImportProfile and D:ImportProfile(s) then E:StaticPopup_Show("IMPORT_RL")
                             else print("|cFF8080FFthingsUI|r: global import failed.") end
-                        end,
-                    },
-                    importBigWigs = {
-                        order = 4, type = "execute", width = 1.13, name = "BigWigs",
-                        func = function()
-                            if not ns.Setup.InstallBigWigs() then print("|cFF8080FFthingsUI|r: BigWigs is not loaded.") end
                         end,
                     },
                     importCDM = {

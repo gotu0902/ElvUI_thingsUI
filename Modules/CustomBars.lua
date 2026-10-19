@@ -677,6 +677,7 @@ local function SyncGroup(group)
     local st = EnsureState(group)
     st.group = group
     local frame, c = st.frame, st.container
+    ns.STRATA.Apply(frame, group.frameStrata, group.frameLevel)
 
     local af = group.anchorFrame or "UIParent"
     if af == "CUSTOM" then af = group.anchorFrameCustom or "UIParent" end

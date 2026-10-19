@@ -500,9 +500,33 @@ function A.StrokeRing(host, store, size, inset, on)
     EdgeRing(host, store.sOut, 1, inset - 1, STROKE_BLACK)
 end
 
--- the pandemic border reaches th out of the button
-local function PandemicStroke(pd, th)
-    A.StrokeRing(pd, pd, th or 0, -(th or 0), th ~= nil)
+local function PandemicRegion(parent)
+    local pd = CreateFrame("Frame", nil, parent)
+    pd:SetAllPoints(parent)
+    pd.tex = {}
+    for i = 1, 4 do pd.tex[i] = pd:CreateTexture(nil, "OVERLAY", nil, 6) NoSnap(pd.tex[i]) end
+    return pd
+end
+
+-- the pandemic look on pd: the Border ring or one of the Glow While Active styles
+local function DrawPandemic(pd, fx, opts, on, owner)
+    local pc = opts.pandemicColor or PAND_DEFAULT
+    local ps = on and opts.pandemicStyle or nil
+    if ps and ps ~= "border" then
+        for i = 1, 4 do pd.tex[i]:Hide() end
+        A.StrokeRing(pd, pd, 0, 0, false)
+    else
+        ps = nil
+        local th = opts.pandemicThickness or 2
+        -- from the border's outer edge inward, over the icon
+        local pi = opts.pandemicInset or 0
+        EdgeRing(pd, pd.tex, th, pi, pc)
+        A.StrokeRing(pd, pd, th, pi, (on and opts.pandemicStroke) and true or false)
+    end
+    DrawGlow(pd, fx, { style = ps, color = pc, w = opts.w, h = opts.h, anchor = opts.anchor,
+        thickness = opts.pandemicThickness, lines = opts.pandemicLines, length = opts.pandemicLength,
+        offset = opts.pandemicOffset, frequency = opts.pandemicSpeed, outline = opts.pandemicStroke,
+        animOwner = owner, animSlot = "pandemic" })
 end
 
 function A.ApplyButtonFX(button, r, opts)
@@ -514,35 +538,66 @@ function A.ApplyButtonFX(button, r, opts)
     -- the pandemic region is shown by the aura engine only inside the pandemic window
     local wantPand = opts.pandemic and A.CanPandemic(button) or false
     if wantPand and not r.pand then
-        local pd = CreateFrame("Frame", nil, button)
-        pd:SetAllPoints(button)
+        local pd = PandemicRegion(button)
         pd:SetFrameLevel(button:GetFrameLevel() + 4)
-        pd.tex = {}
-        for i = 1, 4 do pd.tex[i] = pd:CreateTexture(nil, "OVERLAY", nil, 6) NoSnap(pd.tex[i]) end
         r.pand = pd
         r.pandFX = {}
         button:AddPandemicRegion(pd)
     end
     if r.pand then
-        local pc = opts.pandemicColor or PAND_DEFAULT
-        local ps = wantPand and opts.pandemicStyle or nil
-        if ps and ps ~= "border" then
-            for i = 1, 4 do r.pand.tex[i]:Hide() end
-            PandemicStroke(r.pand, nil)
-        else
-            ps = nil
-            local th = opts.pandemicThickness or 2
-            for i = 1, 4 do
-                r.pand.tex[i]:SetColorTexture(pc.r or 1, pc.g or 0.35, pc.b or 0.1, pc.a or 1)
-            end
-            LayoutRing(r.pand, th)
-            PandemicStroke(r.pand, (wantPand and opts.pandemicStroke) and th or nil)
-        end
-        -- the same styles as Glow While Active, played by the engine only inside the pandemic window
-        DrawGlow(r.pand, r.pandFX, { style = ps, color = pc, w = opts.w, h = opts.h, anchor = opts.anchor,
-            thickness = opts.pandemicThickness, lines = opts.pandemicLines, length = opts.pandemicLength,
-            offset = opts.pandemicOffset, frequency = opts.pandemicSpeed, outline = opts.pandemicStroke,
-            animOwner = owner, animSlot = "pandemic" })
+        DrawPandemic(r.pand, r.pandFX, opts, wantPand, owner)
         r.pand:SetAlpha(wantPand and 1 or 0)
     end
+end
+
+-- a few seconds of the pandemic look where an icon sits, on a stand-in icon of our own
+-- look: tex, crop, skin, artInset, border = { size, inset, color, stroke }, and point/x/y/w/h on host
+-- (else it covers host)
+local prev
+function A.PreviewPandemic(host, opts, look, secs)
+    if not host then return false end
+    local p = prev
+    if not p then
+        p = CreateFrame("Frame", nil, UIParent)
+        p.icon = p:CreateTexture(nil, "ARTWORK")
+        NoSnap(p.icon)
+        p.border = {}
+        for i = 1, 4 do p.border[i] = p:CreateTexture(nil, "OVERLAY") end
+        p.pd = PandemicRegion(p)
+        p.fx = {}
+        prev = p
+    end
+    p:ClearAllPoints()
+    if look.point then
+        ns.Pixel.SetSize(p, look.w or 36, look.h or 36)
+        ns.Pixel.SetPoint(p, look.point, host, look.point, look.x or 0, look.y or 0)
+    else
+        p:SetAllPoints(host)
+    end
+    p:SetFrameStrata(host:GetFrameStrata())
+    p:SetFrameLevel(math.min(host:GetFrameLevel() + 60, 9000))
+    p.pd:SetFrameLevel(p:GetFrameLevel() + 4)
+    p.icon:SetTexture(look.tex or 134400)
+    ns.CustomGroups.ApplyIconSkin(p, p.icon, look.crop, look.skin)
+    if look.artInset and look.artInset ~= 0 and ns.SpecialBars then ns.SpecialBars.PlaceArt(p.icon, p, look.artInset) end
+    local b = look.border
+    if b then
+        EdgeRing(p, p.border, b.size or 1, b.inset or 0, b.color or STROKE_BLACK)
+        A.StrokeRing(p, p, b.size or 1, b.inset or 0, b.stroke and true or false)
+    else
+        for i = 1, 4 do p.border[i]:Hide() end
+        A.StrokeRing(p, p, 0, 0, false)
+    end
+    local w, h = p:GetSize()
+    opts.w, opts.h, opts.anchor = look.w or w, look.h or h, p
+    DrawPandemic(p.pd, p.fx, opts, true, nil)
+    p:Show()
+    p.token = (p.token or 0) + 1
+    local tok = p.token
+    C_Timer.After(secs or 5, function()
+        if p.token ~= tok then return end
+        DrawGlow(p.pd, p.fx, {})
+        p:Hide()
+    end)
+    return true
 end

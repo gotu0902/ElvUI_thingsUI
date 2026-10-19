@@ -287,6 +287,20 @@ local function EditAura(def, title, onChange, group)
     end)
     f:AddChild(pandColor)
 
+    if not pandOff then
+        local pv = AceGUI:Create("Button")
+        pv:SetText("Preview Pandemic")
+        pv:SetWidth(170)
+        pv:SetCallback("OnClick", function()
+            local AL = ns.AuraLane
+            if not (group and AL and AL.PreviewGroupPandemic and AL.PreviewGroupPandemic(group, def)) then
+                E:Print("Preview Pandemic: this group isn't on screen right now.")
+            end
+        end)
+        f:AddChild(pv)
+        extra = extra + 30
+    end
+
     -- the same look settings as Glow While Active
     local pst = def.pandemicStyle or "border"
     if not pandOff and pst ~= "proc" and pst ~= "ants" then
@@ -1597,6 +1611,17 @@ function TUI:CustomGroupsOptions()
                                     hidden = isUIParent, get = function() return group.anchorXOffset end, set = function(_, v) gset("anchorXOffset", v) end },
                                 anchorYOffset = { order = 5, type = "range", name = "Y Offset", min = -400, max = 400, step = 0.01, bigStep = 1,
                                     hidden = isUIParent, get = function() return group.anchorYOffset end, set = function(_, v) gset("anchorYOffset", v) end },
+                                strataBrk = { order = 9, type = "description", name = "", width = "full" },
+                                frameStrata = { order = 10, type = "select", name = "Frame Strata",
+                                    values = ns.STRATA.VALUES, sorting = ns.STRATA.ORDER,
+                                    get = function() return group.frameStrata or "MEDIUM" end,
+                                    set = function(_, v) gset("frameStrata", (v ~= "MEDIUM") and v or nil) end },
+                                frameLevel = { order = 11, type = "range", name = "Frame Level", min = 1, max = 100, step = 1,
+                                    get = function()
+                                        local f = _G["TUI_CustomGroup" .. group.id]
+                                        return group.frameLevel or (f and f._tuiBaseLevel) or 1
+                                    end,
+                                    set = function(_, v) gset("frameLevel", v) end },
                             },
                         },
                     },

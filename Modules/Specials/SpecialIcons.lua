@@ -17,6 +17,7 @@ local missingOf = {}
 local missingUp = {}
 local lastGroupedSig
 local overRow = setmetatable({}, { __mode = "k" })
+local overFrame = setmetatable({}, { __mode = "k" })
 
 local function AuraIDsFor(db)
     local SA = ns.SpecialAura
@@ -25,13 +26,13 @@ end
 
 local function RowOf(db)
     if db.cdmRow and CDM_VIEWER[db.cdmRow] then return db.cdmRow end
-    return overRow[db]
+    return db.overSpell and overRow[db] or nil
 end
 
 -- a CDM cell is its art plus ElvUI's 1px ring outside; our border's outside part takes that room
 local function RowPad(db)
     local pad = ns.CDM_SPACING_INSET or 2
-    if not db.showBorder then return pad end
+    if not db.showBorder then return (db.overSpell and not db.cdmRow) and 0 or pad end
     local bs = db.borderSize or 1
     local AL = ns.AuraLane
     if db.glowBorderStroke and db.showGlow and AL and AL.MapGlowStyle(db.glowType) == "pixel" then
@@ -39,6 +40,19 @@ local function RowPad(db)
     end
     -- a stroke adds a line outside the border
     return pad - 2 * math.max(0, bs - (db.borderInset or 0) + (db.borderStroke and 1 or 0))
+end
+
+-- in a row or on top the art is exactly the CDM cell (its zoom reads the same); the pad is border room
+function SB.ArtInset(db)
+    if not (db and RowOf(db)) then return 0 end
+    return RowPad(db) / 2
+end
+
+function SB.PlaceArt(tex, host, k)
+    tex:ClearAllPoints()
+    if not k or k == 0 then tex:SetAllPoints(host) return end
+    tex:SetPoint("TOPLEFT", host, "TOPLEFT", k, -k)
+    tex:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -k, k)
 end
 
 local function RowIconSize(row)
@@ -54,7 +68,9 @@ end
 function SB.IconTextDB(db)
     local row = db and not db.overrideGroupText and RowOf(db)
     local cdm = row and E.db.thingsUI.cdmIcons
-    local vt = cdm and cdm[row] and cdm[row].text
+    -- on top of a cooldown: the text that frame really uses, its Spell Editor entry included
+    local f = row and overFrame[db]
+    local vt = (f and f._tuiTextConfig) or (cdm and cdm[row] and cdm[row].text)
     if not vt then return db end
     return setmetatable({
         showDuration = vt.showCooldown ~= false,
@@ -471,6 +487,7 @@ local function UpdateIconSlot(iconKey)
             tex = si and si.iconID
         end
         if tex then wrapper.fallback:SetTexture(tex) end
+        SB.PlaceArt(wrapper.fallback, wrapper, SB.ArtInset(db))
         wrapper.fallback:SetTexCoord(ComputeIconTexCoord(db))
         wrapper.fallback:SetDesaturated((not test) and ((not missing) or (db.missingDesat and true or false)))
         wrapper.fallback:Show()
@@ -669,8 +686,10 @@ end
 
 -- the frame Blizzard draws the spell in now: same center, its cell size
 function SB.PlaceOver(iconKey, wrapper, db)
-    local child, row = ns.CDMIcons and ns.CDMIcons.ChildForSpell and ns.CDMIcons.ChildForSpell(db.overSpell)
+    local CI, child, row = ns.CDMIcons
+    if CI and CI.ChildForSpell then child, row = CI.ChildForSpell(db.overSpell) end
     wrapper._overChild = child
+    overFrame[db] = child
     if not child then
         overRow[db] = nil
         return wrapper:GetWidth() or 36, wrapper:GetHeight() or 36
@@ -752,6 +771,30 @@ function SB.RestyleOverCD(iconKey)
     local w = _G["TUI_SpecialIcon_" .. iconKey]
     if w and w.overCD then w.overCD._styled = nil end
     SB.UpdateOverCD(iconKey)
+end
+
+-- the frame under an Aura Icon got new text: the icon takes it too
+do
+    local due, queued = {}, false
+    local function Flush()
+        queued = false
+        for key in pairs(due) do
+            due[key] = nil
+            if overOf[key] then UpdateIconSlot(key) end
+        end
+    end
+    function SB.OverTextChanged(child)
+        for key in pairs(overOf) do
+            local wrapper = _G["TUI_SpecialIcon_" .. key]
+            if wrapper and wrapper._overChild == child then
+                due[key] = true
+                if not queued then
+                    queued = true
+                    C_Timer.After(0, Flush)
+                end
+            end
+        end
+    end
 end
 
 -- frames move and get re-used: follow them, repaint what changed (and re-ask missing auras)

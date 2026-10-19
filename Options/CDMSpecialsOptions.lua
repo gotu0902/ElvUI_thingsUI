@@ -46,8 +46,10 @@ local function ComputeIconLayout()
             local gid = d.customGroup
             local g = gid and ns.CustomGroups and ns.CustomGroups.GroupByID and ns.CustomGroups.GroupByID(gid)
             local row = not g and d.cdmRow
+            local over = not g and not row and d.overSpell
             local b = (g and bucket("g" .. gid, g.name or ("Group " .. gid)))
                 or (row and bucket("row" .. row, (row == "utility" and "Utility" or "Essential") .. " Cooldowns"))
+                or (over and bucket("over", "On Top"))
                 or bucket("standalone", "Standalone")
             if g then b.color = g.tabColor end
             b.icons[#b.icons + 1] = { key = ikey, name = SpellName(d.spellID) }
@@ -59,6 +61,7 @@ local function ComputeIconLayout()
     local function rank(k)
         if k == "standalone" then return 0 end
         if k:sub(1, 3) == "row" then return 0.5 end
+        if k == "over" then return 0.75 end
         return (k == "unconfigured") and 2 or 1
     end
     table.sort(dests, function(a, b)

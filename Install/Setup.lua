@@ -470,10 +470,10 @@ BIGWIGS = SpecProvider({
         end
     end,
     outdated = function() return #BWChanged(Res()) > 0 end,
-    install = function(res, done)
+    install = function(res, done, only)
         local todo, existing = {}, {}
         for _, bp in ipairs(BWProfiles()) do
-            if ResString(bp.strings, res) then
+            if (not only or bp.name == only) and ResString(bp.strings, res) then
                 todo[#todo + 1] = bp
                 if _G.BigWigsAPI.IsValidProfile(bp.name) then existing[#existing + 1] = bp.name end
             end
@@ -846,7 +846,7 @@ end
 local function RunInstall(p, res, after, only)
     if InCombatLockdown() then Say("not in combat."); return end
     p.install(res, function(ok)
-        if ok then
+        if ok and (not only or p.installed()) then
             local i = DB()
             i.done[p.key] = true
             i.res = res
@@ -903,9 +903,10 @@ function M.ApplySpecProfiles()
     return any
 end
 
-function M.InstallBigWigs(after)
+-- only: one pack profile ("NHT" / "FHT"), else all of them
+function M.InstallBigWigs(after, only)
     if not Usable(BIGWIGS, Res()) then if after then after(false) end return false end
-    RunInstall(BIGWIGS, Res(), after)
+    RunInstall(BIGWIGS, Res(), after, only)
     return true
 end
 

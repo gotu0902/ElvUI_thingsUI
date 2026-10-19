@@ -806,6 +806,7 @@ local function SpellEditorPage(order, buffs)
         if TUI.UpdateCDMGlow then TUI:UpdateCDMGlow() end
         if ns.CDMText and ns.CDMText.RefreshAll then ns.CDMText.RefreshAll() end
         if ns.CDMIcons and ns.CDMIcons.RefreshCustomIcons then ns.CDMIcons.RefreshCustomIcons() end
+        if TUI.QueueSpecialBarsUpdate then TUI:QueueSpecialBarsUpdate() end
         ns.NotifyChange()
     end
     local function setField(k, v)
@@ -844,7 +845,7 @@ local function SpellEditorPage(order, buffs)
     local function byName(a, b) return spellName(a) < spellName(b) end
     -- spells set up on another class or spec stay out of the list (Spell ID still reaches them)
     local function listed(id, spec)
-        return spec[id] or id == sel or (IsPlayerSpell and IsPlayerSpell(id)) or false
+        return spec[id] ~= nil or id == sel or (IsPlayerSpell and IsPlayerSpell(id)) or false
     end
     -- Aura Icons in a row (cooldowns), or every Aura Icon/Bar drawing a tracked buff (buffs,
     -- Blizzard's copy hidden): they keep their look in their own settings.
@@ -876,6 +877,17 @@ local function SpellEditorPage(order, buffs)
         end
         return out, covered
     end
+    -- spells an Aura Icon sits on top of
+    local function overSpells()
+        local out, SB = {}, ns.SpecialBars
+        if buffs or not SB then return out end
+        for i = 1, (SB.GetIconCount and SB.GetIconCount() or 0) do
+            local d = SB.GetIconDB("icon" .. i)
+            if d and d.enabled and d.spellID and d.overSpell and not d.cdmRow then out[d.overSpell] = true end
+        end
+        return out
+    end
+    local ON_TOP = " |cFFFFD27F(Aura On Top)|r"
     local function iconKey() return type(sel) == "string" and sel:match("^si:(.+)$") or nil end
     local function barKey() return type(sel) == "string" and sel:match("^sb:(.+)$") or nil end
     local function own(k, def)
@@ -979,7 +991,7 @@ local function SpellEditorPage(order, buffs)
                 values = function()
                     local out = {}
                     local ri, covered = rowIcons()
-                    local spec = specSpells()
+                    local spec, over = specSpells(), overSpells()
                     for id in pairs(spec) do
                         if not covered[id] then out[id] = spellLabel(id) end
                     end
@@ -987,6 +999,9 @@ local function SpellEditorPage(order, buffs)
                         if listed(id, spec) then out[id] = "|cFF40FF40" .. spellLabel(id) .. "|r" end
                     end
                     if isSpell() and not out[sel] then out[sel] = spellLabel(sel) end
+                    for id in pairs(over) do
+                        if out[id] then out[id] = out[id] .. ON_TOP end
+                    end
                     for k, d in pairs(ri) do
                         out[k] = "|cFFFF80C0" .. spellLabel(d.spellID)
                             .. (k:sub(1, 3) == "sb:" and " (Aura Bar)|r" or " (Aura Icon)|r")
@@ -1004,7 +1019,7 @@ local function SpellEditorPage(order, buffs)
                     for id in pairs(spec) do
                         if not store()[id] and not covered[id] then other[#other + 1] = id end
                     end
-                    if isSpell() and not store()[sel] and (not spec[sel] or covered[sel]) then other[#other + 1] = sel end
+                    if isSpell() and not store()[sel] and (spec[sel] == nil or covered[sel]) then other[#other + 1] = sel end
                     table.sort(set, byName)
                     table.sort(icons, function(a, b) return spellName(ri[a].spellID) < spellName(ri[b].spellID) end)
                     table.sort(other, byName)
@@ -1193,7 +1208,8 @@ local function SpellEditorPage(order, buffs)
                                 pick = {
                                     order = 1, type = "select", name = "Aura Icon", width = 1.5,
                                     values = function()
-                                        local out = { [""] = "|cFF888888- None -|r", new = "|cFF40FF40+ New Aura Icon|r" }
+                                        local nm = isSpell() and C_Spell.GetSpellName and C_Spell.GetSpellName(sel)
+                                        local out = { [""] = "|cFF888888- None -|r", new = "|cFF40FF40+ New Aura Icon: " .. (nm or "this spell") .. "|r" }
                                         for i = 1, count() do
                                             local d = SB.GetIconDB("icon" .. i)
                                             if d and d.spellID then

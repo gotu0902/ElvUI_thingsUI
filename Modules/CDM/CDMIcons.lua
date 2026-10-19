@@ -366,7 +366,8 @@ local function RebuildPassiveCache()
     if cdm and cdm.hideGroupedDuplicates ~= false then
         if CG and CG.ShownSets then dupSpells, dupTrinkets, dupAuras = CG.ShownSets() end
         local CBm = ns.ChargeBar
-        local cbRaw, cbLive = CBm and CBm.TrackedSpells and CBm.TrackedSpells()
+        local cbRaw, cbLive
+        if CBm and CBm.TrackedSpells then cbRaw, cbLive = CBm.TrackedSpells() end
         if cbRaw then
             dupSpells = dupSpells or {}
             dupSpells[cbRaw] = true
@@ -419,10 +420,11 @@ local function RebuildPassiveCache()
                     if not hide and isBuff and dupAuras and AuraDup(info, sid, base, dupAuras) then
                         hide = true
                     end
-                    -- Spell Editor Show When: out of the row while its rules say no
-                    if not hide and anySpellRule then
+                    -- Spell Editor Show: out of the row while its rules say no
+                    if not hide and (anySpellRule or anyCDState) then
                         local o = M.SpellSettings(c)
                         if o and o.visibility and not ns.Visibility.Shown(o.visibility) then hide = true end
+                        if not hide and o and o.cdState and sid and M.CDStateHides(sid, o.cdState) then hide = true end
                     end
                     local slot = info and PlainID(info.equipSlot)
                     if slot then
@@ -463,10 +465,10 @@ end
 
 function M.IsPassiveHidden(child) return passiveHidden[child] == true end
 
--- Spell Editor Show rules. Visibility takes a frame out of its row (plain state); the
--- cooldown state is secret in combat, so it only fades the frame and the slot stays
-local cdFaded = setmetatable({}, { __mode = "k" })
-local readyCurve
+-- Spell Editor Show rules. Both take a frame out of its row and the rest closes up:
+-- visibility from plain state, the cooldown from the spell's own isActive (plain in
+-- combat, like EUI's Shift Icons reads it), the GCD left out
+local cdOn = {}
 
 function M.RefreshSpellRules()
     local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
@@ -479,56 +481,77 @@ function M.RefreshSpellRules()
             end
         end
     end
+    wipe(cdOn)
     QueuePassiveRebuild()
-    M.ApplyCDStates()
+    -- the same rules hold where a group shows the spell
+    local CG = ns.CustomGroups
+    if CG and CG.QueueLayout then CG.QueueLayout(false) end
 end
 
-local function CDStateAlpha(sid, mode)
+-- on its own cooldown (not the GCD); nil when the game won't say
+local function OnRealCD(sid)
     local info = C_Spell.GetSpellCooldown(sid)
-    local dur = C_Spell.GetSpellCooldownDuration and C_Spell.GetSpellCooldownDuration(sid)
-    local on = GetDesatCurve()
-    -- the GCD is not this spell's cooldown
-    if not (dur and on) or (info and info.isOnGCD) then return mode == "ready" and 1 or 0 end
-    if mode == "cooldown" then return dur:EvaluateRemainingDuration(on, 0) end
-    if not readyCurve then
-        readyCurve = C_CurveUtil.CreateCurve()
-        readyCurve:SetType(Enum.LuaCurveType.Step)
-        readyCurve:AddPoint(0, 1)
-        readyCurve:AddPoint(0.001, 0)
-    end
-    return dur:EvaluateRemainingDuration(readyCurve, 1)
+    if not info then return false end
+    local a, g = info.isActive, info.isOnGCD
+    if issecretvalue and (issecretvalue(a) or issecretvalue(g)) then return nil end
+    return (a and not g) and true or false
 end
 
-function M.ApplyCDStates()
-    if not anyCDState and not next(cdFaded) then return end
-    for _, name in ipairs({ "EssentialCooldownViewer", "UtilityCooldownViewer" }) do
-        local v = _G[name]
-        for _, c in ipairs((v and v._tuiVisible) or {}) do
-            if c.cooldownInfo and not passiveHidden[c] then
-                local o = anyCDState and M.SpellSettings(c)
-                local mode = o and o.cdState
-                local sid = mode and M.ChildSpell(c)
-                if sid then
-                    c:SetAlpha(CDStateAlpha(sid, mode))
-                    cdFaded[c] = true
-                elseif cdFaded[c] then
-                    c:SetAlpha(1)
-                    cdFaded[c] = nil
-                end
+M.OnRealCD = OnRealCD
+
+-- whether a Show > Cooldown rule hides the spell right now
+function M.CDStateHides(sid, mode)
+    local on = OnRealCD(sid)
+    if on == nil then return false end
+    if mode == "cooldown" then return not on end
+    return on
+end
+
+-- a ruled spell flipped: rows and groups lay out again
+function M.CheckCDStates()
+    if not anyCDState then return end
+    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    local changed = false
+    for id, o in pairs((cdm and cdm.perSpell) or {}) do
+        if type(o) == "table" and o.cdState then
+            local on = OnRealCD(id)
+            if on ~= nil and cdOn[id] ~= on then
+                cdOn[id] = on
+                changed = true
             end
         end
     end
+    if changed then
+        QueuePassiveRebuild()
+        local CG = ns.CustomGroups
+        if CG and CG.QueueLayout then CG.QueueLayout(false) end
+    end
 end
+
+-- a spell's Spell Editor entry (or the one of what it turns into right now)
+function M.SpellRuleFor(id)
+    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    local ps = cdm and cdm.perSpell
+    if not (ps and id) then return nil end
+    if ps[id] then return ps[id] end
+    local live = C_Spell.GetOverrideSpell and C_Spell.GetOverrideSpell(id)
+    return live and ps[live] or nil
+end
+
+function M.HasSpellRules() return anySpellRule end
 
 do
     local queued = false
-    local ev = CreateFrame("Frame")
-    ev:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-    ev:SetScript("OnEvent", function()
+    local function Flush() queued = false; M.CheckCDStates() end
+    M.QueueCheckCDStates = function()
         if queued or not anyCDState then return end
         queued = true
-        C_Timer.After(0, function() queued = false; M.ApplyCDStates() end)
-    end)
+        C_Timer.After(0, Flush)
+    end
+    local ev = CreateFrame("Frame")
+    ev:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+    ev:RegisterEvent("SPELL_UPDATE_CHARGES")
+    ev:SetScript("OnEvent", M.QueueCheckCDStates)
     ns.Visibility.OnChange(function() if anySpellRule then QueuePassiveRebuild() end end)
 end
 
@@ -947,7 +970,11 @@ local function EnsureSwipeHook(child)
     local cd = child.Cooldown
     if not cd or swipeHooked[cd] or not cd.SetSwipeColor then return end
     swipeHooked[cd] = true
-    hooksecurefunc(cd, "SetSwipeColor", function() StyleAuraSwipe(child); NoteAuraState(child) end)
+    hooksecurefunc(cd, "SetSwipeColor", function()
+        StyleAuraSwipe(child)
+        NoteAuraState(child)
+        if anyCDState then M.QueueCheckCDStates() end
+    end)
 end
 
 local function EnsureOverlayHooks(child)
@@ -1354,6 +1381,7 @@ LayoutViewer = function(viewer)
             local sid, base = M.ChildSpell(c)
             if (sid and auraWatch[sid]) or (base and auraWatch[base]) then EnsureSwipeHook(c); NoteAuraState(c) end
         end
+        if anyCDState and o and o.cdState then EnsureSwipeHook(c) end
     end
     -- per-spell glow and text follow the spell, not the re-used frame
     local glowSync = ns.CDMGlow and ns.CDMGlow.Sync
@@ -1605,7 +1633,6 @@ local function FlushPending(self)
         pendingViewers[viewer] = nil
         M.LayoutViewer(viewer)
     end
-    M.ApplyCDStates()
     -- Aura Icons on top of a cooldown follow its frame
     local SB = ns.SpecialBars
     if SB and SB.RefreshOverIcons then SB.RefreshOverIcons() end

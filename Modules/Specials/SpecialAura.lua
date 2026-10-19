@@ -196,25 +196,30 @@ function SA.StyleIconButton(button, r, wrapper, key)
         r.overlay:SetAllPoints(button)
     end
     r.overlay:SetFrameLevel(button:GetFrameLevel() + 3)
+    SB.PlaceArt(r.icon, button, SB.ArtInset(db))
     r.icon:SetTexCoord(SB.ComputeIconTexCoord(db))
     if ns.AuraLane then ns.AuraLane.ShowFixedIcon(r, db.customIcon, { SB.ComputeIconTexCoord(db) }) end
 
     local AL0 = ns.AuraLane
-    if db.showBorder and AL0 then
+    -- no border of its own: the plain 1px edge the idle icon has (on top, the frame's own ring shows)
+    local plain = not db.showBorder and not (db.overSpell and not db.cdmRow)
+    if (db.showBorder or plain) and AL0 then
         if not r.border then
             r.border = {}
             for i = 1, 4 do r.border[i] = button:CreateTexture(nil, "OVERLAY") end
         end
-        local bs = db.borderSize or 1
-        if db.glowBorderStroke and db.showGlow and AL0.MapGlowStyle(db.glowType) == "pixel" then bs = db.glowThickness or bs end
+        local bs = plain and 1 or (db.borderSize or 1)
+        if not plain and db.glowBorderStroke and db.showGlow and AL0.MapGlowStyle(db.glowType) == "pixel" then bs = db.glowThickness or bs end
         -- outside the icon like the CDM's; Inset moves it in
-        local bi = (db.borderInset or 0) - bs
-        AL0.EdgeRing(button, r.border, bs, bi, db.borderColor or { r = 0, g = 0, b = 0, a = 1 })
-        AL0.StrokeRing(button, r, bs, bi, db.borderStroke)
+        local bi = plain and 0 or ((db.borderInset or 0) - bs)
+        r.borderAt = bi
+        AL0.EdgeRing(button, r.border, bs, bi, (not plain and db.borderColor) or { r = 0, g = 0, b = 0, a = 1 })
+        AL0.StrokeRing(button, r, bs, bi, (not plain) and db.borderStroke)
         if r.borderIn then
             for i = 1, 4 do r.borderIn[i]:Hide() r.borderOut[i]:Hide() end
         end
     else
+        r.borderAt = 0
         if r.border then for _, tex in ipairs(r.border) do tex:Hide() end end
         if AL0 then AL0.StrokeRing(button, r, 0, 0, false) end
         if r.borderIn then
@@ -283,6 +288,7 @@ function SA.StyleIconButton(button, r, wrapper, key)
             offset = db.glowOffset, frequency = db.glowSpeed,
             w = w, h = h,
             pandemic = db.showPandemic and true or false,
+            pandemicInset = r.borderAt or 0,
         }, db))
     end
 
@@ -564,6 +570,22 @@ ns.SlashCommand("icons", function()
                 tostring(db.customGroup), tostring(db.cdmRow), tostring(attached[key] ~= nil),
                 DumpVal(w and w:IsShown()), DumpVal(w and w:IsVisible())))
             print("    ids: " .. table.concat(ids, ", "))
+            if db.overSpell or db.showMissing or db.cdmRow then
+                local tx = SB.IconTextDB(db)
+                local ch = w and w._overChild
+                local fc = ch and ch._tuiTextConfig
+                local cdfs = ch and ch.Cooldown and ch.Cooldown.Text
+                local fsz
+                if cdfs and cdfs.GetFont then fsz = select(2, cdfs:GetFont()) end
+                print(("    on top of=%s frame=%s textFromRow=%s override=%s durSize=%s style=%s missing=%s"):format(
+                    tostring(db.overSpell), tostring(ch and (ch:GetName() or "found") or "none"),
+                    tostring(tx ~= db), tostring(db.overrideGroupText), tostring(tx.durationFontSize),
+                    tostring(db.styleName), tostring(db.showMissing)))
+                print(("    frame text: cfg=%s cfgSize=%s fontSize=%s scale=%s border=%s size=%s inset=%s"):format(tostring(fc ~= nil),
+                    tostring(fc and fc.cooldownFontSize), tostring(fsz),
+                    (ch and w) and ("%.3f"):format(ch:GetEffectiveScale() / w:GetEffectiveScale()) or "?",
+                    tostring(db.showBorder), tostring(db.borderSize), tostring(db.borderInset)))
+            end
             print("    P: " .. cstate(w and w._tuiAuraP))
             print("    T: " .. cstate(w and w._tuiAuraT))
         end

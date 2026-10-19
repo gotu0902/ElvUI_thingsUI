@@ -221,7 +221,7 @@ local function CountdownText(cd)
     return SB and SB.CooldownText and SB.CooldownText(cd)
 end
 
-local Rebuild
+local Rebuild, QueueRelayout
 
 function M.UpdateLine(L)
     local id = L.spellID
@@ -230,9 +230,21 @@ function M.UpdateLine(L)
     if L.test then return end
     local info = C_Spell.GetSpellCooldown(id)
     local dur = C_Spell.GetSpellCooldownDuration and C_Spell.GetSpellCooldownDuration(id)
+    -- the spell's own isActive is plain in combat: a hidden line leaves the stack
+    local CI = ns.CDMIcons
+    local onCD = CI and CI.OnRealCD and CI.OnRealCD(id)
     local on, off = Curves()
+    if onCD ~= nil then
+        if onCD and dur then H.SetCooldownFromDuration(L.cd, dur) else L.cd:Clear() end
+        L.main:SetAlpha((onCD or L.keep) and 1 or 0)
+        L.ready:SetAlpha((L.readyOn and not onCD) and 1 or 0)
+        local shown = (onCD or L.keep or L.readyOn) and true or false
+        if L.shown ~= shown then
+            L.shown = shown
+            if L.st then QueueRelayout(L.st) end
+        end
     -- the GCD is not this spell's cooldown
-    if not (dur and on) or (info and info.isOnGCD) then
+    elseif not (dur and on) or (info and info.isOnGCD) then
         L.cd:Clear()
         L.main:SetAlpha(L.keep and 1 or 0)
         L.ready:SetAlpha(L.readyOn and 1 or 0)
@@ -240,6 +252,10 @@ function M.UpdateLine(L)
         H.SetCooldownFromDuration(L.cd, dur)
         L.main:SetAlpha(L.keep and 1 or dur:EvaluateRemainingDuration(on, 0))
         if L.readyOn and off then L.ready:SetAlpha(dur:EvaluateRemainingDuration(off, 1)) else L.ready:SetAlpha(0) end
+    end
+    if onCD == nil and L.shown ~= true then
+        L.shown = true
+        if L.st then QueueRelayout(L.st) end
     end
     if L.charges[1] then
         local ch = C_Spell.GetSpellCharges(id)
@@ -319,6 +335,52 @@ Rebuild = function(L)
     BuildCD(L, L.ready, L.readySegs, L.group.readyFormat or "", L.group, false)
 end
 
+-- the shown lines stacked from the top (or bottom); the aura lines follow right after
+local function Layout(st)
+    local group = st.group
+    if not (group and st.cdHost) then return 0 end
+    local Hh = st.effH or group.height or 16
+    local sp = group.spacing or 2
+    local up = group.growth == "UP"
+    local n = 0
+    for _, L in ipairs(st.cdLines or {}) do
+        if L.spellID and (L.test or L.shown ~= false) then
+            local y = n * (Hh + sp)
+            L:ClearAllPoints()
+            if up then L:SetPoint("BOTTOMLEFT", st.cdHost, "BOTTOMLEFT", 0, y)
+            else L:SetPoint("TOPLEFT", st.cdHost, "TOPLEFT", 0, -y) end
+            L:Show()
+            n = n + 1
+        else
+            L:Hide()
+        end
+    end
+    local cdH = n * (Hh + sp)
+    if st.clip then
+        local pt = up and "BOTTOMLEFT" or "TOPLEFT"
+        st.clip:ClearAllPoints()
+        st.clip:SetPoint(pt, st.frame, pt, 0, up and cdH or -cdH)
+    end
+    return cdH
+end
+
+do
+    local pending, queued = {}, false
+    local function Flush()
+        queued = false
+        for st in pairs(pending) do
+            pending[st] = nil
+            Layout(st)
+        end
+    end
+    QueueRelayout = function(st)
+        pending[st] = true
+        if queued then return end
+        queued = true
+        C_Timer.After(0, Flush)
+    end
+end
+
 local events
 local function Events()
     if events then return end
@@ -327,7 +389,8 @@ local function Events()
     local function Flush()
         queued = false
         for L in pairs(active) do
-            if L:IsVisible() then M.UpdateLine(L) end
+            local host = L:GetParent()
+            if host and host:IsVisible() then M.UpdateLine(L) end
         end
     end
     events:RegisterEvent("SPELL_UPDATE_COOLDOWN")
@@ -363,8 +426,6 @@ function M.SyncCooldowns(st, group, W, Hh, test)
             if c.id and c.enabled ~= false and (test or Known(c.id)) then list[#list + 1] = c end
         end
     end
-    local sp = group.spacing or 2
-    local up = group.growth == "UP"
     local mode = group.cdReady or "hide"
     for i, c in ipairs(list) do
         local L = st.cdLines[i]
@@ -374,10 +435,7 @@ function M.SyncCooldowns(st, group, W, Hh, test)
         end
         L:SetSize(W, Hh)
         L.W = W
-        L:ClearAllPoints()
-        local y = (i - 1) * (Hh + sp)
-        if up then L:SetPoint("BOTTOMLEFT", st.cdHost, "BOTTOMLEFT", 0, y)
-        else L:SetPoint("TOPLEFT", st.cdHost, "TOPLEFT", 0, -y) end
+        L.st = st
         L.cd:SetSize(Hh, Hh)
         L.cd:ClearAllPoints()
         L.cd:SetPoint("LEFT", L, "LEFT")
@@ -401,7 +459,6 @@ function M.SyncCooldowns(st, group, W, Hh, test)
             L.ready:SetAlpha(0)
             for _, fs in ipairs(L.charges) do fs:SetText("2") end
         end
-        L:Show()
         active[L] = true
         if not test then M.UpdateLine(L) end
     end
@@ -415,7 +472,7 @@ function M.SyncCooldowns(st, group, W, Hh, test)
     end
     if #list > 0 then Events() end
     st.cdHost:SetShown(group.enabled ~= false and (test or ns.Visibility.Shown(group.visibility)))
-    return #list > 0 and #list * (Hh + sp) or 0
+    return Layout(st)
 end
 
 -- a group's lines repaint after it shows again

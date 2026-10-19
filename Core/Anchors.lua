@@ -178,6 +178,13 @@ ns.POINTS.ORDER = {
   "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT",
 }
 ns.STRATA = ns.STRATA or {}
+function ns.STRATA.Apply(frame, strata, level)
+    strata = strata or "MEDIUM"
+    if frame:GetFrameStrata() ~= strata then frame:SetFrameStrata(strata) end
+    frame._tuiBaseLevel = frame._tuiBaseLevel or frame:GetFrameLevel()
+    level = level or frame._tuiBaseLevel
+    if frame:GetFrameLevel() ~= level then frame:SetFrameLevel(level) end
+end
 ns.STRATA.VALUES = {
   BACKGROUND        = "BACKGROUND",
   LOW               = "LOW",

@@ -265,6 +265,54 @@ local function Font(name, size, outline)
     return path, size, outline
 end
 
+-- an entry's border: the group's (inside), or its Aura Icon's / style's (outside)
+local function LaneBorder(group, idb, def)
+    local bShow, bSize, bInset, bColor = group.showBorder,
+        group.borderSize or 1, group.borderInset or 0, group.borderColor
+    local bStroke = group.borderStroke
+    local gau = group.auras
+    if bShow and gau and gau.sortGlow and gau.sortGlowBorderStroke and (gau.sortMode or "manual") ~= "manual"
+        and (gau.sortGlowStyle or "pulse") == "pixel" then
+        bSize = gau.sortGlowThickness or bSize
+    end
+    if idb and idb.showBorder then
+        bShow, bSize, bInset, bColor = true,
+            idb.borderSize or 1, idb.borderInset or 0, idb.borderColor
+        bStroke = idb.borderStroke
+        if idb.glowBorderStroke and idb.showGlow and A.MapGlowStyle(idb.glowType) == "pixel" then bSize = idb.glowThickness or bSize end
+        bInset = bInset - bSize
+    end
+    local SBm = ns.SpecialBars
+    local st = (not idb) and def and def.styleName and SBm and SBm.Styles
+        and SBm.Styles.Get("icons", def.styleName)
+    if st then
+        bShow, bSize, bInset, bColor = st.showBorder, st.borderSize or 1, st.borderInset or 0, st.borderColor
+        bStroke = st.borderStroke
+        if bShow and st.glowBorderStroke and st.showGlow and A.MapGlowStyle(st.glowType) == "pixel" then
+            bSize = st.glowThickness or bSize
+        end
+        bInset = bInset - bSize
+    end
+    return bShow, bSize, bInset, bColor, bStroke
+end
+
+-- Preview Pandemic for a group entry: where the group's first aura sits, with its look
+-- (lookSrc: the settings being edited, else the entry's)
+function A.PreviewGroupPandemic(group, def, lookSrc)
+    local frame = group and _G["TUI_CustomGroup" .. group.id]
+    local S = frame and frame._tuiSlot
+    if not S then return false end
+    local pt, x, y = ns.CustomGroups.SlotPoint(frame, S.n)
+    local idb = def and def.iconDB
+    local bShow, bSize, bInset, bColor, bStroke = LaneBorder(group, idb, def)
+    local id = (idb and idb.spellID) or A.SpellList(def)[1]
+    local tex = (idb and idb.customIcon) or (id and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id))
+    return A.PreviewPandemic(frame, A.PandemicLook({ pandemicInset = bShow and bInset or 0 }, lookSrc or idb or def), {
+        point = pt, x = x, y = y, w = S.iw, h = S.ih, tex = tex, crop = S.crop, skin = S.skin,
+        border = bShow and { size = bSize, inset = bInset, color = bColor, stroke = bStroke } or nil,
+    }, 5)
+end
+
 local function StyleButton(button, group, lane)
     if button:IsForbidden() then return end
     local S = lane.slot
@@ -295,33 +343,7 @@ local function StyleButton(button, group, lane)
 
     local t = A.IconOverrideText(idb) or S.text or group.text or {}
 
-    local bShow, bSize, bInset, bColor = group.showBorder,
-        group.borderSize or 1, group.borderInset or 0, group.borderColor
-    local bStroke = group.borderStroke
-    local gau = group.auras
-    if bShow and gau and gau.sortGlow and gau.sortGlowBorderStroke and (gau.sortMode or "manual") ~= "manual"
-        and (gau.sortGlowStyle or "pulse") == "pixel" then
-        bSize = gau.sortGlowThickness or bSize
-    end
-    -- an Aura Icon's own border (or its style's) sits outside it; the group's sits inside
-    if idb and idb.showBorder then
-        bShow, bSize, bInset, bColor = true,
-            idb.borderSize or 1, idb.borderInset or 0, idb.borderColor
-        bStroke = idb.borderStroke
-        if idb.glowBorderStroke and idb.showGlow and A.MapGlowStyle(idb.glowType) == "pixel" then bSize = idb.glowThickness or bSize end
-        bInset = bInset - bSize
-    end
-    local SBm = ns.SpecialBars
-    local st = (not idb) and def and def.styleName and SBm and SBm.Styles
-        and SBm.Styles.Get("icons", def.styleName)
-    if st then
-        bShow, bSize, bInset, bColor = st.showBorder, st.borderSize or 1, st.borderInset or 0, st.borderColor
-        bStroke = st.borderStroke
-        if bShow and st.glowBorderStroke and st.showGlow and A.MapGlowStyle(st.glowType) == "pixel" then
-            bSize = st.glowThickness or bSize
-        end
-        bInset = bInset - bSize
-    end
+    local bShow, bSize, bInset, bColor, bStroke = LaneBorder(group, idb, def)
 
     if bShow then
         if not r.border then
@@ -393,6 +415,7 @@ local function StyleButton(button, group, lane)
     fx.w, fx.h = S.iw, S.ih
     fx.anchor = r.icon
     fx.pandemic = (idb and idb.showPandemic) or (def and def.showPandemic) or false
+    fx.pandemicInset = bShow and bInset or 0
     A.PandemicLook(fx, idb or def)
     A.ApplyButtonFX(button, r, fx)
 
