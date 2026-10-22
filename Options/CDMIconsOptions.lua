@@ -1090,6 +1090,16 @@ local function SpellEditorPage(order, buffs)
                                     lookField(buffs and "invertSwipe" or "swipeReverse", (v ~= "default") and v or nil)
                                 end,
                             },
+                            chargeSwipe = {
+                                order = 2.5, type = "select", name = "Recharge Swipe", width = 1.2, hidden = buffs,
+                                values = function()
+                                    local on = E.db.thingsUI.cdmIcons.chargeSwipe ~= false
+                                    return { default = on and "Settings (shown)" or "Settings (edge only)", show = "Show", hide = "Edge Only" }
+                                end,
+                                sorting = { "default", "show", "hide" },
+                                get = function() local e = entry() return (e and e.chargeSwipe) or "default" end,
+                                set = function(_, v) setField("chargeSwipe", (v ~= "default") and v or nil) end,
+                            },
                             swipeBrk = { order = 3, type = "description", name = "", width = "full" },
                             swipeColorOn = {
                                 order = 4, type = "toggle", name = "Own Swipe Color",
@@ -1608,6 +1618,12 @@ function TUI:CDMIconsOptions()
                             TUI:UpdateCDMIcons()
                             if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
                         end,
+                    },
+                    chargeSwipe = {
+                        order = 2.5, type = "toggle", width = "full",
+                        name = "Swipe while a charge spell recharges (Blizzard only draws the edge while a charge is left)",
+                        get = function() return E.db.thingsUI.cdmIcons.chargeSwipe ~= false end,
+                        set = function(_, v) E.db.thingsUI.cdmIcons.chargeSwipe = (not v) and false or nil end,
                     },
                     auraOverlayLink = {
                         order = 3, type = "description", width = "full",

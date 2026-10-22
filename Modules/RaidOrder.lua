@@ -124,15 +124,18 @@ function RO.Roster()
     return out
 end
 
--- the raid in list order: listed names first, everyone else by name
+-- the raid in list order: listed names first, everyone else by name; also how many are listed
 local function Members()
     local roster = RO.Roster()
-    if not roster then return nil end
+    if not roster then return nil, 0 end
     local full, short = BuildRanks(RO.ActiveList())
-    local members = {}
+    local members, listed = {}, 0
     for l, m in pairs(roster) do
         local rank = full[l] or short[StripRealm(l)]
-        if rank then RO.Remember(m.name, m.class, m.role) end
+        if rank then
+            RO.Remember(m.name, m.class, m.role)
+            listed = listed + 1
+        end
         members[#members + 1] = { name = m.name, subgroup = m.subgroup, rank = rank or 10000 }
     end
     -- name tiebreak: stable through subgroup moves, unlike raid index
@@ -140,7 +143,7 @@ local function Members()
         if a.rank ~= b.rank then return a.rank < b.rank end
         return a.name < b.name
     end)
-    return members
+    return members, listed
 end
 
 local function Names(members, maxGroup, onlyGroup)
@@ -181,15 +184,15 @@ local function Release(Header, i)
     local hdr = Header.groups and Header.groups[i]
     if not (hdr and owned[hdr]) then return end
     owned[hdr] = nil
-    if not hdr:IsShown() then return end
     local db = Header.db
     local n = Header.numGroups or 1
-    hdr:Hide()
+    local shown = hdr:IsShown()
+    if shown then hdr:Hide() end
     hdr:SetAttribute("nameList", nil)
     UF():SetHeaderSortGroup(hdr, db.groupBy)
     hdr:SetAttribute("groupFilter", (i == 1 and db.raidWideSorting) and strsub("1,2,3,4,5,6,7,8", 1, n * 2 - 1) or tostring(i))
     if hdr.ClearChildPoints then hdr:ClearChildPoints() end
-    hdr:Show()
+    if shown then hdr:Show() end
 end
 
 local function ReleaseAll()
@@ -206,7 +209,7 @@ local function Owns()
     return list and #list > 0
 end
 
-local pendingRegen, retries = false, 0
+local pendingRegen, retries, unresolved = false, 0, false
 local Queue
 
 -- ElvUI configures a shown header one attribute at a time and the secure layout never
@@ -235,16 +238,19 @@ local function Apply()
     if InCombatLockdown() then pendingRegen = true return end
     Reanchor()
     if not Owns() then ReleaseAll() return end
-    local members = Members()
-    if not members then
-        -- names still loading: try again shortly
-        if retries < 10 then
+    local members, listed = Members()
+    -- a name list hides everyone it leaves out: while names still load, or nobody from
+    -- the list is here, ElvUI's own group order shows the whole raid
+    if not members or listed == 0 then
+        ReleaseAll()
+        unresolved = not members
+        if unresolved and retries < 10 then
             retries = retries + 1
             C_Timer.After(1, Queue)
         end
         return
     end
-    retries = 0
+    retries, unresolved = 0, false
     local uf = UF()
     for _, group in ipairs(RO.GROUPS) do
         local Header = uf and uf[group]
@@ -328,12 +334,16 @@ end
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("GROUP_ROSTER_UPDATE")
 ev:RegisterEvent("PLAYER_REGEN_ENABLED")
-ev:SetScript("OnEvent", function(_, event)
+ev:RegisterEvent("UNIT_NAME_UPDATE")
+ev:SetScript("OnEvent", function(_, event, unit)
     if event == "PLAYER_REGEN_ENABLED" then
         if pendingRegen then
             pendingRegen = false
             Queue()
         end
+    elseif event == "UNIT_NAME_UPDATE" then
+        -- a raid member's name came in: the order can go on now
+        if unresolved and unit and unit:find("^raid") and not InCombatLockdown() then Throttled() end
     elseif RO.Enabled() and IsInRaid() then
         if InCombatLockdown() then pendingRegen = true else Throttled() end
     end

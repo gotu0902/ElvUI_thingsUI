@@ -205,7 +205,34 @@ end
 
 -- work inside hooks on ElvUI/Blizzard frames is billed to their rows, not ours
 local PROF_ADDONS = { "ElvUI_thingsUI", "ElvUI", "ElvUI_Libraries" }
-ns.SlashCommand("prof", function()
+-- every loaded addon, worst first: run it, do the laggy thing, run it again
+local function ProfAll(P, M)
+    local rows = {}
+    for i = 1, C_AddOns.GetNumAddOns() do
+        local name = C_AddOns.GetAddOnInfo(i)
+        if name and C_AddOns.IsAddOnLoaded(i) then
+            rows[#rows + 1] = { name = name, over = P.GetAddOnMetric(name, M.CountTimeOver5Ms),
+                peak = P.GetAddOnMetric(name, M.PeakTime), now = P.GetAddOnMetric(name, M.RecentAverageTime) }
+        end
+    end
+    table.sort(rows, function(a, b)
+        if a.over ~= b.over then return a.over > b.over end
+        return a.peak > b.peak
+    end)
+    print("|cFF8080FFthingsUI|r frames over 5 ms | peak ms | now ms per frame (since login)")
+    for i = 1, math.min(12, #rows) do
+        local r = rows[i]
+        print(("  %-24s %4.0f | %6.1f | %.3f"):format(r.name, r.over, r.peak, r.now))
+    end
+end
+
+ns.SlashCommand("prof", function(arg)
+    if strlower(strtrim(arg or "")) == "all" then
+        local P, M = C_AddOnProfiler, Enum.AddOnProfilerMetric
+        if P and P.IsEnabled and P.IsEnabled() and M then ProfAll(P, M)
+        else print("|cFF8080FFthingsUI|r: the addon profiler is not available.") end
+        return
+    end
     local marks, parts = ns.loadMarks, {}
     for n = 2, #marks do
         parts[#parts + 1] = ("%s %.1f"):format(marks[n][1], marks[n][2] - marks[n - 1][2])

@@ -730,6 +730,18 @@ local function StripOverlayTextures(frame)
     end
 end
 
+local function WantsChargeSwipe(child)
+    local o = M.SpellSettings(child)
+    local v = o and o.chargeSwipe
+    if v then return v == "show" end
+    local cdm = E.db.thingsUI and E.db.thingsUI.cdmIcons
+    return not (cdm and cdm.chargeSwipe == false)
+end
+
+local function HasCharges(child)
+    return child.HasVisualDataSource_Charges and child:HasVisualDataSource_Charges() and true or false
+end
+
 local function ApplyCooldownStyle(cd)
     if cd.SetDrawSwipe          then cd:SetDrawSwipe(true) end
     if cd.SetDrawEdge           then cd:SetDrawEdge(false) end
@@ -858,6 +870,11 @@ local function ProcessCooldownFrame(child)
     applyingOverlay[cd] = true
     StripOverlayTextures(child)
     ApplyCooldownStyle(cd)
+    -- Recharge Swipe: Edge Only keeps Blizzard's look for a charge spell
+    if kind == "spell" and HasCharges(child) and not WantsChargeSwipe(child) then
+        cd:SetDrawSwipe(false)
+        cd:SetDrawEdge(true)
+    end
     if kind == "equip" then
         local slot = child:GetEquipSlot()
         local start, dur, _, gcd
@@ -974,6 +991,24 @@ local function EnsureSwipeHook(child)
         StyleAuraSwipe(child)
         NoteAuraState(child)
         if anyCDState then M.QueueCheckCDStates() end
+    end)
+end
+
+-- Blizzard draws a charge spell that still has a charge as a bare edge while it recharges
+-- (swipe off); the full swipe comes back unless Settings or the Spell Editor say no
+local chargeHooked = setmetatable({}, { __mode = "k" })
+local forcingSwipe = setmetatable({}, { __mode = "k" })
+
+local function EnsureChargeHook(child)
+    local cd = child.Cooldown
+    if not cd or chargeHooked[cd] or not cd.SetDrawSwipe then return end
+    chargeHooked[cd] = true
+    hooksecurefunc(cd, "SetDrawSwipe", function(_, show)
+        if show or forcingSwipe[cd] or applyingOverlay[cd] then return end
+        if not HasCharges(child) or not WantsChargeSwipe(child) then return end
+        forcingSwipe[cd] = true
+        cd:SetDrawSwipe(true)
+        forcingSwipe[cd] = nil
     end)
 end
 
@@ -1372,6 +1407,7 @@ LayoutViewer = function(viewer)
     local swipeStyled = not buffViewer and cdmRoot and (cdmRoot.auraSwipeColor or cdmRoot.auraSwipeReverse)
     for i = 1, #visible do
         local c = visible[i]
+        if not buffViewer then EnsureChargeHook(c) end
         if WantsOverlayHidden(c) then EnsureOverlayHooks(c); HideAuraOverlay(c) end
         local o = M.SpellSettings(c)
         if swipeStyled or swipeHooked[c.Cooldown] or (o and (o.swipeColor or o.swipeReverse)) then

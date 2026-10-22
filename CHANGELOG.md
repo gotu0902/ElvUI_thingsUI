@@ -66,6 +66,10 @@
 - Hidden or unused aura groups in Groups, Aura Icons/Bars and Groups - Bars are switched fully off, so they do no work when your auras change
 - Damage Meter (thingsUI): fixed a possible error opening a breakdown now that the game can hide who a row belongs to
 - Aura Icons with Border off had the plain 1px edge while idle (greyed out in a CDM row) but lost it as soon as the aura came up; they keep it now
+- MinimapButtonButton: Show Only On Mouseover now shows the bar the moment you hover any of its buttons and hides it when you leave; it could lag behind or stay up when you came in or left over a button
+- Raid Frame Builder: joining a raid could leave only group 1 showing until a /reload. The order went on while the roster was still arriving, and when names stayed Unknown it never caught up, so the rest of the raid stayed left out. Now nobody is ever left out: while names load, or when nobody from your list is in the raid (an alt in a pug), ElvUI's normal group order shows everyone
+- CDM: charge spells (Swiftmend, 2 charges) show the full swipe while a charge recharges, like EUI. Blizzard only draws a thin edge until the last charge is gone. CDM > Settings turns it off, Spell Editor > Recharge Swipe per spell (Show / Edge Only), and Edge Only holds with Hide Aura Overlay too
+- New /tui prof all: every loaded addon by frames over 5 ms and peak, to find what makes something stutter
 - Charge Bar: Hide Duplicates missed the CDM copy of the spell's current form when a talent turns it into another spell
 ### General
 - Aura Icons in an Essential/Utility row or on their own show sample duration and stacks text in the options preview, like Groups do (row text, or their own with Override CDM Row Text)

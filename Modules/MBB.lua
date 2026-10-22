@@ -218,6 +218,7 @@ local function ApplyHideMain()
     end
 end
 
+local HookHover
 local pending
 local function QueueSkin()
     if pending then return end
@@ -226,6 +227,8 @@ local function QueueSkin()
         pending = false
         NormalizeCollected()
         SkinAll()
+        local db, main = DB(), MainButton()
+        if db and db.mouseover and main then HookHover(main) end
     end)
 end
 
@@ -280,29 +283,40 @@ local function VerifyState()
     end
 end
 
+-- shown the moment anything in the bar is entered; the way out is polled while it shows,
+-- since a leave from a collected button never reaches the bar itself
+local hoverTicker
 local function ApplyHoverAlpha()
     local db = DB()
     local main = MainButton()
     if not main then return end
-    if not (db and db.mouseover) then main:SetAlpha(1); return end
-    local cont = ContainerOf(main)
-    local over = main:IsMouseOver() or (cont and cont:IsShown() and cont:IsMouseOver())
+    local over = true
+    if db and db.mouseover then
+        local cont = ContainerOf(main)
+        over = main:IsMouseOver() or (cont and cont:IsShown() and cont:IsMouseOver()) or false
+    end
     main:SetAlpha(over and 1 or 0)
+    if over and db and db.mouseover then
+        if not hoverTicker then hoverTicker = C_Timer.NewTicker(0.15, ApplyHoverAlpha) end
+    elseif hoverTicker then
+        hoverTicker:Cancel()
+        hoverTicker = nil
+    end
 end
 
-local function HoverLeave() C_Timer.After(0.1, ApplyHoverAlpha) end
-local function HookHover(main)
-    if not main._tuiHover then
-        main._tuiHover = true
-        main:HookScript("OnEnter", ApplyHoverAlpha)
-        main:HookScript("OnLeave", HoverLeave)
-    end
+local hoverHooked = setmetatable({}, { __mode = "k" })
+local function HookEnter(f)
+    if hoverHooked[f] or not f.HookScript then return end
+    hoverHooked[f] = true
+    f:HookScript("OnEnter", ApplyHoverAlpha)
+end
+
+HookHover = function(main)
+    HookEnter(main)
     local cont = ContainerOf(main)
-    if cont and not cont._tuiHover then
-        cont._tuiHover = true
-        cont:HookScript("OnEnter", ApplyHoverAlpha)
-        cont:HookScript("OnLeave", HoverLeave)
-    end
+    if not cont then return end
+    HookEnter(cont)
+    for _, btn in ipairs({ cont:GetChildren() }) do HookEnter(btn) end
 end
 
 local hooked = false
@@ -321,12 +335,8 @@ function TUI:UpdateMBB()
         M.SetWrap(6)
     end
     main:SetScale((db and db.scale) or 1)
-    if db and db.mouseover then
-        HookHover(main)
-        ApplyHoverAlpha()
-    else
-        main:SetAlpha(1)
-    end
+    if db and db.mouseover then HookHover(main) end
+    ApplyHoverAlpha()
     ApplyPosition()
     NormalizeCollected()
     SkinAll()
