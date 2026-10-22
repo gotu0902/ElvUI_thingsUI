@@ -126,6 +126,8 @@ function TUI:RaidOrderOptions()
             order = 5, type = "description", name = "|cFF888888No names yet.|r",
             hidden = function() return #List() > 0 end,
         },
+        -- the list starts on its own line, whatever the window width
+        listBrk = { order = 6, type = "description", name = "", width = "full" },
     }
     for ri = 1, MAX_ROWS do
         local hidden = function() return List()[ri] == nil end
@@ -163,7 +165,7 @@ function TUI:RaidOrderOptions()
                 name = "Sorts ElvUI's raid frames by your list: listed names first, everyone else by name. Layouts are shared by all characters; Enable is per profile.\n",
             },
             enabled = {
-                order = 2, type = "toggle", name = "Enable",
+                order = 2, type = "toggle", name = "Enable", width = "full",
                 get = function() return E.db.thingsUI.raidOrder.enabled end,
                 set = function(_, v)
                     E.db.thingsUI.raidOrder.enabled = v
@@ -171,9 +173,10 @@ function TUI:RaidOrderOptions()
                 end,
             },
             open = {
-                order = 3, type = "execute", name = "|cFF4DD2A6Open Builder|r",
+                order = 3, type = "execute", name = "|cFF4DD2A6Open Builder|r", width = "double",
                 func = function() RO().Editor.Open() end,
             },
+            openBrk = { order = 3.5, type = "description", name = " ", width = "full" },
             note = {
                 order = 4, type = "description",
                 name = function() return SeparatedNote() or "" end,

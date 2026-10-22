@@ -11,8 +11,16 @@ local MAX_ROWS = 60
 local function Secret(v) return issecretvalue and issecretvalue(v) end
 
 local function IsSelfSrc(src)
-    local g = src and src.sourceGUID
+    if not src then return false end
+    local own = src.isLocalPlayer
+    if own ~= nil and not Secret(own) then return own == true end
+    local g = src.sourceGUID
     return not Secret(g) and g ~= nil and g == UnitGUID("player")
+end
+
+-- an icon worth drawing; a secret one (a spell id in combat) is drawn as it comes
+local function HasIcon(icon)
+    return Secret(icon) or (icon and icon ~= 0) or false
 end
 
 local function DB() return E.db.thingsUI and E.db.thingsUI.damageMeter end
@@ -193,10 +201,16 @@ local function DrillInfo(src)
     if Secret(recap) or type(recap) ~= "number" or recap <= 0 then recap = nil end
     local si = src.specIconID
     if Secret(si) or type(si) ~= "number" then si = nil end
+    local guid, cid, name = src.sourceGUID, src.sourceCreatureID, src.name
+    if Secret(guid) and IsSelfSrc(src) then
+        guid, cid = UnitGUID("player"), nil
+        local n, realm = UnitName("player")
+        name = (realm and realm ~= "") and (n .. "-" .. realm) or n
+    end
     return {
-        guid = src.sourceGUID,
-        creatureID = src.sourceCreatureID,
-        name = src.name,
+        guid = guid,
+        creatureID = cid,
+        name = name,
         classFile = (not Secret(src.classFilename)) and src.classFilename or nil,
         deathRecapID = recap,
         specIconID = si,
@@ -251,7 +265,17 @@ function M.InvalidateNicknames() nickReady = nil end
 local function SpellDisplay(spell, drill)
     local det = spell.combatSpellDetails
     local sid = spell.spellID
-    if Secret(sid) or sid == 0 then sid = nil end
+    if Secret(sid) then
+        -- no joins or compares on what comes back; some ids get refused outright
+        local okN, nm = pcall(C_Spell.GetSpellName, sid)
+        local okT, tex = pcall(C_Spell.GetSpellTexture, sid)
+        local icon = det and det.specIconID
+        if Secret(icon) or icon == 0 then icon = nil end
+        return (okN and nm) or PlainStr(spell.creatureName) or PlainStr(det and det.unitName),
+            icon or (okT and tex) or 134400,
+            PlainStr(det and det.unitClassFilename) or (drill and drill.classFile) or nil
+    end
+    if sid == 0 then sid = nil end
     local spellName = sid and C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(sid) or nil
     local unitName = PlainStr(det and det.unitName)
     local unitClass = PlainStr(det and det.unitClassFilename)
@@ -646,9 +670,9 @@ local function UpdateRow(win, i, rank, src, maxAmt, db)
     local iconW = 0
     if showIcon then
         local z = db.iconZoom or 0.05
-        local specIcon = src.specIconID
-        if Secret(specIcon) then specIcon = nil end
-        if (db.iconStyle == "spec" or src._hpFrac) and specIcon and specIcon ~= 0 then
+        local specIcon
+        if (db.iconStyle == "spec" or src._hpFrac) and HasIcon(src.specIconID) then
+            specIcon = src.specIconID
             row.icon:SetTexture(specIcon)
             row.icon:SetTexCoord(z, 1 - z, z, 1 - z)
             row.icon:Show(); iconW = barH
@@ -841,10 +865,8 @@ RefreshWindow = function(win)
     local last = math.min(total, first + vis - 1)
     local meRank
     if db.alwaysShowPlayer ~= false and not win.drill and not M.testMode and not deathsView and total > 0 then
-        local pg = UnitGUID("player")
         for r = 1, total do
-            local g = sources[r].sourceGUID
-            if not Secret(g) and g == pg then meRank = r break end
+            if IsSelfSrc(sources[r]) then meRank = r break end
         end
         if meRank and meRank >= first and meRank <= last then meRank = nil end
     end
@@ -1031,7 +1053,7 @@ ShowRowTooltip = function(win, row)
         r:SetPoint("TOPRIGHT", tip, "TOPRIGHT", -pad, -y)
         local z = db.iconZoom or 0.05
         r.icon:SetWidth(barH)
-        if icon and icon ~= 0 then
+        if HasIcon(icon) then
             r.icon:SetTexture(icon)
             r.icon:SetTexCoord(z, 1 - z, z, 1 - z)
             r.icon:Show()
@@ -1315,7 +1337,7 @@ RenderPopout = function()
         local tsid = sp.spellID
         row._ttSpell = (not Secret(tsid) and type(tsid) == "number" and tsid > 0) and tsid or nil
         row.icon:SetWidth(rowH)
-        if icon and icon ~= 0 then
+        if HasIcon(icon) then
             row.icon:SetTexture(icon)
             row.icon:SetTexCoord(z, 1 - z, z, 1 - z)
         elseif cf and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[cf] then

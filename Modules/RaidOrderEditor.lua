@@ -320,15 +320,26 @@ local function Build()
 
     local roleBtn = Button("", 170, nil)
     roleBtn:SetPoint("TOPLEFT", 12, -38)
-    local function RoleText() roleBtn:SetText(RoleOrderText(RO.Store().roleOrder or "TDH")) end
-    roleBtn:SetScript("OnClick", function()
-        local r = RO.Store()
-        local cur = 1
-        for i, o in ipairs(ROLE_ORDERS) do if o == (r.roleOrder or "TDH") then cur = i end end
-        r.roleOrder = ROLE_ORDERS[cur % #ROLE_ORDERS + 1]
+    local ARROW = " |TInterface\\Buttons\\Arrow-Up-Up:12:12:0:-2:32:32:0:32:32:0|t"
+    local function RoleText() roleBtn:SetText(RoleOrderText(RO.Store().roleOrder or "TDH") .. ARROW) end
+    local function PickOrder(o)
+        RO.Store().roleOrder = o
         RoleText()
         SortByRole()
         Layout()
+    end
+    -- every order in a menu: a button that cycles on click doesn't read as a choice
+    roleBtn:SetScript("OnClick", function(self)
+        local menu = MenuUtil.CreateContextMenu(self, function(_, root)
+            root:CreateTitle("Sort by Role order")
+            for _, o in ipairs(ROLE_ORDERS) do
+                root:CreateRadio(RoleOrderText(o),
+                    function() return (RO.Store().roleOrder or "TDH") == o end,
+                    function() PickOrder(o) end)
+            end
+        end)
+        -- above the builder, which sits in FULLSCREEN_DIALOG itself
+        if menu and menu.SetFrameStrata then menu:SetFrameStrata("TOOLTIP") end
     end)
     frame.roleText = RoleText
 
