@@ -413,3 +413,5 @@ function ED.Open()
     frame:Show()
     frame:Raise()
 end
+
+ns.SlashCommand("rf", function() ED.Open() end)
