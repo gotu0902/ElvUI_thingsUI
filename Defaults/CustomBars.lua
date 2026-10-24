@@ -45,7 +45,7 @@ ns.CUSTOM_BAR_GROUP_DEFAULTS = {
     anchorPoint = "CENTER",
     anchorRelativePoint = "CENTER",
     anchorXOffset = 0,
-    anchorYOffset = -250,
+    anchorYOffset = 0,
     auras = {},
 }
 
@@ -58,7 +58,7 @@ ns.CUSTOM_TEXT_GROUP_DEFAULTS = {
     height = 16,
     spacing = 2,
     growth = "DOWN",
-    justify = "LEFT",
+    justify = "CENTER",
     unit = "player",
     sortMode = "manual",
     scopeOrder = { "global", "class", "spec" },
@@ -77,6 +77,6 @@ ns.CUSTOM_TEXT_GROUP_DEFAULTS = {
     anchorPoint = "CENTER",
     anchorRelativePoint = "CENTER",
     anchorXOffset = 0,
-    anchorYOffset = -200,
+    anchorYOffset = 0,
     auras = {},
 }

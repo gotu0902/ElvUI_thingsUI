@@ -342,9 +342,11 @@ local function Layout(st)
     local Hh = st.effH or group.height or 16
     local sp = group.spacing or 2
     local up = group.growth == "UP"
+    -- Max Lines counts the cooldown lines first; the auras get what's left
+    local cap = tonumber(group.maxBars) or 0
     local n = 0
     for _, L in ipairs(st.cdLines or {}) do
-        if L.spellID and (L.test or L.shown ~= false) then
+        if L.spellID and (L.test or L.shown ~= false) and (cap == 0 or n < cap) then
             local y = n * (Hh + sp)
             L:ClearAllPoints()
             if up then L:SetPoint("BOTTOMLEFT", st.cdHost, "BOTTOMLEFT", 0, y)
@@ -356,10 +358,15 @@ local function Layout(st)
         end
     end
     local cdH = n * (Hh + sp)
+    st.cdShown = n
     if st.clip then
         local pt = up and "BOTTOMLEFT" or "TOPLEFT"
         st.clip:ClearAllPoints()
         st.clip:SetPoint(pt, st.frame, pt, 0, up and cdH or -cdH)
+        if cap > 0 then
+            local left = cap - n
+            st.clip:SetHeight(left > 0 and (left * Hh + (left - 1) * sp) or 0.001)
+        end
     end
     return cdH
 end
@@ -385,9 +392,7 @@ local events
 local function Events()
     if events then return end
     events = CreateFrame("Frame")
-    local queued = false
     local function Flush()
-        queued = false
         for L in pairs(active) do
             local host = L:GetParent()
             if host and host:IsVisible() then M.UpdateLine(L) end
@@ -403,9 +408,8 @@ local function Events()
             if TUI.QueueCustomBarsUpdate then TUI:QueueCustomBarsUpdate() end
             return
         end
-        if queued or not next(active) then return end
-        queued = true
-        C_Timer.After(0, Flush)
+        -- read inside the event: the GCD flag is only right there
+        if next(active) then Flush() end
     end)
 end
 
@@ -422,9 +426,22 @@ function M.SyncCooldowns(st, group, W, Hh, test)
     end
     local list = {}
     if group.enabled ~= false then
-        for _, c in ipairs(group.cooldowns or {}) do
-            if c.id and c.enabled ~= false and (test or Known(c.id)) then list[#list + 1] = c end
+        -- this character's scopes in the group's scope order, a spell once
+        local CB = ns.CustomBars
+        local mine, seen = {}, {}
+        for _, scope in ipairs(CB.ScopeOrderFor(group)) do
+            for _, c in ipairs(CB.ScopeCooldowns(group, scope, nil, false) or {}) do
+                if c.id and c.enabled ~= false and not seen[c.id] then
+                    seen[c.id] = true
+                    mine[#mine + 1] = c
+                end
+            end
         end
+        for _, c in ipairs(mine) do
+            if Known(c.id) then list[#list + 1] = c end
+        end
+        -- a preview on a character that knows none of them still shows the lines
+        if test and #list == 0 then list = mine end
     end
     local mode = group.cdReady or "hide"
     for i, c in ipairs(list) do

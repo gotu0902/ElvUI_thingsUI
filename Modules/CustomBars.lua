@@ -107,6 +107,14 @@ function M.GetScopeRoot(group, scope, key, create)
     return root
 end
 
+-- Groups - Text cooldown lines of one scope (the global ones sit on the group itself)
+function M.ScopeCooldowns(group, scope, key, create)
+    local root = M.GetScopeRoot(group, scope, key, create)
+    if not root then return nil end
+    if create then root.cooldowns = root.cooldowns or {} end
+    return root.cooldowns
+end
+
 local function NextIndex(group, scope, key)
     local n = 0
     for _, e in ipairs(M.ScopeEntries(group, scope, key)) do
@@ -838,10 +846,12 @@ local function SyncGroup(group)
     local capBars = tonumber(group.maxBars) or 0
     local sp = group.spacing or 2
     local clipOn = capBars > 0
+    -- Groups - Text: Max Lines counts its cooldown lines first
+    local left = math.max(0, capBars - (st.cdShown or 0))
     local clip = st.clip
     clip:ClearAllPoints()
     clip:SetPoint(pt, frame, pt, 0, up and cdH or -cdH)
-    clip:SetSize(effW, clipOn and (capBars * effH + (capBars - 1) * sp) or effH)
+    clip:SetSize(effW, clipOn and (left > 0 and (left * effH + (left - 1) * sp) or 0.001) or effH)
     clip:SetClipsChildren(clipOn)
     c:ClearAllPoints()
     c:SetSize(effW, effH)

@@ -3,9 +3,11 @@
 ### Groups - Text
 - New module: auras and cooldowns as lines of text. Write a line as [name] [cd], or put anything around them: [name] - [cd], NO WILD CHARGE [cd]. [stacks] shows stacks on an aura and charges on a cooldown
 - Auras work like Groups - Bars: Spec / Class / Global lists, Aura Collections, Blizzard filters, order and sorting, Visibility. Every aura line can have its own text
-- Cooldowns: a list of spells, a line each with its own text if you want. It shows while the spell is on cooldown (the GCD doesn't count), or keeps the line, or swaps to a Ready Text. A hidden line leaves the stack and the rest closes up. A character only gets the spells it knows, so one group can serve every class
+- Cooldowns: spells in the Spec, Class and Global tabs, picked like the spell cooldowns in Groups - Icons, a line each with its own text if you want. It shows while the spell is on cooldown (the GCD doesn't count), or keeps the line, or swaps to a Ready Text. A hidden line leaves the stack and the rest closes up. A character gets the lines of its spec, its class and Global, only for spells it knows, so one group can serve every class
 - Own colors for name, time, stacks and the text around them; left or right aligned
 - Center align (lined up from a guess of the time and name width, so it doesn't wobble as the numbers tick) and Case: UPPERCASE for your text, cooldown names and one-spell auras. Names the game writes itself in combat stay as they are
+- A charge spell's line (Grappling Hook) only shows once every charge is spent, and no line blinks on for a second at the end of the GCD anymore (the game's GCD flag can't be trusted outside its own event; the CDM's frame and an in-event read decide now). Spell Editor > Show > Cooldown and groups use the same check
+- Max Lines counts the cooldown lines too: they come first and the auras get what's left. Global lists this character's spells (Show Other Classes for the rest), up to 40 lines per tab, and the preview shows only what this character has
 ### Character Setup (/tui alt)
 - /tui alt is a new window, like the things for EUI installer: one row per addon with Install / Reinstall / Update, what this character uses, Profile... (what your characters should use) and Load. Load for This Character and Load Without CDM at the bottom, 1440p / 1080p up top (1080p once its strings are in)
 - ElvUI and BigWigs switch per spec on their own on classes with a healer spec or Augmentation: FHT there, NHT on the rest (ElvUI's own spec profiles). Warriors and co just use NHT. Profile... picks which profiles that is: Tank & DPS and Healer + Aug, each its own (BuffReminders can do the same)
@@ -57,6 +59,9 @@
 - Aura Icon spell lookups are cached in combat too (rebuilt after combat), and the role visibility rule only reacts to your own spec changes
 - A tracked cast (Ironfur with Ticks, totem timers) no longer rebuilds every Aura Bar and Aura Icon: only the bars and icons that use it update, and ticks just move
 ### Fixes
+- Dragging a thingsUI mover (/emove) keeps the element's anchor frame and points (CENTER stays CENTER) and only changes X/Y by how far you dragged, like the nudge arrows. It used to switch to whatever corner ElvUI picked for that part of the screen. Groups, Aura Icons and Bars, Utility Cooldowns and Timers
+- A new Groups - Bars or Groups - Text group starts in the middle of the screen (0, 0) like Groups - Icons, instead of down by the bars. A new text group is center aligned
+- CDM: icons hidden from the rows (spells a group already shows, Spell Editor rules, trinkets) no longer flash back in for a moment when the game rebuilds the rows, like going in and out of stealth. They're hidden again before the frame is drawn
 - Aura Icons shown in a CDM row with their own border were 2 px too big after the border moved outside the icon
 - CDM: an icon that overflows from Essential into Utility (or the other way) now takes that row's text settings instead of keeping its old row's
 - CDM Spell Editor listed spells you set up on other classes and specs (Dream Breath on a monk). It only lists this spec's now; Spell ID still reaches the rest, their settings were never lost. The picked spell no longer shows up twice

@@ -710,11 +710,14 @@ local function MemberMap(g, kind)
                     out[scope .. "/" .. l .. "/" .. tostring(id)] = { scope = scope, list = l, id = id, e = e }
                 end
             end
-        end
-    end
-    if kind == "bars" then
-        for _, c in ipairs(g.cooldowns or {}) do
-            if type(c) == "table" and c.id then out["cd/" .. tostring(c.id)] = { scope = "cd", id = c.id, e = c } end
+            -- Groups - Text cooldown lines, per scope like the auras
+            if kind == "bars" and type(root.cooldowns) == "table" then
+                for _, c in ipairs(root.cooldowns) do
+                    if type(c) == "table" and c.id then
+                        out[scope .. "/cd/" .. tostring(c.id)] = { scope = scope, list = "cd", id = c.id, e = c }
+                    end
+                end
+            end
         end
     end
     return out
@@ -792,9 +795,10 @@ local function Union(m, g, kind)
     local have = MemberMap(m, kind)
     for path, it in pairs(MemberMap(g, kind)) do
         if not have[path] then
-            if it.scope == "cd" then
-                m.cooldowns = m.cooldowns or {}
-                m.cooldowns[#m.cooldowns + 1] = DeepCopy(it.e)
+            if it.list == "cd" then
+                local root = RootFor(m, kind, it.scope, true)
+                root.cooldowns = root.cooldowns or {}
+                root.cooldowns[#root.cooldowns + 1] = DeepCopy(it.e)
             else
                 local root = RootFor(m, kind, it.scope, true)
                 root[it.list] = root[it.list] or {}

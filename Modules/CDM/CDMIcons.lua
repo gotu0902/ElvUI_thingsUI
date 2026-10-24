@@ -122,6 +122,20 @@ local passiveDirty   = false
 local pendingFrame   = CreateFrame("Frame")
 local QueueLayout
 local LayoutViewer
+-- frames Blizzard just re-pooled or rebound get their hide verdict before the frame draws
+local rehideDue = false
+
+-- /tui cdm watch: row counts and refreshes with their time, for flashes too short to see
+local watchUntil, watchT0, watchRows = 0, 0, {}
+local function Watch(what, viewer, n)
+    if watchUntil == 0 or GetTime() > watchUntil then return end
+    local name = viewer and viewer.GetName and (viewer:GetName() or ""):gsub("CooldownViewer", "") or ""
+    if n then
+        if watchRows[name] == n then return end
+        watchRows[name] = n
+    end
+    print(("|cFF8080FFtuicdm|r +%dms %s %s%s"):format(math.floor((GetTime() - watchT0) * 1000), what, name, n and (" = " .. n) or ""))
+end
 
 local proxies = {}
 local function GetProxy(viewer)
@@ -447,6 +461,7 @@ local function RebuildPassiveCache()
         end
     end
     if changed then
+        Watch("rehide")
         M.Invalidate()
         for name in pairs(VIEWERS) do QueueLayout(_G[name]) end
     end
@@ -489,12 +504,42 @@ function M.RefreshSpellRules()
 end
 
 -- on its own cooldown (not the GCD); nil when the game won't say
+-- the CDM frame drawing a spell, shown or not (its state flags are what we want)
+local ruleKids = {}
+local function AnyChildForSpell(sid)
+    for _, name in ipairs({ "EssentialCooldownViewer", "UtilityCooldownViewer" }) do
+        local v = _G[name]
+        if v then
+            for i = 1, H.ChildrenInto(v, ruleKids) do
+                local c = ruleKids[i]
+                if c and c.cooldownInfo then
+                    local s, base = M.ChildSpell(c)
+                    if s == sid or base == sid then return c end
+                end
+            end
+        end
+    end
+end
+
+-- The game's GCD flag is only good inside SPELL_UPDATE_COOLDOWN: as a GCD ends the lockout can
+-- still read active with the flag already clear. The CDM's own frame keeps what it saw at its
+-- last refresh: a charge in hand (wasSetFromCharges, only set while one is left) means castable,
+-- and its GCD flag counts while the spell's cooldown drew it (EUI's CdmOnRealCD reading).
 local function OnRealCD(sid)
     local info = C_Spell.GetSpellCooldown(sid)
     if not info then return false end
     local a, g = info.isActive, info.isOnGCD
     if issecretvalue and (issecretvalue(a) or issecretvalue(g)) then return nil end
-    return (a and not g) and true or false
+    if not a or g then return false end
+    local c = AnyChildForSpell(sid)
+    if c then
+        local ch, sc, cg = c.wasSetFromCharges, c.wasSetFromCooldown, c.isOnGCD
+        if NotSecret(ch) and NotSecret(sc) and NotSecret(cg) then
+            if ch == true then return false end
+            if sc == true and cg == true then return false end
+        end
+    end
+    return true
 end
 
 M.OnRealCD = OnRealCD
@@ -551,7 +596,7 @@ do
     local ev = CreateFrame("Frame")
     ev:RegisterEvent("SPELL_UPDATE_COOLDOWN")
     ev:RegisterEvent("SPELL_UPDATE_CHARGES")
-    ev:SetScript("OnEvent", M.QueueCheckCDStates)
+    ev:SetScript("OnEvent", function() if anyCDState then M.CheckCDStates() end end)
     ns.Visibility.OnChange(function() if anySpellRule then QueuePassiveRebuild() end end)
 end
 
@@ -631,15 +676,10 @@ function M.TrinketHidden(slot, buff)
 end
 M.QueuePassiveRebuild = function() QueuePassiveRebuild() end
 
-local dataRefreshQueued = false
-local function OnViewerDataRefresh()
-    if dataRefreshQueued then return end
-    dataRefreshQueued = true
-    C_Timer.After(0, function()
-        dataRefreshQueued = false
-        M.RebuildPassiveCache()
-        for name in pairs(VIEWERS) do QueueLayout(_G[name]) end
-    end)
+local function OnViewerDataRefresh(viewer)
+    Watch("data", viewer)
+    rehideDue = true
+    for name in pairs(VIEWERS) do QueueLayout(_G[name]) end
 end
 
 local function ByLayoutIndex(a, b)
@@ -1294,6 +1334,7 @@ LayoutViewer = function(viewer)
     end
 
     SortByCooldownID(visible)
+    Watch("rows", viewer, #visible)
 
     local myName = viewer:GetName()
     local cap = tonumber(vdb.maxIcons) or 0
@@ -1663,6 +1704,10 @@ LayoutViewer = function(viewer)
 end
 
 local function FlushPending(self)
+    if rehideDue then
+        rehideDue = false
+        M.RebuildPassiveCache()
+    end
     self:SetScript("OnUpdate", nil)
     if not M.LayoutViewer then M.LayoutViewer = LayoutViewer end
     for viewer in pairs(pendingViewers) do
@@ -1689,6 +1734,7 @@ local function HookViewer(name)
         hooksecurefunc(viewer, "RefreshData", OnViewerDataRefresh)
     end
     ns.ViewerHooks.On(viewer, "RefreshLayout", "CDMIcons", function(v)
+        Watch("layout", v)
         if rebuildFinish then
             local f = rebuildFinish
             rebuildFinish = nil
@@ -1708,8 +1754,8 @@ local function HookViewer(name)
             ApplyPassiveState(itemFrame, false)
             passiveMouse[itemFrame] = nil
             self._tuiLayoutSig = nil
+            rehideDue = true
             QueueLayout(self)
-            QueuePassiveRebuild()
         end)
     end
     QueueLayout(viewer)
@@ -1891,6 +1937,7 @@ f:SetScript("OnEvent", function(_, event, arg1)
     end
     if event == "SPELLS_CHANGED" or event == "TRAIT_CONFIG_UPDATED"
         or event == "COOLDOWN_VIEWER_SPELL_OVERRIDE_UPDATED" then
+        Watch(event)
         QueuePassiveRebuild()
         return
     end
@@ -1934,7 +1981,14 @@ local function DumpVal(v)
     return tostring(v)
 end
 
-ns.SlashCommand("cdm", function()
+ns.SlashCommand("cdm", function(rest)
+    if strtrim(rest or "") == "watch" then
+        watchT0 = GetTime()
+        watchUntil = watchT0 + 10
+        wipe(watchRows)
+        print("|cFF8080FFtuicdm|r watching the rows for 10 s")
+        return
+    end
     local emm = _G.EditModeManagerFrame
     local cvs = _G.CooldownViewerSettings
     print(("|cFF8080FFtuicdm|r editmode=%s cvs=%s rebuilding=%s"):format(

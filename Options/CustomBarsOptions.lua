@@ -368,64 +368,123 @@ local function SpellFrom(v)
     if id and C_Spell.GetSpellName and C_Spell.GetSpellName(id) then return id end
 end
 
-local MAX_CD = 20
-local function CooldownsArgs(grp)
-    local function list()
+local MAX_CD = 40
+
+local function Knows(id)
+    return IsPlayerSpell(id) or (C_SpellBook and C_SpellBook.IsSpellKnown and C_SpellBook.IsSpellKnown(id)) or false
+end
+
+-- a text group's cooldown lines in one scope tab, picked like Groups - Icons' spells
+local function CooldownsArgs(grp, scope)
+    local function list(create)
         local g = grp()
-        if not g then return {} end
-        g.cooldowns = g.cooldowns or {}
-        return g.cooldowns
+        if not (g and CB()) then return {} end
+        return CB().ScopeCooldowns(g, scope, keyFor(scope), create) or {}
     end
     local function add(id)
-        local l = list()
-        if not id or #l >= MAX_CD then return end
+        if not id or #list() >= MAX_CD then return end
+        local l = list(true)
         for _, c in ipairs(l) do if c.id == id then return end end
         l[#l + 1] = { id = id }
         Refresh()
     end
-    local function specSpells()
-        local spec = GetSpecialization and GetSpecialization()
-        local specID = spec and GetSpecializationInfo(spec)
-        return (ns.CDMSpells and ns.CDMSpells.GetForSpec and ns.CDMSpells.GetForSpec(specID)) or {}
+    local function classFile()
+        if scope == "class" then return getEditClass() end
+        if scope == "spec" then local m = ns.SpecMeta(tonumber(getEditSpec())); return m and m.classToken end
+        return curClassFile()
     end
     local function name(id) return (C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or "" end
+    local function spells()
+        local CDM = ns.CDMSpells
+        local map
+        if CDM then
+            if scope == "spec" then map = CDM.GetForSpec(tonumber(getEditSpec()))
+            elseif scope == "class" then map = CDM.GetForClass(classFile())
+            else map = CDM.GetForSpec(tonumber(curSpecID())) end
+        end
+        local out = {}
+        if map and next(map) then
+            for id in pairs(map) do out[#out + 1] = id end
+        else
+            local fb
+            if scope == "spec" and ns.GetSpecSpellList then fb = ns.GetSpecSpellList(tonumber(getEditSpec())) end
+            if not fb and ns.GetClassSpellList then fb = ns.GetClassSpellList(classFile()) end
+            for _, id in ipairs(fb or {}) do out[#out + 1] = id end
+        end
+        table.sort(out, function(a, b) return name(a) < name(b) end)
+        return out
+    end
+    -- Global holds every character's lines; the other classes' wait behind a button
+    local showAll = false
+    local function Listed(c)
+        return c ~= nil and (scope ~= "global" or showAll or Knows(c.id))
+    end
+    local function Elsewhere()
+        if scope ~= "global" then return 0 end
+        local n = 0
+        for _, c in ipairs(list()) do if not Knows(c.id) then n = n + 1 end end
+        return n
+    end
+    local function Here()
+        if scope == "spec" then return getEditSpec() == curSpecID() end
+        if scope == "class" then return getEditClass() == curClassFile() end
+        return true
+    end
     local args = {
-        desc = {
-            order = 0, type = "description",
-            name = "A line per cooldown, there while the spell is on cooldown (Text > When Ready). Each character only gets the spells it knows.\n",
-        },
-        add = {
-            order = 1, type = "select", name = "|cFF60E0A0Add Cooldown|r", width = "double",
+        addCD = {
+            order = 3, type = "select", width = "double",
+            name = function()
+                local label = "Add Cooldown"
+                if scope == "spec" then
+                    local m = ns.SpecMeta(tonumber(getEditSpec()))
+                    label = label .. " - " .. ((m and m.name) or "Spec")
+                elseif scope == "class" then
+                    local cf = classFile()
+                    local nm = cf and LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[cf]
+                    label = label .. " - " .. (nm or cf or "Class")
+                end
+                return "|cFF8AC8FF" .. label .. "|r"
+            end,
             disabled = function() return #list() >= MAX_CD end,
             values = function()
                 local out = {}
-                for id in pairs(specSpells()) do out[id] = SpellLabel(id) end
+                for _, id in ipairs(spells()) do out[tostring(id)] = SpellLabel(id) end
                 return out
             end,
             sorting = function()
                 local out = {}
-                for id in pairs(specSpells()) do out[#out + 1] = id end
-                table.sort(out, function(a, b) return name(a) < name(b) end)
+                for _, id in ipairs(spells()) do out[#out + 1] = tostring(id) end
                 return out
             end,
             get = function() return "" end,
             set = function(_, v) add(tonumber(v)) end,
         },
-        addID = {
-            order = 2, type = "input", name = "|cFF60E0A0...or Spell by ID or name|r",
+        addCDID = {
+            order = 4, type = "input", name = "|cFFFFD200...or Cooldown by ID or name|r",
             disabled = function() return #list() >= MAX_CD end,
             get = function() return "" end,
             set = function(_, v) add(SpellFrom(v)) end,
+        },
+        others = {
+            order = 5, type = "execute", width = 1.4,
+            hidden = function() return Elsewhere() == 0 end,
+            name = function()
+                if showAll then return "Only This Character" end
+                return ("Show Other Classes (%d)"):format(Elsewhere())
+            end,
+            func = function() showAll = not showAll; Refresh() end,
         },
     }
     local rows = {}
     for ri = 1, MAX_CD do
         local i = ri
         local function cur() return list()[i] end
-        local hidden = function() return cur() == nil end
+        local hidden = function() return not Listed(cur()) end
+        -- past the lines that aren't shown, to the next one that is
         local function move(dir)
             local l = list()
             local j = i + dir
+            while l[j] and not Listed(l[j]) do j = j + dir end
             if l[i] and l[j] then l[i], l[j] = l[j], l[i]; Refresh() end
         end
         rows["c" .. i .. "_up"] = { order = i * 10 + 1, type = "execute", name = CB_UP, width = 0.3, hidden = hidden,
@@ -436,8 +495,11 @@ local function CooldownsArgs(grp)
             name = function()
                 local c = cur()
                 if not c then return "" end
-                local known = IsPlayerSpell(c.id) or (C_SpellBook and C_SpellBook.IsSpellKnown and C_SpellBook.IsSpellKnown(c.id))
-                return SpellLabel(c.id) .. (known and "" or " |cff888888(not on this character)|r")
+                local tag = ""
+                if Here() and not Knows(c.id) then
+                    tag = (scope == "global") and " |cff888888(not on this character)|r" or " |cff888888(not known)|r"
+                end
+                return SpellLabel(c.id) .. tag
             end }
         rows["c" .. i .. "_fmt"] = { order = i * 10 + 4, type = "input", name = "", width = 1.1, hidden = hidden,
             get = function() local c = cur() return c and c.format or "" end,
@@ -452,9 +514,13 @@ local function CooldownsArgs(grp)
             func = function() table.remove(list(), i); Refresh() end }
         rows["c" .. i .. "_brk"] = { order = i * 10 + 6, type = "description", name = "", width = "full", hidden = hidden }
     end
-    args.rowsGrp = {
-        order = 10, type = "group", inline = true,
+    args.cdRows = {
+        order = 8, type = "group", inline = true,
         name = "Cooldowns |cff888888(right box: this line's own text, empty = the group's)|r",
+        hidden = function()
+            for _, c in ipairs(list()) do if Listed(c) then return false end end
+            return true
+        end,
         args = rows,
     }
     return args
@@ -518,22 +584,49 @@ end
 -- a Groups - Text tab: the Groups - Bars one with text instead of bars
 local function Textify(tab, gi, grp, gget, gset)
     local a = tab.args
-    for _, k in ipairs({ "specTab", "classTab", "globalTab" }) do
+    local SCOPE_OF = { specTab = "spec", classTab = "class", globalTab = "global" }
+    for k, scope in pairs(SCOPE_OF) do
         local t = a[k] and a[k].args
         if t then
             t.addSpecialBar = nil
             if t.rowsGrp then t.rowsGrp.name = "Auras" end
             if t.addAura then t.addAura.name = "|cFF60E0A0Add Aura|r" end
             if t.addAuraID then t.addAuraID.name = "|cFF60E0A0...or Aura by ID or name|r" end
+            for ck, cv in pairs(CooldownsArgs(grp, scope)) do t[ck] = cv end
         end
     end
-    a.cooldownsTab = { order = 13.5, type = "group", name = function()
-        local g = grp()
-        return "Cooldowns (" .. #((g and g.cooldowns) or {}) .. ")"
-    end, args = CooldownsArgs(grp) }
     local o = a.orderTab.args
     o.sortMode.name = "Line Order"
     o.maxBars.name = "Max Lines (0 = Off)"
+    o.sortDesc.name = function()
+        if (gget("sortMode") or "manual") == "manual" then
+            return "\nCooldown lines come first, then the aura lines - each in the arrow order of its list, lists by the block order below. Max Lines counts both.\n"
+        end
+        return "|cFFFFD200Sorted: the aura lines sort by time; cooldown lines stay first. Max Lines counts both.|r\n"
+    end
+    -- what this character gets: its cooldown lines, then the auras
+    o.previewGrp.args.list.name = function()
+        local g = grp()
+        if not (g and CB()) then return "" end
+        local lines, seen = {}, {}
+        for _, scope in ipairs(CB().ScopeOrderFor(g)) do
+            for _, c in ipairs(CB().ScopeCooldowns(g, scope, nil, false) or {}) do
+                if c.id and c.enabled ~= false and not seen[c.id] and Knows(c.id) then
+                    seen[c.id] = true
+                    lines[#lines + 1] = ("%d.  %s  |cff888888%s cooldown|r"):format(#lines + 1, SpellLabel(c.id), scope)
+                end
+            end
+        end
+        for _, scope in ipairs(CB().ScopeOrderFor(g)) do
+            for _, e in ipairs(CB().ScopeEntries(g, scope)) do
+                if e.def.enabled ~= false then
+                    lines[#lines + 1] = ("%d.  %s  |cff888888%s|r"):format(#lines + 1, EntryLabel(e), scope)
+                end
+            end
+        end
+        if #lines == 0 then return "No lines yet." end
+        return table.concat(lines, "\n")
+    end
     local lay = a.layoutTab.args
     lay.barGrp, lay.iconGrp = nil, nil
     lay.sizeGrp.args.width.get = function() return gget("width") or 200 end
@@ -640,7 +733,8 @@ local function GroupTab(gi)
 
     local function scopeCount(scope)
         local g = grp()
-        return (g and CB()) and #CB().ScopeEntries(g, scope, keyFor(scope)) or 0
+        if not (g and CB()) then return 0 end
+        return #CB().ScopeEntries(g, scope, keyFor(scope)) + #(CB().ScopeCooldowns(g, scope, keyFor(scope), false) or {})
     end
 
     local function cbSpecCount(g, specID)
@@ -649,6 +743,7 @@ local function GroupTab(gi)
         for _, d in pairs((root and root.auras) or {}) do
             if type(d) == "table" and d.enabled ~= false then n = n + 1 end
         end
+        n = n + #((root and root.cooldowns) or {})
         local sb = E.db.thingsUI and E.db.thingsUI.specialBars
         local bars = sb and sb.specs and sb.specs[tostring(specID)] and sb.specs[tostring(specID)].bars
         for _, bdb in pairs(bars or {}) do
@@ -663,6 +758,7 @@ local function GroupTab(gi)
         for _, d in pairs((root and root.auras) or {}) do
             if type(d) == "table" and d.enabled ~= false then n = n + 1 end
         end
+        n = n + #((root and root.cooldowns) or {})
         return n
     end
 

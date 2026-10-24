@@ -373,6 +373,17 @@ function M.CreateManaged(frame, moverName, label, opts)
         function(self)
             if not _managedDragging[moverName] then return end
             _managedDragging[moverName] = nil
+            -- a drag shifts the offsets by how far the mover went; its points and anchor stay
+            local fx, fy = self._tuiDragX, self._tuiDragY
+            self._tuiDragX, self._tuiDragY = nil, nil
+            local x, y = self:GetLeft(), self:GetBottom()
+            if opts.onNudge and fx and x and y then
+                local k = (self:GetEffectiveScale() or 1) / (frame:GetEffectiveScale() or 1)
+                local dx = math.floor((x - fx) * k + 0.5)
+                local dy = math.floor((y - fy) * k + 0.5)
+                if dx ~= 0 or dy ~= 0 then opts.onNudge(dx, dy) end
+                return
+            end
             save(self)
         end,
         "ALL,THINGSUI", opts.shouldDisable, opts.configString, opts.ignoreSizeChanged)
@@ -380,7 +391,17 @@ function M.CreateManaged(frame, moverName, label, opts)
     local mv = _G[moverName]
     if mv and not mv._tuiDragHooked then
         mv._tuiDragHooked = true
-        mv:HookScript("OnDragStart", function() _managedDragging[moverName] = true end)
+        mv:HookScript("OnDragStart", function(self)
+            _managedDragging[moverName] = true
+            self._tuiDragX, self._tuiDragY = self:GetLeft(), self:GetBottom()
+            -- shift-connected movers go along
+            for m in pairs(E.ConnectedMovers or {}) do
+                if m.name and _managedCreated[m.name] then
+                    _managedDragging[m.name] = true
+                    m._tuiDragX, m._tuiDragY = m:GetLeft(), m:GetBottom()
+                end
+            end
+        end)
     end
     M.RegisterNudge(moverName, function(self, nx, ny)
         if opts.onNudge then opts.onNudge(nx, ny) else save(self) end
