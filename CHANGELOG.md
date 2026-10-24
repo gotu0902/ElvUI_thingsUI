@@ -22,6 +22,7 @@
 - New Sync tab: tick the profiles that should stay the same, then pick modules in the list: All, or Some (single groups, Aura Icons per spec, styles, or parts like Essential and Spell Editor). Position (X/Y) and size (W/H) stay per profile unless you tick them, and only show where a module keeps them itself
 - The profile you're on hands its settings on when you switch profile, log out or click Sync Now. Each module says whether the others match, and Take It From... pulls a module from another profile first
 - Groups are matched by name and you're asked what to do with differences; Aura Icons and Aura Bars follow their group
+- Aura Collections sync collection by collection (built-in ones with your edits and tab colors, your own by name), and groups keep their links to them
 - A profile that gets reset, imported or copied from outside the sync leaves it, so nothing spreads by accident
 - The Modules list shows a green S on synced modules. Exports carry your sync setup, and the installer has a Profile Sync page
 - Copy between profiles: Import - Export - Install > Profiles (and a thingsUI tab in ElvUI's Module Copy) copies whole modules or single items from or to another profile

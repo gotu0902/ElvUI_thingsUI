@@ -156,6 +156,7 @@ local function PartKind(id, sec)
     if #sec.keys > 1 then return "keys" end
     if LIST_KEY[dk] then return "list" end
     if dk == "specialBars" then return "specs" end
+    if dk == "auraCollections" then return "collections" end
     if dk == "specialStyles" then return "styles" end
     return "blob"
 end
@@ -179,6 +180,18 @@ function M.Parts(id)
         for _, it in ipairs(((db[dk] or {})[LIST_KEY[dk]]) or {}) do
             if type(it) == "table" and it.name and Fits(sec, it) then out[#out + 1] = { key = "n:" .. it.name, label = it.name } end
         end
+    elseif kind == "collections" then
+        local ac = type(db.auraCollections) == "table" and db.auraCollections or {}
+        for _, p in ipairs(ns.AURA_PRESETS or {}) do
+            local e = ac.edits and ac.edits[p.key]
+            out[#out + 1] = { key = "p:" .. p.key, label = (e and e.name) or p.name or p.key }
+        end
+        local own = {}
+        for _, c in pairs(ac.custom or {}) do
+            if type(c) == "table" and c.name then own[#own + 1] = { key = "n:" .. c.name, label = c.name } end
+        end
+        table.sort(own, function(a, b) return a.label < b.label end)
+        for _, o in ipairs(own) do out[#out + 1] = o end
     elseif kind == "specs" then
         for specKey in pairs(((db.specialBars or {}).specs) or {}) do
             out[#out + 1] = { key = tostring(specKey), label = SpecName(specKey) }
@@ -349,7 +362,7 @@ local function Sub(t, k)
 end
 
 -- picked list entries by name: an existing one keeps its own id (and what is kept)
-local function SomeList(src, dst, id, parts, cfg)
+local function SomeList(src, dst, id, parts, cfg, fresh)
     local lk = LIST_KEY[id]
     local st = src[id]
     if type(st) ~= "table" then return end
@@ -372,12 +385,13 @@ local function SomeList(src, dst, id, parts, cfg)
                 if old then new.id = old.id else new.id = dt.nextID; dt.nextID = dt.nextID + 1 end
             end
             if i then dt[lk][i] = new else dt[lk][#dt[lk] + 1] = new; byName[n] = #dt[lk] end
+            if fresh then fresh[#fresh + 1] = { id, new } end
         end
     end
 end
 
 -- All on Groups - Bars or Groups - Text: that kind mirrors by name, the other kind stays
-local function KindMirror(src, dst, sec, cfg)
+local function KindMirror(src, dst, sec, cfg, fresh)
     local dk = sec.keys[1]
     local parts, names = {}, {}
     for _, it in ipairs(((type(src[dk]) == "table" and src[dk].groups) or {})) do
@@ -391,7 +405,96 @@ local function KindMirror(src, dst, sec, cfg)
         end
         dt.groups = keep
     end
-    SomeList(src, dst, dk, parts, cfg)
+    SomeList(src, dst, dk, parts, cfg, fresh)
+end
+
+-- Aura Collections: built-ins by key (their edits), your own by name - each profile keeps
+-- its own keys (c1, c2 ... differ per profile) so its groups' links stay right; ones only
+-- the other profile has are kept
+local function ColWrite(src, dst, parts)
+    local sc = type(src.auraCollections) == "table" and src.auraCollections or {}
+    local dc = Sub(dst, "auraCollections")
+    dc.custom = dc.custom or {}
+    dc.edits = dc.edits or {}
+    dc.nextID = dc.nextID or 1
+    local byName = {}
+    for k, c in pairs(dc.custom) do
+        local n = tonumber(tostring(k):match("^c(%d+)$"))
+        if n and n >= dc.nextID then dc.nextID = n + 1 end
+        if type(c) == "table" and c.name then byName[c.name] = k end
+    end
+    for part in pairs(parts) do
+        local p = part:match("^p:(.+)$")
+        local n = part:match("^n:(.+)$")
+        if p then
+            dc.edits[p] = DeepCopy((sc.edits or {})[p])
+        elseif n then
+            for _, c in pairs(sc.custom or {}) do
+                if type(c) == "table" and c.name == n then
+                    local k = byName[n]
+                    if not k then
+                        k = "c" .. dc.nextID
+                        dc.nextID = dc.nextID + 1
+                        byName[n] = k
+                    end
+                    dc.custom[k] = DeepCopy(c)
+                    break
+                end
+            end
+        end
+    end
+end
+
+local function AllCollections(src)
+    local parts = {}
+    local sc = type(src.auraCollections) == "table" and src.auraCollections or {}
+    for _, p in ipairs(ns.AURA_PRESETS or {}) do parts["p:" .. p.key] = true end
+    for k in pairs(sc.edits or {}) do parts["p:" .. k] = true end
+    for _, c in pairs(sc.custom or {}) do if type(c) == "table" and c.name then parts["n:" .. c.name] = true end end
+    return parts
+end
+
+-- groups that came over carry the source's collection keys: they follow the names into
+-- this profile's keys; a collection it doesn't have leaves the entry a copy of its spells
+local function FixColRefs(dst, src, fresh)
+    if #fresh == 0 then return end
+    local sc = (type(src.auraCollections) == "table" and src.auraCollections.custom) or {}
+    local dc = (type(dst.auraCollections) == "table" and dst.auraCollections.custom) or {}
+    local keyOf = {}
+    for k, c in pairs(dc) do if type(c) == "table" and c.name then keyOf[c.name] = k end end
+    local function Fix(root)
+        local auras = type(root) == "table" and root.auras
+        if type(auras) ~= "table" then return end
+        local moves = {}
+        for uid, def in pairs(auras) do
+            local ck = type(def) == "table" and def.collection
+            local from = ck and sc[ck]
+            if from then
+                local nk = from.name and keyOf[from.name]
+                if nk ~= ck then moves[uid] = { def = def, nk = nk, from = from } end
+            end
+        end
+        for uid, m in pairs(moves) do
+            auras[uid] = nil
+            if m.nk then
+                m.def.collection = m.nk
+                auras["col:" .. m.nk] = m.def
+            else
+                m.def.collection = nil
+                m.def.spells = DeepCopy(m.from.spells)
+                m.def.name = m.def.name or m.from.name
+                auras[uid] = m.def
+            end
+        end
+    end
+    for _, it in ipairs(fresh) do
+        local dk, g = it[1], it[2]
+        if type(g) == "table" then
+            if dk == "customGroups" then Fix(g.global) else Fix(g) end
+            for _, r in pairs(g.classes or {}) do Fix(r) end
+            for _, r in pairs(g.specs or {}) do Fix(r) end
+        end
+    end
 end
 
 -- one module from src into dst, by its mode
@@ -399,14 +502,20 @@ local function Write(src, dst, id, cfg)
     local sec = M.SectionByID(id)
     if not (sec and cfg and cfg.mode) then return end
     local before = Before(dst)
-    local wrote = {}
-    if cfg.mode == "all" and sec.only then
-        KindMirror(src, dst, sec, cfg)
+    local wrote, fresh = {}, {}
+    if sec.keys[1] == "auraCollections" then
+        ColWrite(src, dst, (cfg.mode == "all") and AllCollections(src) or (cfg.parts or {}))
+        wrote[1] = "auraCollections"
+    elseif cfg.mode == "all" and sec.only then
+        KindMirror(src, dst, sec, cfg, fresh)
         wrote[1] = sec.keys[1]
     elseif cfg.mode == "all" then
         for _, k in ipairs(sec.keys) do
             dst[k] = CopyFor(src[k], dst[k], Def(k), cfg, true)
             wrote[#wrote + 1] = k
+            if k == "customGroups" or k == "customBars" then
+                for _, g in ipairs((type(dst[k]) == "table" and dst[k].groups) or {}) do fresh[#fresh + 1] = { k, g } end
+            end
         end
     else
         local parts = cfg.parts or {}
@@ -419,7 +528,7 @@ local function Write(src, dst, id, cfg)
                 end
             end
         elseif kind == "list" then
-            SomeList(src, dst, sec.keys[1], parts, cfg)
+            SomeList(src, dst, sec.keys[1], parts, cfg, fresh)
             wrote[1] = sec.keys[1]
         elseif kind == "specs" then
             local ss = (type(src.specialBars) == "table" and src.specialBars.specs) or {}
@@ -453,6 +562,7 @@ local function Write(src, dst, id, cfg)
         end
     end
     FixRefs(dst, before, src, wrote)
+    FixColRefs(dst, src, fresh)
 end
 
 local function DBOf(name)
@@ -470,9 +580,16 @@ function M.Push(onlyID)
     for _, name in ipairs(M.SetProfiles()) do
         if name ~= cur then
             local dst = ns.Share.ProfileDB(name, true)
+            local ids = {}
             for id, cfg in pairs(mods) do
-                if (not onlyID or onlyID == id) and type(cfg) == "table" and cfg.mode then Write(live, dst, id, cfg) end
+                if (not onlyID or onlyID == id) and type(cfg) == "table" and cfg.mode then ids[#ids + 1] = id end
             end
+            -- collections before the groups that link them
+            table.sort(ids, function(a, b)
+                if (a == "auraCollections") ~= (b == "auraCollections") then return a == "auraCollections" end
+                return a < b
+            end)
+            for _, id in ipairs(ids) do Write(live, dst, id, mods[id]) end
         end
     end
 end
