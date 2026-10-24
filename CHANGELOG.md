@@ -18,6 +18,14 @@
 - Layouts are shared by all your characters and stay out of profiles; Enable is per profile, so it follows spec profiles
 - Export/Import, also between thingsUI and things for EUI
 - Without ElvUI's Raid-Wide Sorting the order applies inside each group. Changes wait until combat ends (someone joining mid-fight shows up after it)
+### Profile Sync
+- New Sync tab: tick the profiles that should stay the same, then pick modules in the list: All, or Some (single groups, Aura Icons per spec, styles, or parts like Essential and Spell Editor). Position (X/Y) and size (W/H) stay per profile unless you tick them, and only show where a module keeps them itself
+- The profile you're on hands its settings on when you switch profile, log out or click Sync Now. Each module says whether the others match, and Take It From... pulls a module from another profile first
+- Groups are matched by name and you're asked what to do with differences; Aura Icons and Aura Bars follow their group
+- A profile that gets reset, imported or copied from outside the sync leaves it, so nothing spreads by accident
+- The Modules list shows a green S on synced modules. Exports carry your sync setup, and the installer has a Profile Sync page
+- Copy between profiles: Import - Export - Install > Profiles (and a thingsUI tab in ElvUI's Module Copy) copies whole modules or single items from or to another profile
+- Groups - Bars and Groups - Text are separate in exports, copies and sync; Damage Meter and Minimap are part of exports now
 ### More
 - Aura Icons and Aura Bars: Frame Level next to Frame Strata (default 10, as before). Lower it, or pick a lower strata, to let something like Buff Icons' stack text draw over an icon sitting on top of them. Groups - Icons, Groups - Bars and Groups - Text get Frame Strata and Frame Level too (Layout & Position > Position); an Aura Icon in a group follows its group's
 - Aura Icons > Show: While Active, Always (idle greyed) or Only When Missing. Missing shows the icon only while the aura is down (your poison, your DoT on the target...) and also works in a group, where it gets its own slot and the rest closes up. In combat it follows Blizzard's Cooldown Manager, so the aura has to be in its Buffs (or the spell in Essential/Utility); the options say so if it isn't. Desaturate shows it grey, and in a group it keeps its own Visibility rules (combat, target, zone...), in combat too
@@ -67,6 +75,7 @@
 - Damage Meter (thingsUI): fixed a possible error opening a breakdown now that the game can hide who a row belongs to
 - Aura Icons with Border off had the plain 1px edge while idle (greyed out in a CDM row) but lost it as soon as the aura came up; they keep it now
 - MinimapButtonButton: Show Only On Mouseover now shows the bar the moment you hover any of its buttons and hides it when you leave; it could lag behind or stay up when you came in or left over a button
+- CDM Spell Editor > Aura Icon On Top lists auras like Aura Icons does: free ones in green get a new icon, ones in use show where (group, row, on top of another spell) and move here. The Aura Icons spell list shows [On Top: spell] too
 - Mini Meter: your own row works in combat, like Details and EUI. Its tooltip, the spell list (left-click) and the popout (middle-click) show your spells live, with names and icons. Always Show Player also keeps you in view in combat now. Before, the game hid your row's identity in combat and thingsUI treated it like anyone else's. Other players' rows still open after combat
 - Raid Frame Builder: /tui rf opens the builder; the role order is a menu of all six orders now (it cycled on click before)
 - Raid Frame Builder: joining a raid could leave only group 1 showing until a /reload. The order went on while the roster was still arriving, and when names stayed Unknown it never caught up, so the rest of the raid stayed left out. Now nobody is ever left out: while names load, or when nobody from your list is in the raid (an alt in a pug), ElvUI's normal group order shows everyone

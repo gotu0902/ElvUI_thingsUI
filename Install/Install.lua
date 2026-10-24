@@ -50,11 +50,16 @@ function ns.ImportPresetConfirm(key, label)
 end
 
 -- plugin preset queued behind an async profile-name popup; drained on accept/cancel
+local QuickSync
 local function DrainPendingPreset()
     local pk = ns.__afterProfilePreset
     if pk then
         ns.__afterProfilePreset = nil
         ns.ImportPreset(pk)
+        if ns.__afterProfileSync then
+            ns.__afterProfileSync = nil
+            if QuickSync then QuickSync() end
+        end
         E:StaticPopup_Show("IMPORT_RL")
     end
 end
@@ -102,6 +107,105 @@ end
 
 local function HasElvProfile(name)
     return name and _G.ElvDB and _G.ElvDB.profiles and _G.ElvDB.profiles[name] and true or false
+end
+
+-- ------------------------------------------------------------ profile sync
+
+-- the pack's sync setup, as its plugin string says: { [id] = cfg }
+function ns.PackSyncConfig(res)
+    local PS = ns.ProfileSync
+    if not (PS and ns.Share and ns.Share.Decode) then return {} end
+    for _, key in ipairs({ "NHT_PLUGIN", "FHT_PLUGIN" }) do
+        local s = ns.InstallString(key, res or Res())
+        local data = s and ns.Share.Decode(s)
+        if data and data._sync then return PS.ReadConfig(data._sync) end
+    end
+    return {}
+end
+
+-- decoding a profile string for its name is slow: once per resolution
+local packNames = {}
+function ns.PackProfileNames(res)
+    res = res or Res()
+    local c = packNames[res]
+    if not c then
+        c = { (DecodeProfileStr("NHT", res)), (DecodeProfileStr("FHT", res)) }
+        packNames[res] = c
+    end
+    return c[1], c[2]
+end
+
+local function SyncNames(cfgs)
+    local PS = ns.ProfileSync
+    local out = {}
+    for _, sec in ipairs(ns.Share.SECTIONS) do
+        local c = cfgs[PS.SectionID(sec)]
+        if c then out[#out + 1] = sec.name .. ((c.mode == "some") and " (some)" or "") end
+    end
+    return table.concat(out, ", ")
+end
+
+-- sync like the pack: its two profiles in the set, its modules the way it has them;
+-- interactive asks where group lists don't line up
+function ns.ApplyPackSync(cfgs, res, interactive, done)
+    local PS = ns.ProfileSync
+    local a, b = ns.PackProfileNames(res)
+    if not (PS and a and b and HasElvProfile(a) and HasElvProfile(b)) then
+        return false, "Install the NHT and FHT profiles first"
+    end
+    if next(cfgs) == nil then return false, "This pack has no sync setup" end
+    PS.SetInSet(a, true)
+    PS.SetInSet(b, true)
+    local ids = {}
+    for id, cfg in pairs(cfgs) do
+        PS.SetMode(id, cfg.mode)
+        local c = PS.Module(id, true)
+        c.pos, c.size = cfg.pos, cfg.size
+        c.parts = cfg.parts and ns.DeepCopy(cfg.parts) or nil
+        ids[#ids + 1] = id
+    end
+    table.sort(ids)
+    local cur = E.data:GetCurrentProfile()
+    local master = (cur == a or cur == b) and cur or a
+    if master ~= cur or not interactive then
+        for _, id in ipairs(ids) do PS.SeedTo(id, master, { a, b }) end
+        if done then done() end
+        return true
+    end
+    local i = 0
+    local function Next()
+        i = i + 1
+        local id = ids[i]
+        if not id then
+            if done then done() end
+            return
+        end
+        PS.SeedModule(id, { a, b }, Next, true)
+    end
+    Next()
+    return true
+end
+
+function ns.OpenSyncTab()
+    E:ToggleOptions("thingsUI,syncTab")
+end
+
+-- the heads-up on pages that import profiles
+local function SyncWarning()
+    local PS = ns.ProfileSync
+    local a, b = ns.PackProfileNames()
+    if not (PS and a and b and (PS.InSet(a) or PS.InSet(b)) and #PS.SetProfiles() > 1) then return "" end
+    local mods = {}
+    for _, sec in ipairs(ns.Share.SECTIONS) do
+        if PS.Mode(PS.SectionID(sec)) then mods[#mods + 1] = sec.name end
+    end
+    if #mods == 0 then return "" end
+    return ("|cFFFFD200Profile Sync is on for %s. Importing the profiles takes them out of it; the Profile Sync page sets it up again.|r"):format(table.concat(mods, ", "))
+end
+
+-- the one-click setups sync like the pack too
+QuickSync = function()
+    ns.ApplyPackSync(ns.PackSyncConfig())
 end
 
 -- both profiles with their thingsUI layout; the one this spec uses ends active
@@ -323,7 +427,13 @@ local function QuickSetup(key)
     local ps = ns.InstallString(key .. "_PROFILE", Res())
     local ok, pending
     if ps then ok, pending = ns.ImportElvProfile(ps) end
-    if pending then ns.__afterProfilePreset = key else ns.ImportPreset(key) end
+    if pending then
+        ns.__afterProfilePreset = key
+        ns.__afterProfileSync = true
+    else
+        ns.ImportPreset(key)
+        QuickSync()
+    end
     ns.ImportElvExtras()
     if ns.SetAutoScale then ns.SetAutoScale() end
     if ns.ApplyDarkMode then ns.ApplyDarkMode() end
@@ -354,6 +464,7 @@ function ns.QuickSetupAuto()
     ns.ImportElvExtras()
 
     ns.ImportPreset(mainKey)
+    QuickSync()
     if ns.SetAutoScale then ns.SetAutoScale() end
     if ns.ApplyDarkMode then ns.ApplyDarkMode() end
     ns.SetDamageMeterProvider("TUI")
@@ -389,7 +500,7 @@ ns.installTable = {
             f.SubTitle:SetText("Quick Setup")
             f.Desc1:SetText("One click sets up everything like I have it" .. (IsInstalled("|cFFFFFEE1UF: Grid2|r") and " (Grid2)" or " (ElvUI)") .. ".")
             f.Desc2:SetText("Continue to pick stuff yourself.")
-            f.Desc3:SetText("")
+            f.Desc3:SetText(SyncWarning())
             local defs = {
                 { key = "NHT", label = "Quick |cFFff0000NHT|r Setup" },
                 { key = "FHT", label = "Quick |cFF00ff17FHT|r Setup" },
@@ -449,6 +560,7 @@ ns.installTable = {
             f.SubTitle:SetText("ElvUI Profile")
             f.Desc1:SetText("Import the ElvUI profile.")
             f.Desc2:SetText("Your imported thingsUI layout is carried over to the new profile.")
+            f.Desc3:SetText(SyncWarning())
             local defs = {
                 { key = "NHT_PROFILE", label = "|cFFff0000NHT|r Profile" },
                 { key = "FHT_PROFILE", label = "|cFF00ff17FHT|r Profile" },
@@ -503,6 +615,25 @@ ns.installTable = {
             end)
             f.Option3:Show(); f.Option3:Enable(); f.Option3:SetText("Character Setup")
             f.Option3:SetScript("OnClick", function() if S then S.Open() end end)
+        end,
+        -- Profile Sync
+        function()
+            local f = PIF()
+            local picks = ns.PackSyncConfig()
+            local any = next(picks) ~= nil
+            f.SubTitle:SetText("Profile Sync")
+            f.Desc1:SetText("Keep modules the same in NHT and FHT: change one, the other follows when you swap. Positions stay with each profile.")
+            f.Desc2:SetText(any and ("I sync: |cFFFFFFFF" .. SyncNames(picks) .. "|r")
+                or "This pack has no sync setup - choose your own.")
+            f.Desc3:SetText("Change it any time: thingsUI -> Sync.")
+            f.Option1:Show(); f.Option1:SetText("Sync Like Me")
+            if any then f.Option1:Enable() else f.Option1:Disable() end
+            f.Option1:SetScript("OnClick", function()
+                local ok, err = ns.ApplyPackSync(picks, nil, true, function() StepDone("Synced like the pack") end)
+                if not ok then StepDone(err) end
+            end)
+            f.Option2:Show(); f.Option2:Enable(); f.Option2:SetText("Choose...")
+            f.Option2:SetScript("OnClick", function() ns.OpenSyncTab() end)
         end,
         -- 3: UI Scale
         function()
@@ -624,7 +755,7 @@ ns.installTable = {
         end,
     },
     StepTitles = {
-        "Quick Setup", "Plugin things", "ElvUI Profile", "Account Settings", "Boss Mods", "Scale", "Coloring", "Positions", "Damage Meter", "ActionBars", "Unit Frames", "Finished",
+        "Quick Setup", "Plugin things", "ElvUI Profile", "Account Settings", "Boss Mods", "Profile Sync", "Scale", "Coloring", "Positions", "Damage Meter", "ActionBars", "Unit Frames", "Finished",
     },
     StepTitlesColorSelected = { 0.5, 0.5, 1 },
 }

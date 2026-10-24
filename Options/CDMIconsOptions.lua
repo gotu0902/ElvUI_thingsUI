@@ -1215,44 +1215,45 @@ local function SpellEditorPage(order, buffs)
                             local function bget(k, dflt) local d = linkedDB() local v = d and d[k] if v == nil then return dflt end return v end
                             local function bset(k, v) local d = linkedDB() if d then d[k] = v; refresh() end end
                             return {
+                                -- the Aura Icons list: free auras get a new icon, one already in use moves here
                                 pick = {
-                                    order = 1, type = "select", name = "Aura Icon", width = 1.5,
+                                    order = 1, type = "select", name = "Aura Icon", width = 2,
                                     values = function()
-                                        local nm = isSpell() and C_Spell.GetSpellName and C_Spell.GetSpellName(sel)
-                                        local out = { [""] = "|cFF888888- None -|r", new = "|cFF40FF40+ New Aura Icon: " .. (nm or "this spell") .. "|r" }
-                                        for i = 1, count() do
-                                            local d = SB.GetIconDB("icon" .. i)
-                                            if d and d.spellID then
-                                                local busy = d.overSpell and d.overSpell ~= sel
-                                                out["icon" .. i] = spellLabel(d.spellID) .. (busy and " |cff888888(on another)|r" or "")
-                                            end
+                                        local out = (ns.SB_SpellChoices and ns.SB_SpellChoices(nil, false, SB.GetCurrentSpecID())) or {}
+                                        out[""] = "|cFF888888- None -|r"
+                                        if isSpell() and not out[tostring(sel)] then
+                                            local nm = C_Spell.GetSpellName and C_Spell.GetSpellName(sel)
+                                            out.new = "|cFF40FF40+ New Aura Icon: " .. (nm or "this spell") .. "|r"
                                         end
                                         return out
                                     end,
                                     sorting = function()
-                                        local out = { "", "new" }
-                                        for i = 1, count() do
-                                            local d = SB.GetIconDB("icon" .. i)
-                                            if d and d.spellID then out[#out + 1] = "icon" .. i end
-                                        end
-                                        return out
+                                        local keys = (ns.SB_SpellChoiceOrder and ns.SB_SpellChoiceOrder(SB.GetCurrentSpecID())) or { "" }
+                                        local listed = false
+                                        for _, k in ipairs(keys) do if k == tostring(sel) then listed = true break end end
+                                        if isSpell() and not listed then table.insert(keys, 2, "new") end
+                                        return keys
                                     end,
-                                    get = function() return linked() or "" end,
+                                    get = function()
+                                        local d = linkedDB()
+                                        return (d and d.spellID) and tostring(d.spellID) or ""
+                                    end,
                                     set = function(_, v)
                                         -- one icon per cooldown
                                         for i = 1, count() do
                                             local d = SB.GetIconDB("icon" .. i)
                                             if d and d.overSpell == sel then d.overSpell = nil; SB.ReleaseIcon("icon" .. i) end
                                         end
-                                        if v == "new" then
+                                        local spellID = (v == "new") and sel or tonumber(v)
+                                        if spellID then
                                             local specID = SB.GetCurrentSpecID()
-                                            v = (ns.SB_PlaceSpell and ns.SB_PlaceSpell(false, sel, specID)
-                                                and SB.FindSlotForSpell and SB.FindSlotForSpell("icons", sel, specID)) or ""
-                                        end
-                                        if v ~= "" then
-                                            local d = SB.GetIconDB(v)
-                                            d.overSpell, d.cdmRow, d.customGroup, d.enabled = sel, nil, nil, true
-                                            SB.ReleaseIcon(v)
+                                            local key = ns.SB_PlaceSpell and ns.SB_PlaceSpell(false, spellID, specID)
+                                                and SB.FindSlotForSpell and SB.FindSlotForSpell("icons", spellID, specID)
+                                            if key then
+                                                local d = SB.GetIconDB(key)
+                                                d.overSpell, d.cdmRow, d.customGroup, d.enabled = sel, nil, nil, true
+                                                SB.ReleaseIcon(key)
+                                            end
                                         end
                                         if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end
                                         refresh()
@@ -1623,7 +1624,7 @@ function TUI:CDMIconsOptions()
                         order = 2.5, type = "toggle", width = "full",
                         name = "Swipe while a charge spell recharges (Blizzard only draws the edge while a charge is left)",
                         get = function() return E.db.thingsUI.cdmIcons.chargeSwipe ~= false end,
-                        set = function(_, v) E.db.thingsUI.cdmIcons.chargeSwipe = (not v) and false or nil end,
+                        set = function(_, v) if v then E.db.thingsUI.cdmIcons.chargeSwipe = nil else E.db.thingsUI.cdmIcons.chargeSwipe = false end end,
                     },
                     auraOverlayLink = {
                         order = 3, type = "description", width = "full",

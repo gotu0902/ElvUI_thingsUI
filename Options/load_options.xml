@@ -17,6 +17,7 @@
 	<Script file="RaidOrderOptions.lua"/>
 	<Script file="DamageMeterOptions.lua"/>
 	<Script file="ShareOptions.lua"/>
+	<Script file="SyncOptions.lua"/>
 	<Script file="Grid2Options.lua"/>
 	<Script file="Options.lua"/>
 </Ui>

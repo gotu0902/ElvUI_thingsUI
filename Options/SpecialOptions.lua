@@ -215,6 +215,8 @@ local function GetChoicesTable(currentKey, isBar)
                 local gid = idb and idb.customGroup
                 local g = gid and ns.CustomGroups and ns.CustomGroups.GroupByID and ns.CustomGroups.GroupByID(gid)
                 if g and g.name then where = " |cFF8AC8FF[" .. g.name .. "]|r"
+                elseif idb and idb.overSpell and not idb.cdmRow then
+                    where = " |cFFFFD27F[On Top: " .. ((C_Spell.GetSpellName and C_Spell.GetSpellName(idb.overSpell)) or idb.overSpell) .. "]|r"
                 elseif idb and idb.cdmRow then
                     where = " |cFF80FF80[" .. (idb.cdmRow == "utility" and "Utility" or "Essential") .. " Cooldowns]|r"
                 else where = " |cFF888888[standalone]|r" end
@@ -279,6 +281,16 @@ function ns.SB_SpellChoices(currentKey, isBar, specID)
     forceSpecID = tonumber(specID)
     forceCurrentSpec = not forceSpecID
     local res = GetChoicesTable(currentKey, isBar)
+    forceSpecID = nil
+    forceCurrentSpec = false
+    return res
+end
+
+-- the same list's order (in use first, then live, then the rest)
+function ns.SB_SpellChoiceOrder(specID)
+    forceSpecID = tonumber(specID)
+    forceCurrentSpec = not forceSpecID
+    local res = GetSortedKeys()
     forceSpecID = nil
     forceCurrentSpec = false
     return res

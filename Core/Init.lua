@@ -97,6 +97,8 @@ function TUI:Initialize()
         if not ok then geterrorhandler()("|cFF8080FFthingsUI|r ConfigTable failed: " .. tostring(err)) end
     end)
 
+    if ns.ProfileSync then ns.ProfileSync.Init() end
+
     local D = E:GetModule("Distributor", true)
     if D and D.blacklistedKeys and D.blacklistedKeys.profile then
         D.blacklistedKeys.profile.thingsUI = true

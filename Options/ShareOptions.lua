@@ -202,11 +202,69 @@ function TUI:ShareOptions()
         },
     }
 
+    local copyFrom
+    local function ProfileValues()
+        local out = {}
+        for _, n in ipairs(ns.Share.OtherProfiles()) do out[n] = n end
+        return out
+    end
+    local function ProfileOrder() return ns.Share.OtherProfiles() end
+    local function NoProfile() return not (copyFrom and ProfileValues()[copyFrom]) end
+
+    local profileTab = {
+        order = 3, type = "group", name = "Profiles",
+        args = {
+            desc = {
+                order = 1, type = "description", fontSize = "medium", width = "full",
+                name = "Copy thingsUI between this profile and another one: whole modules, or single groups, Aura Icons per spec, styles and collections.\n",
+            },
+            profile = {
+                order = 2, type = "select", name = "Other Profile", width = "double",
+                values = ProfileValues, sorting = ProfileOrder,
+                get = function() return (not NoProfile()) and copyFrom or nil end,
+                set = function(_, v) copyFrom = v end,
+            },
+            brk = { order = 3, type = "description", name = "", width = "full" },
+            from = {
+                order = 4, type = "execute", name = "Copy From It...", width = 1.13, disabled = NoProfile,
+                func = function() ns.Share.OpenCopy("from", copyFrom) end,
+            },
+            to = {
+                order = 5, type = "execute", name = "Copy To It...", width = 1.13, disabled = NoProfile,
+                func = function() ns.Share.OpenCopy("to", copyFrom) end,
+            },
+        },
+    }
+
+    -- ElvUI's Module Copy: a thingsUI tab whose Import / Export open this same picker
+    -- (its own copy merges tables key by key, which mixes up lists like groups)
+    local mc = E.Options and E.Options.args.profiles and E.Options.args.profiles.args.modulecopy
+    if mc and mc.args and not mc.args.thingsUI then
+        local function Selected() return E.global.profileCopy and E.global.profileCopy.selected end
+        mc.args.thingsUI = {
+            order = 20, type = "group", name = "|cFF8080FFthingsUI|r",
+            args = {
+                info = {
+                    order = 1, type = "description", fontSize = "medium", width = "full",
+                    name = function()
+                        -- the shared buttons act on the tab on screen
+                        mc.args.import.func = function() ns.Share.OpenCopy("from", Selected()) end
+                        mc.args.export.func = function() ns.Share.OpenCopy("to", Selected()) end
+                        mc.args.clear.func = function() end
+                        mc.args.select.func = function() end
+                        return "Import copies thingsUI from the profile picked above into this one, Export copies this one into it. Both open thingsUI's picker: whole modules, or single groups, Aura Icons per spec, styles and collections.\n"
+                    end,
+                },
+            },
+        }
+    end
+
     return {
         order = 40, type = "group", name = "Import - Export - Install", childGroups = "tab",
         args = {
             importTab = importTab,
             exportTab = exportTab,
+            profileTab = profileTab,
         },
     }
 end

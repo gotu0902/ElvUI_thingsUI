@@ -49,7 +49,9 @@ function W.ShowExport(str)
     eb.editBox:SetFocus()
 end
 
-function W.Open(str)
+-- opts: title, dest = a profile name to write into instead of this one (no reload then)
+function W.Open(str, opts)
+    opts = opts or {}
     local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
     if not AceGUI then
         print("|cFF8080FFthingsUI|r: AceGUI unavailable.")
@@ -72,7 +74,7 @@ function W.Open(str)
     end
 
     if str and tostring(str):gsub("%s", "") ~= "" then
-        local a = ns.Share and ns.Share.Analyze(str)
+        local a = ns.Share and ns.Share.Analyze(str, opts.dest)
         if not (a and #a.sections > 0) then
             print("|cFF8080FFthingsUI|r: nothing importable in that string.")
             return
@@ -84,7 +86,7 @@ function W.Open(str)
 
     local f = AceGUI:Create("Frame")
     ns.SolidDialog(f)
-    f:SetTitle("|cFF8080FFthingsUI|r Import")
+    f:SetTitle("|cFF8080FFthingsUI|r " .. (opts.title or "Import"))
     f:SetWidth(680)
     f:SetHeight(640)
     f:SetLayout("Fill")
@@ -117,12 +119,21 @@ function W.Open(str)
         return SecName(sec) .. extra
     end
 
+    -- another profile takes it as saved; this one needs the reload
+    local function Done()
+        if opts.dest then
+            print("|cFF8080FFthingsUI|r - copied into " .. opts.dest .. ". It shows the next time you use that profile.")
+        else
+            ReloadUI()
+        end
+    end
+
     local function ApplyAll()
         local p = {}
         for _, sec in ipairs(A.sections) do p[sec.index] = { mode = "overwrite" } end
-        ns.Share.ApplyPlan(A.data, p)
+        ns.Share.ApplyPlan(A.data, p, opts.dest)
         AceGUI:Release(f)
-        ReloadUI()
+        Done()
     end
 
     local function ApplyChosen()
@@ -130,9 +141,9 @@ function W.Open(str)
         for _, sec in ipairs(A.sections) do
             p[sec.index] = chosen[sec.index] and plan[sec.index] or { mode = "skip" }
         end
-        ns.Share.ApplyPlan(A.data, p)
+        ns.Share.ApplyPlan(A.data, p, opts.dest)
         AceGUI:Release(f)
-        ReloadUI()
+        Done()
     end
 
     local function BuildPaste(c)
@@ -151,7 +162,7 @@ function W.Open(str)
         Add(c, "Button", function(w)
             w:SetText("Continue >"); w:SetWidth(160)
             w:SetCallback("OnClick", function()
-                local a = ns.Share and ns.Share.Analyze(pasteText)
+                local a = ns.Share and ns.Share.Analyze(pasteText, opts.dest)
                 if a and #a.sections > 0 then
                     pasteErr = nil
                     InitFromAnalysis(a)
@@ -179,7 +190,8 @@ function W.Open(str)
                 ApplyAll()
             else
                 armed = true
-                btnAll:SetText("|cFFFF6060Overwrites every listed section and reloads - click again|r")
+                btnAll:SetText(opts.dest and ("|cFFFF6060Overwrites every listed section in " .. opts.dest .. " - click again|r")
+                    or "|cFFFF6060Overwrites every listed section and reloads - click again|r")
             end
         end)
         Add(c, "Button", function(w)
@@ -331,9 +343,26 @@ function W.Open(str)
             Label(c, line)
         end
         Label(c, " ")
-        Label(c, "|cFFFF6060Applies the import and reloads your UI.|r")
+        -- what lands in a synced module travels on to the rest of its group
+        local PS = ns.ProfileSync
+        local target = opts.dest or (PS and PS.Current())
+        local synced = {}
+        for _, sec in ipairs(A.sections) do
+            local p = chosen[sec.index] and plan[sec.index]
+            local def = ns.Share.SECTIONS[sec.index]
+            if PS and p and p.mode ~= "skip" and def then
+                local id = PS.SectionID(def)
+                if PS.Syncs(id, target) then synced[#synced + 1] = sec.name end
+            end
+        end
+        if #synced > 0 then
+            Label(c, ("|cFFFFD200%s syncs %s with other profiles: this reaches them too the next time %s hands its settings on.|r"):format(
+                target, table.concat(synced, ", "), target))
+        end
+        Label(c, opts.dest and ("|cFFFF6060Writes into " .. opts.dest .. "; this profile stays as it is.|r")
+            or "|cFFFF6060Applies the import and reloads your UI.|r")
         Add(c, "Button", function(w)
-            w:SetText("Apply & Reload"); w:SetWidth(200)
+            w:SetText(opts.dest and ("Copy to " .. opts.dest) or "Apply & Reload"); w:SetWidth(200)
             w:SetCallback("OnClick", ApplyChosen)
         end)
     end

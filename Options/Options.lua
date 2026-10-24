@@ -7,6 +7,48 @@ local function Colorize(tab, hex)
     return tab
 end
 
+-- Profile Sync in the module list: a green S on what this profile syncs, a grey one on the
+-- rest, none at all until sync is set up. part(parts) narrows a Some module to its own share.
+local SYNC_ON, SYNC_OFF = "|cFF40FF40S|r|cFF444444 |||r ", "|cFF555555S|r|cFF444444 |||r "
+local function SyncMark(tab, ids, part)
+    if not (tab and type(tab.name) == "string") then return tab end
+    local base = tab.name
+    tab.name = function()
+        local PS = ns.ProfileSync
+        if not (PS and PS.Active()) then return base end
+        local on = false
+        for _, id in ipairs(ids) do
+            local m = PS.Mode(id)
+            if m == "all" then
+                on = true
+            elseif m == "some" then
+                local c = PS.Module(id) or {}
+                if not part then on = on or (c.parts and next(c.parts) ~= nil) or false
+                else on = on or (c.parts and part(c.parts)) or false end
+            end
+        end
+        return (on and SYNC_ON or SYNC_OFF) .. base
+    end
+    return tab
+end
+
+local function AnyPart(keys)
+    return function(parts)
+        for _, k in ipairs(keys) do if parts[k] then return true end end
+        return false
+    end
+end
+
+local function AnyPartBut(keys)
+    local skip = {}
+    for _, k in ipairs(keys) do skip[k] = true end
+    return function(parts)
+        for k in pairs(parts) do if not skip[k] then return true end end
+        return false
+    end
+end
+
+
 local curSection, weOpenedCDM, userClosedCDM, closingCDM
 
 local CDM_SECTIONS = { cdm = true, spellEditor = true, buffBars = true, customGroups = true, customBars = true, customText = true,
@@ -138,21 +180,24 @@ function TUI.ConfigTable()
         name = "Modules",
         childGroups = "tree",
         args = {
-            barSetup     = WithSentinel(withOrder(Colorize(TUI:BarSetupOptions(),     "FFB060"), 1), "barSetup"),
-            buffBars     = WithSentinel(withOrder(Colorize(TUI:BuffBarsOptions(),     "05D6F2"), 2), "buffBars"),
-            cdm          = WithSentinel(withOrder(Colorize(TUI:CDMIconsOptions(),     "FFD27F"), 3), "cdm"),
-            chargeBar    = WithSentinel(withOrder(Colorize(TUI:ChargeBarOptions(),    "C780FF"), 4), "chargeBar"),
-            classbar     = WithSentinel(withOrder(Colorize(TUI:ClassbarModeOptions(), "6FB7FF"), 5), "classbar"),
-            customGroups = WithSentinel(withOrder(Colorize(TUI:CustomGroupsOptions(), "F20553"), 6), "customGroups"),
-            customBars   = WithSentinel(withOrder(Colorize(TUI:CustomBarsOptions(), "F27D2A"), 6.2), "customBars"),
-            customText   = WithSentinel(withOrder(Colorize(TUI:CustomTextOptions(), "F2C12E"), 6.3), "customText"),
-            auraCollections = WithSentinel(withOrder(Colorize(TUI:AuraCollectionsOptions(), "B0A0FF"), 0.5), "auraCollections"),
-            damageMeter  = WithSentinel(withOrder(Colorize(TUI:DamageMeterOptions(),  "FF5C5C"), 5.5), "damageMeter"),
-            specialBars  = WithSentinel(withOrder(Colorize(TUI:SpecialBarsOptions(),  "80FF80"), 0.4), "specialBars"),
-            specialIcons = WithSentinel(withOrder(Colorize(TUI:SpecialIconsOptions(), "FF80C0"), 0.6), "specialIcons"),
-            raidOrder    = WithSentinel(withOrder(Colorize(TUI:RaidOrderOptions(),    "4DD2A6"), 7), "raidOrder"),
-            spellEditor  = WithSentinel(withOrder(Colorize(TUI:SpellEditorOptions(),  "FFE9A8"), 3.5), "spellEditor"),
-            timers       = WithSentinel(withOrder(Colorize(TUI:TimersOptions(),       "FFC04D"), 9), "timers"),
+            barSetup     = WithSentinel(withOrder(SyncMark(Colorize(TUI:BarSetupOptions(),     "FFB060"), { "barSetup" }), 1), "barSetup"),
+            buffBars     = WithSentinel(withOrder(SyncMark(Colorize(TUI:BuffBarsOptions(),     "05D6F2"), { "buffBars" }), 2), "buffBars"),
+            cdm          = WithSentinel(withOrder(SyncMark(Colorize(TUI:CDMIconsOptions(),     "FFD27F"), { "cdmIcons" },
+                AnyPartBut({ "perSpell", "perBuff" })), 3), "cdm"),
+            chargeBar    = WithSentinel(withOrder(SyncMark(Colorize(TUI:ChargeBarOptions(),    "C780FF"), { "chargeBar" }), 4), "chargeBar"),
+            classbar     = WithSentinel(withOrder(SyncMark(Colorize(TUI:ClassbarModeOptions(), "6FB7FF"), { "classbarMode" }), 5), "classbar"),
+            customGroups = WithSentinel(withOrder(SyncMark(Colorize(TUI:CustomGroupsOptions(), "F20553"), { "customGroups" }), 6), "customGroups"),
+            customBars   = WithSentinel(withOrder(SyncMark(Colorize(TUI:CustomBarsOptions(), "F27D2A"), { "customBars" }), 6.2), "customBars"),
+            customText   = WithSentinel(withOrder(SyncMark(Colorize(TUI:CustomTextOptions(), "F2C12E"), { "customText" }), 6.3), "customText"),
+            auraCollections = WithSentinel(withOrder(SyncMark(Colorize(TUI:AuraCollectionsOptions(), "B0A0FF"), { "auraCollections" }), 0.5), "auraCollections"),
+            damageMeter  = WithSentinel(withOrder(SyncMark(Colorize(TUI:DamageMeterOptions(),  "FF5C5C"), { "damageMeter" }), 5.5), "damageMeter"),
+            specialBars  = WithSentinel(withOrder(SyncMark(Colorize(TUI:SpecialBarsOptions(),  "80FF80"), { "specialBars" }), 0.4), "specialBars"),
+            specialIcons = WithSentinel(withOrder(SyncMark(Colorize(TUI:SpecialIconsOptions(), "FF80C0"), { "specialBars" }), 0.6), "specialIcons"),
+            raidOrder    = WithSentinel(withOrder(SyncMark(Colorize(TUI:RaidOrderOptions(),    "4DD2A6"), { "essentialMover" },
+                AnyPart({ "raidOrder" })), 7), "raidOrder"),
+            spellEditor  = WithSentinel(withOrder(SyncMark(Colorize(TUI:SpellEditorOptions(),  "FFE9A8"), { "cdmIcons" },
+                AnyPart({ "perSpell", "perBuff" })), 3.5), "spellEditor"),
+            timers       = WithSentinel(withOrder(SyncMark(Colorize(TUI:TimersOptions(),       "FFC04D"), { "timers" }), 9), "timers"),
         },
     }
     E.Options.args.thingsUI = {
@@ -215,6 +260,7 @@ function TUI.ConfigTable()
             fixesAndQoLTab       = WithSentinel(TUI:FixesAndQoLOptions(), "fixes"),
             grid2Tab             = WithSentinel(TUI:Grid2Options(), "grid2"),
             shareTab             = WithSentinel(TUI:ShareOptions(), "share"),
+            syncTab              = WithSentinel(TUI:SyncOptions(), "sync"),
         },
     }
 end

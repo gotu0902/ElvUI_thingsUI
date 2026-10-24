@@ -15,15 +15,50 @@ M.SECTIONS = {
     { name = "Charge Bar",           keys = { "chargeBar" },                                  color = "C780FF" },
     { name = "Classbar",             keys = { "classbarMode" },                               color = "6FB7FF" },
     { name = "Groups - Icons",       keys = { "customGroups" }, collection = "customGroups",  color = "F20553" },
-    { name = "Groups - Bars",        keys = { "customBars" },                                 color = "F27D2A" },
+    { name = "Groups - Bars", id = "customBars", keys = { "customBars" }, collection = "customBars", only = "bars", color = "F27D2A" },
+    { name = "Groups - Text", id = "customText", keys = { "customBars" }, collection = "customBars", only = "text", color = "F2C12E" },
     { name = "Aura Collections",     keys = { "auraCollections" },                            color = "B0A0FF" },
     { name = "Aura Bars & Icons", keys = { "specialBars" },  collection = "specialBars",   color = "80FF80" },
     { name = "Aura Styles",       keys = { "specialStyles" }, collection = "specialStyles", color = "FF80C0" },
     { name = "Timers",               keys = { "timers" },                                     color = "FFC04D" },
     { name = "Racials",              keys = { "racialsCDM" } },
     { name = "Cluster Positioning",  keys = { "clusterPositioning" } },
+    { name = "Damage Meter",         keys = { "damageMeter" },                                color = "FF6B6B" },
+    { name = "Minimap",              keys = { "mbb", "instanceDifficulty" } },
     { name = "Movers & General",     keys = { "essentialMover", "groupAnchor", "raidOrder", "actionBarCopy", "autoSetAudioChannels", "rightChatAsBackground", "rightChatWidthOffset", "rightChatHeightOffset" } },
 }
+
+-- Groups - Bars and Groups - Text share customBars: a group is one or the other
+function M.GroupKind(g) return (type(g) == "table" and g.display == "text") and "text" or "bars" end
+local GroupKind = M.GroupKind
+
+local function Fits(sec, g) return not sec.only or GroupKind(g) == sec.only end
+M.Fits = Fits
+
+-- what a section owns of a value: all of it, or its kind of groups
+local function Owned(sec, v)
+    if not sec.only or type(v) ~= "table" then return v end
+    local out = {}
+    for k, x in pairs(v) do if k ~= "groups" then out[k] = x end end
+    out.groups = {}
+    for _, g in ipairs(v.groups or {}) do
+        if Fits(sec, g) then out.groups[#out.groups + 1] = g end
+    end
+    return out
+end
+
+local function Present(sec, data)
+    for _, k in ipairs(sec.keys) do
+        local v = data[k]
+        if v ~= nil then
+            if not sec.only then return true end
+            for _, g in ipairs((type(v) == "table" and v.groups) or {}) do
+                if Fits(sec, g) then return true end
+            end
+        end
+    end
+    return false
+end
 
 local COMPRESS = Enum.CompressionMethod and Enum.CompressionMethod.Deflate or 0
 local OPTIMIZE = Enum.CompressionLevel and Enum.CompressionLevel.Default or 0
@@ -36,16 +71,33 @@ local function Tools()
     end
 end
 
-function M.Export(selected)
+-- src: another profile's thingsUI table (default: this profile's)
+function M.Export(selected, src)
     local CE = Tools()
     if not CE then return nil end
-    local data = {}
+    local mine = src == nil
+    src = src or E.db.thingsUI
+    local data, ids, by = {}, {}, {}
     for i, sec in ipairs(M.SECTIONS) do
         if (not selected) or selected[i] ~= false then
+            ids[#ids + 1] = sec.id or sec.keys[1]
             for _, k in ipairs(sec.keys) do
-                if E.db.thingsUI[k] ~= nil then data[k] = E.db.thingsUI[k] end
+                if src[k] ~= nil then
+                    by[k] = by[k] or {}
+                    by[k][#by[k] + 1] = sec
+                end
             end
         end
+    end
+    -- one section of a shared key takes only its own part
+    for k, secs in pairs(by) do
+        data[k] = (#secs == 1) and Owned(secs[1], src[k]) or src[k]
+    end
+    -- the modules this profile syncs ride along, so an installer can offer the same
+    local PS = ns.ProfileSync
+    if mine and PS and PS.ExportConfig then
+        local cfg = PS.ExportConfig(ids)
+        if cfg then data._sync = cfg end
     end
     if next(data) == nil then return nil end
     local serialized = CE.SerializeCBOR(data)
@@ -92,13 +144,42 @@ function M.Import(str)
     if s:sub(1, #PREFIX) ~= PREFIX then return false, "Not a thingsUI export string." end
     local data = Decode(s)
     if not data then return false, "Could not decode the string." end
-    for k, v in pairs(data) do E.db.thingsUI[k] = v end
+    for k, v in pairs(data) do
+        if k ~= "_sync" then E.db.thingsUI[k] = v end
+    end
     ns.SpecialBars.Styles.MigrateBorders()
     return true
 end
 
+local destName
+
+function M.CurrentProfile() return E.data and E.data:GetCurrentProfile() end
+
+-- another profile's saved thingsUI table (only what differs from the defaults)
+function M.ProfileDB(name, create)
+    local profiles = E.data and E.data.profiles
+    local p = name and profiles and profiles[name]
+    if not p then return nil end
+    if p.thingsUI == nil and create then p.thingsUI = {} end
+    return p.thingsUI
+end
+
+function M.OtherProfiles()
+    local out = {}
+    local cur = M.CurrentProfile()
+    for name in pairs((E.data and E.data.profiles) or {}) do
+        if name ~= cur then out[#out + 1] = name end
+    end
+    table.sort(out)
+    return out
+end
+
+local function Dest()
+    return (destName and M.ProfileDB(destName, true)) or E.db.thingsUI
+end
+
 local function Root(key, seed)
-    local db = E.db.thingsUI
+    local db = Dest()
     if db[key] == nil then db[key] = seed and DeepCopy(seed) or {} end
     return db[key]
 end
@@ -139,6 +220,87 @@ end
 
 local COLL = {}
 
+-- Groups - Bars and Groups - Text share one list: members are the auras (and text cooldowns)
+local CB_MEMBERS = { auras = true, classes = true, specs = true, cooldowns = true }
+local function CBGroupOf(k)
+    if CB_MEMBERS[k] then return "spells" end
+    if CG_ANCHOR[k] then return "anchor" end
+    return "layout"
+end
+
+COLL.customBars = {
+    fieldGroups = {
+        { key = "spells", label = "Auras / cooldowns" },
+        { key = "layout", label = "Layout & look" },
+        { key = "anchor", label = "Position & anchor" },
+    },
+    Items = function(data, sec)
+        local imp = data.customBars or {}
+        local db = Dest()
+        local existing = {}
+        for _, g in ipairs((db.customBars and db.customBars.groups) or {}) do
+            if Fits(sec, g) then existing[g.name or ""] = true end
+        end
+        local out = {}
+        for idx, g in ipairs(imp.groups or {}) do
+            if Fits(sec, g) then
+                out[#out + 1] = { id = "c" .. idx, label = g.name or ("Group " .. idx), exists = existing[g.name or ""] == true }
+            end
+        end
+        return out
+    end,
+    -- sel.mode "replace" = this kind goes, the other kind stays; same names keep their ids
+    Apply = function(data, sel, sec)
+        local imp = data.customBars; if not imp then return end
+        local cur = Root("customBars", { groups = {}, nextID = 1 })
+        cur.groups = cur.groups or {}; cur.nextID = cur.nextID or 1
+        local byName = {}
+        for _, g in ipairs(cur.groups) do
+            if type(g.id) == "number" and g.id >= cur.nextID then cur.nextID = g.id + 1 end
+            if Fits(sec, g) then byName[g.name or ""] = g end
+        end
+        if sel.mode == "replace" then
+            local keep = {}
+            for _, g in ipairs(cur.groups) do if not Fits(sec, g) then keep[#keep + 1] = g end end
+            cur.groups = keep
+            for _, g in ipairs(imp.groups or {}) do
+                if Fits(sec, g) then
+                    local ng = DeepCopy(g)
+                    local old = byName[ng.name or ""]
+                    if old then ng.id = old.id else ng.id = cur.nextID; cur.nextID = cur.nextID + 1 end
+                    cur.groups[#cur.groups + 1] = ng
+                end
+            end
+            return
+        end
+        for idx, g in ipairs(imp.groups or {}) do
+            if not Fits(sec, g) then
+                -- the other section's group
+            else
+            local exists = byName[g.name or ""]
+            local it = sel.items and sel.items["c" .. idx]
+            local doIt, fields
+            if sel.mode == "add" then
+                doIt = not exists
+            elseif it and it.include then
+                doIt = true; fields = it.fields
+            end
+            if doIt then
+                if exists and sel.mode ~= "add" then
+                    MergeByGroup(exists, g, CG_IDENTITY, CBGroupOf, fields or { spells = true, layout = true, anchor = true })
+                else
+                    local ng = DeepCopy(g)
+                    ng.id = cur.nextID; cur.nextID = cur.nextID + 1
+                    if byName[ng.name or ""] then ng.name = (ng.name or "Group") .. " (imported)" end
+                    cur.groups[#cur.groups + 1] = ng
+                    byName[ng.name or ""] = ng
+                end
+            end
+            end
+        end
+    end,
+}
+
 COLL.customGroups = {
     fieldGroups = {
         { key = "spells", label = "Spells / members" },
@@ -148,7 +310,8 @@ COLL.customGroups = {
     Items = function(data)
         local imp = data.customGroups or {}
         local existing = {}
-        for _, g in ipairs((E.db.thingsUI.customGroups and E.db.thingsUI.customGroups.groups) or {}) do
+        local db = Dest()
+        for _, g in ipairs((db.customGroups and db.customGroups.groups) or {}) do
             existing[g.name or ""] = true
         end
         local out = {}
@@ -195,7 +358,8 @@ COLL.barSetup = {
     Items = function(data)
         local imp = data.barSetup or {}
         local existing = {}
-        for _, s in ipairs((E.db.thingsUI.barSetup and E.db.thingsUI.barSetup.setups) or {}) do
+        local db = Dest()
+        for _, s in ipairs((db.barSetup and db.barSetup.setups) or {}) do
             existing[s.name or ""] = true
         end
         local out = {}
@@ -242,7 +406,8 @@ COLL.specialBars = {
             for _, d in pairs(s.bars or {})  do if type(d) == "table" and d.spellID then nb = nb + 1 end end
             for _, d in pairs(s.icons or {}) do if type(d) == "table" and d.spellID then ni = ni + 1 end end
             if nb + ni > 0 then
-                local curSpec = E.db.thingsUI.specialBars and E.db.thingsUI.specialBars.specs and E.db.thingsUI.specialBars.specs[specKey]
+                local db = Dest()
+                local curSpec = db.specialBars and db.specialBars.specs and db.specialBars.specs[specKey]
                 local exists = false
                 if curSpec then
                     for _, d in pairs(curSpec.bars or {})  do if type(d) == "table" and d.spellID then exists = true break end end
@@ -276,7 +441,7 @@ COLL.specialBars = {
 COLL.specialStyles = {
     Items = function(data)
         local imp = data.specialStyles or {}
-        local cur = E.db.thingsUI.specialStyles or {}
+        local cur = Dest().specialStyles or {}
         local out = {}
         for _, kind in ipairs({ "bars", "icons" }) do
             local tag = (kind == "bars") and "|cFF9FD8FF[Bar]|r " or "|cFFFFC98A[Icon]|r "
@@ -309,18 +474,18 @@ COLL.specialStyles = {
 
 M.COLLECTIONS = COLL
 
-function M.Analyze(str)
+-- target: a profile name to compare with and write into (default: this profile)
+function M.Analyze(str, target)
     local data = Decode(str)
     if not data then return nil end
+    destName = target
     local out = { data = data, sections = {} }
     for i, sec in ipairs(M.SECTIONS) do
-        local present = false
-        for _, k in ipairs(sec.keys) do if data[k] ~= nil then present = true break end end
-        if present then
+        if Present(sec, data) then
             local entry = { index = i, name = sec.name, keys = sec.keys, collection = sec.collection, color = sec.color }
             local coll = sec.collection and COLL[sec.collection]
             if coll then
-                entry.items = coll.Items(data)
+                entry.items = coll.Items(data, sec)
                 entry.fieldGroups = coll.fieldGroups
                 local new, dup = 0, 0
                 for _, it in ipairs(entry.items) do
@@ -331,27 +496,57 @@ function M.Analyze(str)
             out.sections[#out.sections + 1] = entry
         end
     end
+    destName = nil
     return out
 end
 
-function M.ApplyPlan(data, plan)
+function M.ApplyPlan(data, plan, target)
     if not (data and plan) then return false end
+    destName = target
     for i, sec in ipairs(M.SECTIONS) do
         local p = plan[i]
         if p and p.mode and p.mode ~= "skip" then
-            local present = false
-            for _, k in ipairs(sec.keys) do if data[k] ~= nil then present = true break end end
-            if present then
-                if p.mode == "overwrite" then
+            if Present(sec, data) then
+                if p.mode == "overwrite" and sec.only then
+                    COLL[sec.collection].Apply(data, { mode = "replace" }, sec)
+                elseif p.mode == "overwrite" then
+                    local db = Dest()
                     for _, k in ipairs(sec.keys) do
-                        if data[k] ~= nil then E.db.thingsUI[k] = DeepCopy(data[k]) end
+                        if data[k] ~= nil then db[k] = DeepCopy(data[k]) end
                     end
                 elseif sec.collection and COLL[sec.collection] then
-                    COLL[sec.collection].Apply(data, p)
+                    COLL[sec.collection].Apply(data, p, sec)
                 end
             end
         end
     end
-    ns.SpecialBars.Styles.MigrateBorders()
+    destName = nil
+    -- another profile migrates its own borders when it loads
+    if not target then ns.SpecialBars.Styles.MigrateBorders() end
     return true
+end
+
+-- copy between this profile and another one through the import picker
+-- only: a section index to copy just that module
+function M.OpenCopy(dir, name, only)
+    local W = ns.ShareWizard
+    if not W then return end
+    if not name or name == M.CurrentProfile() or not (E.data and E.data.profiles and E.data.profiles[name]) then
+        print("|cFF8080FFthingsUI|r: pick another profile first.")
+        return
+    end
+    local sel
+    if only then
+        sel = {}
+        for i in ipairs(M.SECTIONS) do sel[i] = (i == only) end
+    end
+    if dir == "from" then
+        local str = M.Export(sel, M.ProfileDB(name) or {})
+        if not str then print("|cFF8080FFthingsUI|r: " .. name .. " has nothing of its own there.") return end
+        W.Open(str, { title = "Copy from " .. name })
+    else
+        local str = M.Export(sel)
+        if not str then print("|cFF8080FFthingsUI|r: nothing to copy.") return end
+        W.Open(str, { title = "Copy to " .. name, dest = name })
+    end
 end
