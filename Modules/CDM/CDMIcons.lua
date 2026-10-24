@@ -552,6 +552,32 @@ function M.CDStateHides(sid, mode)
     return on
 end
 
+-- no event follows a cooldown running out: a hidden Cooldown of ours marks the end, then the
+-- state is read again (the game can still say active in that same frame)
+local endWatch = {}
+local function AfterEnd(id, tries)
+    C_Timer.After(tries == 0 and 0 or 0.1, function()
+        M.CheckCDStates()
+        if cdOn[id] and tries < 4 then AfterEnd(id, tries + 1) end
+    end)
+end
+local function WatchEnd(id)
+    local f = endWatch[id]
+    if not f then
+        f = CreateFrame("Cooldown", nil, UIParent, "CooldownFrameTemplate")
+        f:SetSize(1, 1)
+        f:SetPoint("BOTTOMLEFT")
+        f:SetDrawSwipe(false)
+        f:SetDrawEdge(false)
+        f:SetDrawBling(false)
+        f:SetHideCountdownNumbers(true)
+        f:SetScript("OnCooldownDone", function() AfterEnd(id, 0) end)
+        endWatch[id] = f
+    end
+    local dur = C_Spell.GetSpellCooldownDuration and C_Spell.GetSpellCooldownDuration(id)
+    if dur then H.SetCooldownFromDuration(f, dur) end
+end
+
 -- a ruled spell flipped: rows and groups lay out again
 function M.CheckCDStates()
     if not anyCDState then return end
@@ -560,6 +586,7 @@ function M.CheckCDStates()
     for id, o in pairs((cdm and cdm.perSpell) or {}) do
         if type(o) == "table" and o.cdState then
             local on = OnRealCD(id)
+            if on then WatchEnd(id) end
             if on ~= nil and cdOn[id] ~= on then
                 cdOn[id] = on
                 changed = true

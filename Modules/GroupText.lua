@@ -266,6 +266,20 @@ function M.UpdateLine(L)
     end
 end
 
+-- the line's own countdown ending is the spell coming off cooldown (the CDM reads it that way:
+-- the game can still say active in that frame, and no event follows)
+function M.LineDone(L)
+    if L.needCD and CountdownText(L.cd) then Rebuild(L) end
+    if L.test or not L.spellID then return end
+    L.main:SetAlpha(L.keep and 1 or 0)
+    L.ready:SetAlpha(L.readyOn and 1 or 0)
+    local shown = (L.keep or L.readyOn) and true or false
+    if L.shown ~= shown then
+        L.shown = shown
+        if L.st then QueueRelayout(L.st) end
+    end
+end
+
 local function NewLine(host)
     local L = CreateFrame("Frame", nil, host)
     L.main = CreateFrame("Frame", nil, L)
@@ -277,7 +291,9 @@ local function NewLine(host)
     L.cd:SetDrawEdge(false)
     L.cd:SetDrawBling(false)
     L.cd:SetHideCountdownNumbers(false)
-    L.cd:SetScript("OnCooldownDone", function() M.UpdateLine(L) end)
+    -- the game hides countdowns under ~2 s by default; the line is only up for the real cooldown
+    if L.cd.SetMinimumCountdownDuration then L.cd:SetMinimumCountdownDuration(0) end
+    L.cd:SetScript("OnCooldownDone", function() M.LineDone(L) end)
     local AL = ns.AuraLane
     local f = AL and AL.DurFormatter()
     if f and L.cd.SetCountdownFormatter then L.cd:SetCountdownFormatter(f) end

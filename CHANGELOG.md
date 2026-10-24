@@ -7,6 +7,8 @@
 - Own colors for name, time, stacks and the text around them; left or right aligned
 - Center align (lined up from a guess of the time and name width, so it doesn't wobble as the numbers tick) and Case: UPPERCASE for your text, cooldown names and one-spell auras. Names the game writes itself in combat stay as they are
 - A charge spell's line (Grappling Hook) only shows once every charge is spent, and no line blinks on for a second at the end of the GCD anymore (the game's GCD flag can't be trusted outside its own event; the CDM's frame and an in-event read decide now). Spell Editor > Show > Cooldown and groups use the same check
+- [cd] shows on short cooldowns too (Stealth's 2 s): the game hides countdown numbers under about 2 seconds unless told otherwise
+- A cooldown line goes away the moment its countdown ends, also when nothing else happens after it (out of Stealth with no buffs up). The game sends no event when a cooldown runs out, so the line's own countdown decides, like the Cooldown Manager does. Spell Editor > Show > Cooldown gets the same: a ruled icon flips when its cooldown runs out on its own
 - Max Lines counts the cooldown lines too: they come first and the auras get what's left. Global lists this character's spells (Show Other Classes for the rest), up to 40 lines per tab, and the preview shows only what this character has
 ### Character Setup (/tui alt)
 - /tui alt is a new window, like the things for EUI installer: one row per addon with Install / Reinstall / Update, what this character uses, Profile... (what your characters should use) and Load. Load for This Character and Load Without CDM at the bottom, 1440p / 1080p up top (1080p once its strings are in)
