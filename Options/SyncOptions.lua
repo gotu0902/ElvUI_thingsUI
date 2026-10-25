@@ -264,7 +264,7 @@ function TUI:SyncOptions()
             end,
         },
         pack = {
-            order = 5, type = "execute", name = "Sync Like the Pack", width = 1.2,
+            order = 5, type = "execute", name = "Reset to Gruffs Sync", width = 1.2,
             hidden = function() return not (ns.PackSyncConfig and next(ns.PackSyncConfig()) ~= nil) end,
             func = function()
                 local ok, err = ns.ApplyPackSync(ns.PackSyncConfig(), nil, true, function()
