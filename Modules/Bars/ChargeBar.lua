@@ -8,9 +8,12 @@ ns.ChargeBar = CB
 
 local frame
 local barFrame
-local chargeBar
-local rechargeBar
-local rechargeText
+-- one piece per charge: { bar, clip, rech, text }
+local slots = {}
+local rechargeOn, textOn = false, true
+local fillR, fillG, fillB = 0.2, 0.6, 1.0
+local recR, recG, recB, recA = 0.5, 0.5, 0.5, 0.8
+local textFont, textSize, textOutline
 local ticksContainer
 local tickPool = {}
 local activeTickCount = 0
@@ -25,8 +28,10 @@ local isEnabled = false
 local playerEntered = (IsLoggedIn and IsLoggedIn()) or false
 local currentSpellID
 local currentMaxCharges = 0
+-- no charge info: the spell isn't a charge spell right now (its talent not taken)
+local noChargeInfo = false
 
-local lastLayoutW, lastLayoutH, lastLayoutN
+local lastLayoutW, lastLayoutH, lastLayoutN, lastLayoutMode
 local lastLayoutShowTicks, lastLayoutTickW, lastLayoutTickR, lastLayoutTickG, lastLayoutTickB, lastLayoutTickA
 local lastVisualSpellID, lastVisualR, lastVisualG, lastVisualB
 local lastVisualRR, lastVisualRG, lastVisualRB, lastVisualRA
@@ -153,34 +158,6 @@ local function EnsureFrame()
     barFrame:SetPoint("TOPLEFT",     frame, "TOPLEFT",      px, -px)
     barFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -px,  px)
 
-    chargeBar = CreateFrame("StatusBar", "ElvUI_thingsUI_ChargeBar_Charges", barFrame)
-    chargeBar:SetAllPoints(barFrame)
-    chargeBar:SetMinMaxValues(0, 1)
-    chargeBar:SetValue(0)
-
-    if chargeBar.SetColorFill then
-        chargeBar:SetColorFill(0.2, 0.6, 1.0, 1)
-    else
-        chargeBar:SetStatusBarTexture(E.media.blankTex)
-    end
-
-    rechargeBar = CreateFrame("StatusBar", "ElvUI_thingsUI_ChargeBar_Recharge", barFrame)
-
-    rechargeBar:SetPoint("LEFT", chargeBar:GetStatusBarTexture(), "RIGHT")
-    rechargeBar:SetPoint("TOP",    barFrame, "TOP",    0, 0)
-    rechargeBar:SetPoint("BOTTOM", barFrame, "BOTTOM", 0, 0)
-    if rechargeBar.SetColorFill then
-        rechargeBar:SetColorFill(0.5, 0.5, 0.5, 0.8)
-    else
-        rechargeBar:SetStatusBarTexture(E.media.blankTex)
-    end
-    rechargeBar:SetFrameLevel(chargeBar:GetFrameLevel() + 1)
-    rechargeBar:SetMinMaxValues(0, 1)
-    rechargeBar:SetValue(0)
-
-    rechargeText = rechargeBar:CreateFontString(nil, "OVERLAY")
-    rechargeText:SetPoint("CENTER", rechargeBar, "CENTER", 0, 0)
-
     ticksContainer = CreateFrame("Frame", nil, barFrame)
     ticksContainer:SetAllPoints(barFrame)
     ticksContainer:SetFrameLevel(barFrame:GetFrameLevel() + 5)
@@ -211,13 +188,125 @@ local function GetTick(i)
     return tickPool[i]
 end
 
+local function Fill(bar, r, g, b, a)
+    if bar.SetColorFill then bar:SetColorFill(r, g, b, a) else bar:SetStatusBarColor(r, g, b, a) end
+end
+
+local function GetSlot(i)
+    local s = slots[i]
+    if s then return s end
+    s = {}
+    s.bar = CreateFrame("StatusBar", nil, barFrame)
+    if not s.bar.SetColorFill then s.bar:SetStatusBarTexture(E.media.blankTex) end
+    Fill(s.bar, fillR, fillG, fillB, 1)
+    s.gate = CreateFrame("Frame", nil, barFrame)
+    s.gate:SetClipsChildren(true)
+    s.gate:SetFrameLevel(s.bar:GetFrameLevel() + 1)
+    s.clip = CreateFrame("Frame", nil, s.gate)
+    s.clip:SetClipsChildren(true)
+    s.rech = CreateFrame("StatusBar", nil, s.clip)
+    if not s.rech.SetColorFill then s.rech:SetStatusBarTexture(E.media.blankTex) end
+    Fill(s.rech, recR, recG, recB, recA)
+    s.rech:SetMinMaxValues(0, 1)
+    s.rech:Hide()
+    s.text = s.rech:CreateFontString(nil, "OVERLAY")
+    s.text:SetPoint("CENTER", s.rech, "CENTER", 0, 0)
+    E:SetFont(s.text, textFont or STANDARD_TEXT_FONT, textSize or 12, textOutline or "OUTLINE")
+    s.text:SetTextColor(1, 1, 1, 1)
+    s.text:SetShown(textOn)
+    slots[i] = s
+    return s
+end
+
+-- the k-th charge to fill: its piece (1 = left) and whether it fills leftwards
+local function Place(k, n, mode)
+    if mode == "rtl" then return n - k + 1, true end
+    if mode == "edges" then
+        if k % 2 == 1 then return (k + 1) / 2, false end
+        return n - k / 2 + 1, true
+    end
+    if mode == "middle" then
+        if n % 2 == 0 then
+            if k % 2 == 1 then return n / 2 - (k - 1) / 2, true end
+            return n / 2 + k / 2, false
+        end
+        local c = (n + 1) / 2
+        if k == 1 then return c, false end
+        if k % 2 == 0 then return c - k / 2, true end
+        return c + (k - 1) / 2, false
+    end
+    return k, false
+end
+
+local function FillMode()
+    local db = E.db.thingsUI.chargeBar
+    local e = GetSpecEntry()
+    if e and e.useGlobalLayout == false and e.fillMode then return e.fillMode end
+    return db.fillMode or "ltr"
+end
+
+-- Each piece holds one charge (min k-1, max k: the game clamps the secret count itself).
+-- Its recharge (and text) sits in two clips: the piece's empty part, and a gate the piece
+-- before it opens only once that one is full - just the charge coming back shows its timer.
+local function LayoutSlots(n, W, mode)
+    local seg = W / n
+    for k = 1, n do
+        local s = GetSlot(k)
+        local p, left = Place(k, n, mode)
+        local x0, x1 = (p - 1) * seg, p * seg
+        s.x0, s.x1, s.left = x0, x1, left
+        s.bar:ClearAllPoints()
+        s.bar:SetPoint("TOPLEFT", barFrame, "TOPLEFT", x0, 0)
+        s.bar:SetPoint("BOTTOMRIGHT", barFrame, "BOTTOMLEFT", x1, 0)
+        s.bar:SetMinMaxValues(k - 1, k)
+        s.bar:SetReverseFill(left)
+        s.bar:Show()
+        local tex = s.bar:GetStatusBarTexture()
+        s.rech:ClearAllPoints()
+        s.rech:SetPoint("TOPLEFT", barFrame, "TOPLEFT", x0, 0)
+        s.rech:SetPoint("BOTTOMRIGHT", barFrame, "BOTTOMLEFT", x1, 0)
+        s.rech:SetReverseFill(left)
+        -- the piece's empty part (zero wide once it's full)
+        s.clip:ClearAllPoints()
+        if left then
+            s.clip:SetPoint("TOPLEFT", barFrame, "TOPLEFT", x0, 0)
+            s.clip:SetPoint("BOTTOMRIGHT", tex, "BOTTOMLEFT", 0, 0)
+        else
+            s.clip:SetPoint("TOPLEFT", tex, "TOPRIGHT", 0, 0)
+            s.clip:SetPoint("BOTTOMRIGHT", barFrame, "BOTTOMLEFT", x1, 0)
+        end
+        -- open once the piece before it is full
+        s.gate:ClearAllPoints()
+        local prev = k > 1 and slots[k - 1]
+        if not prev then
+            s.gate:SetPoint("TOPLEFT", barFrame, "TOPLEFT", x0, 0)
+            s.gate:SetPoint("BOTTOMRIGHT", barFrame, "BOTTOMLEFT", x1, 0)
+        elseif prev.left then
+            s.gate:SetPoint("TOPLEFT", prev.bar:GetStatusBarTexture(), "TOPLEFT", x0 - prev.x0, 0)
+            s.gate:SetPoint("BOTTOMRIGHT", barFrame, "BOTTOMLEFT", x1, 0)
+        else
+            s.gate:SetPoint("TOPLEFT", barFrame, "TOPLEFT", x0, 0)
+            s.gate:SetPoint("BOTTOMRIGHT", prev.bar:GetStatusBarTexture(), "BOTTOMRIGHT", x1 - prev.x1, 0)
+        end
+        s.gate:Show()
+    end
+    for k = n + 1, #slots do
+        slots[k].bar:Hide()
+        slots[k].gate:Hide()
+    end
+end
+
+local function HideSlots()
+    for _, s in ipairs(slots) do s.bar:Hide(); s.gate:Hide() end
+end
+
+local function SetCharges(v)
+    for k = 1, math.min(currentMaxCharges, #slots) do slots[k].bar:SetValue(v) end
+end
+
 local function ApplyChargeLayout()
     if not currentSpellID or currentMaxCharges <= 0 then
-        if chargeBar then
-            chargeBar:SetMinMaxValues(0, 1)
-            chargeBar:SetValue(0)
-        end
-        if rechargeBar then rechargeBar:Hide() end
+        HideSlots()
         ReleaseTicks()
         return
     end
@@ -234,8 +323,9 @@ local function ApplyChargeLayout()
     local tcr, tcg, tcb, tca = tc.r or 0, tc.g or 0, tc.b or 0, tc.a or 1
     local tickW = db.tickWidth or 1
 
+    local mode = FillMode()
     if lastLayoutW == barWInt and lastLayoutH == barH
-       and lastLayoutN == n
+       and lastLayoutN == n and lastLayoutMode == mode
        and lastLayoutShowTicks == showTicks
        and lastLayoutTickW == tickW
        and lastLayoutTickR == tcr and lastLayoutTickG == tcg
@@ -243,12 +333,11 @@ local function ApplyChargeLayout()
         return
     end
     lastLayoutW, lastLayoutH = barWInt, barH
-    lastLayoutN = n
+    lastLayoutN, lastLayoutMode = n, mode
     lastLayoutShowTicks, lastLayoutTickW = showTicks, tickW
     lastLayoutTickR, lastLayoutTickG, lastLayoutTickB, lastLayoutTickA = tcr, tcg, tcb, tca
 
-    chargeBar:SetMinMaxValues(0, n)
-    rechargeBar:SetWidth(barW / n)
+    LayoutSlots(n, barW, mode)
 
     ReleaseTicks()
     if showTicks and n > 1 then
@@ -313,15 +402,11 @@ local function ApplyVisuals(entry)
     lastVisualShowText = showText
     lastVisualFont, lastVisualSize, lastVisualOutline = fontName, fontSize, fontOutline
 
-    if chargeBar.SetColorFill then
-        chargeBar:SetColorFill(r, g, b, 1)
-    else
-        chargeBar:SetStatusBarColor(r, g, b, 1)
-    end
-    if rechargeBar.SetColorFill then
-        rechargeBar:SetColorFill(rcR, rcG, rcB, rcA)
-    else
-        rechargeBar:SetStatusBarColor(rcR, rcG, rcB, rcA)
+    fillR, fillG, fillB = r, g, b
+    recR, recG, recB, recA = rcR, rcG, rcB, rcA
+    for _, s in ipairs(slots) do
+        Fill(s.bar, r, g, b, 1)
+        Fill(s.rech, rcR, rcG, rcB, rcA)
     end
 
     if frame.tuiBg then
@@ -333,13 +418,12 @@ local function ApplyVisuals(entry)
         end
     end
 
-    if showText then
-        local font = (LSM and LSM:Fetch("font", fontName)) or STANDARD_TEXT_FONT
-        E:SetFont(rechargeText, font, fontSize, fontOutline)
-        rechargeText:SetTextColor(1, 1, 1, 1)
-        rechargeText:Show()
-    else
-        rechargeText:Hide()
+    textOn = showText
+    textFont = (LSM and LSM:Fetch("font", fontName)) or STANDARD_TEXT_FONT
+    textSize, textOutline = fontSize, fontOutline
+    for _, s in ipairs(slots) do
+        E:SetFont(s.text, textFont, textSize, textOutline)
+        s.text:SetShown(showText)
     end
 end
 
@@ -433,13 +517,30 @@ local function ResolveSpellID(entry)
     return id and FollowOverride(id)
 end
 
+-- With one charge the game runs the spell as a plain cooldown: a one-piece bar ("bar")
+-- or the bar hides and the icon stays in the Cooldown Manager ("cdm")
+local function OneChargeMode(entry)
+    return (entry and entry.oneCharge) or "bar"
+end
+
+local function MaxChargesOf(id)
+    local info = id and C_Spell.GetSpellCharges and C_Spell.GetSpellCharges(id)
+    local mx = info and info.maxCharges
+    if issecretvalue and issecretvalue(mx) then
+        return (id == currentSpellID and currentMaxCharges > 0) and currentMaxCharges or nil
+    end
+    return info and mx or 1
+end
+
 -- the spell this spec's bar tracks (as set, and its live override): its CDM copy is a duplicate
 function CB.TrackedSpells()
     if not CB.IsActiveForCurrentSpec() then return nil end
-    local raw = RawSpellID(GetSpecEntry())
+    local entry = GetSpecEntry()
+    local raw = RawSpellID(entry)
     if not raw then return nil end
     local live = FollowOverride(raw)
     if issecretvalue and issecretvalue(live) then live = nil end
+    if OneChargeMode(entry) == "cdm" and (MaxChargesOf(live or raw) or 2) <= 1 then return nil end
     return raw, live
 end
 
@@ -452,57 +553,105 @@ local function NotifyTracked()
     if ns.CDMIcons and ns.CDMIcons.QueuePassiveRebuild then ns.CDMIcons.QueuePassiveRebuild() end
 end
 
+local function HideRecharge()
+    rechargeOn = false
+    for _, s in ipairs(slots) do
+        s.rech:Hide()
+        s.text:SetText("")
+    end
+end
+
+-- the one-charge cooldown's end: no event follows it, so a hidden Cooldown marks it
+local endCD
+local function WatchEnd(dur)
+    if not endCD then
+        endCD = CreateFrame("Cooldown", nil, UIParent, "CooldownFrameTemplate")
+        endCD:SetSize(1, 1)
+        endCD:SetPoint("BOTTOMLEFT")
+        endCD:SetDrawSwipe(false)
+        endCD:SetDrawEdge(false)
+        endCD:SetDrawBling(false)
+        endCD:SetHideCountdownNumbers(true)
+        endCD:SetScript("OnCooldownDone", function()
+            if not (slots[1] and currentMaxCharges <= 1) then return end
+            HideRecharge()
+            SetCharges(1)
+        end)
+    end
+    if dur and endCD.SetCooldownFromDurationObject then endCD:SetCooldownFromDurationObject(dur, true) end
+end
+
+-- every piece runs the timer; the clips decide which one is seen
+local function ShowRecharge(durationObj)
+    rechargeOn = true
+    for k = 1, math.min(currentMaxCharges, #slots) do
+        local r = slots[k].rech
+        r:SetTimerDuration(durationObj, Enum.StatusBarInterpolation.Immediate, Enum.StatusBarTimerDirection.ElapsedTime)
+        r:Show()
+    end
+end
+
+-- one charge: the spell's own cooldown fills the one piece (the GCD left out)
+local function UpdateSingle(info)
+    local CI = ns.CDMIcons
+    local onCD = CI and CI.OnRealCD and CI.OnRealCD(currentSpellID)
+    if info then SetCharges(info.currentCharges)
+    elseif onCD ~= nil then SetCharges(onCD and 0 or 1) end
+    local dur = onCD ~= false and C_Spell.GetSpellCooldownDuration and C_Spell.GetSpellCooldownDuration(currentSpellID)
+    if dur then
+        ShowRecharge(dur)
+        WatchEnd(dur)
+    else
+        HideRecharge()
+    end
+end
+
 local function _UpdateChargeStateInner()
     if not currentSpellID then return end
     local info = C_Spell and C_Spell.GetSpellCharges and C_Spell.GetSpellCharges(currentSpellID) or nil
-    if not info then return end
+    if not info then
+        if noChargeInfo then UpdateSingle(nil) end
+        return
+    end
 
     local mx = info.maxCharges
     if type(mx) == "number" and not issecretvalue(mx) and mx ~= currentMaxCharges then
         currentMaxCharges = mx
         ApplyChargeLayout()
     end
+    if currentMaxCharges <= 1 then
+        UpdateSingle(info)
+        return
+    end
 
-    chargeBar:SetValue(info.currentCharges)
+    SetCharges(info.currentCharges)
 
     local durationObj = C_Spell.GetSpellChargeDuration and C_Spell.GetSpellChargeDuration(currentSpellID)
     local active = info.isActive
     if durationObj and (issecretvalue(active) or active) then
-        rechargeBar.isActive = true
-        rechargeBar:SetTimerDuration(
-            durationObj,
-            Enum.StatusBarInterpolation.Immediate,
-            Enum.StatusBarTimerDirection.ElapsedTime
-        )
-        rechargeBar:Show()
+        ShowRecharge(durationObj)
     else
-        rechargeBar.isActive = false
-        rechargeBar:Hide()
-        rechargeText:SetText("")
+        HideRecharge()
     end
 end
 
 local function UpdateChargeState() _UpdateChargeStateInner() end
 
 local function UpdateRechargeText()
-    if not rechargeText:IsShown() then return end
-    if not rechargeBar.GetTimerDuration or not rechargeBar.isActive then
-        rechargeText:SetText("")
-        return
+    if not (textOn and rechargeOn and slots[1]) then return end
+    local timer = slots[1].rech.GetTimerDuration and slots[1].rech:GetTimerDuration()
+    local n = math.min(currentMaxCharges, #slots)
+    for k = 1, n do
+        local t = slots[k].text
+        if timer then t:SetFormattedText("%.1f", timer:GetRemainingDuration()) else t:SetText("") end
     end
-    local timer = rechargeBar:GetTimerDuration()
-    if not timer then
-        rechargeText:SetText("")
-        return
-    end
-    rechargeText:SetFormattedText("%.1f", timer:GetRemainingDuration())
 end
 
 local textTicker = CreateFrame("Frame")
 textTicker:Hide()
 local rechargeTextElapsed = 0
 textTicker:SetScript("OnUpdate", function(_, elapsed)
-    if not rechargeBar or not rechargeBar:IsShown() then
+    if not rechargeOn then
         textTicker:Hide()
         return
     end
@@ -516,7 +665,7 @@ end)
 local function HideAll()
     local wasShown = frame and frame:IsShown()
     if frame then frame:Hide() end
-    if rechargeBar then rechargeBar:Hide() end
+    HideRecharge()
     textTicker:Hide()
     if wasShown then
         if TUI.InvalidateDynamicCastBarAnchor then
@@ -548,15 +697,23 @@ local function UpdateNow()
     end
 
     local info = C_Spell.GetSpellCharges and C_Spell.GetSpellCharges(spellID) or nil
-    if not info then
+    local mx
+    if info then
+        mx = info.maxCharges
+        if type(mx) ~= "number" or (issecretvalue and issecretvalue(mx)) or mx < 1 then
+            if not currentMaxCharges or currentMaxCharges < 1 or currentSpellID ~= spellID then
+                HideAll(); return
+            end
+            mx = currentMaxCharges
+        end
+    elseif IsPlayerSpell(spellID) then
+        mx = 1
+    else
         HideAll(); return
     end
-    local mx = info.maxCharges
-    if type(mx) ~= "number" or mx < 1 then
-        if not currentMaxCharges or currentMaxCharges < 1 or currentSpellID ~= spellID then
-            HideAll(); return
-        end
-        mx = currentMaxCharges
+    noChargeInfo = not info
+    if mx <= 1 and OneChargeMode(entry) == "cdm" then
+        HideAll(); return
     end
 
     EnsureFrame()
@@ -596,7 +753,7 @@ local function UpdateNow()
         end
     end
 
-    if rechargeBar:IsShown() and rechargeText:IsShown() then
+    if rechargeOn and textOn then
         textTicker:Show()
     else
         textTicker:Hide()
@@ -629,14 +786,22 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, _, arg3)
     elseif event == "SPELL_UPDATE_CHARGES" then
         if frame and frame:IsShown() then
             UpdateChargeState()
-            if rechargeBar:IsShown() and rechargeText:IsShown() then
+            if rechargeOn and textOn then
+                textTicker:Show()
+            end
+        end
+    elseif event == "SPELL_UPDATE_COOLDOWN" then
+        -- one charge runs on the spell's cooldown; read inside the event (the GCD flag is right there)
+        if currentMaxCharges <= 1 and frame and frame:IsShown() then
+            UpdateChargeState()
+            if rechargeOn and textOn then
                 textTicker:Show()
             end
         end
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" and arg1 == "player" then
         if currentSpellID and arg3 == currentSpellID and frame and frame:IsShown() then
             UpdateChargeState()
-            if rechargeBar:IsShown() and rechargeText:IsShown() then
+            if rechargeOn and textOn then
                 textTicker:Show()
             end
         end
@@ -666,6 +831,7 @@ function TUI:UpdateChargeBar()
         eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
         eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
         eventFrame:RegisterEvent("SPELL_UPDATE_CHARGES")
+        eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
         eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
         HookCluster()
         if playerEntered then C_Timer.After(0.2, MarkDirty) end

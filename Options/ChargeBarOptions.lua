@@ -8,6 +8,9 @@ local STRATA_ORDER  = ns.STRATA.ORDER
 local POINT_VALUES = ns.POINTS.VALUES
 local POINT_ORDER  = ns.POINTS.ORDER
 
+local FILL_VALUES = { ltr = "Left to Right", rtl = "Right to Left", edges = "Toward the Middle", middle = "From the Middle" }
+local FILL_ORDER  = { "ltr", "rtl", "edges", "middle" }
+
 local function IsFHT()
     if E.db.thingsUI.barSetup and E.db.thingsUI.barSetup.enabled == false then return true end
     local bs = ns.BarSetup
@@ -134,14 +137,14 @@ local function CDMOrderedForEdit()
     local specID = tonumber(selectedEditSpec)
     local map = specID and ns.CDMSpells and ns.CDMSpells.GetForSpec(specID)
     if not (map and next(map)) then return {} end
-    local chargeMap = ns.CDMSpells.GetChargesForSpec(specID)
+    -- charge spells first; the rest too, for one set up before its charge talent
+    local chargeMap = ns.CDMSpells.GetChargesForSpec(specID) or {}
     local list = {}
     for id, nd in pairs(map) do
-        if not chargeMap or chargeMap[id] then   -- nil chargeMap = not captured -> show all
-            list[#list + 1] = { id = id, nd = nd, nm = SpellName(id) }
-        end
+        list[#list + 1] = { id = id, nd = nd, nm = SpellName(id), ch = chargeMap[id] }
     end
     table.sort(list, function(a, b)
+        if (a.ch ~= nil) ~= (b.ch ~= nil) then return a.ch ~= nil end
         if a.nd ~= b.nd then return not a.nd end
         return a.nm < b.nm
     end)
@@ -339,7 +342,7 @@ function TUI:ChargeBarOptions()
                                         return "|cFFFFD200" .. EditedSpecLabel() .. "|r isn't scanned yet.\n"
                                             .. "|cFF888888Log into this spec once — we can only read the spells of the spec you're currently in.|r"
                                     end
-                                    return "|cFF888888No spells with charges for " .. EditedSpecLabel() .. ".|r"
+                                    return "|cFF888888No spells in the Cooldown Manager for " .. EditedSpecLabel() .. ".|r"
                                 end,
                             },
                             spellPick = {
@@ -350,9 +353,10 @@ function TUI:ChargeBarOptions()
                                     local out = {}
                                     for _, s in ipairs(CDMOrderedForEdit()) do
                                         local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(s.id)) or 0
-                                        out[s.id] = s.nd
+                                        local tag = s.ch and (" |cFF888888(%d charges)|r"):format(s.ch) or " |cFF888888(1 charge)|r"
+                                        out[s.id] = (s.nd
                                             and ("|T%d:16:16:0:0:64:64:4:60:4:60|t  |cFFFF6060%s|r"):format(tex, s.nm)
-                                            or  ("|T%d:16:16:0:0:64:64:4:60:4:60|t  %s"):format(tex, s.nm)
+                                            or  ("|T%d:16:16:0:0:64:64:4:60:4:60|t  %s"):format(tex, s.nm)) .. tag
                                     end
                                     local e = GetEditSpec()
                                     local stored = e and tonumber(e.spellID)
@@ -377,6 +381,18 @@ function TUI:ChargeBarOptions()
                                     local e = GetEditSpec(); if not e then return end
                                     e.spellID = v
                                     e.spellName = SpellName(v)
+                                    Update()
+                                end,
+                            },
+                            oneCharge = {
+                                order = 1.5, type = "select", name = "With One Charge", width = 1.5,
+                                hidden = function() return #CDMOrderedForEdit() == 0 end,
+                                values = { bar = "Single Bar", cdm = "Show in Cooldown Manager" },
+                                sorting = { "bar", "cdm" },
+                                get = function() local e = GetEditSpec(); return (e and e.oneCharge) or "bar" end,
+                                set = function(_, v)
+                                    local e = GetEditSpec(); if not e then return end
+                                    e.oneCharge = (v ~= "bar") and v or nil
                                     Update()
                                 end,
                             },
@@ -426,12 +442,25 @@ function TUI:ChargeBarOptions()
 
                     -- Per-spec color overrides (only when Use Global Layout is OFF).
                     overrideColors = {
-                        order = 25, type = "group", inline = true, name = "Color Overrides",
+                        order = 25, type = "group", inline = true, name = "Layout Overrides",
                         hidden = function()
                             if #GetEnabledSpecsList() == 0 then return true end
                             local e = GetEditSpec(); return not e or e.useGlobalLayout ~= false
                         end,
                         args = {
+                            fillMode = {
+                                order = 0.5, type = "select", name = "Fill Direction",
+                                values = FILL_VALUES, sorting = FILL_ORDER,
+                                get = function()
+                                    local e = GetEditSpec()
+                                    return (e and e.fillMode) or E.db.thingsUI.chargeBar.fillMode or "ltr"
+                                end,
+                                set = function(_, v)
+                                    local e = GetEditSpec(); if not e then return end
+                                    e.fillMode = v
+                                    Update()
+                                end,
+                            },
                             rechargeColor = {
                                 order = 1, type = "color", name = "Recharge Color", hasAlpha = true,
                                 get = function()
@@ -543,6 +572,8 @@ function TUI:ChargeBarOptions()
                                     local function applySettings(dst)
                                         dst.spellID         = src.spellID
                                         dst.spellName       = src.spellName
+                                        dst.oneCharge       = src.oneCharge
+                                        dst.fillMode        = src.fillMode
                                         dst.useClassColor   = src.useClassColor
                                         dst.customColor     = src.customColor and { r = src.customColor.r, g = src.customColor.g, b = src.customColor.b } or nil
                                         dst.useGlobalLayout = src.useGlobalLayout
@@ -640,6 +671,12 @@ function TUI:ChargeBarOptions()
                                     E.db.thingsUI.chargeBar.borderColor = { r = r, g = g, b = b, a = a }
                                     Update()
                                 end,
+                            },
+                            fillMode = {
+                                order = 4.5, type = "select", name = "Fill Direction",
+                                values = FILL_VALUES, sorting = FILL_ORDER,
+                                get = function() return E.db.thingsUI.chargeBar.fillMode or "ltr" end,
+                                set = function(_, v) E.db.thingsUI.chargeBar.fillMode = (v ~= "ltr") and v or nil; Update() end,
                             },
                             showTicks = {
                                 order = 5, type = "toggle", name = "Show Ticks",
