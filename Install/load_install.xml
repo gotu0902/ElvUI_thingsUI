@@ -9,5 +9,6 @@
 	<Script file="BigWigs.lua"/>
 	<Script file="CooldownManager.lua"/>
 	<Script file="Install.lua"/>
+	<Script file="PackUpdate.lua"/>
 	<Script file="Setup.lua"/>
 </Ui>

@@ -53,8 +53,8 @@ local function ComputeIconLayout()
                 or bucket("standalone", "Standalone")
             if g then b.color = g.tabColor end
             b.icons[#b.icons + 1] = { key = ikey, name = SpellName(d.spellID) }
-        elseif d then
-            local b = bucket("unconfigured", "Unconfigured")
+        elseif d and SB.freshSlots and SB.freshSlots[ikey] then
+            local b = bucket("unconfigured", "New")
             b.icons[#b.icons + 1] = { key = ikey, name = ("Icon %d"):format(i) }
         end
     end
@@ -112,7 +112,7 @@ local function BuildCopySpecsTree(kind, onlySpecStr, destSpecID)
                     local leaves = {}
                     if slots then
                         local prefix = (kind == "bars") and "bar" or "icon"
-                        local n = (kind == "bars") and (specData.barCount or 3) or (specData.iconCount or 3)
+                        local n = (kind == "bars") and (specData.barCount or 0) or (specData.iconCount or 0)
                         for i = 1, n do
                             local slotKey = prefix .. i
                             local s = slots[slotKey]
@@ -174,7 +174,7 @@ local function ApplyCopy(kind, leafID, mode, destSpecID)
 
     local sources = {}
     if what == "ALL" then
-        local n = src[countField] or 3
+        local n = src[countField] or 0
         for i = 1, n do
             local k = prefix .. i
             if type(srcSlots[k]) == "table" and srcSlots[k].spellID then
@@ -400,7 +400,13 @@ local function RebuildBarPages()
         barPages[key .. "Group"] = {
             order = i * 10, type = "group", childGroups = "tab",
             name = function() return BarTabName(key, n) end,
-            hidden = function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) < n end,
+            hidden = function()
+                if not SB then return true end
+                local s = SB.GetSpecRoot(SB.EditingSpec())
+                if (s.barCount or 0) < n then return true end
+                local d = s.bars and s.bars[key]
+                return not (type(d) == "table" and d.spellID) and not (SB.freshSlots and SB.freshSlots[key])
+            end,
             args = TUI:SpecialBarOptions(key),
         }
     end
@@ -635,12 +641,11 @@ local function BuildSpecialBarsGroup()
                 order = 0.5, type = "execute", width = "double",
                 hidden = function() return not (SB and SB.EditingSpec()) end,
                 name = function() return "|cFF40FF40+ New Aura Bar for |r" .. SpecTag(SB.EditingSpec()) end,
-                disabled = function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).barCount or 3) >= (SB.MAX_SLOTS or 12) end,
+                disabled = function() return not SB or SB.UsedSlots("bars", SB.EditingSpec()) >= (SB.MAX_SLOTS or 30) end,
                 func = function()
-                    local s = SB.GetSpecRoot(SB.EditingSpec()); local c = s.barCount or 3
-                    if c < (SB.MAX_SLOTS or 12) then
-                        s.barCount = c + 1
-                        SB.Styles.ApplyToDB("bars", SB.Styles.EffectiveDefault("bars"), SB.GetBarDB("bar" .. (c + 1), SB.EditingSpec()))
+                    local key = SB.TakeSlot("bars", SB.EditingSpec())
+                    if key then
+                        SB.Styles.ApplyToDB("bars", SB.Styles.EffectiveDefault("bars"), SB.GetBarDB(key, SB.EditingSpec()))
                         if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end; TUI:UpdateSpecialBars(); NotifyChange()
                     end
                 end,
@@ -648,13 +653,12 @@ local function BuildSpecialBarsGroup()
             addBar = {
                 order = 1, type = "execute", width = "double",
                 name = function() return "|cFF40FF40+ New Aura Bar for |r" .. SpecTag(CurSpecNum()) end,
-                disabled = function() return not SB or (SB.GetSpecRoot().barCount or 3) >= (SB.MAX_SLOTS or 12) end,
+                disabled = function() return not SB or SB.UsedSlots("bars") >= (SB.MAX_SLOTS or 30) end,
                 func = function()
                     if not SB then return end
-                    local s = SB.GetSpecRoot(); local c = s.barCount or 3
-                    if c < (SB.MAX_SLOTS or 12) then
-                        s.barCount = c + 1
-                        SB.Styles.ApplyToDB("bars", SB.Styles.EffectiveDefault("bars"), SB.GetBarDB("bar" .. (c + 1)))
+                    local key = SB.TakeSlot("bars")
+                    if key then
+                        SB.Styles.ApplyToDB("bars", SB.Styles.EffectiveDefault("bars"), SB.GetBarDB(key))
                         if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end; TUI:UpdateSpecialBars(); NotifyChange()
                     end
                 end,
@@ -676,7 +680,7 @@ local function BuildSpecialBarsGroup()
             end),
             barCountHint = {
                 order = 3, type = "description", fontSize = "medium",
-                name = function() return ("|cFF888888%d / %d bars - delete a bar from its own page.|r"):format((SB and SB.GetSpecRoot(SB.EditingSpec()).barCount) or 3, (SB and SB.MAX_SLOTS) or 12) end,
+                name = function() return ("|cFF888888%d / %d bars - delete a bar from its own page.|r"):format((SB and SB.UsedSlots("bars", SB.EditingSpec())) or 0, (SB and SB.MAX_SLOTS) or 30) end,
             },
             barsTab = {
                 order = 10, type = "group", name = "Bars", childGroups = "tree",
@@ -702,29 +706,27 @@ local function BuildSpecialIconsGroup()
                 order = 0.5, type = "execute", width = "double",
                 hidden = function() return not (SB and SB.EditingSpec()) end,
                 name = function() return "|cFF40FF40+ New Aura Icon for |r" .. SpecTag(SB.EditingSpec()) end,
-                disabled = function() return not SB or (SB.GetSpecRoot(SB.EditingSpec()).iconCount or 3) >= (SB.MAX_SLOTS or 12) end,
+                disabled = function() return not SB or SB.UsedSlots("icons", SB.EditingSpec()) >= (SB.MAX_SLOTS or 30) end,
                 func = function()
-                    local s = SB.GetSpecRoot(SB.EditingSpec()); local c = s.iconCount or 3
-                    if c < (SB.MAX_SLOTS or 12) then
-                        s.iconCount = c + 1
-                        SB.Styles.ApplyToDB("icons", SB.Styles.EffectiveDefault("icons"), SB.GetIconDB("icon" .. (c + 1), SB.EditingSpec()))
+                    local key = SB.TakeSlot("icons", SB.EditingSpec())
+                    if key then
+                        SB.Styles.ApplyToDB("icons", SB.Styles.EffectiveDefault("icons"), SB.GetIconDB(key, SB.EditingSpec()))
                         if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end; TUI:UpdateSpecialBars(); NotifyChange()
-                        if ns.SB_OpenIconEditor then ns.SB_OpenIconEditor("icon" .. (c + 1)) end
+                        if ns.SB_OpenIconEditor then ns.SB_OpenIconEditor(key) end
                     end
                 end,
             },
             addIcon = {
                 order = 1, type = "execute", width = "double",
                 name = function() return "|cFF40FF40+ New Aura Icon for |r" .. SpecTag(CurSpecNum()) end,
-                disabled = function() return not SB or (SB.GetSpecRoot().iconCount or 3) >= (SB.MAX_SLOTS or 12) end,
+                disabled = function() return not SB or SB.UsedSlots("icons") >= (SB.MAX_SLOTS or 30) end,
                 func = function()
                     if not SB then return end
-                    local s = SB.GetSpecRoot(); local c = s.iconCount or 3
-                    if c < (SB.MAX_SLOTS or 12) then
-                        s.iconCount = c + 1
-                        SB.Styles.ApplyToDB("icons", SB.Styles.EffectiveDefault("icons"), SB.GetIconDB("icon" .. (c + 1)))
+                    local key = SB.TakeSlot("icons")
+                    if key then
+                        SB.Styles.ApplyToDB("icons", SB.Styles.EffectiveDefault("icons"), SB.GetIconDB(key))
                         if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end; TUI:UpdateSpecialBars(); NotifyChange()
-                        if not SB.EditingSpec() and ns.SB_OpenIconEditor then ns.SB_OpenIconEditor("icon" .. (c + 1)) end
+                        if not SB.EditingSpec() and ns.SB_OpenIconEditor then ns.SB_OpenIconEditor(key) end
                     end
                 end,
             },
@@ -745,7 +747,7 @@ local function BuildSpecialIconsGroup()
             end),
             iconCountHint = {
                 order = 3, type = "description", fontSize = "medium",
-                name = function() return ("|cFF888888%d / %d icons - delete an icon from its own page.|r"):format((SB and SB.GetSpecRoot(SB.EditingSpec()).iconCount) or 3, (SB and SB.MAX_SLOTS) or 12) end,
+                name = function() return ("|cFF888888%d / %d icons - delete an icon from its own page.|r"):format((SB and SB.UsedSlots("icons", SB.EditingSpec())) or 0, (SB and SB.MAX_SLOTS) or 30) end,
             },
             iconsTab = {
                 order = 10, type = "group", name = "Icons", childGroups = "tree",

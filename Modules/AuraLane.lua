@@ -266,12 +266,8 @@ local function Font(name, size, outline)
 end
 
 -- an Aura Icon in a group draws its own border only when it overrides the group's
--- (unset: icons from before the toggle overrode by turning Show Border on)
 function A.OwnBorder(idb)
-    if not idb then return false end
-    local o = idb.overrideGroupBorder
-    if o == nil then return idb.showBorder == true end
-    return o == true
+    return (idb and idb.overrideGroupBorder == true) and true or false
 end
 
 -- an entry's border: the group's, inside the icon (a style picked for an entry gives its glow,

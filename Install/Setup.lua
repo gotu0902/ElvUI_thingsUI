@@ -1236,10 +1236,12 @@ local function CheckLines()
     return lines, table.concat(sig, ";"), hasCDM
 end
 
+-- no hideOnEscape: ElvUI's popup would take every key press, keybinds included
 local POPUP_BASE = {
     text = "%s",
     selectCallbackByIndex = true,
-    timeout = 0, whileDead = 1, hideOnEscape = 1, preferredIndex = 3,
+    timeout = 0, whileDead = 1, preferredIndex = 3,
+    OnShow = function(self) self:SetScript("OnKeyDown", nil) end,
 }
 
 E.PopupDialogs.TUI_SETUP_CHECK = CreateFromMixins(POPUP_BASE, {

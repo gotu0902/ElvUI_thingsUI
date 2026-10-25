@@ -22,6 +22,35 @@ local function FillDefaults(tbl, defaults)
     end
 end
 
+-- the highest slot number a list holds (a count from before counts were saved)
+local function Highest(list, prefix)
+    local n = 0
+    for k in pairs(list) do
+        local i = tonumber(tostring(k):match("^" .. prefix .. "(%d+)$"))
+        if i and i > n then n = i end
+    end
+    return n
+end
+
+-- slots at the end with no spell are dropped once a session (the old three empty ones per spec)
+local trimmed = setmetatable({}, { __mode = "k" })
+local function Trim(s)
+    if trimmed[s] then return end
+    trimmed[s] = true
+    while s.iconCount > 0 do
+        local d = s.icons["icon" .. s.iconCount]
+        if type(d) == "table" and d.spellID then break end
+        s.icons["icon" .. s.iconCount] = nil
+        s.iconCount = s.iconCount - 1
+    end
+    while s.barCount > 0 do
+        local d = s.bars["bar" .. s.barCount]
+        if type(d) == "table" and d.spellID then break end
+        s.bars["bar" .. s.barCount] = nil
+        s.barCount = s.barCount - 1
+    end
+end
+
 local function GetSpecRoot(specID)
     local db = E.db.thingsUI and E.db.thingsUI.specialBars
     if not db then return nil end
@@ -29,12 +58,13 @@ local function GetSpecRoot(specID)
     specID = specID or GetCurrentSpecID()
     if specID == 0 then specID = 1 end
     local key = tostring(specID)
-    if not db.specs[key] then db.specs[key] = { bars = {}, icons = {}, barCount = 3, iconCount = 3 } end
+    if not db.specs[key] then db.specs[key] = { bars = {}, icons = {}, barCount = 0, iconCount = 0 } end
     local s = db.specs[key]
     if not s.bars      then s.bars      = {} end
     if not s.icons     then s.icons     = {} end
-    if not s.barCount  then s.barCount  = 3  end
-    if not s.iconCount then s.iconCount = 3  end
+    if not s.barCount  then s.barCount  = Highest(s.bars, "bar") end
+    if not s.iconCount then s.iconCount = Highest(s.icons, "icon") end
+    Trim(s)
     return s
 end
 
@@ -58,8 +88,51 @@ local function GetIconDB(iconKey, specID)
     return s.icons[iconKey]
 end
 
-local function GetBarCount(specID)  local s = GetSpecRoot(specID); return (s and s.barCount)  or 3 end
-local function GetIconCount(specID) local s = GetSpecRoot(specID); return (s and s.iconCount) or 3 end
+local function GetBarCount(specID)  local s = GetSpecRoot(specID); return (s and s.barCount)  or 0 end
+local function GetIconCount(specID) local s = GetSpecRoot(specID); return (s and s.iconCount) or 0 end
+
+-- a slot for a new Aura Bar / Icon: the first one without a spell is cleared and reused,
+-- else one is added; nil when the spec is full
+SB.freshSlots = {}
+local function TakeSlot(kind, specID)
+    local s = GetSpecRoot(specID)
+    if not s then return nil end
+    local isBar = kind == "bars"
+    local prefix, list = isBar and "bar" or "icon", isBar and s.bars or s.icons
+    local n = isBar and s.barCount or s.iconCount
+    local idx
+    for i = 1, n do
+        local d = list[prefix .. i]
+        if type(d) ~= "table" or not d.spellID then idx = i break end
+    end
+    if not idx then
+        if n >= (SB.MAX_SLOTS or 30) then return nil end
+        idx = n + 1
+        if isBar then s.barCount = idx else s.iconCount = idx end
+    end
+    local key = prefix .. idx
+    if not specID or tostring(specID) == tostring(GetCurrentSpecID()) then
+        local release = isBar and SB.ReleaseBar or SB.ReleaseIcon
+        if release then release(key) end
+    end
+    list[key] = nil
+    SB.freshSlots[key] = true
+    return key
+end
+
+-- slots holding a spell (the count shown to the user)
+local function UsedSlots(kind, specID)
+    local s = GetSpecRoot(specID)
+    if not s then return 0 end
+    local isBar = kind == "bars"
+    local prefix, list = isBar and "bar" or "icon", isBar and s.bars or s.icons
+    local used = 0
+    for i = 1, (isBar and s.barCount or s.iconCount) do
+        local d = list[prefix .. i]
+        if type(d) == "table" and d.spellID then used = used + 1 end
+    end
+    return used
+end
 
 SB.editingSpec = nil
 function SB.EditingSpec()
@@ -74,3 +147,5 @@ SB.GetBarDB         = GetBarDB
 SB.GetIconDB        = GetIconDB
 SB.GetBarCount      = GetBarCount
 SB.GetIconCount     = GetIconCount
+SB.TakeSlot         = TakeSlot
+SB.UsedSlots        = UsedSlots

@@ -474,6 +474,101 @@ COLL.specialStyles = {
 
 M.COLLECTIONS = COLL
 
+-- a value as one sorted string: unset and false read the same, "_" keys and skip keys left out
+local function Canon(v, skip, out)
+    if type(v) ~= "table" then
+        out[#out + 1] = (type(v) == "number") and ("%.4f"):format(v) or tostring(v)
+        return
+    end
+    local keys = {}
+    for k, x in pairs(v) do
+        local ks = tostring(k)
+        if x ~= false and ks:sub(1, 1) ~= "_" and not (skip and skip[ks]) then keys[#keys + 1] = k end
+    end
+    table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+    out[#out + 1] = "{"
+    for _, k in ipairs(keys) do
+        out[#out + 1] = tostring(k) .. "="
+        Canon(v[k], skip, out)
+        out[#out + 1] = ";"
+    end
+    out[#out + 1] = "}"
+end
+
+-- a short fingerprint of a value (nil for nothing)
+function M.Print(v, skip)
+    if v == nil then return nil end
+    local parts = {}
+    Canon(v, skip, parts)
+    local s = table.concat(parts)
+    local h = 5381
+    for i = 1, #s do h = (h * 33 + s:byte(i)) % 4294967296 end
+    return ("%08x:%d"):format(h, #s)
+end
+
+-- ids a profile gives its own groups, and the group links that follow them
+local GROUP_SKIP = { id = true }
+local SPEC_SKIP = { customGroup = true }
+
+local function ByName(list, sec)
+    local out = {}
+    for _, g in ipairs(list or {}) do
+        if not sec or Fits(sec, g) then out[g.name or ""] = g end
+    end
+    return out
+end
+
+-- every item of an import next to the same item here: { [section index] = { {id, ident, label, pack, cur} } }
+-- (id = the wizard's item id, ident = what stays the same between profiles: a name, a spec)
+function M.PackDiff(data)
+    local db = E.db.thingsUI or {}
+    local out = {}
+    for i, sec in ipairs(M.SECTIONS) do
+        if Present(sec, data) then
+            local list = {}
+            local c = sec.collection
+            if c == "customGroups" or c == "customBars" then
+                local k = sec.keys[1]
+                local mine = ByName(db[k] and db[k].groups, sec.only and sec)
+                for idx, g in ipairs((data[k] and data[k].groups) or {}) do
+                    if Fits(sec, g) then
+                        local n = g.name or ""
+                        list[#list + 1] = { id = ((c == "customGroups") and "g" or "c") .. idx, ident = "n:" .. n, label = n,
+                            pack = M.Print(g, GROUP_SKIP), cur = M.Print(mine[n], GROUP_SKIP) }
+                    end
+                end
+            elseif c == "barSetup" then
+                local mine = ByName(db.barSetup and db.barSetup.setups)
+                for idx, s in ipairs((data.barSetup and data.barSetup.setups) or {}) do
+                    local n = s.name or ""
+                    list[#list + 1] = { id = "b" .. idx, ident = "n:" .. n, label = n,
+                        pack = M.Print(s), cur = M.Print(mine[n]) }
+                end
+            elseif c == "specialBars" then
+                local mine = (db.specialBars and db.specialBars.specs) or {}
+                for specKey, s in pairs((data.specialBars and data.specialBars.specs) or {}) do
+                    list[#list + 1] = { id = "s" .. specKey, ident = "s:" .. specKey, label = SpecLabel(specKey),
+                        pack = M.Print(s, SPEC_SKIP), cur = M.Print(mine[specKey], SPEC_SKIP) }
+                end
+            elseif c == "specialStyles" then
+                local mine = db.specialStyles or {}
+                for _, kind in ipairs({ "bars", "icons" }) do
+                    for name, st in pairs((data.specialStyles and data.specialStyles[kind]) or {}) do
+                        list[#list + 1] = { id = kind .. ":" .. name, ident = kind .. ":" .. name, label = name,
+                            pack = M.Print(st), cur = M.Print(mine[kind] and mine[kind][name]) }
+                    end
+                end
+            else
+                local p, m = {}, {}
+                for _, k in ipairs(sec.keys) do p[k] = data[k]; m[k] = db[k] end
+                list[1] = { id = "_", ident = "_", label = sec.name, pack = M.Print(p), cur = M.Print(m) }
+            end
+            out[i] = list
+        end
+    end
+    return out
+end
+
 -- target: a profile name to compare with and write into (default: this profile)
 function M.Analyze(str, target)
     local data = Decode(str)

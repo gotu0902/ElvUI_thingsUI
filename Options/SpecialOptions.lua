@@ -302,7 +302,7 @@ local function AddSlotSpells(values, sorting, isBar, specID)
     local kind = isBar and "bars" or "icons"
     local has = {}
     for _, k in ipairs(sorting or {}) do has[k] = true end
-    for i = 1, (isBar and (s.barCount or 3) or (s.iconCount or 3)) do
+    for i = 1, (isBar and (s.barCount or 0) or (s.iconCount or 0)) do
         local d = s[kind] and s[kind][(isBar and "bar" or "icon") .. i]
         local k = type(d) == "table" and d.spellID and tostring(d.spellID)
         if k and values and not values[k] then
@@ -1048,17 +1048,14 @@ function TUI:SpecialBarOptions(barKey, ctx)
     commonArgs.copyBar = {
         order = 4.4, type = "execute", name = "|cFF8AC8FFCopy Bar|r",
         hidden = function() return not db().spellID end,
-        disabled = function() local s = SB.GetSpecRoot(ESpec()); return (s.barCount or 3) >= (SB.MAX_SLOTS or 12) end,
+        disabled = function() return SB.UsedSlots("bars", ESpec()) >= (SB.MAX_SLOTS or 30) end,
         func = function()
-            local s = SB.GetSpecRoot(ESpec()); local c = s.barCount or 3
-            if c >= (SB.MAX_SLOTS or 12) then return end
             local copy = ns.DeepCopy(db())
             copy.spellID, copy.spellName, copy.customIcon = nil, nil, nil   -- can't track one spell twice; keep the style, pick a new spell
             copy.enabled = false
-            local newKey = "bar" .. (c + 1)
-            s.bars = s.bars or {}
-            s.bars[newKey] = copy
-            s.barCount = c + 1
+            local newKey = SB.TakeSlot("bars", ESpec())
+            if not newKey then return end
+            SB.GetSpecRoot(ESpec()).bars[newKey] = copy
             if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end
             TUI:UpdateSpecialBars(); NotifyChange()
             if ns.SB_OpenBarEditor then ns.SB_OpenBarEditor(newKey) end
@@ -1447,7 +1444,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
     commonArgs.auraKind = {
         order = 3.52, type = "select", name = "Aura Type",
         hidden = function() return not db().spellID end,
-        values = { BOTH = "Buff or Debuff", HELPFUL = "Buff (on you)", HARMFUL = "Debuff (on target)" },
+        values = { BOTH = "Auto", HELPFUL = "Buff (on you)", HARMFUL = "Debuff (on target)" },
         sorting = { "BOTH", "HELPFUL", "HARMFUL" },
         get = function() return db().auraKind or "BOTH" end,
         set = function(_, v)
@@ -1549,17 +1546,14 @@ function TUI:SpecialIconOptions(keyArg, ctx)
     commonArgs.copyIcon = {
         order = 4.4, type = "execute", name = "|cFF8AC8FFCopy Icon|r",
         hidden = function() return not db().spellID end,
-        disabled = function() local s = SB.GetSpecRoot(ESpec()); return (s.iconCount or 3) >= (SB.MAX_SLOTS or 12) end,
+        disabled = function() return SB.UsedSlots("icons", ESpec()) >= (SB.MAX_SLOTS or 30) end,
         func = function()
-            local s = SB.GetSpecRoot(ESpec()); local c = s.iconCount or 3
-            if c >= (SB.MAX_SLOTS or 12) then return end
             local copy = ns.DeepCopy(db())
             copy.spellID, copy.spellName, copy.customIcon = nil, nil, nil   -- can't track one spell twice; keep the style, pick a new spell
             copy.enabled = false
-            local newKey = "icon" .. (c + 1)
-            s.icons = s.icons or {}
-            s.icons[newKey] = copy
-            s.iconCount = c + 1
+            local newKey = SB.TakeSlot("icons", ESpec())
+            if not newKey then return end
+            SB.GetSpecRoot(ESpec()).icons[newKey] = copy
             TUI:UpdateSpecialBars(); NotifyChange()
             if ns.SB_OpenIconEditor then ns.SB_OpenIconEditor(newKey) end
         end,

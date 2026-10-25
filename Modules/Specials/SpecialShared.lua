@@ -167,26 +167,26 @@ end
 
 local function RemoveBarSlot(index, specID)
     local s = GetSpecRoot(specID)
-    local count = s.barCount or 3
+    local count = s.barCount or 0
     if not index or index < 1 or index > count then return end
     local release = SB.ReleaseBar
     if release and not specID then for i = 1, count do release("bar" .. i) end end
     s.bars = s.bars or {}
     for i = index, count - 1 do s.bars["bar" .. i] = s.bars["bar" .. (i + 1)] end
     s.bars["bar" .. count] = nil
-    s.barCount = math.max(1, count - 1)
+    s.barCount = math.max(0, count - 1)
 end
 
 local function RemoveIconSlot(index, specID)
     local s = GetSpecRoot(specID)
-    local count = s.iconCount or 3
+    local count = s.iconCount or 0
     if not index or index < 1 or index > count then return end
     local release = SB.ReleaseIcon
     if release and not specID then for i = 1, count do release("icon" .. i) end end
     s.icons = s.icons or {}
     for i = index, count - 1 do s.icons["icon" .. i] = s.icons["icon" .. (i + 1)] end
     s.icons["icon" .. count] = nil
-    s.iconCount = math.max(1, count - 1)
+    s.iconCount = math.max(0, count - 1)
 end
 
 SB.RemoveBarSlot          = RemoveBarSlot
@@ -202,7 +202,7 @@ SB.yoinkedBars            = yoinkedBars
 local function GetSpellUsageInfo(spellID, excludeBarKey, excludeIconKey, specID)
     if not spellID then return nil end
     local s = GetSpecRoot(specID)
-    for i = 1, (s.barCount or 3) do
+    for i = 1, (s.barCount or 0) do
         local key = "bar" .. i
         if key ~= excludeBarKey then
             local bd = s.bars and s.bars[key]
@@ -211,7 +211,7 @@ local function GetSpellUsageInfo(spellID, excludeBarKey, excludeIconKey, specID)
             end
         end
     end
-    for i = 1, (s.iconCount or 3) do
+    for i = 1, (s.iconCount or 0) do
         local key = "icon" .. i
         if key ~= excludeIconKey then
             local id = s.icons and s.icons[key]
@@ -229,7 +229,7 @@ SB.GetSpellUsageInfo = GetSpellUsageInfo
 local function FindSlotForSpell(kind, spellID, specID)
     local s = GetSpecRoot(specID)
     local isBar = kind == "bars"
-    for i = 1, (isBar and (s.barCount or 3) or (s.iconCount or 3)) do
+    for i = 1, (isBar and (s.barCount or 0) or (s.iconCount or 0)) do
         local key = (isBar and "bar" or "icon") .. i
         local d = s[kind] and s[kind][key]
         if d and d.spellID == spellID then return key end

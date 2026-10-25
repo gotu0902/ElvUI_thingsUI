@@ -62,15 +62,32 @@ function W.Open(str, opts)
     local stage, render
     local pasteText, pasteErr = "", nil
 
+    -- opts.update = { [section index] = { [item id] = "new"|"pack"|"mine"|"diff" } }: a pack update,
+    -- only what it changed; ticked when new or untouched here
+    local up = opts.update
     local function InitFromAnalysis(a)
         A = a
+        if up then
+            local keep = {}
+            for _, sec in ipairs(A.sections) do if up[sec.index] then keep[#keep + 1] = sec end end
+            A.sections = keep
+        end
         single = #A.sections == 1
         plan, chosen = {}, {}
         for _, sec in ipairs(A.sections) do
             chosen[sec.index] = single
             plan[sec.index] = { mode = sec.collection and "choose" or "overwrite", items = {} }
+            if up then
+                local any = false
+                for id, st in pairs(up[sec.index]) do
+                    local on = st == "new" or st == "pack"
+                    plan[sec.index].items[id] = { include = on }
+                    any = any or on
+                end
+                chosen[sec.index] = any
+            end
         end
-        stage = single and "config" or "start"
+        stage = single and "config" or (up and "modules" or "start")
     end
 
     if str and tostring(str):gsub("%s", "") ~= "" then
@@ -114,13 +131,27 @@ function W.Open(str, opts)
     end
 
     local function SectionLine(sec)
+        if up then
+            local n = 0
+            for _ in pairs(up[sec.index] or {}) do n = n + 1 end
+            return SecName(sec) .. (" |cFF888888(%d changed)|r"):format(n)
+        end
         local extra = sec.collection
             and (" |cFF888888(%d new, %d already exist)|r"):format(sec.newCount or 0, sec.dupCount or 0) or ""
         return SecName(sec) .. extra
     end
 
+    local function UpdateTag(sec, id)
+        local st = up and up[sec.index] and up[sec.index][id]
+        if st == "pack" then return " |cFF40FF40(updated)|r" end
+        if st == "mine" then return " |cFFFF6060(you changed this too)|r" end
+        if st == "diff" then return " |cFFFFD200(yours differs)|r" end
+        return ""
+    end
+
     -- another profile takes it as saved; this one needs the reload
     local function Done()
+        if opts.onApplied then opts.onApplied() end
         if opts.dest then
             print("|cFF8080FFthingsUI|r - copied into " .. opts.dest .. ". It shows the next time you use that profile.")
         else
@@ -228,10 +259,12 @@ function W.Open(str, opts)
             end)
         end
         Label(c, " ")
-        Add(c, "Button", function(w)
-            w:SetText("< Back"); w:SetWidth(120)
-            w:SetCallback("OnClick", function() stage = "start"; render() end)
-        end)
+        if not up then
+            Add(c, "Button", function(w)
+                w:SetText("< Back"); w:SetWidth(120)
+                w:SetCallback("OnClick", function() stage = "start"; render() end)
+            end)
+        end
         Add(c, "Button", function(w)
             w:SetText("Continue >"); w:SetWidth(140)
             w:SetCallback("OnClick", function()
@@ -249,9 +282,22 @@ function W.Open(str, opts)
 
     local function BuildItems(c, sec, p, rerender)
         local newItems, dupItems = {}, {}
+        local only = up and up[sec.index]
+        if only then
+            Add(c, "Button", function(w)
+                w:SetText("Tick All"); w:SetWidth(120)
+                w:SetCallback("OnClick", function()
+                    for id in pairs(only) do p.items[id] = p.items[id] or {}; p.items[id].include = true end
+                    rerender()
+                end)
+            end)
+            Label(c, " ")
+        end
         for _, it in ipairs(sec.items or {}) do
-            local bucket = it.exists and dupItems or newItems
-            bucket[#bucket + 1] = it
+            if not only or only[it.id] then
+                local bucket = it.exists and dupItems or newItems
+                bucket[#bucket + 1] = it
+            end
         end
         if #newItems > 0 then
             Label(c, "|cFF40FF40New|r")
@@ -270,7 +316,7 @@ function W.Open(str, opts)
                 local item = EnsureItem(p, it)
                 if sec.fieldGroups then
                     local grp = Add(c, "InlineGroup", function(w)
-                        w:SetTitle(it.label); w:SetFullWidth(true); w:SetLayout("Flow")
+                        w:SetTitle(it.label .. UpdateTag(sec, it.id)); w:SetFullWidth(true); w:SetLayout("Flow")
                     end)
                     Add(grp, "CheckBox", function(w)
                         w:SetFullWidth(true); w:SetLabel("|cFFFF6060Overwrite mine|r"); w:SetValue(item.include)
@@ -287,7 +333,7 @@ function W.Open(str, opts)
                 else
                     Add(c, "CheckBox", function(w)
                         w:SetFullWidth(true)
-                        w:SetLabel(it.label .. " |cFF888888- overwrites yours|r")
+                        w:SetLabel(it.label .. UpdateTag(sec, it.id) .. " |cFF888888- overwrites yours|r")
                         w:SetValue(item.include)
                         w:SetCallback("OnValueChanged", function(_, _, v) item.include = v and true or false end)
                     end)
@@ -299,7 +345,7 @@ function W.Open(str, opts)
     local function BuildSectionPage(c, sec, rerender)
         Heading(c, SecName(sec))
         if not sec.collection then
-            Label(c, "Imports this whole section, replacing your current settings for it.")
+            Label(c, "Imports this whole section, replacing your current settings for it." .. UpdateTag(sec, "_"))
             return
         end
         local p = plan[sec.index]

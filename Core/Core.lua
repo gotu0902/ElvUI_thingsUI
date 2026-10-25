@@ -200,7 +200,7 @@ SlashCmdList.THINGSUI = function(msg)
     cmd = strlower(cmd)
     if cmd == "" then E:ToggleOptions("thingsUI") return end
     if slashCommands[cmd] then slashCommands[cmd](rest) return end
-    print("|cFF8080FFthingsUI|r: /tui opens the options, /tui install the installer, /tui alt the alt profile setup, /tui rf the Raid Frame Builder, /tui prof the profiler.")
+    print("|cFF8080FFthingsUI|r: /tui opens the options, /tui install the installer, /tui alt the alt profile setup, /tui rf the Raid Frame Builder, /tui updates the pack updates, /tui prof the profiler.")
 end
 
 -- work inside hooks on ElvUI/Blizzard frames is billed to their rows, not ours

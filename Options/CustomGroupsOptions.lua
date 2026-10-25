@@ -402,16 +402,12 @@ local function CopySpecialToLive(srcSpec, srcIconKey, groupID)
     local sb = E.db.thingsUI and E.db.thingsUI.specialBars
     local src = sb and sb.specs and sb.specs[srcSpec] and sb.specs[srcSpec].icons and sb.specs[srcSpec].icons[srcIconKey]
     if not (SB and SB.GetSpecRoot and src) then return end
-    local s = SB.GetSpecRoot()
-    if not s then return end
-    local c = s.iconCount or 3
-    if c >= (SB.MAX_SLOTS or 12) then E:Print(("All %d Aura Icon slots are in use on this spec."):format(SB.MAX_SLOTS or 12)) return end
+    local key = SB.TakeSlot and SB.TakeSlot("icons")
+    if not key then E:Print(("All %d Aura Icon slots are in use on this spec."):format(SB.MAX_SLOTS or 30)) return end
     if ns.SB_RebuildSlotPages then C_Timer.After(0, ns.SB_RebuildSlotPages) end
     local copy = ns.DeepCopy(src)
     copy.customGroup = groupID
-    s.icons = s.icons or {}
-    s.icons["icon" .. (c + 1)] = copy
-    s.iconCount = c + 1
+    SB.GetSpecRoot().icons[key] = copy
     TUI:UpdateSpecialBars(); TUI:UpdateCustomGroups(); NotifyChange()
 end
 
