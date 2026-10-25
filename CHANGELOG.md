@@ -70,7 +70,7 @@
 - Aura Icon spell lookups are cached in combat too (rebuilt after combat), and the role visibility rule only reacts to your own spec changes
 - A tracked cast (Ironfur with Ticks, totem timers) no longer rebuilds every Aura Bar and Aura Icon: only the bars and icons that use it update, and ticks just move
 ### Fixes
-- Aura Icons and Aura Bars track what the Cooldown Manager tracks for that spell: another buff that only links to it is left out (Violent Outburst no longer shows Seeing Red)
+- Aura Icons and Aura Bars track what the Cooldown Manager tracks for that spell: the entry that lists the aura, not every entry on the same spell (Violent Outburst and Seeing Red share one spell in the CDM, so a Violent Outburst icon showed Seeing Red too). /tui aura <spellID> lists what an Aura Icon for that spell tracks and why
 - Stack and charge numbers stay on top of glows: the CDM's proc / Spell Editor glow drew over them, and the pandemic glow did on Aura Icons and in groups
 - The login popups (setup updates, Character Setup) no longer block your keybinds while they show
 - Groups - Icons Spacing showed 2 less than it used (Spacing 1 gave a 3 px gap, so a 1 px gap took -1). It shows the real gap now: -1 = one shared border line, 0 = side by side, 1 = a 1 px gap. Your groups look the same, only the number changes

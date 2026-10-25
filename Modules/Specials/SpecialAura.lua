@@ -28,40 +28,33 @@ function SA.InvalidateSpellExpansion()
     wipe(provisional)
 end
 
-function SA.ExpandSpellIDs(spellID)
-    if not spellID then return nil end
-    local hit = expandCache[spellID]
-    if hit then return hit end
+-- why: a list that gets a line for every ID added and where it came from (/tui aura)
+local function Build(spellID, why)
+    local function Note(fmt, ...) if why then why[#why + 1] = fmt:format(...) end end
     local map = { [spellID] = true }
-    local base = SB.GetBaseSpellID and SB.GetBaseSpellID(spellID)
-    if base then map[base] = true end
     -- a patch can re-ID a buff (12.1.5: Lifebloom 1227806 lost its link to the 33763 HoT),
     -- so a tracked row with the same name counts too
     local myName = PlainID(C_Spell.GetSpellName(spellID))
-    local row = {}
+    -- the base spell only when it's the same buff by name: an override can sit on another one
+    local base = SB.GetBaseSpellID and SB.GetBaseSpellID(spellID)
+    if base and base ~= spellID then
+        if PlainID(C_Spell.GetSpellName(base)) == myName then
+            map[base] = true
+            Note("base spell %d (same name)", base)
+        else
+            Note("base spell %d %s left out (another name)", base, tostring(C_Spell.GetSpellName(base)))
+            base = nil
+        end
+    end
+    local rows = {}
     local function consider(info)
         if not info then return end
-        wipe(row)
-        local o = PlainID(info.overrideSpellID)
-        local s = PlainID(info.spellID)
-        if o then row[#row + 1] = o end
-        if s then row[#row + 1] = s end
-        if info.linkedSpellIDs then
-            for _, lid in ipairs(info.linkedSpellIDs) do
-                local pl = PlainID(lid)
-                if pl then row[#row + 1] = pl end
-            end
+        local r = { s = PlainID(info.spellID), o = PlainID(info.overrideSpellID), linked = {} }
+        for _, lid in ipairs(info.linkedSpellIDs or {}) do
+            local pl = PlainID(lid)
+            if pl then r.linked[#r.linked + 1] = pl end
         end
-        -- only the entry for this spell (its own ID, or the same name) brings its links in; an
-        -- entry that merely links to this spell is another buff (Seeing Red links Violent Outburst)
-        local match = (s and (s == spellID or s == base)) or (o and (o == spellID or o == base)) or false
-        if not match and myName then
-            match = (s and PlainID(C_Spell.GetSpellName(s)) == myName)
-                or (o and PlainID(C_Spell.GetSpellName(o)) == myName) or false
-        end
-        if match then
-            for _, id in ipairs(row) do map[id] = true end
-        end
+        rows[#rows + 1] = r
     end
     if C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCategorySet then
         for _, cat in ipairs({ CAT_BUFF, CAT_BAR }) do
@@ -76,12 +69,52 @@ function SA.ExpandSpellIDs(spellID)
             for _, c in ipairs({ v:GetChildren() }) do consider(c.cooldownInfo) end
         end
     end
+    local function Is(id) return id ~= nil and (id == spellID or id == base) end
+    local function Name(id) return id and PlainID(C_Spell.GetSpellName(id)) end
+    -- the CDM entry for this spell brings all its auras; an entry that lists this aura
+    -- brings just it (entries can share a spell: Violent Outburst and Seeing Red both sit on 386477)
+    local direct = false
+    for _, r in ipairs(rows) do
+        if Is(r.s) or Is(r.o) then
+            direct = true
+            if r.s then map[r.s] = true end
+            if r.o then map[r.o] = true end
+            for _, l in ipairs(r.linked) do map[l] = true end
+            Note("CDM entry %s is this spell: %s", tostring(r.s or r.o), table.concat(r.linked, ", "))
+        else
+            for _, l in ipairs(r.linked) do
+                if Is(l) then
+                    direct = true
+                    Note("CDM entry %s lists it", tostring(r.s or r.o))
+                    break
+                end
+            end
+        end
+    end
+    -- not in the CDM under this ID (a patch re-IDed the buff): entries by the same name, their IDs with that name
+    if not direct and myName then
+        for _, r in ipairs(rows) do
+            if Name(r.s) == myName or Name(r.o) == myName then
+                local ids = { r.s, r.o }
+                for _, l in ipairs(r.linked) do ids[#ids + 1] = l end
+                for _, id in pairs(ids) do
+                    if Name(id) == myName and not map[id] then
+                        map[id] = true
+                        Note("same name in CDM entry %s: %d", tostring(r.s or r.o), id)
+                    end
+                end
+            end
+        end
+    end
     -- a CDM entry can carry another ID than the aura it tracks: the spell you know by
     -- that name, and what each ID resolves to while its aura is up (Lifebloom 1227806 -> 33763)
-    if myName then
+    if myName and not direct then
         local known = C_Spell.GetSpellInfo(myName)
         local kid = known and PlainID(known.spellID)
-        if kid then map[kid] = true end
+        if kid then
+            map[kid] = true
+            Note("the spell you know as %s: %d", myName, kid)
+        end
     end
     if not InCombatLockdown() then
         local ids = {}
@@ -90,14 +123,38 @@ function SA.ExpandSpellIDs(spellID)
             -- restricted auras make the lookup throw
             local ok, aura = pcall(C_UnitAuras.GetPlayerAuraBySpellID, id)
             local aid = ok and aura and PlainID(aura.spellId)
-            if aid then map[aid] = true end
+            if aid then
+                if not map[aid] then Note("aura up for %d: %d", id, aid) end
+                map[aid] = true
+            end
         end
     end
+    return map
+end
+
+function SA.ExpandSpellIDs(spellID)
+    if not spellID then return nil end
+    local hit = expandCache[spellID]
+    if hit then return hit end
+    local map = Build(spellID)
     -- in combat some IDs read as secrets: keep it for now, rebuild once combat ends
     expandCache[spellID] = map
     if InCombatLockdown() then provisional[spellID] = true end
     return map
 end
+
+-- /tui aura <spellID>: the IDs an Aura Icon or Bar for it tracks, and why
+ns.SlashCommand("aura", function(arg)
+    local id = tonumber(strtrim(arg or ""))
+    if not id then print("|cFF8080FFthingsUI|r: /tui aura <spellID>") return end
+    local why = {}
+    local map = Build(id, why)
+    local ids = {}
+    for k in pairs(map) do ids[#ids + 1] = ("%d %s"):format(k, tostring(C_Spell.GetSpellName(k))) end
+    table.sort(ids)
+    print(("|cFF8080FFthingsUI|r %d %s tracks: %s"):format(id, tostring(C_Spell.GetSpellName(id)), table.concat(ids, " | ")))
+    for _, line in ipairs(why) do print("  " .. line) end
+end)
 
 local function EnsureContainer(wrapper, field)
     local c = wrapper[field]
