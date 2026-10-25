@@ -147,7 +147,8 @@ end
 
 -- visibility rules for standalone and row icons; a grouped icon follows its group's
 local function VisibleNow(db)
-    return (ns.CustomGroups and ns.CustomGroups.testMode) or ns.Visibility.Shown(db.visibility)
+    if ns.CustomGroups and ns.CustomGroups.testMode then return ns.Visibility.PreviewShown(db.visibility) end
+    return ns.Visibility.Shown(db.visibility)
 end
 
 function SB.RefreshIconVisibility()

@@ -375,7 +375,8 @@ end
 
 -- visibility rules for standalone and Bar Setup bars; a grouped bar follows its group's
 local function VisibleNow(db)
-    return (ns.CustomGroups and ns.CustomGroups.testMode) or ns.Visibility.Shown(db.visibility)
+    if ns.CustomGroups and ns.CustomGroups.testMode then return ns.Visibility.PreviewShown(db.visibility) end
+    return ns.Visibility.Shown(db.visibility)
 end
 
 local function Restack()

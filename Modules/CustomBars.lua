@@ -774,10 +774,15 @@ local function SyncGroup(group)
         end
     end
     EnsureMover(st, group)
+    local testOn = ns.CustomGroups and ns.CustomGroups.testMode and true or false
+    -- a preview leaves out groups for another role, unless it's the one being edited
+    if testOn and M.previewFocusID ~= group.id and not ns.Visibility.PreviewShown(group.visibility) then
+        frame:Hide()
+        return
+    end
     frame:Show()
 
     local text = M.IsText(group)
-    local testOn = ns.CustomGroups and ns.CustomGroups.testMode and true or false
     local cdH = text and ns.GroupText.SyncCooldowns(st, group, effW, effH, testOn) or 0
     if text then
         if ns.GroupText.RenderTest(st, group, cdH, M.Entries(group), function(def)

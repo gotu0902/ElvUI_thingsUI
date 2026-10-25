@@ -101,6 +101,14 @@ function V.Shown(v)
     return true
 end
 
+-- a preview ignores the rules except the role one: that can't change while you look,
+-- and groups made for another role would cover the ones you're editing
+function V.PreviewShown(v)
+    if not (v and v.enabled) then return true end
+    if v.roles and next(v.roles) and not v.roles[Role()] then return false end
+    return true
+end
+
 -- owners re-check themselves when anything a rule can read has changed
 local listeners = {}
 function V.OnChange(fn) listeners[#listeners + 1] = fn end

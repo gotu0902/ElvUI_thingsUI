@@ -265,7 +265,17 @@ local function Font(name, size, outline)
     return path, size, outline
 end
 
--- an entry's border: the group's (inside), or its Aura Icon's / style's (outside)
+-- an Aura Icon in a group draws its own border only when it overrides the group's
+-- (unset: icons from before the toggle overrode by turning Show Border on)
+function A.OwnBorder(idb)
+    if not idb then return false end
+    local o = idb.overrideGroupBorder
+    if o == nil then return idb.showBorder == true end
+    return o == true
+end
+
+-- an entry's border: the group's, inside the icon (a style picked for an entry gives its glow,
+-- not its border), or its Aura Icon's own (outside, CDM-sized) when that overrides the group
 local function LaneBorder(group, idb, def)
     local bShow, bSize, bInset, bColor = group.showBorder,
         group.borderSize or 1, group.borderInset or 0, group.borderColor
@@ -275,26 +285,16 @@ local function LaneBorder(group, idb, def)
         and (gau.sortGlowStyle or "pulse") == "pixel" then
         bSize = gau.sortGlowThickness or bSize
     end
-    if idb and idb.showBorder then
-        bShow, bSize, bInset, bColor = true,
+    if A.OwnBorder(idb) then
+        bShow, bSize, bInset, bColor = idb.showBorder and true or false,
             idb.borderSize or 1, idb.borderInset or 0, idb.borderColor
         bStroke = idb.borderStroke
         if idb.glowBorderStroke and idb.showGlow and A.MapGlowStyle(idb.glowType) == "pixel" then bSize = idb.glowThickness or bSize end
         bInset = bInset - bSize
     end
-    local SBm = ns.SpecialBars
-    local st = (not idb) and def and def.styleName and SBm and SBm.Styles
-        and SBm.Styles.Get("icons", def.styleName)
-    if st then
-        bShow, bSize, bInset, bColor = st.showBorder, st.borderSize or 1, st.borderInset or 0, st.borderColor
-        bStroke = st.borderStroke
-        if bShow and st.glowBorderStroke and st.showGlow and A.MapGlowStyle(st.glowType) == "pixel" then
-            bSize = st.glowThickness or bSize
-        end
-        bInset = bInset - bSize
-    end
     return bShow, bSize, bInset, bColor, bStroke
 end
+A.LaneBorder = LaneBorder
 
 -- Preview Pandemic for a group entry: where the group's first aura sits, with its look
 -- (lookSrc: the settings being edited, else the entry's)

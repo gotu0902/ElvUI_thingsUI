@@ -1322,6 +1322,12 @@ function TUI:SpecialIconOptions(keyArg, ctx)
     -- on top of a cooldown: sized and placed by the CDM like a row icon
     local function onTop() return not styleMode and not db().cdmRow and db().overSpell ~= nil end
     local function placed() return isGrouped() or inRow() or onTop() end
+    -- in a group the border is the group's unless the icon overrides it
+    local function OwnBorderOn()
+        local AL = ns.AuraLane
+        return AL and AL.OwnBorder(db()) or false
+    end
+    local function GroupBorderOnly() return isGrouped() and not OwnBorderOn() end
 
     -- 5 s of the pandemic look on this icon (a style: the first icon wearing it)
     local function PreviewPandemic()
@@ -1722,7 +1728,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             hidden = function() local s = get("pandemicStyle") or "border" return s ~= "border" and s ~= "pixel" end,
                             disabled = function() return not get("showPandemic") end,
                             get = function() return get("pandemicBorderStroke") end,
-                            set = function(_, v) set("pandemicBorderStroke", v or nil) end },
+                            set = function(_, v) set("pandemicBorderStroke", v and true or false) end },
                         pandemicLines = { order = 3.5, type = "range", name = "Particles", min = 1, max = 12, step = 1,
                             hidden = function() return get("pandemicStyle") ~= "pixel" end,
                             disabled = function() return not get("showPandemic") end,
@@ -1748,10 +1754,23 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                 borderGroup = {
                     order = 12, type = "group", name = "Border", inline = true,
                     args = {
+                        overrideGroupBorder = { order = 0.5, type = "toggle", width = "full",
+                            name = "|cFF8AC8FFOverride Custom Group Border|r",
+                            hidden = function() return not (styleMode or isGrouped()) end,
+                            get = function()
+                                local AL = ns.AuraLane
+                                return AL and AL.OwnBorder(db()) or false
+                            end,
+                            set = function(_, v) set("overrideGroupBorder", v and true or false) end },
+                        groupBorderNote = { order = 0.6, type = "description", width = "full", fontSize = "medium",
+                            hidden = function() return not isGrouped() or OwnBorderOn() end,
+                            name = "|cFF888888The border follows the Custom Group (Groups - Icons > Layout). Enable the toggle above to set your own.|r\n" },
                         showBorder  = { order = 1, type = "toggle", name = "Show Border",
+                            hidden = GroupBorderOnly,
                             get = function() return get("showBorder") end,
                             set = function(_, v) set("showBorder", v) end },
                         borderSize  = { order = 2, type = "range", name = "Size",  min = 1, max = 16,  step = 0.01, bigStep = 1,
+                            hidden = GroupBorderOnly,
                             disabled = function()
                                 if not get("showBorder") then return true end
                                 local AL = ns.AuraLane
@@ -1761,17 +1780,20 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             get = function() return get("borderSize") end,
                             set = function(_, v) set("borderSize", v) end },
                         borderColor = { order = 3, type = "color", name = "Color", hasAlpha = true,
+                            hidden = GroupBorderOnly,
                             disabled = function() return not get("showBorder") end,
                             get = function() return unpackColor(get("borderColor"), true) end,
                             set = function(_, r, g, b, a) set("borderColor", { r=r, g=g, b=b, a=a }) end },
                         borderInset = { order = 4, type = "range", name = "Inset", min = -10, max = 10, step = 0.01, bigStep = 1,
+                            hidden = GroupBorderOnly,
                             disabled = function() return not get("showBorder") end,
                             get = function() return get("borderInset") end,
                             set = function(_, v) set("borderInset", v) end },
                         borderStroke = { order = 5, type = "toggle", name = "Stroke",
+                            hidden = GroupBorderOnly,
                             disabled = function() return not get("showBorder") end,
                             get = function() return get("borderStroke") end,
-                            set = function(_, v) set("borderStroke", v or nil) end },
+                            set = function(_, v) set("borderStroke", v and true or false) end },
                     },
                 },
                 glowGroup = {
@@ -1852,7 +1874,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                     name = function()
                         return (inRow() or onTop()) and "|cFF8AC8FFOverride CDM Row Text|r" or "|cFF8AC8FFOverride Custom Group Text|r"
                     end,
-                    hidden = function() return not (isGrouped() or inRow() or onTop()) end,
+                    hidden = function() return not (styleMode or isGrouped() or inRow() or onTop()) end,
                     get = function() return get("overrideGroupText") end,
                     set = function(_, v) set("overrideGroupText", v) end,
                 },
@@ -1868,7 +1890,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                 },
                 stackGroup = {
                     order = 10, type = "group", name = "Stack Count", inline = true,
-                    hidden = function() return (inRow() or onTop()) and not get("overrideGroupText") end,
+                    hidden = function() return placed() and not get("overrideGroupText") end,
                     args = {
                         showStacks  = { order = 1, type = "toggle", name = "Show Stacks",
                             get = function() return get("showStacks") end,
@@ -1908,7 +1930,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                 },
                 durationGroup = {
                     order = 20, type = "group", name = "Duration", inline = true,
-                    hidden = function() return (inRow() or onTop()) and not get("overrideGroupText") end,
+                    hidden = function() return placed() and not get("overrideGroupText") end,
                     args = {
                         showDuration   = { order = 1, type = "toggle", name = "Show Duration",
                             get = function() return get("showDuration") end,

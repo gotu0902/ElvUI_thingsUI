@@ -29,13 +29,13 @@ function M.SlotPoint(frame, slotIndex)
     if S.center then
         local tll = (S.perLine > 0) and S.perLine or math.max(S.n, 1)
         local rows = (S.n > 0) and math.ceil(S.n / tll) or 0
-        local cross = rows * (S.crossDim + S.sp)
+        local cross = (S.out or 0) + rows * (S.crossDim + S.sp)
         if S.horizontal then return S.pt, 0, cross * S.crossSign end
         return S.pt, cross * S.crossSign, 0
     end
     local tll = (S.perLine > 0) and S.perLine or (slotIndex + 1)
-    local along = (slotIndex % tll) * (S.alongDim + S.sp)
-    local cross = math.floor(slotIndex / tll) * (S.crossDim + S.sp)
+    local along = (S.out or 0) + (slotIndex % tll) * (S.alongDim + S.sp)
+    local cross = (S.out or 0) + math.floor(slotIndex / tll) * (S.crossDim + S.sp)
     if S.horizontal then return S.pt, along * S.alongSign, cross * S.crossSign end
     return S.pt, cross * S.crossSign, along * S.alongSign
 end
@@ -80,6 +80,13 @@ local function EnsureDB()
             db.nextID = db.nextID + 1
             CarryOldFlat(g, db)
             db.groups[1] = g
+        end
+    end
+    -- a group border sits inside the icon (as in WeakAuras); undo the short-lived outside move
+    for _, g in ipairs(db.groups) do
+        if g._borderOut then
+            g._borderOut = nil
+            if g.showBorder then g.borderInset = (g.borderInset or 0) - (g.borderSize or 1) end
         end
     end
     return db
@@ -294,8 +301,7 @@ local function ApplyGroupBorder(btn)
     if not (g and g.showBorder) then
         bd:Hide(); inner:Hide(); outer:Hide(); return
     end
-    DrawStroke3(bd, inner, outer, btn,
-        g.borderSize or 1, g.borderInset or 0,
+    DrawStroke3(bd, inner, outer, btn, g.borderSize or 1, g.borderInset or 0,
         g.borderColor or { r = 0, g = 0, b = 0, a = 1 }, g.borderStroke)
 end
 
@@ -758,42 +764,18 @@ local function RenderTestLane(gs, group, frame)
 
             local AL = ns.AuraLane
             local idb = entry.def and entry.def.iconDB
-            local bShow, bs, bi, bc, bstk = group.showBorder,
-                group.borderSize or 1, group.borderInset or 0, group.borderColor, false
-            local gau = group.auras
-            if bShow and gau and gau.sortGlow and gau.sortGlowBorderStroke and (gau.sortMode or "manual") ~= "manual"
-                and (gau.sortGlowStyle or "pulse") == "pixel" then
-                bs = gau.sortGlowThickness or bs
-            end
-            if idb and idb.showBorder then
-                bShow, bs, bi, bc, bstk = true,
-                    idb.borderSize or 1, idb.borderInset or 0, idb.borderColor, false
-                if idb.glowBorderStroke and idb.showGlow and AL.MapGlowStyle(idb.glowType) == "pixel" then bs = idb.glowThickness or bs end
-            end
-            if bShow and AL.EdgeRing then
+            -- the same border the live aura gets (an Aura Icon's own sits outside, with its stroke)
+            local bShow, bs, bi, bc, bstk = AL.LaneBorder(group, idb, entry.def)
+            if bShow then
                 if not f.border then
                     f.border = {}
                     for j = 1, 4 do f.border[j] = f:CreateTexture(nil, "OVERLAY") end
                 end
                 AL.EdgeRing(f, f.border, bs, bi, bc or { a = 1 })
-                if bstk then
-                    if not f.borderIn then
-                        f.borderIn, f.borderOut = {}, {}
-                        for j = 1, 4 do
-                            f.borderIn[j] = f:CreateTexture(nil, "OVERLAY")
-                            f.borderOut[j] = f:CreateTexture(nil, "OVERLAY")
-                        end
-                    end
-                    AL.EdgeRing(f, f.borderIn, 1, bi + bs, { a = 1 })
-                    AL.EdgeRing(f, f.borderOut, 1, bi - 1, { a = 1 })
-                elseif f.borderIn then
-                    for j = 1, 4 do f.borderIn[j]:Hide() f.borderOut[j]:Hide() end
-                end
+                AL.StrokeRing(f, f, bs, bi, bstk)
             else
                 if f.border then for j = 1, 4 do f.border[j]:Hide() end end
-                if f.borderIn then
-                    for j = 1, 4 do f.borderIn[j]:Hide() f.borderOut[j]:Hide() end
-                end
+                AL.StrokeRing(f, f, 0, 0, false)
             end
 
             -- fake numbers
@@ -968,7 +950,8 @@ local function CollectScopeInto(group, scope, root, shown)
             elseif idb and idb.enabled and idb.spellID and idb.customGroup == group.id and idb.showMissing then
                 -- Only When Missing: a slot of its own while the aura is down
                 -- its own Visibility rules decide too (it's our button, so in combat as well)
-                if (M.testMode or (not SBm.MissingUp(idb) and ns.Visibility.Shown(idb.visibility)))
+                if ((M.testMode and ns.Visibility.PreviewShown(idb.visibility))
+                    or (not SBm.MissingUp(idb) and ns.Visibility.Shown(idb.visibility)))
                     and not _seen["m" .. idb.spellID] then
                     _seen["m" .. idb.spellID] = true
                     list[#list + 1] = { kind = "missing", id = idb.spellID, li = idb.customGroupOrder or 20000 }
@@ -1056,7 +1039,13 @@ local function ApplyGroup(group, force)
 
     local iw = m_iw or group.iconWidth or group.iconSize or 36
     local ih = m_ih or ((group.squareIcon ~= false) and iw or (group.iconHeight or iw))
-    local sp     = m_sp or group.spacing or 2
+    -- the border sits inside the icon; pushed out (negative Inset) it gets room, so Spacing
+    -- always counts from border to border
+    local out = 0
+    if group.showBorder and not m_iw then
+        out = math.max(0, -(group.borderInset or 0))
+    end
+    local sp     = (m_sp or group.spacing or 2) + 2 * out
     local growth = group.growth or "RIGHT"
     local perLine = math.max(0, math.floor(group.columns or 0))
     local crop, skinPx
@@ -1173,11 +1162,11 @@ local function ApplyGroup(group, force)
             local col = idx % lineLen
             local rowN = math.min(lineLen, n - row * lineLen)
             local c = (col - (rowN - 1) / 2) * (alongDim + sp)
-            local cr = row * (crossDim + sp) * crossSign
+            local cr = (out + row * (crossDim + sp)) * crossSign
             if horizontal then x, y = c, cr else x, y = cr, -c end
         else
-            local along = (idx % lineLen) * (alongDim + sp)
-            local cross = math.floor(idx / lineLen) * (crossDim + sp)
+            local along = out + (idx % lineLen) * (alongDim + sp)
+            local cross = out + math.floor(idx / lineLen) * (crossDim + sp)
             if horizontal then x, y = along * alongSign, cross * crossSign
             else               x, y = cross * crossSign, along * alongSign end
         end
@@ -1189,13 +1178,13 @@ local function ApplyGroup(group, force)
         pt = pt, sp = sp, iw = iw, ih = ih, n = n, perLine = perLine,
         horizontal = horizontal, alongDim = alongDim, crossDim = crossDim,
         alongSign = alongSign, crossSign = crossSign, center = centered,
-        crop = crop, skin = skinPx, text = m_text,
+        crop = crop, skin = skinPx, text = m_text, out = out,
     }
 
     local lines = (n > 0) and math.ceil(n / lineLen) or 1
     local alongCount = math.min(lineLen, math.max(n, 1))
-    local alongPx = alongCount * alongDim + math.max(0, alongCount - 1) * sp
-    local crossPx = lines * crossDim + math.max(0, lines - 1) * sp
+    local alongPx = alongCount * alongDim + math.max(0, alongCount - 1) * sp + 2 * out
+    local crossPx = lines * crossDim + math.max(0, lines - 1) * sp + 2 * out
     if horizontal then
         ns.Pixel.SetSize(frame, alongPx, crossPx)
     else
@@ -1234,7 +1223,8 @@ local function ApplyGroup(group, force)
         end
     end
 
-    local visible = M.VisibilityOK(group) or M.testMode
+    local visible = M.VisibilityOK(group)
+        or (M.testMode and (M.previewFocusID == group.id or ns.Visibility.PreviewShown(group.visibility)))
     local lane = ns.AuraLane and ns.AuraLane.HasSets(group)
     frame:SetShown((visible and (n > 0 or lane or M.testMode)) and true or false)
     if ns.AuraLane then ns.AuraLane.Sync(group, frame) end

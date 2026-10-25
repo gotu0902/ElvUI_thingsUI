@@ -185,7 +185,7 @@ local function EditAura(def, title, onChange, group)
     if styled then
         local note = AceGUI:Create("Label")
         note:SetFullWidth(true)
-        note:SetText(("|cffCBA0FFGlow and border come from style:|r |cffFFFFFF%s|r"):format(def.styleName))
+        note:SetText(("|cffCBA0FFGlow comes from style:|r |cffFFFFFF%s|r |cff888888(the border is the group's)|r"):format(def.styleName))
         f:AddChild(note)
     else
         local glow = AceGUI:Create("CheckBox")
@@ -822,6 +822,14 @@ function TUI:CustomGroupsOptions()
                         name = "|cFF888888Nothing added for this scope.|r",
                         hidden = function() return #entriesFor(group, scope, getKey()) > 0 end,
                     }
+                    box._sorted = {
+                        order = 2, type = "description", width = "full", fontSize = "medium",
+                        name = "|cFF888888Sorted group: the auras share one glow (Order > Style or Glow) and the group's border.|r\n",
+                        hidden = function()
+                            return #entriesFor(group, scope, getKey()) == 0
+                                or ((group.auras and group.auras.sortMode) or "manual") == "manual"
+                        end,
+                    }
                     for i = 1, 50 do
                         local idx = i
                         local function entry() return entriesFor(group, scope, getKey())[idx] end
@@ -942,10 +950,10 @@ function TUI:CustomGroupsOptions()
 
                         box["r" .. i .. "_bstyle"] = {
                             order = base + 4.5, type = "select", name = "", width = 1.2,
-                            hidden = function() local e = entry(); return not (e and (e.kind == "aura" or e.kind == "timer")) end,
-                            disabled = function()
+                            hidden = function()
                                 local e = entry()
-                                return e and e.kind == "aura" and ((group.auras and group.auras.sortMode) or "manual") ~= "manual"
+                                if not (e and (e.kind == "aura" or e.kind == "timer")) then return true end
+                                return e.kind == "aura" and ((group.auras and group.auras.sortMode) or "manual") ~= "manual"
                             end,
                             values = function()
                                 local SBm = ns.SpecialBars
@@ -1518,8 +1526,8 @@ function TUI:CustomGroupsOptions()
                             set = function(_, v) gset("iconZoom", v) end },
                         spacing = { order = 2, type = "range", name = "Spacing", min = -10, max = 10, step = 0.01, bigStep = 1,
                             disabled = function() return group.matchAnchorIcons end,
-                            get = function() return (group.spacing or 2) - (ns.CDM_SPACING_INSET or 2) end,
-                            set = function(_, v) gset("spacing", v + (ns.CDM_SPACING_INSET or 2)) end },
+                            get = function() return group.spacing or 2 end,
+                            set = function(_, v) gset("spacing", v) end },
                         growth = { order = 3, type = "select", name = "Growth Direction", values = ns.GROWTH.VALUES, sorting = ns.GROWTH.ORDER,
                             get = function() return group.growth end, set = function(_, v) gset("growth", v) end },
                         columns = { order = 4, type = "range", name = "Wrap After (0 = no wrap)", min = 0, max = 20, step = 1,
@@ -1581,7 +1589,7 @@ function TUI:CustomGroupsOptions()
                                     get = function() return group.borderInset or 0 end, set = function(_, v) gset("borderInset", v) end },
                                 stroke = { order = 5, type = "toggle", name = "Stroke",
                                     disabled = function() return not group.showBorder end,
-                                    get = function() return group.borderStroke end, set = function(_, v) gset("borderStroke", v or nil) end },
+                                    get = function() return group.borderStroke end, set = function(_, v) gset("borderStroke", v and true or false) end },
                             },
                         },
                         positionGroup = {

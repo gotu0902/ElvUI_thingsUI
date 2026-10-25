@@ -96,12 +96,23 @@ function M.Get(kind, name)
     return root and name and root[name] or nil
 end
 
+-- every setting a style sets: one it was saved without (an unticked box used to be left
+-- out) counts as its default, or icons using the style would keep their own
+local function EachStyleValue(kind, style, fn)
+    for k, v in pairs(style) do fn(k, v, false) end
+    local ex = EXCLUDE[kind]
+    local d = (kind == "bars") and ns.SPECIAL_BAR_DEFAULTS or ns.SPECIAL_ICON_DEFAULTS
+    for k, v in pairs(d or {}) do
+        if style[k] == nil and not ex[k] and type(k) == "string" and k:sub(1, 1) ~= "_" then fn(k, v, true) end
+    end
+end
+
 function M.ApplyToDB(kind, name, db)
     local style = M.Get(kind, name)
     if not (style and db) then return false end
-    for k, v in pairs(style) do
+    EachStyleValue(kind, style, function(k, v)
         db[k] = type(v) == "table" and DeepCopy(v) or v
-    end
+    end)
     db.styleName = name
     return true
 end
@@ -109,10 +120,15 @@ end
 function M.IsDirty(kind, name, db, ignore)
     local style = M.Get(kind, name)
     if not (style and db) then return false end
-    for k, v in pairs(style) do
-        if not (ignore and ignore[k]) and not DeepEqual(v, db[k]) then return true end
-    end
-    return false
+    local dirty = false
+    -- unset and off are the same; a setting neither has set isn't a difference
+    EachStyleValue(kind, style, function(k, v, filled)
+        if dirty or (ignore and ignore[k]) then return end
+        local cur = db[k]
+        if cur == nil and (filled or v == false) then return end
+        if not DeepEqual(v, cur) then dirty = true end
+    end)
+    return dirty
 end
 
 function EachSpecial(kind, fn)
@@ -134,9 +150,9 @@ function M.ApplyToUsers(kind, name)
     local n = 0
     EachSpecial(kind, function(d)
         if d.styleName == name then
-            for k, v in pairs(style) do
+            EachStyleValue(kind, style, function(k, v)
                 d[k] = type(v) == "table" and DeepCopy(v) or v
-            end
+            end)
             n = n + 1
         end
     end)

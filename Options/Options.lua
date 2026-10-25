@@ -113,9 +113,38 @@ local function StillInThingsUI()
     return sel == "thingsUI" or sel:sub(1, 9) == "thingsUI\001"
 end
 
+-- the group tab open in Groups - Icons / Bars / Text: its preview shows whatever its rules say
+local FOCUS_MODULE = { customGroups = "CustomGroups", customBars = "CustomBars", customText = "CustomBars" }
+local function TrackPreviewFocus()
+    local key = FOCUS_MODULE[curSection or ""]
+    local id
+    if key then
+        local ACD = E.Libs and E.Libs.AceConfigDialog
+        local st = ACD and ACD:GetStatusTable("ElvUI", { "thingsUI", "modulesTab", curSection })
+        local sel = st and st.groups and st.groups.selected
+        local i = type(sel) == "string" and tonumber(sel:match("^group(%d+)$"))
+        local mod = ns[key]
+        local g = i and mod and mod.GetGroups and mod.GetGroups()[i]
+        id = g and g.id
+    end
+    for _, k in ipairs({ "CustomGroups", "CustomBars" }) do
+        local mod = ns[k]
+        local want = (k == key) and id or nil
+        if mod and mod.previewFocusID ~= want then
+            mod.previewFocusID = want
+            if k == "CustomGroups" then
+                if TUI.UpdateCustomGroups then TUI:UpdateCustomGroups() end
+            elseif TUI.QueueCustomBarsUpdate then
+                TUI:QueueCustomBarsUpdate()
+            end
+        end
+    end
+end
+
 local function StartSectionWatch()
     if watchTicker then return end
     watchTicker = C_Timer.NewTicker(0.3, function()
+        TrackPreviewFocus()
         if not curSection then
             StopSectionWatch()
             return
