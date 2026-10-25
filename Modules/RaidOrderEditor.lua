@@ -414,4 +414,6 @@ function ED.Open()
     frame:Raise()
 end
 
-ns.SlashCommand("rf", function() ED.Open() end)
+ns.SlashCommand("rf", function(rest)
+    if strlower(strtrim(rest or "")) == "dump" then ns.RaidOrder.Dump() else ED.Open() end
+end)

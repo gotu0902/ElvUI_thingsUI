@@ -331,6 +331,36 @@ function TUI:UpdateRaidOrder()
     Queue()
 end
 
+-- /tui rf dump: what each raid group header filters on right now
+function RO.Dump()
+    local p = "|cFF8080FFthingsUI|r rf"
+    local members, listed = Members()
+    print(("%s on %s, raid %s, owns %s | roster %s (%d listed) | waiting: combat %s, names %s"):format(p,
+        tostring(RO.Enabled()), tostring(IsInRaid()), tostring(Owns()),
+        members and #members or "unresolved", listed or 0, tostring(pendingRegen), tostring(unresolved)))
+    local uf = UF()
+    for _, group in ipairs(RO.GROUPS) do
+        local Header = uf and uf[group]
+        if Header then
+            local db = Header.db or {}
+            print(("  %s: shown %s, groups %s, raid-wide %s, forced %s"):format(group, tostring(Header:IsShown()),
+                tostring(Header.numGroups), tostring(db.raidWideSorting), tostring(Header.isForced)))
+            for i, hdr in ipairs(Header.groups or {}) do
+                local kids = 0
+                for c = 1, 40 do
+                    local b = hdr:GetAttribute("child" .. c)
+                    if b and b:IsShown() then kids = kids + 1 end
+                end
+                local nl = hdr:GetAttribute("nameList")
+                local n = nl and select(2, nl:gsub("[^,]+", "")) or 0
+                print(("    %d: shown %s, frames %d, ours %s, filter %s, sort %s, names %s%s"):format(i, tostring(hdr:IsShown()),
+                    kids, tostring(owned[hdr] == true), tostring(hdr:GetAttribute("groupFilter")),
+                    tostring(hdr:GetAttribute("sortMethod")), nl and n or "-", (nl and n > 0) and (" (" .. nl:sub(1, 60) .. ")") or ""))
+            end
+        end
+    end
+end
+
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("GROUP_ROSTER_UPDATE")
 ev:RegisterEvent("PLAYER_REGEN_ENABLED")

@@ -872,7 +872,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
     if not styleMode then
     commonArgs = CommonHeader("bars")
     commonArgs.spellSelect = {
-        order = 1, type = "select", name = "Select Spell", width = "double",
+        order = 1, type = "select", dialogControl = "TUI_SpellDropdown", name = "Select Spell", width = "double",
         values = function() return GetChoicesTable(barKey, true) end,
         sorting = GetSortedKeys,
         get = function() return db().spellID and tostring(db().spellID) or "" end,
@@ -1368,7 +1368,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
     if not styleMode then
     commonArgs = CommonHeader("icons")
     commonArgs.spellSelect = {
-        order = 1, type = "select", name = "Spell", width = "double",
+        order = 1, type = "select", dialogControl = "TUI_SpellDropdown", name = "Spell", width = "double",
         values = function() return GetChoicesTable(curKey(), false) end,
         sorting = GetSortedKeys,
         get = function() return db().spellID and tostring(db().spellID) or "" end,

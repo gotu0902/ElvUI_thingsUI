@@ -32,6 +32,7 @@
 - Copy between profiles: Import - Export - Install > Profiles (and a thingsUI tab in ElvUI's Module Copy) copies whole modules or single items from or to another profile
 - Groups - Bars and Groups - Text are separate in exports, copies and sync; Damage Meter and Minimap are part of exports now
 ### More
+- Spell lists in the options show the spell's tooltip when you hover an entry: Add Aura Icon / Buff / Aura Bar / Spell CD / Cooldown / Racial, the Aura Icon and Aura Bar spell pickers, the Spell Editor and the Charge Bar
 - Setup updates: a profile set up from the NHT or FHT pack is told at login when a new version changes the pack (groups by name, styles, Aura Icons per spec, modules). Review opens the import picker with only what changed: new things and things you never touched are ticked, things you changed yourself are not ("you changed this too"). Not Now asks again next login, Skip This Update leaves everything as it is. /tui updates checks by hand
 - Aura Icons / Aura Bars: no more three empty Icon 1-3 / Bar 1-3 on every spec. A spec can have none; empty ones at the end are dropped, the others stay out of the list and a new icon or bar takes their place first. The count shows the ones in use
 - Aura Icons > Aura Type says Auto (was "Buff or Debuff"): leave it unless a spell is both a buff and a debuff, like Fiery Brand

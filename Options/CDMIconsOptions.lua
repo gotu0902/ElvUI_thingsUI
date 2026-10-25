@@ -188,7 +188,7 @@ end
 local function AddAuraIconArg(row)
     local function spec() return ns.SpecialBars and ns.SpecialBars.GetCurrentSpecID and ns.SpecialBars.GetCurrentSpecID() end
     return {
-        order = 0.5, type = "select", name = "|cFFFF80C0Add Aura Icon|r", width = "double",
+        order = 0.5, type = "select", dialogControl = "TUI_SpellDropdown", name = "|cFFFF80C0Add Aura Icon|r", width = "double",
         hidden = function() return not (ns.SB_GroupPickValues and spec()) end,
         values = function() return ns.SB_GroupPickValues(false, spec()) end,
         sorting = function() return ns.SB_GroupPickSorting(false, spec()) end,
@@ -987,7 +987,7 @@ local function SpellEditorPage(order, buffs)
                     or "Glow and text for one cooldown in Essential or Utility. Spells set up here are green, Aura Icons in a row are pink. Glow needs Custom Glow on in CDM > Layout > Glow.\n",
             },
             spell = {
-                order = 1, type = "select", name = "Spell", width = "double",
+                order = 1, type = "select", dialogControl = "TUI_SpellDropdown", name = "Spell", width = "double",
                 values = function()
                     local out = {}
                     local ri, covered = rowIcons()

@@ -432,7 +432,7 @@ local function CooldownsArgs(grp, scope)
     end
     local args = {
         addCD = {
-            order = 3, type = "select", width = "double",
+            order = 3, type = "select", dialogControl = "TUI_SpellDropdown", width = "double",
             name = function()
                 local label = "Add Cooldown"
                 if scope == "spec" then
@@ -676,7 +676,7 @@ local function GroupTab(gi)
         end
         local args = {
             addAura = {
-                order = 1, type = "select", name = "|cFF60E0A0Add Buff|r", width = "double",
+                order = 1, type = "select", dialogControl = "TUI_SpellDropdown", name = "|cFF60E0A0Add Buff|r", width = "double",
                 values = auraCommonValues,
                 sorting = auraCommonSorting,
                 disabled = full,
@@ -706,7 +706,7 @@ local function GroupTab(gi)
         }
         if scope == "spec" then
             args.addSpecialBar = {
-                order = 3, type = "select", name = "|cFF80FF80Add Aura Bar|r", width = "double",
+                order = 3, type = "select", dialogControl = "TUI_SpellDropdown", name = "|cFF80FF80Add Aura Bar|r", width = "double",
                 disabled = full,
                 hidden = function() return not ns.SpecialBars end,
                 values = function() return (ns.SB_GroupPickValues and ns.SB_GroupPickValues(true, getEditSpec())) or {} end,

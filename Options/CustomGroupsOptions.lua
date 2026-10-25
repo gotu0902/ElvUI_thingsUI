@@ -677,7 +677,7 @@ function TUI:CustomGroupsOptions()
         end
         local a = {
             addSpell = {
-                order = 5, type = "select", width = "double",
+                order = 5, type = "select", dialogControl = "TUI_SpellDropdown", width = "double",
                 name = function()
                     local label
                     if scope == "spec" then
@@ -724,7 +724,7 @@ function TUI:CustomGroupsOptions()
                 set = function(_, v) local id = tonumber(v); if id and CG then CG.AddItem(group, scope, getKey(), id); NotifyChange() end end,
             },
             addAura = {
-                order = 11.5, type = "select", name = "|cFF60E0A0Add Buff|r", width = "double",   -- auras = green
+                order = 11.5, type = "select", dialogControl = "TUI_SpellDropdown", name = "|cFF60E0A0Add Buff|r", width = "double",   -- auras = green
                 values = auraCommonValues,
                 sorting = auraCommonSorting,
                 get = function() return "" end,
@@ -797,7 +797,7 @@ function TUI:CustomGroupsOptions()
                 end,
             },
             addSpecialIcon = {
-                order = 13, type = "select", name = "|cFFFF80C0Add Aura Icon|r", width = "double",   -- aura icons = pink
+                order = 13, type = "select", dialogControl = "TUI_SpellDropdown", name = "|cFFFF80C0Add Aura Icon|r", width = "double",   -- aura icons = pink
                 hidden = function() return scope ~= "spec" or not ns.SpecialBars end,
                 values = function() return (ns.SB_GroupPickValues and ns.SB_GroupPickValues(false, getKey())) or {} end,
                 sorting = function() return ns.SB_GroupPickSorting and ns.SB_GroupPickSorting(false, getKey()) or nil end,
@@ -1105,7 +1105,7 @@ function TUI:CustomGroupsOptions()
         globalArgs.gdesc = { order = 1, type = "description", name = "Global entries show on |cFFFFCF40every character and spec|r.\n" }
         globalArgs.addSpell = nil
         globalArgs.addRacial = {
-            order = 5, type = "select", name = "Add Racial", width = "double",
+            order = 5, type = "select", dialogControl = "TUI_SpellDropdown", name = "Add Racial", width = "double",
             values = racialValues, sorting = racialSorting,
             get = function() return "" end,
             set = function(_, v) local id = tonumber(v); if id and CG then CG.AddSpell(group, "global", nil, id); NotifyChange() end end,

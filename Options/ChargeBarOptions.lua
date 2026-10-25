@@ -346,7 +346,7 @@ function TUI:ChargeBarOptions()
                                 end,
                             },
                             spellPick = {
-                                order = 1, type = "select", name = "Spell", width = 2.0,
+                                order = 1, type = "select", dialogControl = "TUI_SpellDropdown", name = "Spell", width = 2.0,
                                 hidden = function() return #CDMOrderedForEdit() == 0 end,
                                 values = function()
                                     GetEditSpec()
