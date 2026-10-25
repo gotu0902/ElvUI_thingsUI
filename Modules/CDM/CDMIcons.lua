@@ -729,7 +729,12 @@ local function ReapplyChildAnchor(child)
     local a = child._tuiAnchor
     if not a or not a.relative then
         local viewer = child._tuiViewer
-        if viewer then viewer._tuiLayoutSig = nil; LayoutViewer(viewer) end
+        if viewer then
+            viewer._tuiLayoutSig = nil
+            -- fresh from the pool: laid out once its hide verdict is back (same frame), or the
+            -- row would briefly count the hidden icons and resize everything that follows it
+            if rehideDue then QueueLayout(viewer) else LayoutViewer(viewer) end
+        end
         return
     end
     applyingChild[child] = true
@@ -1311,13 +1316,18 @@ local function MirrorProxyToViewer(proxy, viewer)
     proxy:SetPoint("BOTTOMLEFT", _G.UIParent, "BOTTOMLEFT", fl, fb)
 end
 
-local barRestackPending
+local barRestackPending, stackedW
 local function NotifyClusterWidthChanged()
     if barRestackPending then return end
     barRestackPending = true
     C_Timer.After(0, function()
         barRestackPending = nil
         if InCombatLockdown() then return end
+        -- a width that came and went needs no restack (it rebuilds the unit frame bars)
+        local p = GetProxy(_G.EssentialCooldownViewer)
+        local w = p and p:GetWidth()
+        if w and stackedW and math.abs(w - stackedW) < 0.5 then return end
+        stackedW = w
         if ns.BarSetup and ns.BarSetup.ResetWidthCache and ns.BarSetup.ApplyStack then
             ns.BarSetup.ResetWidthCache()
             ns.BarSetup.ApplyStack()
