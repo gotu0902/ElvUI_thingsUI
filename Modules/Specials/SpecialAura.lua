@@ -52,10 +52,9 @@ function SA.ExpandSpellIDs(spellID)
                 if pl then row[#row + 1] = pl end
             end
         end
-        local match = false
-        for _, id in ipairs(row) do
-            if id == spellID or id == base then match = true break end
-        end
+        -- only the entry for this spell (its own ID, or the same name) brings its links in; an
+        -- entry that merely links to this spell is another buff (Seeing Red links Violent Outburst)
+        local match = (s and (s == spellID or s == base)) or (o and (o == spellID or o == base)) or false
         if not match and myName then
             match = (s and PlainID(C_Spell.GetSpellName(s)) == myName)
                 or (o and PlainID(C_Spell.GetSpellName(o)) == myName) or false
@@ -195,7 +194,7 @@ function SA.StyleIconButton(button, r, wrapper, key)
         r.overlay = CreateFrame("Frame", nil, button)
         r.overlay:SetAllPoints(button)
     end
-    r.overlay:SetFrameLevel(button:GetFrameLevel() + 3)
+    r.overlay:SetFrameLevel(button:GetFrameLevel() + 5)
     SB.PlaceArt(r.icon, button, SB.ArtInset(db))
     r.icon:SetTexCoord(SB.ComputeIconTexCoord(db))
     if ns.AuraLane then ns.AuraLane.ShowFixedIcon(r, db.customIcon, { SB.ComputeIconTexCoord(db) }) end
@@ -311,7 +310,7 @@ function SA.StyleBarButton(button, r, wrapper, key)
         r.overlay:SetAllPoints(button)
     end
     r.bd:SetFrameLevel(button:GetFrameLevel())
-    r.overlay:SetFrameLevel(button:GetFrameLevel() + 3)
+    r.overlay:SetFrameLevel(button:GetFrameLevel() + 5)
     -- the tick layer sits between fill and text (read here, before any aura makes the button secret)
     wrapper._tuiTickLevel = button:GetFrameLevel() + 2
     r.bd:SetBackdropColor(0, 0, 0, 0.6)

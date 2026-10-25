@@ -128,7 +128,7 @@ local function PreviewText(child, t)
         p.count = p.layer:CreateFontString(nil, "OVERLAY")
         child._tuiPrev = p
     end
-    p.layer:SetFrameLevel(child:GetFrameLevel() + 6)
+    p.layer:SetFrameLevel(child:GetFrameLevel() + 10)
     p.layer:Show()
     -- the font first: SetText errors on a fontstring without one
     E:SetFont(p.cd, FetchFont(t.cooldownFont), t.cooldownFontSize or 14, t.cooldownFontOutline or "OUTLINE")
@@ -173,6 +173,12 @@ local function StyleChild(child, t)
         t.countFont, t.countFontSize, t.countFontOutline,
         t.countColor, t.countPoint, t.countXOffset, t.countYOffset,
         t.showCount)
+    -- stacks and charges over a glow (LibCustomGlow draws 8 levels above the icon)
+    local top = child:GetFrameLevel() + 10
+    for _, key in ipairs({ "Applications", "ChargeCount" }) do
+        local holder = child[key]
+        if holder and holder.SetFrameLevel and holder:GetFrameLevel() ~= top then holder:SetFrameLevel(top) end
+    end
 
     local cd = child.Cooldown
     if cd then

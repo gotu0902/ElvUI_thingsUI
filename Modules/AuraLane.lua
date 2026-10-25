@@ -327,7 +327,7 @@ local function StyleButton(button, group, lane)
         r.overlay:SetAllPoints(button)
         lane.regions[button] = r
     end
-    r.overlay:SetFrameLevel(button:GetFrameLevel() + 3)
+    r.overlay:SetFrameLevel(button:GetFrameLevel() + 5)
     ns.CustomGroups.ApplyIconSkin(button, r.icon, S.crop, S.skin)
 
     local key = lane.keyByButton[button]
