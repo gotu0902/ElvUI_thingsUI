@@ -351,6 +351,78 @@ function SA.StyleIconButton(button, r, wrapper, key)
     button:SetMouseMotionEnabled(true)
 end
 
+-- Fill By Stacks: nil = fill by duration
+function SA.StackCount(src)
+    if not (src and src.fillMode == "stacks") then return nil end
+    return math.max(1, math.floor(src.maxStacks or 4))
+end
+
+-- dark lines split the bar into one piece per stack
+function SA.PaintSegments(host, areaW, n, gap)
+    local lines = host._tuiSeg or {}
+    host._tuiSeg = lines
+    gap = gap or 0
+    local want = (n and n > 1 and gap > 0) and (n - 1) or 0
+    for k = 1, want do
+        local t = lines[k]
+        if not t then
+            t = host:CreateTexture(nil, "OVERLAY", nil, -8)
+            t:SetColorTexture(0, 0, 0, 1)
+            lines[k] = t
+        end
+        local x = math.floor(areaW * k / n - gap / 2 + 0.5)
+        t:ClearAllPoints()
+        t:SetPoint("TOPLEFT", host, "TOPLEFT", x, 0)
+        t:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", x, 0)
+        t:SetWidth(gap)
+        t:Show()
+    end
+    for k = want + 1, #lines do lines[k]:Hide() end
+end
+
+-- the engine fills r.bar by duration, or a second bar by the aura's stacks (0..max)
+function SA.BindBarFill(button, r, src, areaW, paint)
+    local n = SA.StackCount(src)
+    if n and type(button.SetApplicationBar) ~= "function" then n = nil end
+    if n then
+        if r.barBound then button:ClearDurationBar(); r.barBound = false end
+        r.bar:Hide()
+        r.sbar = r.sbar or CreateFrame("StatusBar", nil, button)
+        paint(r.sbar)
+        if r.sbarMax ~= n then
+            button:SetApplicationBar(r.sbar, { minApplications = 0, maxApplications = n })
+            r.sbarMax = n
+        end
+        r.seg = r.seg or CreateFrame("Frame", nil, button)
+        r.seg:SetFrameLevel(button:GetFrameLevel() + 2)
+        r.seg:SetAllPoints(r.sbar)
+        SA.PaintSegments(r.seg, areaW, n, src.stackGap or 1)
+        r.seg:Show()
+    else
+        if r.sbarMax then button:ClearApplicationBar(); r.sbarMax = nil end
+        if r.sbar then r.sbar:Hide() end
+        if r.seg then r.seg:Hide() end
+        r.bar:Show()
+        if not r.barBound and type(button.SetDurationBar) == "function" then
+            button:SetDurationBar(r.bar, { direction = DIR_REMAINING })
+            r.barBound = true
+        end
+    end
+end
+
+-- options preview: a stacks bar shows all but one piece filled
+function SA.PreviewFill(bar, src, areaW)
+    local n = SA.StackCount(src)
+    if n then
+        bar:SetMinMaxValues(0, n)
+        bar:SetValue(math.max(1, n - 1))
+    else
+        bar:SetMinMaxValues(0, 1)
+        bar:SetValue(0.7)
+    end
+    SA.PaintSegments(bar, areaW, n, n and (src.stackGap or 1) or 0)
+end
+
 function SA.StyleBarButton(button, r, wrapper, key)
     if button:IsForbidden() then return end
     local db = SB.GetBarDB(key)
@@ -409,23 +481,18 @@ function SA.StyleBarButton(button, r, wrapper, key)
         r.bar:SetMinMaxValues(0, 1)
         r.bar:SetValue(1)
     end
-    r.bar:SetFrameLevel(button:GetFrameLevel() + 1)
-    r.bar:ClearAllPoints()
-    r.bar:SetPoint("TOPLEFT", r.bd, "TOPLEFT", 1, -1)
-    r.bar:SetPoint("BOTTOMRIGHT", r.bd, "BOTTOMRIGHT", -1, 1)
-    r.bar:SetStatusBarTexture(LSM:Fetch("statusbar", db.statusBarTexture))
-    r.bar:SetReverseFill(db.reverseFill and true or false)
-    if db.useClassColor then
-        local c = E:ClassColor(E.myclass, true)
-        r.bar:SetStatusBarColor(c.r, c.g, c.b)
-    else
-        local c = db.customColor or { r = 0.2, g = 0.6, b = 1 }
-        r.bar:SetStatusBarColor(c.r, c.g, c.b)
+    local function paint(bar)
+        bar:SetFrameLevel(button:GetFrameLevel() + 1)
+        bar:ClearAllPoints()
+        bar:SetPoint("TOPLEFT", r.bd, "TOPLEFT", 1, -1)
+        bar:SetPoint("BOTTOMRIGHT", r.bd, "BOTTOMRIGHT", -1, 1)
+        bar:SetStatusBarTexture(LSM:Fetch("statusbar", db.statusBarTexture))
+        bar:SetReverseFill(db.reverseFill and true or false)
+        local c = db.useClassColor and E:ClassColor(E.myclass, true) or db.customColor or { r = 0.2, g = 0.6, b = 1 }
+        bar:SetStatusBarColor(c.r, c.g, c.b)
     end
-    if not r.barBound and type(button.SetDurationBar) == "function" then
-        button:SetDurationBar(r.bar, { direction = DIR_REMAINING })
-        r.barBound = true
-    end
+    paint(r.bar)
+    SA.BindBarFill(button, r, db, w - barOffset - 2, paint)
 
 
     local font = LSM:Fetch("font", db.font or "Expressway")

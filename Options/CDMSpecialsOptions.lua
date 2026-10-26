@@ -82,6 +82,91 @@ local function IconSlot(ikey)
     end
 end
 
+-- the setup a spec uses, like BarSetup.GetActiveSetup: first one with it ticked, else the fallback
+local function SetupFor(specID)
+    local bsdb = E.db.thingsUI and E.db.thingsUI.barSetup
+    if not (bsdb and bsdb.enabled and bsdb.setups) then return nil end
+    if specID and specID ~= 0 then
+        for _, s in ipairs(bsdb.setups) do
+            if s.specs and s.specs[specID] then return s end
+        end
+    end
+    return bsdb.setups[bsdb.active] or bsdb.setups[1]
+end
+
+-- a spec's Aura Bars that ride Bar Setup, in stack order
+local function StackBars(specID)
+    local out = {}
+    local setup = SetupFor(specID)
+    local s = setup and SB and SB.GetSpecRoot(specID)
+    for _, k in ipairs((setup and setup.order) or {}) do
+        local key = type(k) == "string" and k:match("^special:(bar%d+)$")
+        local b = key and setup.bars and setup.bars[k]
+        local d = key and s and s.bars[key]
+        if b and b.enabled and type(d) == "table" and d.spellID and d.customGroup == nil then
+            out[#out + 1] = key
+        end
+    end
+    return out
+end
+ns.SB_StackBars = StackBars
+
+local function ComputeBarLayout()
+    local dests, byKey = {}, {}
+    local function bucket(key, name)
+        local b = byKey[key]
+        if not b then b = { key = key, name = name, bars = {} }; byKey[key] = b; dests[#dests + 1] = b end
+        return b
+    end
+    local es = SB and SB.EditingSpec()
+    local s = SB and SB.GetSpecRoot(es)
+    local inStack = {}
+    if s then
+        local idx = GetSpecialization()
+        for i, k in ipairs(StackBars(es or (idx and GetSpecializationInfo(idx)) or 0)) do inStack[k] = i end
+    end
+    for i = 1, (s and s.barCount) or 0 do
+        local key = "bar" .. i
+        local d = s.bars[key]
+        if type(d) == "table" and d.spellID then
+            local gid = type(d.customGroup) == "number" and d.customGroup > 0 and d.customGroup
+            local g = gid and ns.CustomBars and ns.CustomBars.GroupByID and ns.CustomBars.GroupByID(gid)
+            local b = (inStack[key] and bucket("setup", "Bar Setup"))
+                or (g and bucket("g" .. gid, g.name or ("Bar Group " .. gid)))
+                or bucket("standalone", "Standalone")
+            if g then b.color = g.tabColor end
+            b.bars[#b.bars + 1] = { key = key, name = SpellName(d.spellID), pos = inStack[key] }
+        elseif SB.freshSlots and SB.freshSlots[key] then
+            local b = bucket("unconfigured", "New")
+            b.bars[#b.bars + 1] = { key = key, name = ("Bar %d"):format(i) }
+        end
+    end
+    local function rank(k)
+        if k == "standalone" then return 0 end
+        if k == "setup" then return 0.5 end
+        return (k == "unconfigured") and 2 or 1
+    end
+    table.sort(dests, function(a, b)
+        if rank(a.key) ~= rank(b.key) then return rank(a.key) < rank(b.key) end
+        return (a.name or ""):lower() < (b.name or ""):lower()
+    end)
+    for _, dest in ipairs(dests) do
+        table.sort(dest.bars, function(x, y)
+            if x.pos and y.pos then return x.pos < y.pos end
+            return (x.name or ""):lower() < (y.name or ""):lower()
+        end)
+    end
+    return dests
+end
+
+local function BarSlot(key)
+    for di, dest in ipairs(ComputeBarLayout()) do
+        for bi, b in ipairs(dest.bars) do
+            if b.key == key then return di, bi end
+        end
+    end
+end
+
 local function CurrentSpecIDStr()
     local idx = GetSpecialization()
     if not idx then return "0" end
@@ -398,16 +483,11 @@ local function RebuildBarPages()
         local key = "bar" .. i
         local n = i
         barPages[key .. "Group"] = {
-            order = i * 10, type = "group", childGroups = "tab",
-            name = function() return BarTabName(key, n) end,
-            hidden = function()
-                if not SB then return true end
-                local s = SB.GetSpecRoot(SB.EditingSpec())
-                if (s.barCount or 0) < n then return true end
-                local d = s.bars and s.bars[key]
-                return not (type(d) == "table" and d.spellID) and not (SB.freshSlots and SB.freshSlots[key])
-            end,
-            args = TUI:SpecialBarOptions(key),
+            type = "group", childGroups = "tab",
+            order  = function() local di, bi = BarSlot(key); return (di and bi) and (di * 1000 + bi * 10) or 99999 end,
+            name   = function() return BarTabName(key, n) end,
+            hidden = function() return not SB or BarSlot(key) == nil end,
+            args   = TUI:SpecialBarOptions(key),
         }
     end
 end
@@ -686,6 +766,14 @@ local function BuildSpecialBarsGroup()
                 order = 10, type = "group", name = "Bars", childGroups = "tree",
                 args = (function()
                     barPages = {}
+                    for k = 1, 13 do
+                        local kk = k
+                        barPages["h" .. kk] = {
+                            type = "group", disabled = true, order = kk * 1000, args = {},
+                            name   = function() local d = ComputeBarLayout()[kk]; return d and ns.TabName(d.name, d.color) or "" end,
+                            hidden = function() return not ComputeBarLayout()[kk] end,
+                        }
+                    end
                     RebuildBarPages()
                     return barPages
                 end)(),

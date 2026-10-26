@@ -194,7 +194,7 @@ local function RenderTestBar(wrapper, db, w, h)
         local c = db.customColor or { r = 0.2, g = 0.6, b = 1 }
         fx.bar:SetStatusBarColor(c.r, c.g, c.b)
     end
-    fx.bar:SetValue(0.7)
+    ns.SpecialAura.PreviewFill(fx.bar, db, w - off - 2)
 
     local font = LSM:Fetch("font", db.font or "Expressway")
     if db.showName then
@@ -373,6 +373,31 @@ local function IsManagedByBarSetup(barKey)
     return b ~= nil and b.enabled == true
 end
 
+local function InStack(setup, barKey)
+    local target = "special:" .. barKey
+    local b = setup and setup.bars and setup.bars[target]
+    if not (b and b.enabled) then return false end
+    for _, k in ipairs(setup.order or {}) do
+        if k == target then return true end
+    end
+    return false
+end
+
+-- a Bar Setup bar can fill in for another one that isn't talented: it takes that bar's height, or its own Specific Height
+function SB.StackHeight(barKey, db, setup)
+    db = db or SB.GetBarDB(barKey)
+    local h = db.height or 0
+    local other = db.fillInFor
+    local od = other and other ~= barKey and SB.GetSpecRoot().bars[other]
+    if type(od) == "table" and od.spellID and od.customGroup == nil and not SB.SpellLearned(od.spellID) then
+        setup = setup or (ns.BarSetup and ns.BarSetup.GetActiveSetup and ns.BarSetup.GetActiveSetup())
+        if InStack(setup, other) then
+            return db.fillInOwn and (db.fillInHeight or od.height or h) or (od.height or h)
+        end
+    end
+    return h
+end
+
 -- visibility rules for standalone and Bar Setup bars; a grouped bar follows its group's
 local function VisibleNow(db)
     if ns.CustomGroups and ns.CustomGroups.testMode then return ns.Visibility.PreviewShown(db.visibility) end
@@ -407,9 +432,19 @@ function SB.RefreshBarVisibility()
 end
 ns.Visibility.OnChange(function() SB.RefreshBarVisibility() end)
 
+local learnedState = {}
+
 local function UpdateBarSlot(barKey)
     local db = SB.GetBarDB(barKey)
     if not db.enabled or not db.spellID then ReleaseBar(barKey); return end
+
+    -- talented out: the bar goes, and a Bar Setup stack closes up
+    local learned = SB.SpellLearned(db.spellID)
+    if learnedState[barKey] ~= nil and learnedState[barKey] ~= learned and IsManagedByBarSetup(barKey) then
+        C_Timer.After(0, Restack)
+    end
+    learnedState[barKey] = learned
+    if not learned then ReleaseBar(barKey); return end
 
     local cbGroup = db.customGroup and ns.CustomBars and ns.CustomBars.GroupByID(db.customGroup)
     if cbGroup and not cbGroup.enabled then cbGroup = nil end
@@ -439,7 +474,7 @@ local function UpdateBarSlot(barKey)
             if aw and aw > 0 then effectiveWidth = aw + cdmInset + (db.inheritWidthOffset or 0) end
         end
     end
-    local effectiveHeight = db.height
+    local effectiveHeight = managedByBS and SB.StackHeight(barKey, db) or db.height
     if db.inheritHeight and anchorFrame and not managedByBS then
         local ah = anchorFrame:GetHeight()
         if ah and ah > 0 then effectiveHeight = ah + cdmInset + (db.inheritHeightOffset or 0) end

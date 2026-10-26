@@ -261,6 +261,7 @@ local function IsSpecialBarAvailable(key)
     local bdb = SB.GetBarDB(slotKey)
     if type(bdb) ~= "table" then return false end
     if bdb.customGroup ~= nil then return false end
+    if SB.SpellLearned and bdb.spellID and not SB.SpellLearned(bdb.spellID) then return false end
     return (bdb.enabled == true) and (bdb.spellID ~= nil)
 end
 M.IsSpecialBarAvailable = IsSpecialBarAvailable
@@ -725,7 +726,8 @@ function M.PositionStack(positionOnly)
                         f:ClearAllPoints()
                         f:SetPoint(setup.anchorPoint or "BOTTOM", stackAnchor, setup.anchorTo or "TOP", localXOff, accY)
                     end
-                    accY = accY + GetBarHeight(key, setup)
+                    local SB = key:sub(1, 8) == "special:" and ns.SpecialBars
+                    accY = accY + ((SB and SB.StackHeight) and SB.StackHeight(key:sub(9), nil, setup) or GetBarHeight(key, setup))
                 end
             end
         end

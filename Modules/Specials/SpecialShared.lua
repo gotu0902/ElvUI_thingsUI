@@ -38,10 +38,36 @@ local function InfoSpellID(info)
     return PlainID(info.overrideSpellID) or PlainID(info.spellID)
 end
 
+-- every ID of the CDM's buff entries for this spec, and of the ones you have learned
+local cdmAll, cdmLearned = {}, {}
+local function AddIDs(set, info)
+    local a, b = PlainID(info.spellID), PlainID(info.overrideSpellID)
+    if a then set[a] = true end
+    if b then set[b] = true end
+    for _, l in ipairs(info.linkedSpellIDs or {}) do
+        local p = PlainID(l)
+        if p then set[p] = true end
+    end
+end
+
+-- false only when the CDM has the spell for this spec and you haven't learned it (talented out)
+function SB.SpellLearned(spellID)
+    if not spellID then return false end
+    return cdmLearned[spellID] or not cdmAll[spellID] or false
+end
+
 local function RefreshKnownSpells()
     if not (C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCategorySet) then return end
     local CAT_BUFF = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.TrackedBuff
     local CAT_BAR  = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.TrackedBar
+    wipe(cdmAll)
+    wipe(cdmLearned)
+    for _, cat in ipairs({ CAT_BUFF, CAT_BAR }) do
+        for _, cdID in ipairs(C_CooldownViewer.GetCooldownViewerCategorySet(cat, true) or {}) do
+            local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
+            if info then AddIDs(cdmAll, info) end
+        end
+    end
     local function fill(cat, set)
         wipe(set)
         local ids = cat and C_CooldownViewer.GetCooldownViewerCategorySet(cat, false)
@@ -49,6 +75,7 @@ local function RefreshKnownSpells()
         for _, cdID in ipairs(ids) do
             local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
             if info then
+                AddIDs(cdmLearned, info)
                 local sid = InfoSpellID(info)
                 local si = sid and C_Spell.GetSpellInfo(sid)
                 if si and si.spellID then
@@ -147,8 +174,15 @@ do
     if C_EventUtils and C_EventUtils.IsEventValid and C_EventUtils.IsEventValid("COOLDOWN_VIEWER_TABLE_HOTFIXED") then
         f:RegisterEvent("COOLDOWN_VIEWER_TABLE_HOTFIXED")
     end
+    f:RegisterEvent("TRAIT_CONFIG_UPDATED")
     f:SetScript("OnEvent", function(_, event, unit)
         if event == "PLAYER_SPECIALIZATION_CHANGED" and unit and unit ~= "player" then return end
+        if event == "TRAIT_CONFIG_UPDATED" then
+            -- talented in or out: bars come and go, the CDM settles its lists first
+            InvalidateSpellListCache()
+            C_Timer.After(0.3, function() TUI:QueueSpecialBarsUpdate() end)
+            return
+        end
         if event == "COOLDOWN_VIEWER_TABLE_HOTFIXED" then
             if ns.SpecialAura and ns.SpecialAura.InvalidateSpellExpansion then
                 ns.SpecialAura.InvalidateSpellExpansion()

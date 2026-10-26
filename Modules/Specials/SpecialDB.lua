@@ -134,6 +134,30 @@ local function UsedSlots(kind, specID)
     return used
 end
 
+-- two Aura Bars trade slots: Bar Setup orders by slot, so they trade places there;
+-- anchors between this spec's bars and icons follow the bar
+local function SwapBars(a, b, specID)
+    local s = GetSpecRoot(specID)
+    if not (s and a and b and a ~= b) then return end
+    s.bars[a], s.bars[b] = s.bars[b], s.bars[a]
+    local fa, fb = "TUI_SpecialBar_" .. a, "TUI_SpecialBar_" .. b
+    for _, list in ipairs({ s.bars, s.icons }) do
+        for _, d in pairs(list) do
+            if type(d) == "table" then
+                if d.anchorFrame == fa then d.anchorFrame = fb
+                elseif d.anchorFrame == fb then d.anchorFrame = fa end
+                if d.fillInFor == a then d.fillInFor = b
+                elseif d.fillInFor == b then d.fillInFor = a end
+            end
+        end
+    end
+    SB.freshSlots[a], SB.freshSlots[b] = SB.freshSlots[b], SB.freshSlots[a]
+    if (not specID or tostring(specID) == tostring(GetCurrentSpecID())) and SB.ReleaseBar then
+        SB.ReleaseBar(a)
+        SB.ReleaseBar(b)
+    end
+end
+
 SB.editingSpec = nil
 function SB.EditingSpec()
     local es = SB.editingSpec
@@ -149,3 +173,4 @@ SB.GetBarCount      = GetBarCount
 SB.GetIconCount     = GetIconCount
 SB.TakeSlot         = TakeSlot
 SB.UsedSlots        = UsedSlots
+SB.SwapBars         = SwapBars

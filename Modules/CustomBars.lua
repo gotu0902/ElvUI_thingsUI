@@ -342,25 +342,18 @@ local function StyleBar(button, r, group, def)
         r.bar:SetMinMaxValues(0, 1)
         r.bar:SetValue(1)
     end
-    r.bar:SetFrameLevel(button:GetFrameLevel() + 1)
-    r.bar:ClearAllPoints()
-    r.bar:SetPoint("TOPLEFT", r.bd, "TOPLEFT", 1, -1)
-    r.bar:SetPoint("BOTTOMRIGHT", r.bd, "BOTTOMRIGHT", -1, 1)
-    r.bar:SetStatusBarTexture(LSM:Fetch("statusbar", group.statusBarTexture))
-    r.bar:SetReverseFill(group.reverseFill and true or false)
-    if group.useClassColor ~= false then
-        local c = E:ClassColor(E.myclass, true)
-        r.bar:SetStatusBarColor(c.r, c.g, c.b)
-    else
-        local c = group.customColor or { r = 0.2, g = 0.6, b = 1 }
-        r.bar:SetStatusBarColor(c.r, c.g, c.b)
+    local function paint(bar)
+        bar:SetFrameLevel(button:GetFrameLevel() + 1)
+        bar:ClearAllPoints()
+        bar:SetPoint("TOPLEFT", r.bd, "TOPLEFT", 1, -1)
+        bar:SetPoint("BOTTOMRIGHT", r.bd, "BOTTOMRIGHT", -1, 1)
+        bar:SetStatusBarTexture(LSM:Fetch("statusbar", group.statusBarTexture))
+        bar:SetReverseFill(group.reverseFill and true or false)
+        local c = (group.useClassColor ~= false) and E:ClassColor(E.myclass, true) or group.customColor or { r = 0.2, g = 0.6, b = 1 }
+        bar:SetStatusBarColor(c.r, c.g, c.b)
     end
-    if not r.barBound and type(button.SetDurationBar) == "function" then
-        button:SetDurationBar(r.bar, {
-            direction = Enum.StatusBarTimerDirection and Enum.StatusBarTimerDirection.RemainingTime,
-        })
-        r.barBound = true
-    end
+    paint(r.bar)
+    ns.SpecialAura.BindBarFill(button, r, def, w - barOffset - 2, paint)
 
     local font = LSM:Fetch("font", group.font or "Expressway")
     r.name = r.name or r.overlay:CreateFontString(nil, "OVERLAY")
@@ -542,7 +535,7 @@ local function RenderTestBars(st, group)
                 local c = group.customColor or { r = 0.2, g = 0.6, b = 1 }
                 f.bar:SetStatusBarColor(c.r, c.g, c.b)
             end
-            f.bar:SetValue(0.7)
+            ns.SpecialAura.PreviewFill(f.bar, (not sorted) and e.def or nil, w - off - 2)
 
             if group.showName ~= false then
                 E:SetFont(f.name, font, group.fontSize or 12, group.fontOutline or "OUTLINE")

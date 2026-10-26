@@ -868,6 +868,16 @@ function TUI:SpecialBarOptions(barKey, ctx)
         return false
     end
 
+    -- the other Bar Setup bars of this spec, when this one is in the stack too
+    local function StackMates()
+        local list = (not styleMode and ns.SB_StackBars) and ns.SB_StackBars(ESpec() or CurSpecID()) or {}
+        local mine, out = false, {}
+        for _, k in ipairs(list) do
+            if k == barKey then mine = true else out[#out + 1] = k end
+        end
+        return mine and out or {}
+    end
+
     local commonArgs = {}
     if not styleMode then
     commonArgs = CommonHeader("bars")
@@ -1070,6 +1080,36 @@ function TUI:SpecialBarOptions(barKey, ctx)
             SettleAfterSlotChange(); NotifyChange()
         end,
     }
+    -- the Bar Setup bar above (-1) or below (1) this one in the stack; false when it isn't in Bar Setup
+    local function Neighbor(dir)
+        local list = ns.SB_StackBars and ns.SB_StackBars(ESpec() or CurSpecID()) or {}
+        for i, k in ipairs(list) do
+            if k == barKey then return list[i + dir] end
+        end
+        return false
+    end
+    local function Move(dir)
+        local other = Neighbor(dir)
+        if not other then return end
+        SB.SwapBars(barKey, other, ESpec())
+        SettleAfterSlotChange()
+        if TUI.QueueCustomBarsUpdate then TUI:QueueCustomBarsUpdate() end
+        if ns.BarSetup and ns.BarSetup.ApplyStack then ns.BarSetup.ApplyStack() end
+        NotifyChange()
+        if ns.SB_OpenBarEditor then ns.SB_OpenBarEditor(other) end
+    end
+    commonArgs.moveUp = {
+        order = 4.7, type = "execute", name = "Move Up", width = 0.8,
+        hidden = function() return Neighbor(-1) == false end,
+        disabled = function() return not Neighbor(-1) end,
+        func = function() Move(-1) end,
+    }
+    commonArgs.moveDown = {
+        order = 4.8, type = "execute", name = "Move Down", width = 0.8,
+        hidden = function() return Neighbor(1) == false end,
+        disabled = function() return not Neighbor(1) end,
+        func = function() Move(1) end,
+    }
     commonArgs.divider = { order = 5, type = "header", name = "" }
     commonArgs.styleBlock = {
         order = 5.05, type = "group", name = "Style", inline = true,
@@ -1132,6 +1172,45 @@ function TUI:SpecialBarOptions(barKey, ctx)
                         height = { order = 4, type = "range", name = "Height", min = 8, max = 60, step = 1, get = function() return get("height") end, set = function(_, v) set("height", v) end, disabled = function() return get("inheritHeight") end },
                         inheritHeight = { order = 5, type = "toggle", name = "Inherit Height from Anchor", get = function() return get("inheritHeight") end, set = function(_, v) set("inheritHeight", v) end },
                         inheritHeightOffset = { order = 6, type = "range", name = "Height Nudge", min = -50, max = 50, step = 0.5, get = function() return get("inheritHeightOffset") end, set = function(_, v) set("inheritHeightOffset", v) end, disabled = function() return not get("inheritHeight") end },
+                        fillInFor = {
+                            order = 7, type = "select", name = "Fill In For (Not Talented)",
+                            hidden = function() return styleMode or #StackMates() == 0 end,
+                            values = function()
+                                local out = { [""] = "- None -" }
+                                local s = SB.GetSpecRoot(ESpec())
+                                for _, k in ipairs(StackMates()) do
+                                    local d = s.bars[k]
+                                    out[k] = (d and d.spellID and C_Spell.GetSpellName(d.spellID)) or k
+                                end
+                                return out
+                            end,
+                            sorting = function()
+                                local o = { "" }
+                                for _, k in ipairs(StackMates()) do o[#o + 1] = k end
+                                return o
+                            end,
+                            get = function() return get("fillInFor") or "" end,
+                            set = function(_, v) set("fillInFor", (v ~= "") and v or nil) end,
+                        },
+                        fillInOwn = {
+                            order = 8, type = "toggle", name = "Specific Height",
+                            hidden = function() return styleMode or not get("fillInFor") or #StackMates() == 0 end,
+                            get = function() return get("fillInOwn") end,
+                            set = function(_, v)
+                                local d = SB.GetSpecRoot(ESpec()).bars[get("fillInFor")]
+                                if v and not get("fillInHeight") then db().fillInHeight = (type(d) == "table" and d.height) or get("height") end
+                                set("fillInOwn", v and true or nil)
+                            end,
+                        },
+                        fillInHeight = {
+                            order = 9, type = "range", name = "Fill-In Height", min = 8, max = 60, step = 1,
+                            hidden = function() return styleMode or not (get("fillInFor") and get("fillInOwn")) or #StackMates() == 0 end,
+                            get = function()
+                                local d = SB.GetSpecRoot(ESpec()).bars[get("fillInFor")]
+                                return get("fillInHeight") or (type(d) == "table" and d.height) or get("height")
+                            end,
+                            set = function(_, v) set("fillInHeight", v) end,
+                        },
                     },
                 },
                 appearanceGroup = {
@@ -1141,6 +1220,34 @@ function TUI:SpecialBarOptions(barKey, ctx)
                         useClassColor = { order = 2, type = "toggle", name = "Use Class Color", get = function() return get("useClassColor") end, set = function(_, v) set("useClassColor", v) end },
                         customColor = { order = 3, type = "color", name = "Custom Color", hasAlpha = false, disabled = function() return get("useClassColor") end, get = function() return unpackColor(get("customColor"), false) end, set = function(_, r, g, b) set("customColor", { r=r, g=g, b=b }) end },
                         reverseFill = { order = 3.5, type = "toggle", name = "Reverse Fill", get = function() return get("reverseFill") end, set = function(_, v) set("reverseFill", v) end },
+                        fillMode = {
+                            order = 3.6, type = "select", name = "Fill By",
+                            values = { duration = "Duration", stacks = "Stacks" }, sorting = { "duration", "stacks" },
+                            hidden = function() return styleMode or get("totemTimer") end,
+                            get = function() return get("fillMode") or "duration" end,
+                            set = function(_, v)
+                                set("fillMode", (v == "stacks") and v or nil)
+                                if TUI.QueueCustomBarsUpdate then TUI:QueueCustomBarsUpdate() end
+                            end,
+                        },
+                        maxStacks = {
+                            order = 3.7, type = "range", name = "Max Stacks", min = 1, max = 20, step = 1,
+                            hidden = function() return styleMode or get("totemTimer") or get("fillMode") ~= "stacks" end,
+                            get = function() return get("maxStacks") or 4 end,
+                            set = function(_, v)
+                                set("maxStacks", v)
+                                if TUI.QueueCustomBarsUpdate then TUI:QueueCustomBarsUpdate() end
+                            end,
+                        },
+                        stackGap = {
+                            order = 3.8, type = "range", name = "Gap Between Stacks", min = 0, max = 6, step = 1,
+                            hidden = function() return styleMode or get("totemTimer") or get("fillMode") ~= "stacks" end,
+                            get = function() return get("stackGap") or 1 end,
+                            set = function(_, v)
+                                set("stackGap", v)
+                                if TUI.QueueCustomBarsUpdate then TUI:QueueCustomBarsUpdate() end
+                            end,
+                        },
                         frameStrata = {
                             order = 4, type = "select", name = "Frame Strata",
                             values = STRATA_VALUES, sorting = STRATA_ORDER,

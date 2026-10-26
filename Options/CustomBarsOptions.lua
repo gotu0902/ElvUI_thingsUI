@@ -125,10 +125,46 @@ local function EditBarAura(def, title, group)
     sort:SetCallback("OnValueChanged", function(_, _, v) def.sort = v; Refresh() end)
     f:AddChild(sort)
 
+    if not text then
+        local stacksN, gap
+        local fill = AceGUI:Create("Dropdown")
+        fill:SetLabel("Fill By")
+        fill:SetWidth(170)
+        fill:SetList({ duration = "Duration", stacks = "Stacks" }, { "duration", "stacks" })
+        fill:SetValue(def.fillMode or "duration")
+        fill:SetDisabled(sorted)
+        fill:SetCallback("OnValueChanged", function(_, _, v)
+            def.fillMode = (v == "stacks") and v or nil
+            stacksN:SetDisabled(sorted or not def.fillMode)
+            gap:SetDisabled(sorted or not def.fillMode)
+            Refresh()
+        end)
+        f:AddChild(fill)
+
+        stacksN = AceGUI:Create("Slider")
+        stacksN:SetLabel("Max Stacks")
+        stacksN:SetWidth(170)
+        stacksN:SetSliderValues(1, 20, 1)
+        stacksN:SetValue(def.maxStacks or 4)
+        stacksN:SetDisabled(sorted or not def.fillMode)
+        stacksN:SetCallback("OnValueChanged", function(_, _, v) def.maxStacks = v; Refresh() end)
+        f:AddChild(stacksN)
+
+        gap = AceGUI:Create("Slider")
+        gap:SetLabel("Gap Between Stacks")
+        gap:SetWidth(170)
+        gap:SetSliderValues(0, 6, 1)
+        gap:SetValue(def.stackGap or 1)
+        gap:SetDisabled(sorted or not def.fillMode)
+        gap:SetCallback("OnValueChanged", function(_, _, v) def.stackGap = v; Refresh() end)
+        f:AddChild(gap)
+        f:SetHeight(440)
+    end
+
     if sorted then
         local note = AceGUI:Create("Label")
         note:SetFullWidth(true)
-        note:SetText("|cffFFD200Group is time-sorted - Max Bars and Sort Active By apply in Manual order only.|r")
+        note:SetText("|cffFFD200Group is time-sorted - Max Bars, Sort Active By and Fill By apply in Manual order only.|r")
         f:AddChild(note)
     end
 end
