@@ -114,6 +114,34 @@ local function GetActiveSpecLabels(setup)
     return out
 end
 
+-- other setups with this spec ticked, and the one that wins (first in the list, like GetActiveSetup)
+local function SpecClash(setup, specID)
+    local others, winner = {}, nil
+    for _, s in ipairs(GetSetups()) do
+        if s.specs and s.specs[specID] then
+            winner = winner or s
+            if s ~= setup then others[#others + 1] = s.name or "?" end
+        end
+    end
+    return others, winner
+end
+
+local function ClashNote(setup, specID)
+    local others, winner = SpecClash(setup, specID)
+    if #others == 0 then return "" end
+    if winner == setup then
+        return "   |cFFFFD200! also in " .. table.concat(others, ", ") .. ", this one wins|r"
+    end
+    return "   |cFFFF5050! also in " .. table.concat(others, ", ") .. ", " .. (winner.name or "?") .. " wins|r"
+end
+
+local function HasClash(setup)
+    for specID in pairs(setup.specs or {}) do
+        if #(SpecClash(setup, specID)) > 0 then return true end
+    end
+    return false
+end
+
 local MODE_VALUES_3 = {
     NHT      = "In stack",
     FHT      = "Anchor (custom)",
@@ -432,7 +460,7 @@ local function SetupEditor(idx)
             pickHeader = { order = 10, type = "header", name = "Pick Specs by Class" },
             pickHint = {
                 order = 11, type = "description",
-                name = "Tick specs below to apply this setup when you're in them. Setups override Global; if multiple match, the lower-index one wins.\n",
+                name = "Tick specs below to apply this setup when you're in them. Setups override Global; a spec in two setups (marked |cFFFF5050!|r) uses the one further left.\n",
             },
             classPick = {
                 order = 12, type = "select", name = "Class", width = "double",
@@ -443,7 +471,13 @@ local function SetupEditor(idx)
             },
             specPick = {
                 order = 13, type = "multiselect", name = "Specs",
-                values = function() return (GetSpecChoicesForClass(selectedClassID)) end,
+                values = function()
+                    local v = GetSpecChoicesForClass(selectedClassID)
+                    for id, label in pairs(v) do
+                        if #(SpecClash(setup, id)) > 0 then v[id] = label .. " |cFFFF5050!|r" end
+                    end
+                    return v
+                end,
                 get = function(_, k) return setup.specs[k] and true or false end,
                 set = function(_, k, v)
                     setup.specs[k] = v or nil
@@ -472,7 +506,7 @@ local function SetupEditor(idx)
                                 label = {
                                     order = 1, type = "description", width = 2.5,
                                     fontSize = "medium",
-                                    name = function() local e = entry(); return e and e.label or "" end,
+                                    name = function() local e = entry(); return e and (e.label .. ClashNote(setup, e.id)) or "" end,
                                 },
                                 remove = {
                                     order = 2, type = "execute", name = "X", width = 0.4,
@@ -620,11 +654,12 @@ local function SetupEditor(idx)
         type = "group",
         name = function()
             local nm = setup.name or ("Setup " .. idx)
+            local warn = HasClash(setup) and " |cFFFF5050!|r" or ""
             if setup.tabColor then
-                return ns.TabName(nm, setup.tabColor) .. (setup == ActiveSetup() and " |cFF33FF33(active)|r" or "")
+                return ns.TabName(nm, setup.tabColor) .. warn .. (setup == ActiveSetup() and " |cFF33FF33(active)|r" or "")
             end
-            if setup == ActiveSetup() then return "|cFF33FF33" .. nm .. "|r" end
-            return nm
+            if setup == ActiveSetup() then return "|cFF33FF33" .. nm .. "|r" .. warn end
+            return nm .. warn
         end,
         order = 100 + idx,
         childGroups = "tab",
