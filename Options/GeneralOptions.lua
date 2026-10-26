@@ -491,44 +491,6 @@ function TUI:FixesAndQoLOptions()
                             },
                         },
                     },
-                    psettingsGroup = {
-                        order = 1,
-                        type = "group",
-                        name = "Import settings.",
-                        inline = true,
-                        args = {
-                            psettingsDescription = {
-                                order = 1,
-                                type = "description",
-                                name = "Alternative to import ElvUI private settings.\n\n|cFFFF6B6BWarning:|r This will overwrite your Private Profile settings!\n\n",
-                            },
-                            psettingsImport = {
-                                order = 2,
-                                type = "execute",
-                                name = "Setup things Settings",
-                                func = function()
-                                    -- ElvUI Private General
-                                    E.private["general"]["chatBubbleFont"] = "Expressway"
-                                    E.private["general"]["chatBubbleFontOutline"] = "OUTLINE"
-                                    E.private["general"]["chatBubbles"] = "nobackdrop"
-                                    E.private["general"]["classColors"] = true
-                                    E.private["general"]["glossTex"] = "ElvUI Blank"
-                                    E.private["general"]["minimap"]["hideTracking"] = true
-                                    E.private["general"]["nameplateFont"] = "Expressway"
-                                    E.private["general"]["nameplateLargeFont"] = "Expressway"
-                                    E.private["general"]["normTex"] = "ElvUI Blank"
-                                    E.private["install_complete"] = 12.12
-                                    -- ElvUI Private Other
-                                    E.private["nameplates"]["enable"] = false
-                                    E.private["skins"]["blizzard"]["cooldownManager"] = true
-                                    E.private["skins"]["parchmentRemoverEnable"] = true
-
-                                    print("|cFF8080FFthingsUI|r - ElvUI private settings applied! |cFFFFFF00Reload required.|r")
-                                    E:StaticPopup_Show("PRIVATE_RL")
-                                end,
-                            },
-                        },
-                    },
                     cvarsGroup = {
                         order = 2,
                         type = "group",
