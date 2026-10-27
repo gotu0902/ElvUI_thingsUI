@@ -122,10 +122,36 @@ local function PaintTicks(wrapper, db, w, h)
     layer:SetShown(shown > 0)
 end
 
+-- Fill By Stacks over a placeholder: the piece lines live on the wrapper, so they stay while the
+-- aura is gone (without a placeholder the aura's own bar draws them)
+local function PaintStackLines(wrapper, db, w, h, test, placeholder)
+    local SA = ns.SpecialAura
+    local n = SA and SA.StackCount(db)
+    local layer = wrapper.segFX
+    -- the options preview draws its own
+    wrapper._tuiStackLines = (n and placeholder and not test and not db.totemTimer) and true or nil
+    if not wrapper._tuiStackLines then
+        if layer then layer:Hide() end
+        return
+    end
+    if not layer then
+        layer = CreateFrame("Frame", nil, wrapper)
+        wrapper.segFX = layer
+    end
+    layer:SetFrameLevel(wrapper._tuiTickLevel or (wrapper:GetFrameLevel() + 4))
+    local left = (db.iconEnabled and (h + (db.iconSpacing or 1)) or 0) + 1
+    layer:ClearAllPoints()
+    layer:SetPoint("TOPLEFT", wrapper, "TOPLEFT", left, -1)
+    layer:SetPoint("BOTTOMRIGHT", wrapper, "BOTTOMRIGHT", -1, 1)
+    SA.PaintSegments(layer, math.max(1, w - left - 1), n, db.stackGap or 1)
+    layer:Show()
+end
+
 local function ReleaseBar(barKey)
     local wrapper = _G["TUI_SpecialBar_" .. barKey]
     if wrapper then
         HideTicks(wrapper.tickFX)
+        if wrapper.segFX then wrapper.segFX:Hide() end
         if ns.SpecialAura then ns.SpecialAura.Detach(wrapper, barKey) end
         wrapper.backdrop:Hide()
         if wrapper.testFX then wrapper.testFX:Hide() end
@@ -573,6 +599,7 @@ local function UpdateBarSlot(barKey)
         wrapper.backdrop:Hide()
     end
 
+    PaintStackLines(wrapper, db, effectiveWidth, effectiveHeight, test, db.showBackdrop or managedByBS)
     if ns.SpecialAura then
         ns.SpecialAura.AttachBar(wrapper, barKey, db, effectiveWidth, effectiveHeight)
     end

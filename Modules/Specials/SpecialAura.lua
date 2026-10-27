@@ -391,8 +391,9 @@ function SA.PaintSegments(host, areaW, n, gap)
     for k = want + 1, #lines do lines[k]:Hide() end
 end
 
--- the engine fills r.bar by duration, or a second bar by the aura's stacks (0..max)
-function SA.BindBarFill(button, r, src, areaW, paint)
+-- the engine fills r.bar by duration, or a second bar by the aura's stacks (0..max);
+-- noLines: the piece lines are drawn elsewhere (an Aura Bar's own frame keeps them without the aura)
+function SA.BindBarFill(button, r, src, areaW, paint, noLines)
     local n = SA.StackCount(src)
     if n and type(button.SetApplicationBar) ~= "function" then n = nil end
     if n then
@@ -404,11 +405,15 @@ function SA.BindBarFill(button, r, src, areaW, paint)
             button:SetApplicationBar(r.sbar, { minApplications = 0, maxApplications = n })
             r.sbarMax = n
         end
-        r.seg = r.seg or CreateFrame("Frame", nil, button)
-        r.seg:SetFrameLevel(button:GetFrameLevel() + 2)
-        r.seg:SetAllPoints(r.sbar)
-        SA.PaintSegments(r.seg, areaW, n, src.stackGap or 1)
-        r.seg:Show()
+        if noLines then
+            if r.seg then r.seg:Hide() end
+        else
+            r.seg = r.seg or CreateFrame("Frame", nil, button)
+            r.seg:SetFrameLevel(button:GetFrameLevel() + 2)
+            r.seg:SetAllPoints(r.sbar)
+            SA.PaintSegments(r.seg, areaW, n, src.stackGap or 1)
+            r.seg:Show()
+        end
     else
         if r.sbarMax then button:ClearApplicationBar(); r.sbarMax = nil end
         if r.sbar then r.sbar:Hide() end
@@ -503,7 +508,7 @@ function SA.StyleBarButton(button, r, wrapper, key)
         bar:SetStatusBarColor(c.r, c.g, c.b)
     end
     paint(r.bar)
-    SA.BindBarFill(button, r, db, w - barOffset - 2, paint)
+    SA.BindBarFill(button, r, db, w - barOffset - 2, paint, wrapper._tuiStackLines)
 
 
     local font = LSM:Fetch("font", db.font or "Expressway")

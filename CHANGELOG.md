@@ -59,7 +59,7 @@
 - New commands: /tui icons (what each Aura Icon tracks and why it might not show), /tui aura <spellID> (what an Aura Icon for that spell tracks and why), /tui prof all (every loaded addon by frames over 5 ms and peak, to find what makes something stutter)
 - Fixes and QoL: the old Setup things Settings button is gone. Import - Export - Install > Account Settings > ElvUI Private imports the full private settings
 - Bar Setup: a spec ticked in two setups gets a red ! on the tab, in the spec picker and in Active on Specs, which also says which setup wins (the one further left)
-- Aura Bars and Groups - Bars: Fill By Stacks fills the bar by the aura's stacks instead of its duration, split into one piece per stack (Max Stacks, Gap Between Stacks), like ElvUI's class bar for Tip of the Spear. Per Aura Bar, or per buff in a Groups - Bars group (Manual order)
+- Aura Bars and Groups - Bars: Fill By Stacks fills the bar by the aura's stacks instead of its duration, split into one piece per stack (Max Stacks, Gap Between Stacks), like ElvUI's class bar for Tip of the Spear. In Bar Setup or over a placeholder the pieces stay marked while the aura is down. Per Aura Bar, or per buff in a Groups - Bars group (Manual order)
 - Aura Bars: the list is split under Standalone, Bar Setup (in stack order) and group headings, like Aura Icons. A bar in Bar Setup gets Move Up / Move Down: it trades places with its neighbour in the stack for this spec only, so your other specs keep their order
 - Aura Bars: a bar whose buff you talented out of leaves Bar Setup and the stack closes up, instead of holding an empty slot. Size > Fill In For (Not Talented) lets another Bar Setup bar take over that bar's height while it's gone, or a Specific Height of its own
 ### Performance
