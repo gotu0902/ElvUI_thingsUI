@@ -241,7 +241,12 @@ local function BarRows(setup)
                 if inactiveReason then
                     return string.format("|cFFFFFF00%d.|r |cFF888888%s (%s)|r", capturedSlot, lbl, inactiveReason)
                 end
-                return string.format("|cFFFFFF00%d.|r |cFF%s%s|r", capturedSlot, col, lbl)
+                -- Height by Position: the place it holds in the stack right now
+                local BS = ns.BarSetup
+                local place, ph
+                if setup.heightByPos and setup == ActiveSetup() and BS.PositionPlace then place, ph = BS.PositionPlace(k) end
+                local tag = place and ("  |cFF8AC8FF%s place: %d high|r"):format(BS.ORDINAL[place], ph) or ""
+                return string.format("|cFFFFFF00%d.|r |cFF%s%s|r%s", capturedSlot, col, lbl, tag)
             end,
             args = {
                 enabled = {
@@ -296,7 +301,8 @@ local function BarRows(setup)
                     order = 6, type = "range", width = 0.7,
                     name = function()
                         if isAttached() then return "|cFFFFAA00Attached Height|r" end
-                        return "Height"
+                        -- with Height by Position this is the height away from the first places
+                        return setup.heightByPos and "Own Height" or "Height"
                     end,
                     desc = function()
                         if isAttached() then
@@ -626,6 +632,37 @@ local function SetupEditor(idx)
                 set = function(_, v) setup.gap = v; ApplyStack() end,
             },
 
+            posHeader = { order = 10, type = "header", name = "Height by Position" },
+            posDesc = {
+                order = 11, type = "description", width = "full",
+                name = "|cFF888888The first bars that show in the stack take these heights, whichever bars they are (a hidden or untalented bar hands its place to the next).|r",
+            },
+            heightByPos = {
+                order = 12, type = "toggle", name = "Enable",
+                get = function() return setup.heightByPos end,
+                set = function(_, v)
+                    setup.heightByPos = v or nil
+                    if v and not setup.posHeights then
+                        -- start from the heights the first bars have now
+                        local BS = ns.BarSetup
+                        local keys = BS.StackKeysInOrder(setup)
+                        setup.posHeights = {}
+                        for k = 1, BS.MAX_POS do
+                            local key = keys[k]
+                            setup.posHeights[k] = key and BS.GetBarHeight(key, setup) or 18
+                        end
+                    end
+                    ApplyStack(); NotifyChange()
+                end,
+            },
+            posCount = {
+                order = 13, type = "range", name = "Bars", min = 1, max = 5, step = 1,
+                hidden = function() return not setup.heightByPos end,
+                get = function() return setup.posCount or 2 end,
+                set = function(_, v) setup.posCount = v; ApplyStack(); NotifyChange() end,
+            },
+            posBreak = { order = 13.5, type = "description", width = "full", name = "",
+                hidden = function() return not setup.heightByPos end },
             widthHeader = { order = 20, type = "header", name = "Width" },
             inheritWidth = {
                 order = 21, type = "toggle", width = "full",
@@ -649,6 +686,19 @@ local function SetupEditor(idx)
             },
         },
     }
+
+    for k = 1, 5 do
+        layoutTab.args["pos" .. k] = {
+            order = 14 + k * 0.1, type = "range", name = ns.BarSetup.ORDINAL[k] .. " Bar", min = 4, max = 60, step = 1,
+            hidden = function() return not setup.heightByPos or k > (setup.posCount or 2) end,
+            get = function() return (setup.posHeights and setup.posHeights[k]) or 18 end,
+            set = function(_, v)
+                setup.posHeights = setup.posHeights or {}
+                setup.posHeights[k] = v
+                ApplyStack()
+            end,
+        }
+    end
 
     return {
         type = "group",

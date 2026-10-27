@@ -90,8 +90,11 @@ function CB.GetActiveAnchorFrame()
     return frame
 end
 
+-- With One Charge > Show in Cooldown Manager hid the bar: Bar Setup closes the gap
+local oneChargeHidden = false
+
 function CB.IsNHTForCurrentSpec()
-    if not CB.IsActiveForCurrentSpec() then return false end
+    if not CB.IsActiveForCurrentSpec() or oneChargeHidden then return false end
     return not IsFHT()
 end
 
@@ -111,6 +114,7 @@ function CB.GetInactiveReason()
     local entry = GetSpecEntry()
     if not entry then return "inactive on this spec" end
     if entry.spellID == nil or entry.spellID == "" then return "no spell ID" end
+    if oneChargeHidden then return "1 charge now, shown in the Cooldown Manager" end
     return nil
 end
 
@@ -712,8 +716,14 @@ local function UpdateNow()
         HideAll(); return
     end
     noChargeInfo = not info
-    if mx <= 1 and OneChargeMode(entry) == "cdm" then
-        HideAll(); return
+    local wasOneHidden = oneChargeHidden
+    oneChargeHidden = mx <= 1 and OneChargeMode(entry) == "cdm"
+    if oneChargeHidden then
+        local restack = not wasOneHidden and not (frame and frame:IsShown())
+        HideAll()
+        -- HideAll restacks a shown bar; one that never showed may still hold a place
+        if restack and ns.BarSetup and ns.BarSetup.ApplyStack then ns.BarSetup.ApplyStack() end
+        return
     end
 
     EnsureFrame()
@@ -739,6 +749,10 @@ local function UpdateNow()
     frame:Show()
     if not wasShown and TUI.InvalidateDynamicCastBarAnchor then
         TUI:InvalidateDynamicCastBarAnchor()
+    end
+    -- back from one charge: Bar Setup gives it its place again
+    if wasOneHidden and not fht and ns.BarSetup and ns.BarSetup.ApplyStack then
+        ns.BarSetup.ApplyStack()
     end
 
     if not wasShown and ns.ClassbarMode and ns.ClassbarMode.RequestUpdate then

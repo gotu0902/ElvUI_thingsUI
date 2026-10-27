@@ -25,7 +25,7 @@ local EXCLUDE = {
         anchorRelativePoint = true, anchorXOffset = true, anchorYOffset = true,
         totemTimer = true, totemTicks = true, totemTickThickness = true,
         totemTickLength = true, totemTickColor = true, auraKind = true, visibility = true, customIcon = true,
-        fillMode = true, maxStacks = true, stackGap = true, fillInFor = true, fillInOwn = true, fillInHeight = true,
+        fillMode = true, maxStacks = true, stackGap = true,
     },
 }
 

@@ -457,11 +457,33 @@ local lastWidth = {}
 
 function M.ResetWidthCache() wipe(lastWidth) end
 
+-- Height by Position (per setup): key -> height for the bars in the first places of the stack
+M.MAX_POS = 5
+M.ORDINAL = { "1st", "2nd", "3rd", "4th", "5th" }
+local MAX_POS = M.MAX_POS
+local posHeight, posPlace = {}, {}
+function M.PositionHeight(key) return posHeight[key] end
+-- the place (1..5) and height a bar of the active setup holds right now
+function M.PositionPlace(key) return posPlace[key], posHeight[key] end
+
+-- the bars in the stack's first places right now, for the options' starting values
+function M.StackKeysInOrder(setup)
+    local out = {}
+    for _, key in ipairs((setup and setup.order) or {}) do
+        local b = setup.bars and setup.bars[key]
+        if b and b.enabled and b.mode == "NHT" and (key:sub(1, 8) ~= "special:" or IsSpecialBarAvailable(key)) then
+            out[#out + 1] = key
+        end
+    end
+    return out
+end
+
 function M.RestoreBarsToElvUI()
     if InCombatLockdown() then return end
     local UF = (E and E.GetModule) and E:GetModule("UnitFrames", true) or nil
     if not UF then return end
     M._managed = nil
+    posHeight, posPlace = {}, {}
     -- Bar Setup may have hidden the power bar (Disabled mode) — bring it back.
     local pw = E.db.unitframe and E.db.unitframe.units and E.db.unitframe.units.player and E.db.unitframe.units.player.power
     if pw and pw.enable == false then pw.enable = true end
@@ -609,6 +631,34 @@ function M.PositionStack(positionOnly)
         return true
     end
 
+    -- Height by Position: the first bars that show in the stack take the setup's heights, whichever
+    -- bars they are. Worked out out of combat only; in combat the heights the bars have stay
+    if not positionOnly then
+        local pos, place = {}, {}
+        if setup.heightByPos then
+            local n, k = math.min(setup.posCount or 2, MAX_POS), 0
+            for _, key in ipairs(setup.order) do
+                local b = setup.bars[key]
+                if b and b.enabled and b.mode == "NHT" and ShouldInclude(key) then
+                    k = k + 1
+                    if k > n then break end
+                    local h = setup.posHeights and setup.posHeights[k]
+                    if h then pos[key], place[key] = h, k end
+                end
+            end
+        end
+        posPlace = place
+        local auraChanged = false
+        for key in pairs(posHeight) do
+            if key:sub(1, 8) == "special:" and pos[key] ~= posHeight[key] then auraChanged = true end
+        end
+        for key, h in pairs(pos) do
+            if key:sub(1, 8) == "special:" and posHeight[key] ~= h then auraChanged = true end
+        end
+        posHeight = pos
+        if auraChanged and TUI.QueueSpecialBarsUpdate then TUI:QueueSpecialBarsUpdate() end
+    end
+
     local UF = (E and E.GetModule) and E:GetModule("UnitFrames", true) or nil
     local function SetDetached(dbPath, want)
         local cur = dbPath.detachFromFrame
@@ -653,7 +703,7 @@ function M.PositionStack(positionOnly)
                     if pBar.textX ~= nil and p.xOffset ~= pBar.textX then p.xOffset = pBar.textX; needsPlayerUF = true end
                     if pBar.textY ~= nil and p.yOffset ~= pBar.textY then p.yOffset = pBar.textY; needsPlayerUF = true end
                 else
-                    local dh = (setup.barHeights and setup.barHeights.power)
+                    local dh = posHeight.power or (setup.barHeights and setup.barHeights.power)
                         or E.db.thingsUI.barSetup.powerDetachedHeight
                     if dh and p.height ~= dh then p.height = dh; needsPlayerUF = true end
                 end
@@ -678,11 +728,12 @@ function M.PositionStack(positionOnly)
         SafeUpdatePlayerUF(UF)
     end
 
-    if setup.barHeights and not positionOnly then
+    -- Aura Bars keep their own height: their position's height only sizes them in the stack
+    if not positionOnly then
         for _, key in ipairs(setup.order) do
             local b = setup.bars[key]
-            local h = setup.barHeights[key]
-            if h and b and b.enabled and key ~= "power"
+            local h = posHeight[key] or (setup.barHeights and setup.barHeights[key])
+            if h and b and b.enabled and key ~= "power" and key:sub(1, 8) ~= "special:"
                and b.mode ~= "ATTACHED" and b.mode ~= "DISABLED" then
                 WriteBarHeightToDB(key, h)
             end
@@ -729,7 +780,9 @@ function M.PositionStack(positionOnly)
                         f:SetPoint(setup.anchorPoint or "BOTTOM", stackAnchor, setup.anchorTo or "TOP", localXOff, accY)
                     end
                     local SB = key:sub(1, 8) == "special:" and ns.SpecialBars
-                    accY = accY + ((SB and SB.StackHeight) and SB.StackHeight(key:sub(9), nil, setup) or GetBarHeight(key, setup))
+                    accY = accY + (posHeight[key]
+                        or ((SB and SB.StackHeight) and SB.StackHeight(key:sub(9)))
+                        or GetBarHeight(key, setup))
                 end
             end
         end

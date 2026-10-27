@@ -868,16 +868,6 @@ function TUI:SpecialBarOptions(barKey, ctx)
         return false
     end
 
-    -- the other Bar Setup bars of this spec, when this one is in the stack too
-    local function StackMates()
-        local list = (not styleMode and ns.SB_StackBars) and ns.SB_StackBars(ESpec() or CurSpecID()) or {}
-        local mine, out = false, {}
-        for _, k in ipairs(list) do
-            if k == barKey then mine = true else out[#out + 1] = k end
-        end
-        return mine and out or {}
-    end
-
     local commonArgs = {}
     if not styleMode then
     commonArgs = CommonHeader("bars")
@@ -1144,7 +1134,17 @@ function TUI:SpecialBarOptions(barKey, ctx)
                         barSetupHint = {
                             order = 0, type = "description", width = "full", fontSize = "medium",
                             hidden = function() return not IsInBarSetup() end,
-                            name = "|cFFFF4040Active in Bar Setup - width is owned by the Bar Setup tab.|r\n",
+                            name = function()
+                                local t = "|cFFFF4040Active in Bar Setup - width is owned by the Bar Setup tab.|r"
+                                local BS = ns.BarSetup
+                                local s = not ESpec() and BS and BS.GetActiveSetup and BS.GetActiveSetup()
+                                local place, ph
+                                if s and s.heightByPos and BS.PositionPlace then place, ph = BS.PositionPlace("special:" .. barKey) end
+                                if place then
+                                    t = t .. ("\n|cFF8AC8FFHeight by Position: %s place in the stack, %d high.|r"):format(BS.ORDINAL[place], ph)
+                                end
+                                return t .. "\n"
+                            end,
                         },
                         groupedHint = {
                             order = 0.1, type = "description", width = "full", fontSize = "medium",
@@ -1169,48 +1169,15 @@ function TUI:SpecialBarOptions(barKey, ctx)
                             set = function(_, v) set("inheritWidthOffset", v) end,
                             disabled = function() return (not get("inheritWidth")) or IsInBarSetup() end,
                         },
-                        height = { order = 4, type = "range", name = "Height", min = 8, max = 60, step = 1, get = function() return get("height") end, set = function(_, v) set("height", v) end, disabled = function() return get("inheritHeight") end },
+                        height = { order = 4, type = "range", min = 8, max = 60, step = 1,
+                            name = function()
+                                local BS = ns.BarSetup
+                                local s = IsInBarSetup() and BS.GetActiveSetup()
+                                return (s and s.heightByPos) and "Own Height" or "Height"
+                            end,
+                            get = function() return get("height") end, set = function(_, v) set("height", v) end, disabled = function() return get("inheritHeight") end },
                         inheritHeight = { order = 5, type = "toggle", name = "Inherit Height from Anchor", get = function() return get("inheritHeight") end, set = function(_, v) set("inheritHeight", v) end },
                         inheritHeightOffset = { order = 6, type = "range", name = "Height Nudge", min = -50, max = 50, step = 0.5, get = function() return get("inheritHeightOffset") end, set = function(_, v) set("inheritHeightOffset", v) end, disabled = function() return not get("inheritHeight") end },
-                        fillInFor = {
-                            order = 7, type = "select", name = "Fill In For (Not Talented)",
-                            hidden = function() return styleMode or #StackMates() == 0 end,
-                            values = function()
-                                local out = { [""] = "- None -" }
-                                local s = SB.GetSpecRoot(ESpec())
-                                for _, k in ipairs(StackMates()) do
-                                    local d = s.bars[k]
-                                    out[k] = (d and d.spellID and C_Spell.GetSpellName(d.spellID)) or k
-                                end
-                                return out
-                            end,
-                            sorting = function()
-                                local o = { "" }
-                                for _, k in ipairs(StackMates()) do o[#o + 1] = k end
-                                return o
-                            end,
-                            get = function() return get("fillInFor") or "" end,
-                            set = function(_, v) set("fillInFor", (v ~= "") and v or nil) end,
-                        },
-                        fillInOwn = {
-                            order = 8, type = "toggle", name = "Specific Height",
-                            hidden = function() return styleMode or not get("fillInFor") or #StackMates() == 0 end,
-                            get = function() return get("fillInOwn") end,
-                            set = function(_, v)
-                                local d = SB.GetSpecRoot(ESpec()).bars[get("fillInFor")]
-                                if v and not get("fillInHeight") then db().fillInHeight = (type(d) == "table" and d.height) or get("height") end
-                                set("fillInOwn", v and true or nil)
-                            end,
-                        },
-                        fillInHeight = {
-                            order = 9, type = "range", name = "Fill-In Height", min = 8, max = 60, step = 1,
-                            hidden = function() return styleMode or not (get("fillInFor") and get("fillInOwn")) or #StackMates() == 0 end,
-                            get = function()
-                                local d = SB.GetSpecRoot(ESpec()).bars[get("fillInFor")]
-                                return get("fillInHeight") or (type(d) == "table" and d.height) or get("height")
-                            end,
-                            set = function(_, v) set("fillInHeight", v) end,
-                        },
                     },
                 },
                 appearanceGroup = {

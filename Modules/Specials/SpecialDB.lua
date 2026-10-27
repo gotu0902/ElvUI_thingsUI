@@ -146,8 +146,6 @@ local function SwapBars(a, b, specID)
             if type(d) == "table" then
                 if d.anchorFrame == fa then d.anchorFrame = fb
                 elseif d.anchorFrame == fb then d.anchorFrame = fa end
-                if d.fillInFor == a then d.fillInFor = b
-                elseif d.fillInFor == b then d.fillInFor = a end
             end
         end
     end

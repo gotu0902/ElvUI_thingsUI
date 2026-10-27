@@ -399,29 +399,11 @@ local function IsManagedByBarSetup(barKey)
     return b ~= nil and b.enabled == true
 end
 
-local function InStack(setup, barKey)
-    local target = "special:" .. barKey
-    local b = setup and setup.bars and setup.bars[target]
-    if not (b and b.enabled) then return false end
-    for _, k in ipairs(setup.order or {}) do
-        if k == target then return true end
-    end
-    return false
-end
-
--- a Bar Setup bar can fill in for another one that isn't talented: it takes that bar's height, or its own Specific Height
-function SB.StackHeight(barKey, db, setup)
+-- a Bar Setup bar takes its place's height (Bar Setup > Height by Position), else its own
+function SB.StackHeight(barKey, db)
     db = db or SB.GetBarDB(barKey)
-    local h = db.height or 0
-    local other = db.fillInFor
-    local od = other and other ~= barKey and SB.GetSpecRoot().bars[other]
-    if type(od) == "table" and od.spellID and od.customGroup == nil and not SB.SpellLearned(od.spellID) then
-        setup = setup or (ns.BarSetup and ns.BarSetup.GetActiveSetup and ns.BarSetup.GetActiveSetup())
-        if InStack(setup, other) then
-            return db.fillInOwn and (db.fillInHeight or od.height or h) or (od.height or h)
-        end
-    end
-    return h
+    local BS = ns.BarSetup
+    return (BS and BS.PositionHeight and BS.PositionHeight("special:" .. barKey)) or db.height or 0
 end
 
 -- visibility rules for standalone and Bar Setup bars; a grouped bar follows its group's
