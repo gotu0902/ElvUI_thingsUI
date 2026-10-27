@@ -637,6 +637,19 @@ local function HookActive(c)
     hooksecurefunc(c, "OnActiveStateChanged", function() M.FireAuraState(c) end)
 end
 
+-- a CDM frame for one of these IDs: its spell, or an aura it tracks (Rend's entry is the
+-- ability 772 with the debuff 388539 linked)
+function M.ChildMatches(c, ids)
+    local sid, base = M.ChildSpell(c)
+    if (sid and ids[sid]) or (base and ids[base]) then return true end
+    local info = c.cooldownInfo
+    for _, l in ipairs((info and info.linkedSpellIDs) or {}) do
+        local p = PlainID(l)
+        if p and ids[p] then return true end
+    end
+    return false
+end
+
 function M.AuraUp(ids)
     local tracked = false
     for _, name in ipairs({ "BuffIconCooldownViewer", "BuffBarCooldownViewer" }) do
@@ -646,8 +659,7 @@ function M.AuraUp(ids)
                 local c = buffKids[i]
                 if c and c.cooldownInfo then
                     HookActive(c)
-                    local sid, base = M.ChildSpell(c)
-                    if (sid and ids[sid]) or (base and ids[base]) then
+                    if M.ChildMatches(c, ids) then
                         tracked = true
                         local a = c.isActive
                         if not (issecretvalue and issecretvalue(a)) and a then return true end
@@ -662,8 +674,7 @@ function M.AuraUp(ids)
             for i = 1, H.ChildrenInto(v, buffKids) do
                 local c = buffKids[i]
                 if c and c.cooldownInfo then
-                    local sid, base = M.ChildSpell(c)
-                    if (sid and ids[sid]) or (base and ids[base]) then
+                    if M.ChildMatches(c, ids) then
                         tracked = true
                         if M.ChildAuraActive(c) then return true end
                     end
@@ -1491,10 +1502,7 @@ LayoutViewer = function(viewer)
         if swipeStyled or swipeHooked[c.Cooldown] or (o and (o.swipeColor or o.swipeReverse)) then
             EnsureSwipeHook(c); StyleAuraSwipe(c)
         end
-        if next(auraWatch) then
-            local sid, base = M.ChildSpell(c)
-            if (sid and auraWatch[sid]) or (base and auraWatch[base]) then EnsureSwipeHook(c); NoteAuraState(c) end
-        end
+        if next(auraWatch) and M.ChildMatches(c, auraWatch) then EnsureSwipeHook(c); NoteAuraState(c) end
         if anyCDState and o and o.cdState then EnsureSwipeHook(c) end
     end
     -- per-spell glow and text follow the spell, not the re-used frame

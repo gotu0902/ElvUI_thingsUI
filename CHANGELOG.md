@@ -76,6 +76,7 @@
 - Profile switches (FHT / NHT per spec) rebuild thingsUI's option pages when you next open the options, not during the switch
 - New /tui prof spec: type it, swap spec, and 8 s later it lists every addon's CPU time during the swap, the longest frames and, on a profile switch, thingsUI's share of it
 ### Fixes
+- Aura Icons > Only When Missing found debuffs like Rend in the Cooldown Manager: their entry is the ability (Rend) with the debuff linked to it, and only the ability was matched, so the icon counted as not tracked in combat (and the options said so)
 - Aura Icons and Aura Bars track what the Cooldown Manager tracks for that spell: the entry that lists the aura, not every entry on the same spell (a Violent Outburst icon showed Seeing Red too). A buff whose CDM entry carries another ID than the aura keeps tracking: 12.1.5 broke Lifebloom set to 1227806 (the HoT on you is 33763); the spell you know by that name, tracked CDM buffs with the same name and buffs your layout moved into Buff Icons/Bars count too
 - Stack and charge numbers stay on top of glows: the CDM's proc / Spell Editor glow drew over them, and the pandemic glow did on Aura Icons and in groups
 - Previews (options open) follow the role rule, so a DPS and a Tank version of a group in the same spot are no longer drawn on top of each other; the group you have open in the options always shows. Groups - Icons / Bars / Text and Aura Icons / Bars
