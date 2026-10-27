@@ -38,8 +38,9 @@ local function InfoSpellID(info)
     return PlainID(info.overrideSpellID) or PlainID(info.spellID)
 end
 
--- every ID of the CDM's buff entries for this spec, and of the ones you have learned
+-- every ID of the CDM's buff entries for this spec (rebuilt on spec/talent change), and of the ones you have learned
 local cdmAll, cdmLearned = {}, {}
+local cdmAllDirty = true
 local function AddIDs(set, info)
     local a, b = PlainID(info.spellID), PlainID(info.overrideSpellID)
     if a then set[a] = true end
@@ -60,14 +61,19 @@ local function RefreshKnownSpells()
     if not (C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCategorySet) then return end
     local CAT_BUFF = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.TrackedBuff
     local CAT_BAR  = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.TrackedBar
-    wipe(cdmAll)
-    wipe(cdmLearned)
-    for _, cat in ipairs({ CAT_BUFF, CAT_BAR }) do
-        for _, cdID in ipairs(C_CooldownViewer.GetCooldownViewerCategorySet(cat, true) or {}) do
-            local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
-            if info then AddIDs(cdmAll, info) end
+    local SA = ns.SpecialAura
+    if cdmAllDirty and SA and SA.CDMRows then
+        local rows = SA.CDMRows()
+        -- the CDM may have nothing yet early in a login
+        cdmAllDirty = #rows == 0
+        wipe(cdmAll)
+        for _, r in ipairs(rows) do
+            if r.s then cdmAll[r.s] = true end
+            if r.o then cdmAll[r.o] = true end
+            for _, l in ipairs(r.linked) do cdmAll[l] = true end
         end
     end
+    wipe(cdmLearned)
     local function fill(cat, set)
         wipe(set)
         local ids = cat and C_CooldownViewer.GetCooldownViewerCategorySet(cat, false)
@@ -177,6 +183,7 @@ do
     f:RegisterEvent("TRAIT_CONFIG_UPDATED")
     f:SetScript("OnEvent", function(_, event, unit)
         if event == "PLAYER_SPECIALIZATION_CHANGED" and unit and unit ~= "player" then return end
+        cdmAllDirty = true
         if event == "TRAIT_CONFIG_UPDATED" then
             -- talented in or out: bars come and go, the CDM settles its lists first
             InvalidateSpellListCache()

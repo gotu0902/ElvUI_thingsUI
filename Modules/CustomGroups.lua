@@ -1639,7 +1639,7 @@ end
 
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")
-ev:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+ev:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
 ev:RegisterEvent("SPELLS_CHANGED")
 ev:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 ev:RegisterEvent("SPELL_UPDATE_CHARGES")

@@ -169,7 +169,7 @@ function TUI:UpdateClassbarMode()
         isEnabled = true
         eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
         eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-        eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+        eventFrame:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
         HookEssential()
         HookConfigureClassBar()
 

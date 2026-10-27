@@ -214,8 +214,7 @@ function TUI:Initialize()
             TUI:UpdateBuffBars()
             TUI:UpdateCDMText()
             TUI:UpdateClusterPositioning()
-            if ns.BarSetup and ns.BarSetup.ResetWidthCache then ns.BarSetup.ResetWidthCache() end
-            TUI:UpdateBarSetup()
+            -- Bar Setup restacks on its own spec ticks (BarSetup InstallWatcher)
             TUI:UpdateClassbarMode()
             TUI:UpdateChargeBar()
             TUI:UpdateCustomGroups()
@@ -229,7 +228,33 @@ function TUI:Initialize()
     print("|cFF8080FFElvUI_thingsUI|r v" .. self.version .. " loaded")
 end
 
+-- every group's and Aura Icon's option pages: heavy, so with the options closed it waits for the next open
+local optionsStale = false
+local function RebuildOptionTables()
+    optionsStale = false
+    if ns.CustomGroups and ns.CustomGroups._rebuildOptions then ns.CustomGroups._rebuildOptions() end
+    if ns.CustomBars and ns.CustomBars._rebuildOptions then ns.CustomBars._rebuildOptions() end
+    if ns.AuraCollections and ns.AuraCollections._rebuildOptions then ns.AuraCollections._rebuildOptions() end
+    if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end
+    if ns.BarSetup and ns.BarSetup._rebuildSetupOptions then ns.BarSetup._rebuildSetupOptions() end
+end
+
+local function OptionsOpen()
+    local ACD = E.Libs and E.Libs.AceConfigDialog
+    return ACD and ACD.OpenFrames and ACD.OpenFrames.ElvUI ~= nil
+end
+
+if E.ExecuteOptions then
+    hooksecurefunc(E, "ExecuteOptions", function()
+        if optionsStale then
+            RebuildOptionTables()
+            ns.NotifyChange()
+        end
+    end)
+end
+
 function TUI:ProfileUpdate()
+    local t0 = debugprofilestop()
     wipe(ns.skinnedBars)
     wipe(ns.yoinkedBars)
     ns.SpecialBars.Styles.MigrateBorders()
@@ -253,11 +278,7 @@ function TUI:ProfileUpdate()
     if self.UpdateMBB then self:UpdateMBB() end
     if self.UpdateInstanceDifficulty then self:UpdateInstanceDifficulty() end
     if ns.BarCopy then ns.BarCopy.OnProfile() end
-    if ns.CustomGroups and ns.CustomGroups._rebuildOptions then ns.CustomGroups._rebuildOptions() end
-    if ns.CustomBars and ns.CustomBars._rebuildOptions then ns.CustomBars._rebuildOptions() end
-    if ns.AuraCollections and ns.AuraCollections._rebuildOptions then ns.AuraCollections._rebuildOptions() end
-    if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end
-    if ns.BarSetup and ns.BarSetup._rebuildSetupOptions then ns.BarSetup._rebuildSetupOptions() end
+    if OptionsOpen() then RebuildOptionTables() else optionsStale = true end
     if ns.Timers then
         if ns.Timers.DropLustTimers then ns.Timers.DropLustTimers() end
         if ns.Timers.Update then ns.Timers.Update() end
@@ -268,6 +289,7 @@ function TUI:ProfileUpdate()
     if self.UpdateGroupAnchor then self:UpdateGroupAnchor() end
     if self.UpdateRaidOrder then self:UpdateRaidOrder() end
     self:UpdateMoverSync()
+    ns.lastProfileUpdateMs = debugprofilestop() - t0
 end
 
 hooksecurefunc(E, "UpdateAll", function() TUI:ProfileUpdate() end)

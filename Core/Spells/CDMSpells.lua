@@ -147,7 +147,7 @@ end
 
 local f = CreateFrame("Frame")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
-f:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+f:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
 f:RegisterEvent("TRAIT_CONFIG_UPDATED")
 if C_EventUtils and C_EventUtils.IsEventValid and C_EventUtils.IsEventValid("COOLDOWN_VIEWER_TABLE_HOTFIXED") then
     f:RegisterEvent("COOLDOWN_VIEWER_TABLE_HOTFIXED")

@@ -70,6 +70,11 @@
 - A tracked cast (Ironfur with Ticks, totem timers) no longer rebuilds every Aura Bar and Aura Icon: only the bars and icons that use it update, and ticks just move
 - Visibility rules only watch what your rules ask about (no work on target or zone changes when no rule uses them), and Aura Collections are built once per frame instead of once per lookup
 - Removed unused code, and the old buff cache the CDM spell picker no longer reads
+- Spec swaps: thingsUI no longer rebuilds Bar Setup, CDM text, Groups and racials when someone else in your group changes spec (the game sends that event for group members too)
+- Spec swaps: Bar Setup restacks three times instead of five and no longer rebuilds ElvUI's player frame and cast bar on each pass. With Bar Setup off it leaves the player frame alone unless it moved bars this session
+- Aura Icons and Aura Bars read the Cooldown Manager's buff list once per update instead of once per icon (a spec swap read it again for every Aura Icon and Bar)
+- Profile switches (FHT / NHT per spec) rebuild thingsUI's option pages when you next open the options, not during the switch
+- New /tui prof spec: type it, swap spec, and 8 s later it lists every addon's CPU time during the swap, the longest frames and, on a profile switch, thingsUI's share of it
 ### Fixes
 - Aura Icons and Aura Bars track what the Cooldown Manager tracks for that spell: the entry that lists the aura, not every entry on the same spell (a Violent Outburst icon showed Seeing Red too). A buff whose CDM entry carries another ID than the aura keeps tracking: 12.1.5 broke Lifebloom set to 1227806 (the HoT on you is 33763); the spell you know by that name, tracked CDM buffs with the same name and buffs your layout moved into Buff Icons/Bars count too
 - Stack and charge numbers stay on top of glows: the CDM's proc / Spell Editor glow drew over them, and the pandemic glow did on Aura Icons and in groups

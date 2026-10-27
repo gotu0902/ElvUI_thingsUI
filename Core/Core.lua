@@ -226,8 +226,84 @@ local function ProfAll(P, M)
     end
 end
 
+-- /tui prof spec: armed, then a spec swap; every addon's time over the next 8 s and the longest frames
+local capture, specTicker
+local function SpecReport()
+    local c = capture
+    capture = nil
+    c.ticker:SetScript("OnUpdate", nil)
+    c.ticker:UnregisterAllEvents()
+    if not c.started then
+        print("|cFF8080FFthingsUI|r: no spec swap within a minute, nothing measured.")
+        return
+    end
+    local rows, all = {}, 0
+    for name, t in pairs(c.addons) do
+        if t.total > 0 then rows[#rows + 1] = { name = name, total = t.total, worst = t.worst } end
+        all = all + t.total
+    end
+    table.sort(rows, function(a, b) return a.total > b.total end)
+    local E = ns.E
+    local now = E.data and E.data.GetCurrentProfile and E.data:GetCurrentProfile()
+    print(("|cFF8080FFthingsUI|r spec swap: %.1f s, addons %.0f ms in total%s"):format(c.game / 1000, all,
+        (c.profile ~= now) and (" | ElvUI profile %s -> %s, thingsUI profile update %.0f ms"):format(
+            tostring(c.profile), tostring(now), ns.lastProfileUpdateMs or 0) or ""))
+    for i = 1, math.min(10, #rows) do
+        print(("  %-26s %7.1f ms | worst frame %6.1f ms"):format(rows[i].name, rows[i].total, rows[i].worst))
+    end
+    table.sort(c.frames, function(a, b) return a.len > b.len end)
+    local parts = {}
+    for i = 1, math.min(6, #c.frames) do
+        parts[#parts + 1] = ("%.0f (%.0f)"):format(c.frames[i].len, c.frames[i].addons)
+    end
+    print("  longest frames, ms (of it addons): " .. table.concat(parts, ", "))
+end
+
+local function SpecCapture(P, M)
+    if capture then print("|cFF8080FFthingsUI|r: already waiting for a spec swap.") return end
+    local names = {}
+    for i = 1, C_AddOns.GetNumAddOns() do
+        local name = C_AddOns.GetAddOnInfo(i)
+        if name and C_AddOns.IsAddOnLoaded(i) then names[#names + 1] = name end
+    end
+    local E = ns.E
+    specTicker = specTicker or CreateFrame("Frame")
+    local c = { addons = {}, frames = {}, game = 0, ticker = specTicker,
+        profile = E.data and E.data.GetCurrentProfile and E.data:GetCurrentProfile() }
+    for _, n in ipairs(names) do c.addons[n] = { total = 0, worst = 0 } end
+    capture = c
+    c.deadline = GetTime() + 60
+    c.ticker:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    c.ticker:SetScript("OnEvent", function()
+        if c.started then return end
+        c.started = true
+        c.deadline = GetTime() + 8
+    end)
+    c.ticker:SetScript("OnUpdate", function(_, elapsed)
+        if c.started then
+            c.game = c.game + elapsed * 1000
+            for _, n in ipairs(names) do
+                local t = c.addons[n]
+                local v = P.GetAddOnMetric(n, M.LastTime)
+                t.total = t.total + v
+                if v > t.worst then t.worst = v end
+            end
+            c.frames[#c.frames + 1] = { len = elapsed * 1000, addons = P.GetOverallMetric(M.LastTime) }
+        end
+        if GetTime() > c.deadline then SpecReport() end
+    end)
+    print("|cFF8080FFthingsUI|r: swap spec now; the report follows 8 s after the swap.")
+end
+
 ns.SlashCommand("prof", function(arg)
-    if strlower(strtrim(arg or "")) == "all" then
+    local sub = strlower(strtrim(arg or ""))
+    if sub == "spec" then
+        local P, M = C_AddOnProfiler, Enum.AddOnProfilerMetric
+        if P and P.IsEnabled and P.IsEnabled() and M then SpecCapture(P, M)
+        else print("|cFF8080FFthingsUI|r: the addon profiler is not available.") end
+        return
+    end
+    if sub == "all" then
         local P, M = C_AddOnProfiler, Enum.AddOnProfilerMetric
         if P and P.IsEnabled and P.IsEnabled() and M then ProfAll(P, M)
         else print("|cFF8080FFthingsUI|r: the addon profiler is not available.") end

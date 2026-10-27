@@ -28,6 +28,39 @@ function SA.InvalidateSpellExpansion()
     wipe(provisional)
 end
 
+-- the CDM's buff entries: Blizzard's sets plus what the layout moved into the buff viewers.
+-- Read once per frame: a spec change rebuilds every Aura Icon and Bar in one go
+local rowsCache, rowsAt
+local function CDMRows()
+    local now = GetTime()
+    if rowsCache and rowsAt == now then return rowsCache end
+    local rows = {}
+    local function consider(info)
+        if not info then return end
+        local r = { s = PlainID(info.spellID), o = PlainID(info.overrideSpellID), linked = {} }
+        for _, lid in ipairs(info.linkedSpellIDs or {}) do
+            local pl = PlainID(lid)
+            if pl then r.linked[#r.linked + 1] = pl end
+        end
+        rows[#rows + 1] = r
+    end
+    if C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCategorySet then
+        for _, cat in ipairs({ CAT_BUFF, CAT_BAR }) do
+            local ids = cat and C_CooldownViewer.GetCooldownViewerCategorySet(cat, true)
+            for _, cdID in ipairs(ids or {}) do consider(C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)) end
+        end
+    end
+    for _, name in ipairs({ "BuffIconCooldownViewer", "BuffBarCooldownViewer" }) do
+        local v = _G[name]
+        if v then
+            for _, c in ipairs({ v:GetChildren() }) do consider(c.cooldownInfo) end
+        end
+    end
+    rowsCache, rowsAt = rows, now
+    return rows
+end
+SA.CDMRows = CDMRows
+
 -- why: a list that gets a line for every ID added and where it came from (/tui aura)
 local function Build(spellID, why)
     local function Note(fmt, ...) if why then why[#why + 1] = fmt:format(...) end end
@@ -46,29 +79,7 @@ local function Build(spellID, why)
             base = nil
         end
     end
-    local rows = {}
-    local function consider(info)
-        if not info then return end
-        local r = { s = PlainID(info.spellID), o = PlainID(info.overrideSpellID), linked = {} }
-        for _, lid in ipairs(info.linkedSpellIDs or {}) do
-            local pl = PlainID(lid)
-            if pl then r.linked[#r.linked + 1] = pl end
-        end
-        rows[#rows + 1] = r
-    end
-    if C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCategorySet then
-        for _, cat in ipairs({ CAT_BUFF, CAT_BAR }) do
-            local ids = cat and C_CooldownViewer.GetCooldownViewerCategorySet(cat, true)
-            for _, cdID in ipairs(ids or {}) do consider(C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)) end
-        end
-    end
-    -- those sets are Blizzard's defaults; a buff the layout moved in lives in the viewers
-    for _, name in ipairs({ "BuffIconCooldownViewer", "BuffBarCooldownViewer" }) do
-        local v = _G[name]
-        if v then
-            for _, c in ipairs({ v:GetChildren() }) do consider(c.cooldownInfo) end
-        end
-    end
+    local rows = CDMRows()
     local function Is(id) return id ~= nil and (id == spellID or id == base) end
     local function Name(id) return id and PlainID(C_Spell.GetSpellName(id)) end
     -- the CDM entry for this spell brings all its auras; an entry that lists this aura

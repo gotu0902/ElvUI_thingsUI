@@ -1955,7 +1955,7 @@ end
 
 local f = CreateFrame("Frame")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
-f:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+f:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
 f:RegisterEvent("PLAYER_REGEN_ENABLED")
 f:RegisterEvent("SPELLS_CHANGED")
 f:RegisterEvent("TRAIT_CONFIG_UPDATED")

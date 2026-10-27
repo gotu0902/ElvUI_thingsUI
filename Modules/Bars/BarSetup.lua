@@ -461,6 +461,7 @@ function M.RestoreBarsToElvUI()
     if InCombatLockdown() then return end
     local UF = (E and E.GetModule) and E:GetModule("UnitFrames", true) or nil
     if not UF then return end
+    M._managed = nil
     -- Bar Setup may have hidden the power bar (Disabled mode) — bring it back.
     local pw = E.db.unitframe and E.db.unitframe.units and E.db.unitframe.units.player and E.db.unitframe.units.player.power
     if pw and pw.enable == false then pw.enable = true end
@@ -572,7 +573,8 @@ function M.PositionStack(positionOnly)
 
     positionOnly = positionOnly or inCombat
     positioning = true
-    
+    M._managed = true
+
     local baseWidth = M.GetInheritedWidth()
     local function EffectiveWidth(b)
         if not baseWidth then return nil end
@@ -805,7 +807,7 @@ local watcher
 function M.InstallWatcher()
     if watcher then return end
     watcher = CreateFrame("Frame")
-    watcher:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+    watcher:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
     watcher:RegisterEvent("PLAYER_LOGIN")
     watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
     watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -829,7 +831,8 @@ function TUI:UpdateBarSetup()
     EnsureDB()
     M.InstallWatcher()
     if E.db.thingsUI.barSetup and E.db.thingsUI.barSetup.enabled == false then
-        if C_Timer and C_Timer.After then C_Timer.After(0.2, M.RestoreBarsToElvUI) end
+        -- only bars this session moved need handing back (it rebuilds ElvUI's player frame)
+        if M._managed and C_Timer and C_Timer.After then C_Timer.After(0.2, M.RestoreBarsToElvUI) end
         return
     end
     if C_Timer and C_Timer.After then

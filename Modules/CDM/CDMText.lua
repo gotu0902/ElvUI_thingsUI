@@ -333,7 +333,7 @@ end
 
 local boot = CreateFrame("Frame")
 boot:RegisterEvent("PLAYER_ENTERING_WORLD")
-boot:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+boot:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
 boot:SetScript("OnEvent", function()
     for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do
         C_Timer.After(t, M.RefreshAll)

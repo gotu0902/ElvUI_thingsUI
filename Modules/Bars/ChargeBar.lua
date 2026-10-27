@@ -826,7 +826,7 @@ function TUI:UpdateChargeBar()
             playerEntered = true
         end
         eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-        eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+        eventFrame:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
         eventFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
         eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
         eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
