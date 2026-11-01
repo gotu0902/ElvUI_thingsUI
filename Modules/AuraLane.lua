@@ -53,6 +53,45 @@ function A.SpellListUnique(def)
     return out
 end
 
+-- an Auto Aura Icon takes the side the CDM showed its aura on, so it keeps one cell in a group
+local unresolved = setmetatable({}, { __mode = "k" })
+
+function A.LearnedKind(idb)
+    if idb._auraSideFor == idb.spellID then return idb._auraSide end
+end
+
+local function LearnSide(c)
+    if not next(unresolved) then return end
+    local CI = ns.CDMIcons
+    local side = CI.ActiveSide(c)
+    if not side then return end
+    local learned
+    for idb, ids in pairs(unresolved) do
+        if CI.ChildMatches(c, ids) then
+            idb._auraSide, idb._auraSideFor = side, idb.spellID
+            unresolved[idb] = nil
+            learned = true
+        end
+    end
+    if not learned then return end
+    if InCombatLockdown() then
+        pendingSync = true
+    elseif ns.CustomGroups and ns.CustomGroups.QueueLayout then
+        ns.CustomGroups.QueueLayout()
+    end
+end
+
+local sideHooked
+local function WatchSides()
+    local CI = ns.CDMIcons
+    if not (next(unresolved) and CI and CI.WatchBuffFrames) then return end
+    if not sideHooked then
+        sideHooked = true
+        CI.OnAuraState(LearnSide)
+    end
+    for _, ids in pairs(unresolved) do CI.WatchBuffFrames(ids) end
+end
+
 function A.Entries(group)
     if not group then return {} end
     local out = {}
@@ -93,18 +132,20 @@ function A.Entries(group)
                     and ns.SpecialAura.ExpandSpellIDs(idb.spellID)) or { [idb.spellID] = true }
                 local rank = siSpec * 100000 + (idb.customGroupOrder or 20000)
                 -- nil = both sides: a buff on you and your debuff on the target
-                if idb.auraKind ~= "HARMFUL" then
+                local kind = idb.auraKind or A.LearnedKind(idb)
+                if not kind then unresolved[idb] = spells else unresolved[idb] = nil end
+                if kind ~= "HARMFUL" then
                     out[#out + 1] = {
                         key = ("TUIAura%d_si_%s"):format(group.id or 0, ikey),
                         def = { spells = spells, max = 1, iconDB = idb },
                         rank = rank,
                     }
                 end
-                if idb.auraKind ~= "HELPFUL" then
+                if kind ~= "HELPFUL" then
                     out[#out + 1] = {
                         key = ("TUIAura%d_siT_%s"):format(group.id or 0, ikey),
                         def = { spells = spells, max = 1, iconDB = idb, kind = "HARMFUL", unit = "target",
-                            previewSkip = idb.auraKind ~= "HARMFUL" },
+                            previewSkip = kind ~= "HARMFUL" },
                         rank = rank + 1,
                     }
                 end
@@ -441,6 +482,7 @@ local function LaneFor(group, frame)
             lane.tail:SetParent(frame)
             lane.container:SetParent(frame)
             if lane.containerT then lane.containerT:SetParent(frame) end
+            if lane.ghost then lane.ghost:SetParent(frame) end
             lane.frame = frame
         end
         return lane
@@ -448,7 +490,7 @@ local function LaneFor(group, frame)
     local tail = CreateFrame("Frame", "TUI_CustomGroup" .. group.id .. "_AuraTail", frame)
     local container = CreateFrame("AuraContainer", nil, frame, "CustomAuraContainerTemplate")
     lane = { frame = frame, tail = tail, container = container,
-             regions = {}, keys = {}, defByKey = {}, keyByButton = {} }
+             regions = {}, keys = {}, gkeys = {}, defByKey = {}, keyByButton = {} }
     lanes[group.id] = lane
     return lane
 end
@@ -502,36 +544,61 @@ local function AttachSideFor(group, S)
     return (S.alongSign == 1) and "TOP" or "BOTTOM"
 end
 
-local function AttachLayout(side, sp, hDir, vDir, centered)
+local function AttachLayout(side, sp, hDir, vDir, centered, horizontal)
     local tH, tV = hDir, vDir
+    local h = (hDir == FLOW_LEFT) and "RIGHT" or "LEFT"
+    local v = (vDir == FLOW_UP) and "BOTTOM" or "TOP"
+    -- along the growth the pair is centered by the ghost; across it each row centers on its own
+    local along = (side == "LEFT" or side == "RIGHT") == (horizontal and true or false)
+    local mid = centered and not along
     local tPt, cPt, ox, oy
     if side == "TOP" then
         tV = FLOW_UP
-        local h = (hDir == FLOW_LEFT) and "RIGHT" or "LEFT"
-        tPt, cPt, ox, oy = "BOTTOM" .. h, "TOP" .. h, 0, sp
-        if centered then tPt, cPt = "BOTTOM", "TOP" end
+        tPt, cPt, ox, oy = "BOTTOM", "TOP", 0, sp
+        if not mid then tPt, cPt = tPt .. h, cPt .. h end
     elseif side == "BOTTOM" then
         tV = FLOW_DOWN
-        local h = (hDir == FLOW_LEFT) and "RIGHT" or "LEFT"
-        tPt, cPt, ox, oy = "TOP" .. h, "BOTTOM" .. h, 0, -sp
-        if centered then tPt, cPt = "TOP", "BOTTOM" end
+        tPt, cPt, ox, oy = "TOP", "BOTTOM", 0, -sp
+        if not mid then tPt, cPt = tPt .. h, cPt .. h end
     elseif side == "LEFT" then
         tH = FLOW_LEFT
-        local v = (vDir == FLOW_UP) and "BOTTOM" or "TOP"
-        tPt, cPt, ox, oy = v .. "RIGHT", v .. "LEFT", -sp, 0
-        if centered then tPt, cPt = "RIGHT", "LEFT" end
+        tPt, cPt, ox, oy = "RIGHT", "LEFT", -sp, 0
+        if not mid then tPt, cPt = v .. tPt, v .. cPt end
     else
         tH = FLOW_RIGHT
-        local v = (vDir == FLOW_UP) and "BOTTOM" or "TOP"
-        tPt, cPt, ox, oy = v .. "LEFT", v .. "RIGHT", sp, 0
-        if centered then tPt, cPt = "LEFT", "RIGHT" end
+        tPt, cPt, ox, oy = "LEFT", "RIGHT", sp, 0
+        if not mid then tPt, cPt = v .. tPt, v .. cPt end
     end
     local flowAnchor = tPt
     if centered then
         flowAnchor = ((tV == FLOW_UP) and "BOTTOM" or "TOP")
             .. ((tH == FLOW_LEFT) and "RIGHT" or "LEFT")
     end
-    return tPt, cPt, ox, oy, tH, tV, flowAnchor
+    return tPt, cPt, ox, oy, tH, tV, flowAnchor, along
+end
+
+-- where the main container pins to the ghost: its far edge, half a gap further out
+local function GhostPin(S, side)
+    local half = S.sp / 2
+    if S.horizontal then
+        if side == "RIGHT" then return S.pt .. "LEFT", -half, 0 end
+        return S.pt .. "RIGHT", half, 0
+    end
+    if side == "BOTTOM" then return "TOP" .. S.pt, 0, half end
+    return "BOTTOM" .. S.pt, 0, -half
+end
+
+local function GhostInit(button)
+    button:SetMouseMotionEnabled(false)
+end
+
+local function GhostOff(lane)
+    local g = lane.ghost
+    if not g then return end
+    for key in pairs(lane.gkeys) do ns.SetAuraGroupCap(g, key, 0) end
+    wipe(lane.gkeys)
+    g:Hide()
+    lane.unitG = nil
 end
 
 local function SortFor(def)
@@ -569,10 +636,11 @@ function A.FilterFor(def)
     return filter, cf
 end
 
-local function ApplyEntry(lane, group, entry, ord, c)
+local function ApplyEntry(lane, group, entry, ord, c, ghost)
     c = c or lane.container
     local key, def = entry.key, entry.def
-    local prev = lane.keys[key]
+    local keys = ghost and lane.gkeys or lane.keys
+    local prev = keys[key]
     if prev and prev ~= true and prev ~= c then ns.SetAuraGroupCap(prev, key, 0) end
     local filter, cf = A.FilterFor(def)
 
@@ -586,7 +654,7 @@ local function ApplyEntry(lane, group, entry, ord, c)
     local sortMethod, sortDir = SortFor(def)
     local maxCount = math.max(1, def.max or 1)
 
-    lane.defByKey[key] = def
+    if not ghost then lane.defByKey[key] = def end
     if c:HasAuraGroup(key) then
         ns.SetAuraGroupCap(c, key, maxCount)
         c:SetAuraGroupFilterString(key, filter)
@@ -600,13 +668,13 @@ local function ApplyEntry(lane, group, entry, ord, c)
             sortDirection = sortDir,
             candidateFilters = cf,
             layout = layout,
-            initializeFrame = function(button)
+            initializeFrame = ghost and GhostInit or function(button)
                 lane.keyByButton[button] = key
                 StyleButton(button, lane.group or group, lane)
             end,
         })
     end
-    lane.keys[key] = c
+    keys[key] = c
 end
 
 function Teardown(groupID)
@@ -619,6 +687,7 @@ function Teardown(groupID)
     end
     lane.container:Hide()
     if lane.containerT then lane.containerT:Hide() end
+    GhostOff(lane)
     lane.tail:Hide()
     lane._syncSig = nil
 end
@@ -653,6 +722,7 @@ function A.Sync(group, frame)
         if lane then
             lane.container:Hide()
             if lane.containerT then lane.containerT:Hide() end
+            if lane.ghost then lane.ghost:Hide() end
             lane._syncSig = nil
         end
         return
@@ -663,6 +733,7 @@ function A.Sync(group, frame)
     end
 
     local entries = A.Entries(group)
+    WatchSides()
     if #entries == 0 then
         local lane = lanes[group.id]
         if lane then
@@ -672,6 +743,7 @@ function A.Sync(group, frame)
             end
             lane.container:Hide()
             if lane.containerT then lane.containerT:Hide() end
+            GhostOff(lane)
             lane._syncSig = nil
         end
         return
@@ -817,9 +889,29 @@ function A.Sync(group, frame)
         lane.containerT = CreateFrame("AuraContainer", nil, frame, "CustomAuraContainerTemplate")
     end
     local cT = lane.containerT
+    local g
     if split then
         local side = AttachSideFor(group, S)
-        local tPt, cPt, ox, oy, tH, tV, tAnchor = AttachLayout(side, S.sp, hDir, vDir, S.center)
+        local tPt, cPt, ox, oy, tH, tV, tAnchor, along = AttachLayout(side, S.sp, hDir, vDir, S.center, S.horizontal)
+        if S.center and along then
+            -- an unseen copy of the debuff side, centered on the pin, shifts the buffs by half its size
+            g = lane.ghost
+            if not g then
+                g = CreateFrame("AuraContainer", nil, frame, "CustomAuraContainerTemplate")
+                g:SetAlpha(0)
+                lane.ghost = g
+            end
+            g:ClearAllPoints()
+            g:SetSize(S.iw, S.ih)
+            g:SetPoint(S.pt, lane.tail, S.pt, 0, 0)
+            g:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
+            ApplyFlowTo(g, S, altEntries, tAnchor, tH, tV)
+            local gPt, gx, gy = GhostPin(S, side)
+            lane.container:ClearAllPoints()
+            if not pcall(lane.container.SetPoint, lane.container, S.pt, g, gPt, gx, gy) then
+                lane.container:SetPoint(S.pt, lane.tail, S.pt, 0, 0)
+            end
+        end
         cT:ClearAllPoints()
         cT:SetSize(S.iw, S.ih)
         local anchored = pcall(cT.SetPoint, cT, tPt, lane.container, cPt, ox, oy)
@@ -863,6 +955,24 @@ function A.Sync(group, frame)
             ns.SetAuraGroupCap(owner, key, 0)
         end
     end
+    if g then
+        local gWanted = {}
+        for i, entry in ipairs(altEntries) do
+            ApplyEntry(lane, group, entry, i, g, true)
+            gWanted[entry.key] = true
+        end
+        for key in pairs(lane.gkeys) do
+            if not gWanted[key] then ns.SetAuraGroupCap(g, key, 0); lane.gkeys[key] = nil end
+        end
+        if lane.unitG ~= altUnit then
+            g:SetUnit(altUnit)
+            lane.unitG = altUnit
+            if g.UpdateAllAuras then g:UpdateAllAuras() end
+        end
+        g:Show()
+    else
+        GhostOff(lane)
+    end
 
     if lane.unit ~= unit then
         lane.container:SetUnit(unit)
@@ -901,6 +1011,7 @@ function A.ReparseAll()
     for _, lane in pairs(lanes) do
         if lane.container.UpdateAllAuras then lane.container:UpdateAllAuras() end
         if lane.containerT and lane.containerT.UpdateAllAuras then lane.containerT:UpdateAllAuras() end
+        if lane.unitG and lane.ghost.UpdateAllAuras then lane.ghost:UpdateAllAuras() end
     end
 end
 
@@ -997,6 +1108,10 @@ ev:SetScript("OnEvent", function(_, event)
             end
             lane.containerT:SetUnit(want)
             if lane.containerT.UpdateAllAuras then lane.containerT:UpdateAllAuras() end
+        end
+        if lane.unitG == want then
+            lane.ghost:SetUnit(want)
+            if lane.ghost.UpdateAllAuras then lane.ghost:UpdateAllAuras() end
         end
     end
 end)

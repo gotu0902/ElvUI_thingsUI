@@ -685,6 +685,28 @@ function M.AuraUp(ids)
     if tracked then return false end
 end
 
+-- the side the CDM found a frame's aura on: HELPFUL (you) / HARMFUL (your target)
+function M.ActiveSide(c)
+    local a, u = c.isActive, c.auraDataUnit
+    if issecretvalue and (issecretvalue(a) or issecretvalue(u)) then return nil end
+    if not a then return nil end
+    if u == "target" then return "HARMFUL" end
+    if u == "player" then return "HELPFUL" end
+end
+
+-- hooks the buff frames of these auras so OnAuraState hears them turn on
+function M.WatchBuffFrames(ids)
+    for _, name in ipairs({ "BuffIconCooldownViewer", "BuffBarCooldownViewer" }) do
+        local v = _G[name]
+        if v then
+            for i = 1, H.ChildrenInto(v, buffKids) do
+                local c = buffKids[i]
+                if c and c.cooldownInfo and M.ChildMatches(c, ids) then HookActive(c) end
+            end
+        end
+    end
+end
+
 -- the Essential/Utility frame showing a spell now, and the row it shows in
 local spellKids = {}
 function M.ChildForSpell(spellID)

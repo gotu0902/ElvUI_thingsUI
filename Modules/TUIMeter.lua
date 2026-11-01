@@ -18,6 +18,11 @@ local function IsSelfSrc(src)
     return not Secret(g) and g ~= nil and g == UnitGUID("player")
 end
 
+local function PlayerName()
+    local n, realm = UnitName("player")
+    return (realm and realm ~= "") and (n .. "-" .. realm) or n
+end
+
 -- an icon worth drawing; a secret one (a spell id in combat) is drawn as it comes
 local function HasIcon(icon)
     return Secret(icon) or (icon and icon ~= 0) or false
@@ -203,9 +208,7 @@ local function DrillInfo(src)
     if Secret(si) or type(si) ~= "number" then si = nil end
     local guid, cid, name = src.sourceGUID, src.sourceCreatureID, src.name
     if Secret(guid) and IsSelfSrc(src) then
-        guid, cid = UnitGUID("player"), nil
-        local n, realm = UnitName("player")
-        name = (realm and realm ~= "") and (n .. "-" .. realm) or n
+        guid, cid, name = UnitGUID("player"), nil, PlayerName()
     end
     return {
         guid = guid,
@@ -261,6 +264,70 @@ local function NickFor(name)
 end
 
 function M.InvalidateNicknames() nickReady = nil end
+
+-- in combat a row's name is secret; class + spec icon (never secret) tell which group member it is
+local specName, className = {}, {}
+local namesDirty = true
+
+local function Restricted()
+    local R, T = C_RestrictedActions, Enum.AddOnRestrictionType
+    if InCombatLockdown() then return true end
+    return (R and R.IsAddOnRestrictionActive and T and T.Combat and R.IsAddOnRestrictionActive(T.Combat)) or false
+end
+
+-- a key two people share is false: can't tell them apart
+local function Bank(map, key, name)
+    local had = map[key]
+    if had == nil then map[key] = name elseif had and had ~= name then map[key] = false end
+end
+
+local function HarvestNames()
+    if Restricted() then return end
+    if namesDirty then
+        namesDirty = false
+        wipe(specName); wipe(className)
+        local raid = IsInRaid()
+        for i = 1, GetNumGroupMembers() do
+            local u = (raid and "raid" or "party") .. i
+            if UnitExists(u) and not UnitIsUnit(u, "player") then
+                local cls, nm = PlainStr(UnitClassBase(u)), PlainStr(GetUnitName(u, true))
+                if cls and nm then Bank(className, cls, nm) end
+            end
+        end
+    end
+    if not IsInGroup() then return end
+    -- additive: Overall empties on reset, the names stay good for the group
+    local ok, s = pcall(C_DamageMeter.GetCombatSessionFromType, Enum.DamageMeterSessionType.Overall, Enum.DamageMeterType.DamageDone)
+    if not (ok and s and s.combatSources) then return end
+    for _, src in ipairs(s.combatSources) do
+        local nm, cls, ic = PlainStr(src.name), PlainStr(src.classFilename), src.specIconID
+        if nm and cls and not Secret(ic) and type(ic) == "number" and not IsSelfSrc(src) then
+            Bank(specName, cls .. ":" .. ic, nm)
+        end
+    end
+end
+
+local harvestQueued
+local function QueueHarvest(dirty)
+    if dirty then namesDirty = true end
+    if harvestQueued then return end
+    harvestQueued = true
+    C_Timer.After(1, function() harvestQueued = false; HarvestNames() end)
+end
+
+-- a plain name for a player row, nil while it can't be told apart
+local function RowName(src)
+    local nm = src.name
+    if not Secret(nm) then return nm end
+    if IsSelfSrc(src) then return PlayerName() end
+    local cls, ic = PlainStr(src.classFilename), src.specIconID
+    if not cls then return nil end
+    if not Secret(ic) and type(ic) == "number" then
+        local n = specName[cls .. ":" .. ic]
+        if n ~= nil then return n or nil end
+    end
+    return className[cls] or nil
+end
 
 local function SpellDisplay(spell, drill)
     local det = spell.combatSpellDetails
@@ -722,6 +789,9 @@ local function UpdateRow(win, i, rank, src, maxAmt, db)
 
     row.pos:SetText(db.showRank ~= false and (rank .. ".") or "")
     local name = src.name
+    if Secret(name) and not win.drill and not (DTr and win.cfg and win.cfg.type == DTr.EnemyDamageTaken) then
+        name = RowName(src) or name
+    end
     if Secret(name) then
         row.label:SetText(name)
     elseif name then
@@ -1657,7 +1727,7 @@ local function ShowResetConfirm()
     ShowConfirm("Reset all damage meter data?", "|cFFFF5C5CReset|r", "Cancel")
 end
 
--- a new dungeon or key: Blizzard can only wipe every session, so ask by default
+-- a new dungeon or raid: Blizzard can only wipe every session, so ask by default
 local function InstanceResetMode(db)
     if not db then return "never" end
     if db.instanceReset then return db.instanceReset end
@@ -1665,16 +1735,11 @@ local function InstanceResetMode(db)
     return "ask"
 end
 
-local askedMap
-local function OnNewInstance(fromKey)
+local function OnNewInstance()
     local mode = InstanceResetMode(TDB())
     if mode == "always" then
         DoResetData()
     elseif mode == "ask" then
-        local map = select(8, GetInstanceInfo())
-        -- zoning in already asked: a key start in the same dungeon doesn't ask again
-        if fromKey and askedMap == map then return end
-        askedMap = map
         ShowConfirm("New instance: reset damage meter data?", "|cFFFF5C5CReset|r", "Keep")
     end
 end
@@ -2081,9 +2146,19 @@ local function SwapAll(session)
     QueueRefresh()
 end
 
-local function NewInstance(fromKey)
-    OnNewInstance(fromKey)
+local function NewInstance()
+    OnNewInstance()
     local db = TDB()
+    if db and db.swapCurrentOnInstance then SwapAll("current") end
+end
+
+-- a key starts Overall over (EUI parity), apart from the zoning-in choice
+local function KeyStart()
+    local db = TDB()
+    if db and db.resetOnKeyStart ~= false then
+        if confirm then confirm:Hide() end
+        DoResetData()
+    end
     if db and db.swapCurrentOnInstance then SwapAll("current") end
 end
 
@@ -2094,6 +2169,7 @@ local COMBAT_EVENTS = {
     "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ENCOUNTER_START", "ENCOUNTER_END",
     "DAMAGE_METER_RESET", "DAMAGE_METER_COMBAT_SESSION_UPDATED", "DAMAGE_METER_CURRENT_SESSION_UPDATED",
     "CHALLENGE_MODE_START", "CHALLENGE_MODE_COMPLETED",
+    "GROUP_ROSTER_UPDATE", "PLAYER_SPECIALIZATION_CHANGED", "ADDON_RESTRICTION_STATE_CHANGED",
 }
 
 local encounterActive = false
@@ -2121,6 +2197,7 @@ local function EndFight()
     M.RefreshAll()
     C_Timer.After(0.5, function()
         pinnedSession = NewestSessionID() or pinnedSession
+        HarvestNames()
         M.RefreshAll()
     end)
 end
@@ -2136,7 +2213,10 @@ local function SetEventsActive(on)
     eventsActive = on
     for _, e in ipairs(COMBAT_EVENTS) do
         if on then
-            if C_DamageMeter or not e:find("^DAMAGE_METER") then ev:RegisterEvent(e) end
+            local known = C_EventUtils and C_EventUtils.IsEventValid
+            if known and known(e) or (not known and (C_DamageMeter or not e:find("^DAMAGE_METER"))) then
+                ev:RegisterEvent(e)
+            end
         else
             ev:UnregisterEvent(e)
         end
@@ -2206,15 +2286,25 @@ ev:SetScript("OnEvent", function(_, event, arg1, arg2)
             QueueRefresh()
         end
     elseif event == "CHALLENGE_MODE_START" then
-        NewInstance(true)
+        KeyStart()
     elseif event == "CHALLENGE_MODE_COMPLETED" then
         local db = TDB()
         if db and db.swapOverallOnKeyEnd then SwapAll("overall") end
+    elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_SPECIALIZATION_CHANGED" then
+        QueueHarvest(true)
+    elseif event == "ADDON_RESTRICTION_STATE_CHANGED" then
+        -- names and amounts read plain again a moment after combat ends
+        local T = Enum.AddOnRestrictionType
+        if T and arg1 == T.Combat and not Restricted() then
+            HarvestNames()
+            QueueRefresh()
+        end
     elseif event == "PLAYER_ENTERING_WORLD" then
         local inInst = IsInInstance()
         local mapID = inInst and select(8, GetInstanceInfo()) or nil
-        if mapID and mapID ~= lastInstMap and not arg1 and not arg2 then NewInstance(false) end
+        if mapID and mapID ~= lastInstMap and not arg1 and not arg2 then NewInstance() end
         if mapID then lastInstMap = mapID end
+        QueueHarvest(true)
         C_Timer.After(1, function() TUI:UpdateTUIMeter() end)
     end
 end)

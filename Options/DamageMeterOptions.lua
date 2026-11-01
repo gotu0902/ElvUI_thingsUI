@@ -130,7 +130,7 @@ function TUI:DamageMeterOptions()
                     },
                     resetOnNewInstance = {
                         order = 3.5, type = "select", name = "Reset on New Instance",
-                        desc = "Entering a new dungeon or starting a Mythic+ key. Blizzard's meter can only wipe all data, so Ask lets you keep it.",
+                        desc = "Entering a new dungeon or raid. Blizzard's meter can only wipe all data, so Ask lets you keep it.",
                         values = { ask = "Ask", always = "Always", never = "Never" },
                         sorting = { "ask", "always", "never" },
                         get = function()
@@ -184,6 +184,11 @@ function TUI:DamageMeterOptions()
                         set = function(_, v) tset("menuSegments", v) end,
                     },
                     swapBrk = { order = 9.55, type = "description", name = "", width = "full" },
+                    resetKey = {
+                        order = 9.58, type = "toggle", name = "Reset When M+ Starts", width = 1.6,
+                        get = function() return tdb().resetOnKeyStart ~= false end,
+                        set = function(_, v) tset("resetOnKeyStart", v) end,
+                    },
                     swapCurrent = {
                         order = 9.6, type = "toggle", name = "Swap to Current on New Instance", width = 1.6,
                         get = function() return tdb().swapCurrentOnInstance end,

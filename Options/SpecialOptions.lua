@@ -1518,7 +1518,12 @@ function TUI:SpecialIconOptions(keyArg, ctx)
     commonArgs.auraKind = {
         order = 3.52, type = "select", name = "Aura Type",
         hidden = function() return not db().spellID end,
-        values = { BOTH = "Auto", HELPFUL = "Buff (on you)", HARMFUL = "Debuff (on target)" },
+        values = function()
+            local AL = ns.AuraLane
+            local k = AL and AL.LearnedKind and AL.LearnedKind(db())
+            local auto = (k == "HARMFUL" and "Auto (Debuff)") or (k == "HELPFUL" and "Auto (Buff)") or "Auto"
+            return { BOTH = auto, HELPFUL = "Buff (on you)", HARMFUL = "Debuff (on target)" }
+        end,
         sorting = { "BOTH", "HELPFUL", "HARMFUL" },
         get = function() return db().auraKind or "BOTH" end,
         set = function(_, v)
