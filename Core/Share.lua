@@ -24,6 +24,7 @@ M.SECTIONS = {
     { name = "Racials",              keys = { "racialsCDM" } },
     { name = "Cluster Positioning",  keys = { "clusterPositioning" } },
     { name = "Damage Meter",         keys = { "damageMeter" },                                color = "FF6B6B" },
+    { name = "Kick Tracker",         keys = { "kickTracker" },                                color = "FF9E4A" },
     { name = "Minimap",              keys = { "mbb", "instanceDifficulty" } },
     { name = "Movers & General",     keys = { "essentialMover", "groupAnchor", "raidOrder", "actionBarCopy", "autoSetAudioChannels", "rightChatAsBackground", "rightChatWidthOffset", "rightChatHeightOffset" } },
 }

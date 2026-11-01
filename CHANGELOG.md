@@ -19,6 +19,13 @@
 - Layouts are shared by all your characters and stay out of profiles; Enable is per profile, so it follows spec profiles
 - Export/Import, also between thingsUI and things for EUI
 - Without ElvUI's Raid-Wide Sorting the order applies inside each group. Changes wait until combat ends (someone joining mid-fight shows up after it). Nobody is ever left out: while names load, or when nobody from your list is in the raid (an alt in a pug), ElvUI's normal group order shows everyone
+### Kick Tracker
+- New module (Modules → Kick Tracker), off until you enable it: your group's interrupts as bars, a row per member with a kick. The kick's icon, their name in a bar in their class color, and while it's on cooldown the seconds left with the bar draining (or filling up)
+- Nobody else needs an addon. Inside a key the game won't say who kicked, so it's read from Blizzard's own meter: a row only starts its cooldown if that member's interrupt count actually went up
+- Cooldowns come from class, spec and talents (Quick Witted, Honed Reflexes, Coldthirst, Light of the Sun, Resto Wind Shear), read by inspecting the group before the key starts. A healer without a kick gets no row. Warlocks follow the demon they have out
+- Limits: other players' cooldowns start when their kick lands, so one that stops nothing can't be seen. Your own row starts on your cast either way
+- All the usual: width and height with Inherit from Anchor, spacing, growth, texture, class or custom color, background, border, icon side, zoom and spacing, font and text placement, NSRT nicknames, Frame Strata and Level, Anchor To, a mover, Visibility rules (starts out for dungeons). Other things can anchor to it too, and it's part of exports and Profile Sync
+- Disabled means off: no frames, no events, nothing running. Opening its page shows sample rows, /tui kick shows what it knows about your group
 ### Profile Sync
 - New Sync tab: tick the profiles that should stay the same, then pick modules in the list: All, or Some (single groups, Aura Icons per spec, styles, or parts like Essential and Spell Editor). Position (X/Y) and size (W/H) stay per profile unless you tick them, and only show where a module keeps them itself
 - The profile you're on hands its settings on when you switch profile, log out or click Sync Now. Each module says whether the others match, and Take It From... pulls a module from another profile first

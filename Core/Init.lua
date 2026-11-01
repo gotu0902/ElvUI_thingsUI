@@ -178,6 +178,7 @@ function TUI:Initialize()
     self:UpdateCustomGroups()
     if self.UpdateCustomBars then self:UpdateCustomBars() end
     if self.UpdateTUIMeter then self:UpdateTUIMeter() end
+    if self.UpdateKickTracker then self:UpdateKickTracker() end
     if self.UpdateMBB then self:UpdateMBB() end
     if self.UpdateInstanceDifficulty then self:UpdateInstanceDifficulty() end
     if self.UpdateGroupAnchor then self:UpdateGroupAnchor() end
@@ -275,6 +276,7 @@ function TUI:ProfileUpdate()
     self:UpdateCustomGroups()
     if self.UpdateCustomBars then self:UpdateCustomBars() end
     if self.UpdateTUIMeter then self:UpdateTUIMeter() end
+    if self.UpdateKickTracker then self:UpdateKickTracker() end
     if self.UpdateMBB then self:UpdateMBB() end
     if self.UpdateInstanceDifficulty then self:UpdateInstanceDifficulty() end
     if ns.BarCopy then ns.BarCopy.OnProfile() end

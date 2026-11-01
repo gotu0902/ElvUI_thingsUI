@@ -14,4 +14,5 @@
 	<Script file="SpecialBars.lua"/>
 	<Script file="EssentialMover.lua"/>
 	<Script file="DamageMeter.lua"/>
+	<Script file="KickTracker.lua"/>
 </Ui>

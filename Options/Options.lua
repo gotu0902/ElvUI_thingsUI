@@ -97,6 +97,7 @@ end
 
 local function OnConfigClosed()
     curSection = nil
+    if ns.KickBars then ns.KickBars.SetPreview(false) end
     userClosedCDM = nil
     StopSectionWatch()
     if ns.CustomGroups and ns.CustomGroups.SetTestReason then
@@ -151,6 +152,7 @@ local function StartSectionWatch()
         end
         if not StillInThingsUI() then
             curSection = nil
+            if ns.KickBars then ns.KickBars.SetPreview(false) end
             StopSectionWatch()
             if ns.CustomGroups and ns.CustomGroups.SetTestReason then
                 ns.CustomGroups.SetTestReason("options", false)
@@ -178,6 +180,7 @@ local function SectionShown(key)
     if key == curSection then return end
     local prev = curSection
     curSection = key
+    if ns.KickBars then ns.KickBars.SetPreview(key == "kickTracker") end
     if ns.CustomGroups and ns.CustomGroups.SetTestReason then
         ns.CustomGroups.SetTestReason("options", TEST_SECTIONS[key] or false)
     end
@@ -220,6 +223,7 @@ function TUI.ConfigTable()
             customText   = WithSentinel(withOrder(SyncMark(Colorize(TUI:CustomTextOptions(), "F2C12E"), { "customText" }), 6.3), "customText"),
             auraCollections = WithSentinel(withOrder(SyncMark(Colorize(TUI:AuraCollectionsOptions(), "B0A0FF"), { "auraCollections" }), 0.5), "auraCollections"),
             damageMeter  = WithSentinel(withOrder(SyncMark(Colorize(TUI:DamageMeterOptions(),  "FF5C5C"), { "damageMeter" }), 5.5), "damageMeter"),
+            kickTracker  = WithSentinel(withOrder(SyncMark(Colorize(TUI:KickTrackerOptions(),  "FF9E4A"), { "kickTracker" }), 5.6), "kickTracker"),
             specialBars  = WithSentinel(withOrder(SyncMark(Colorize(TUI:SpecialBarsOptions(),  "80FF80"), { "specialBars" }), 0.4), "specialBars"),
             specialIcons = WithSentinel(withOrder(SyncMark(Colorize(TUI:SpecialIconsOptions(), "FF80C0"), { "specialBars" }), 0.6), "specialIcons"),
             raidOrder    = WithSentinel(withOrder(SyncMark(Colorize(TUI:RaidOrderOptions(),    "4DD2A6"), { "essentialMover" },

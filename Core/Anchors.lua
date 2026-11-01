@@ -19,6 +19,7 @@ local STATIC_VALUES = {
     ["BuffIconCooldownViewer"]    = col(C_CDM, "CDM: Buff Icons"),
     ["CDMTAIL_BuffIconCooldownViewer"] = col(C_CDM, "CDM: Buff Icons (After Last Icon)"),
     ["ElvUI_thingsUI_ChargeBar"]  = col(C_TUI, "TUI Charge Bar"),
+    ["TUI_KickTracker"]           = col(C_TUI, "TUI Kick Tracker"),
     ["Grid2LayoutFrame"]          = "Grid2 Layout Frame",
     ["UIParent"]                  = "Screen (UIParent)",
     ["CUSTOM"]                    = "|cFFFFFF00Custom Frame...|r",
@@ -27,7 +28,7 @@ local STATIC_VALUES = {
 local STATIC_ORDER = {
     "BARSETUP_TOP",
     "ElvUF_Player", "ElvUF_Target", "ElvUF_TargetTarget", "ElvUF_Focus", "ElvUF_Player_ClassBar", "ElvUF_Player_CastBar", "Minimap",
-    "EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer", "CDMTAIL_BuffIconCooldownViewer", "ElvUI_thingsUI_ChargeBar", "Grid2LayoutFrame", "UIParent", "CUSTOM",
+    "EssentialCooldownViewer", "UtilityCooldownViewer", "BuffIconCooldownViewer", "CDMTAIL_BuffIconCooldownViewer", "ElvUI_thingsUI_ChargeBar", "TUI_KickTracker", "Grid2LayoutFrame", "UIParent", "CUSTOM",
 }
 
 local function ResolveSpellName(spellID)
@@ -148,6 +149,31 @@ function ns.ANCHORS.FilteredOrder()
         if k ~= "CUSTOM" then out[#out + 1] = k end
     end
     return out
+end
+
+-- Inherit Width/Height from Anchor; the width keeps the anchor's pixel parity so it centers crisp
+function ns.ANCHORS.InheritedSize(db, frame, target, w, h)
+    if not target then return w, h end
+    local tn = target.GetName and target:GetName()
+    local cdmInset = (tn and tn:match("^TUI_CDMProxy_")) and 2 or 0
+    if db.inheritWidth then
+        local aw = target:GetWidth()
+        if aw and aw > 0 then
+            w = aw + cdmInset + (db.inheritWidthOffset or 0)
+            local one = ns.Pixel.Size(frame)
+            if one and one > 0 then
+                local p = math.floor(aw / one + 0.5)
+                local e = math.floor(w / one + 0.5)
+                if (p - e) % 2 ~= 0 then e = e + 1 end
+                w = e * one
+            end
+        end
+    end
+    if db.inheritHeight then
+        local ah = target:GetHeight()
+        if ah and ah > 0 then h = ah + cdmInset + (db.inheritHeightOffset or 0) end
+    end
+    return w, h
 end
 
 -- a new anchor frame starts from CENTER on CENTER without offsets; f = field names where they differ

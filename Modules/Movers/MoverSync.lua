@@ -610,6 +610,27 @@ function M.SyncAll()
         for _, o in ipairs(orphans) do M.RemoveManaged(o[1], _G["TUI_CustomBars" .. o[2]]) end
     end
 
+    local ktMover = _G.TUI_KickTrackerMover
+    if ktMover then
+        local mname = "TUI_KickTrackerMover"
+        local kt = E.db.thingsUI and E.db.thingsUI.kickTracker
+        if not (kt and kt.enabled) then
+            if E.DisableMover and E.CreatedMovers and E.CreatedMovers[mname] then E:DisableMover(mname) end
+        else
+            if E.EnableMover and E.DisabledMovers and E.DisabledMovers[mname] then E:EnableMover(mname) end
+            local af = kt.anchorFrame
+            local lock, label = false, "Kick Tracker"
+            if af and af ~= "UIParent" and af ~= "" then
+                label = label .. " |cFFFFAA00(Anchor: " .. ShortAnchor(af) .. ")|r"
+                lock = true
+            end
+            if _G.TUI_KickTracker then SyncMoverToFrame(ktMover, _G.TUI_KickTracker) end
+            if ktMover.text and ktMover.text.SetText then ktMover.text:SetText(label) end
+            SetMoverLock(ktMover, lock)
+        end
+        ColorMover(mname)
+    end
+
     local Tm = ns.Timers
     local timers = (Tm and Tm.GetTimers and Tm.GetTimers()) or {}
     for _, t in ipairs(timers) do

@@ -32,6 +32,9 @@
 	<Script file="CustomBars.lua"/>
 	<Script file="GroupText.lua"/>
 	<Script file="TUIMeter.lua"/>
+	<Script file="Kick\KickData.lua"/>
+	<Script file="Kick\KickEngine.lua"/>
+	<Script file="Kick\KickBars.lua"/>
 	<Script file="MBB.lua"/>
 	<Script file="MinimapDifficulty.lua"/>
 	<Script file="Movers\GroupAnchor.lua"/>

@@ -263,6 +263,7 @@ local function NickFor(name)
     return nickCache[name] or nickShort[name]
 end
 
+M.NickFor = NickFor
 function M.InvalidateNicknames() nickReady = nil end
 
 -- in combat a row's name is secret; class + spec icon (never secret) tell which group member it is

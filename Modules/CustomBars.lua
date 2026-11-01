@@ -694,29 +694,7 @@ local function SyncGroup(group)
         end)
     end
 
-    local effW = group.width or 220
-    local effH = group.height or 22
-    if target then
-        local tn = target.GetName and target:GetName()
-        local cdmInset = (tn and tn:match("^TUI_CDMProxy_")) and 2 or 0
-        if group.inheritWidth then
-            local aw = target:GetWidth()
-            if aw and aw > 0 then
-                effW = aw + cdmInset + (group.inheritWidthOffset or 0)
-                local one = ns.Pixel.Size(frame)
-                if one and one > 0 then
-                    local p = math.floor(aw / one + 0.5)
-                    local e = math.floor(effW / one + 0.5)
-                    if (p - e) % 2 ~= 0 then e = e + 1 end
-                    effW = e * one
-                end
-            end
-        end
-        if group.inheritHeight then
-            local ah = target:GetHeight()
-            if ah and ah > 0 then effH = ah + cdmInset + (group.inheritHeightOffset or 0) end
-        end
-    end
+    local effW, effH = ns.ANCHORS.InheritedSize(group, frame, target, group.width or 220, group.height or 22)
     st.effW, st.effH = effW, effH
 
     ns.Pixel.SetSize(frame, effW, effH)
