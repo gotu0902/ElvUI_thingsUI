@@ -82,9 +82,8 @@ local function GetCurrentClassFile()
 end
 
 local function GetCurrentSpecID()
-    local idx = GetSpecialization and GetSpecialization()
-    local id = idx and select(1, GetSpecializationInfo(idx))
-    return (id and id ~= 0) and id or 1
+    local id = ns.CurrentSpecID()
+    return id ~= 0 and id or 1
 end
 
 function M.GetScopeRoot(group, scope, key, create)

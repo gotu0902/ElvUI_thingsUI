@@ -9,10 +9,7 @@ local M = ns.CustomGroups
 local groupState = {}
 local QueueLayout
 
-local function GetCurrentSpecID()
-    local idx = GetSpecialization()
-    return idx and GetSpecializationInfo(idx) or 0
-end
+local GetCurrentSpecID = ns.CurrentSpecID
 
 local function GetCurrentClassFile()
     local _, cf = UnitClass("player")
@@ -947,7 +944,8 @@ local function CollectScopeInto(group, scope, root, shown)
                     _seen["t" .. idb.spellID] = true
                     list[#list + 1] = { kind = "totem", id = idb.spellID, li = idb.customGroupOrder or 20000 }
                 end
-            elseif idb and idb.enabled and idb.spellID and idb.customGroup == group.id and idb.showMissing then
+            elseif idb and idb.enabled and idb.spellID and idb.customGroup == group.id and idb.showMissing
+                and SBm.SpellLearned(idb.spellID) then
                 -- Only When Missing: a slot of its own while the aura is down
                 -- its own Visibility rules decide too (it's our button, so in combat as well)
                 if ((M.testMode and ns.Visibility.PreviewShown(idb.visibility))
@@ -1398,6 +1396,13 @@ end
 
 local _pendingCD = {}
 local _cdThrottled = false
+local itemsQueued = false
+local function QueueItemsRefresh()
+    if itemsQueued then return end
+    itemsQueued = true
+    C_Timer.After(0.1, function() itemsQueued = false; RefreshItemsAll() end)
+end
+
 local function _cdThrottleTick()
     if not next(_pendingCD) then _cdThrottled = false; return end
     _cdThrottled = true
@@ -1656,7 +1661,7 @@ ev:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "SPELL_UPDATE_CHARGES" then
         QueueChargesRefresh()
     elseif event == "BAG_UPDATE_COOLDOWN" then
-        RefreshItemsAll()
+        QueueItemsRefresh()
     end
 end)
 

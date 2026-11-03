@@ -81,22 +81,32 @@ local function LearnSide(c)
     end
 end
 
-local sideHooked
+local sideHooked, watchedAt
 local function WatchSides()
     local CI = ns.CDMIcons
     if not (next(unresolved) and CI and CI.WatchBuffFrames) then return end
+    -- every group's Sync lands here in the same frame: one walk over the CDM covers them all
+    local now = GetTime()
+    if watchedAt == now then return end
+    watchedAt = now
     if not sideHooked then
         sideHooked = true
         CI.OnAuraState(LearnSide)
     end
-    for _, ids in pairs(unresolved) do CI.WatchBuffFrames(ids) end
+    local all = {}
+    for _, ids in pairs(unresolved) do
+        for id in pairs(ids) do all[id] = true end
+    end
+    CI.WatchBuffFrames(all)
 end
+
+local SCOPE_ORDER = { "global", "class", "spec" }
 
 function A.Entries(group)
     if not group then return {} end
     local out = {}
 
-    local order = group.scopeOrder or { "global", "class", "spec" }
+    local order = group.scopeOrder or SCOPE_ORDER
     for si, scope in ipairs(order) do
         local root = ns.CustomGroups.GetScopeRoot(group, scope, nil, false)
         local AC = ns.AuraCollections
@@ -160,8 +170,30 @@ function A.Entries(group)
     return out
 end
 
+-- the walk of Entries without building anything: stops at the first thing to show
 function A.HasSets(group)
-    return #A.Entries(group) > 0
+    if not group then return false end
+    local AC = ns.AuraCollections
+    for _, scope in ipairs(group.scopeOrder or SCOPE_ORDER) do
+        local root = ns.CustomGroups.GetScopeRoot(group, scope, nil, false)
+        for uid, raw in pairs((root and root.auras) or {}) do
+            local eff = AC and AC.Effective(uid, raw) or raw
+            for _, def in ipairs(AC and AC.Expand(eff) or { eff }) do
+                if def.enabled ~= false and (next(def.spells or {}) or def.filterToken) then return true end
+            end
+        end
+    end
+    local SB = ns.SpecialBars
+    if SB and SB.GetIconCount and SB.GetIconDB then
+        for i = 1, SB.GetIconCount() do
+            local idb = SB.GetIconDB("icon" .. i)
+            if idb and idb.enabled and idb.spellID and idb.customGroup == group.id and not idb.totemTimer
+                and not idb.showMissing then
+                return true
+            end
+        end
+    end
+    return false
 end
 
 local playerAssistOK = true

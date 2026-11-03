@@ -24,11 +24,17 @@ local scanKids, procKids = {}, {}
 -- bumped on anything that changes a bar's inner layout; bars re-lay only on a new stamp
 local layoutVersion = 0
 local laidOut = setmetatable({}, { __mode = "k" })
-local function InvalidateBarLayouts() layoutVersion = layoutVersion + 1 end
+-- the offset each bar sits at; a bar someone else re-anchors loses it (OnBuffChildPointChanged)
+local placed = setmetatable({}, { __mode = "k" })
+local function InvalidateBarLayouts()
+    layoutVersion = layoutVersion + 1
+    wipe(placed)
+end
 
 
 local function OnBuffChildPointChanged(child)
     if applyingLayout then return end
+    if child then placed[child] = nil end
     if child and yoinkedBars[child] then return end
     if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
 end
@@ -79,7 +85,7 @@ local function ScanAndHookBuffChildren()
             hooksecurefunc(BuffBarCooldownViewer, "OnAcquireItemFrame", function(_, itemFrame)
                 HookBuffChild(itemFrame)
                 -- acquire re-runs Blizzard's SetBarContent/SetBarWidth on the bar
-                if itemFrame then laidOut[itemFrame] = nil end
+                if itemFrame then laidOut[itemFrame] = nil; placed[itemFrame] = nil end
                 if ns.MarkBuffBarsDirty then ns.MarkBuffBarsDirty() end
             end)
         end
@@ -361,6 +367,7 @@ local function ProcessUpdate()
             sortedBars[#sortedBars + 1] = childFrame
         elseif childFrame then
             laidOut[childFrame] = nil
+            placed[childFrame] = nil
         end
     end
 
@@ -368,15 +375,17 @@ local function ProcessUpdate()
     if #sortedBars == 0 then return end
     tsort(sortedBars, ByLayoutIndex)
 
-    local spacing = db.spacing
-    local height = db.height
+    local down = db.growthDirection == "DOWN"
+    local point = down and "TOP" or "BOTTOM"
+    local step = (db.height + db.spacing) * (down and -1 or 1)
+    -- UNIT_AURA brings us here up to ten times a second: only a bar that moved is re-anchored
     applyingLayout = true
     for index, barFrame in ipairs(sortedBars) do
-        barFrame:ClearAllPoints()
-        if db.growthDirection == "DOWN" then
-            barFrame:SetPoint("TOP", BuffBarCooldownViewer, "TOP", 0, -((index - 1) * (height + spacing)))
-        else
-            barFrame:SetPoint("BOTTOM", BuffBarCooldownViewer, "BOTTOM", 0, ((index - 1) * (height + spacing)))
+        local y = (index - 1) * step
+        if placed[barFrame] ~= y then
+            placed[barFrame] = y
+            barFrame:ClearAllPoints()
+            barFrame:SetPoint(point, BuffBarCooldownViewer, point, 0, y)
         end
     end
     applyingLayout = false

@@ -10,10 +10,7 @@ local SPECIAL_BAR_DEFAULTS  = ns.SPECIAL_BAR_DEFAULTS
 local SPECIAL_ICON_DEFAULTS = ns.SPECIAL_ICON_DEFAULTS
 local DeepCopy = ns.DeepCopy
 
-local function GetCurrentSpecID()
-    local idx = GetSpecialization()
-    return idx and GetSpecializationInfo(idx) or 0
-end
+local GetCurrentSpecID = ns.CurrentSpecID
 
 local function FillDefaults(tbl, defaults)
     for k, v in pairs(defaults) do

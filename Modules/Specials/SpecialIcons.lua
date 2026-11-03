@@ -160,7 +160,8 @@ function SB.RefreshIconVisibility()
         local g = db and db.customGroup and ns.CustomGroups and ns.CustomGroups.GroupByID
             and ns.CustomGroups.GroupByID(db.customGroup)
         -- Only When Missing icons follow RefreshMissing
-        if wrapper and db and db.enabled and db.spellID and not (g and g.enabled) and not db.showMissing then
+        if wrapper and db and db.enabled and db.spellID and not (g and g.enabled) and not db.showMissing
+            and SB.SpellLearned(db.spellID) then
             local want = (VisibleNow(db) and (not overOf[key] or wrapper._overChild)) and true or false
             if wrapper:IsShown() ~= want then wrapper:SetShown(want); changed = true end
         end
@@ -373,6 +374,9 @@ local function UpdateIconSlot(iconKey)
         end
         return
     end
+
+    -- talented out: the icon goes, and a CDM row closes up
+    if not SB.SpellLearned(db.spellID) then ReleaseIcon(iconKey); return end
 
     local wrapper   = GetOrCreateIconFrame(iconKey)
     local Pixel     = ns.Pixel

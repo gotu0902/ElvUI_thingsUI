@@ -431,7 +431,7 @@ function SB.RefreshBarVisibility()
         local gid = db and db.customGroup
         local g = type(gid) == "number" and gid > 0 and ns.CustomBars and ns.CustomBars.GroupByID
             and ns.CustomBars.GroupByID(gid)
-        if wrapper and db and db.enabled and db.spellID and not g then
+        if wrapper and db and db.enabled and db.spellID and not g and SB.SpellLearned(db.spellID) then
             local want = VisibleNow(db) and true or false
             if wrapper:IsShown() ~= want then wrapper:SetShown(want); changed = true end
         end

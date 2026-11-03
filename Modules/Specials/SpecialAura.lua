@@ -704,8 +704,9 @@ ns.SlashCommand("icons", function()
                     (aid and aid ~= id) and ("->" .. aid) or "")
             end
             table.sort(ids)
-            print(("  %s %d %s en=%s kind=%s grp=%s row=%s attached=%s wrapper=%s/%s"):format(key, db.spellID,
-                C_Spell.GetSpellName(db.spellID) or "?", tostring(db.enabled), tostring(db.auraKind or "BOTH"),
+            print(("  %s %d %s en=%s learned=%s kind=%s grp=%s row=%s attached=%s wrapper=%s/%s"):format(key, db.spellID,
+                C_Spell.GetSpellName(db.spellID) or "?", tostring(db.enabled), tostring(SB.SpellLearned(db.spellID)),
+                tostring(db.auraKind or "BOTH"),
                 tostring(db.customGroup), tostring(db.cdmRow), tostring(attached[key] ~= nil),
                 DumpVal(w and w:IsShown()), DumpVal(w and w:IsVisible())))
             print("    ids: " .. table.concat(ids, ", "))

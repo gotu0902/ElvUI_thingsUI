@@ -54,7 +54,7 @@ end
 -- false only when the CDM has the spell for this spec and you haven't learned it (talented out)
 function SB.SpellLearned(spellID)
     if not spellID then return false end
-    return cdmLearned[spellID] or not cdmAll[spellID] or false
+    return cdmLearned[spellID] or not cdmAll[spellID] or IsPlayerSpell(spellID)
 end
 
 local function RefreshKnownSpells()
@@ -177,8 +177,10 @@ do
     local f = CreateFrame("Frame")
     f:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
     f:RegisterEvent("PLAYER_ENTERING_WORLD")
-    if C_EventUtils and C_EventUtils.IsEventValid and C_EventUtils.IsEventValid("COOLDOWN_VIEWER_TABLE_HOTFIXED") then
-        f:RegisterEvent("COOLDOWN_VIEWER_TABLE_HOTFIXED")
+    for _, name in ipairs({ "COOLDOWN_VIEWER_DATA_LOADED", "COOLDOWN_VIEWER_TABLE_HOTFIXED" }) do
+        if C_EventUtils and C_EventUtils.IsEventValid and C_EventUtils.IsEventValid(name) then
+            f:RegisterEvent(name)
+        end
     end
     f:RegisterEvent("TRAIT_CONFIG_UPDATED")
     f:SetScript("OnEvent", function(_, event, unit)
@@ -190,7 +192,7 @@ do
             C_Timer.After(0.3, function() TUI:QueueSpecialBarsUpdate() end)
             return
         end
-        if event == "COOLDOWN_VIEWER_TABLE_HOTFIXED" then
+        if event == "COOLDOWN_VIEWER_DATA_LOADED" or event == "COOLDOWN_VIEWER_TABLE_HOTFIXED" then
             if ns.SpecialAura and ns.SpecialAura.InvalidateSpellExpansion then
                 ns.SpecialAura.InvalidateSpellExpansion()
             end

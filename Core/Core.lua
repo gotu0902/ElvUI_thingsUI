@@ -162,6 +162,22 @@ function ns.FontValues()
     return out
 end
 
+-- asked in loops over every icon and group: read once a frame
+local curSpec, curSpecAt
+function ns.CurrentSpecID()
+    local now = GetTime()
+    if curSpecAt ~= now then
+        local idx = GetSpecialization()
+        curSpec, curSpecAt = idx and GetSpecializationInfo(idx) or 0, now
+    end
+    return curSpec
+end
+do
+    local ev = CreateFrame("Frame")
+    ev:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    ev:SetScript("OnEvent", function() curSpecAt = nil end)
+end
+
 local _allSpecs, _specByID, _specsByClass
 local function BuildSpecCache()
     _allSpecs, _specByID, _specsByClass = {}, {}, {}

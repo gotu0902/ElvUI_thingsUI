@@ -256,6 +256,7 @@ local SHORT_ANCHOR = {
     ElvUF_TargetTarget          = "ToT",
     ElvUF_Pet                   = "Pet",
     ElvUF_Focus                 = "Focus",
+    ElvUF_Party                 = "Party",
     EssentialCooldownViewer     = "Essential",
     UtilityCooldownViewer       = "Utility",
     BuffIconCooldownViewer      = "BuffIcons",
@@ -684,6 +685,11 @@ local tickFrame = CreateFrame("Frame")
 local function FlushPending(self)
     self:SetScript("OnUpdate", nil)
     pending = false
+    -- movers can't show in combat: the sync waits for the end of the fight
+    if InCombatLockdown() then
+        self:RegisterEvent("PLAYER_REGEN_ENABLED")
+        return
+    end
     M.SyncAll()
 end
 function M.Queue()
@@ -691,6 +697,10 @@ function M.Queue()
     pending = true
     tickFrame:SetScript("OnUpdate", FlushPending)
 end
+tickFrame:SetScript("OnEvent", function(self)
+    self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    M.Queue()
+end)
 
 function TUI:UpdateMoverSync()
     M.Queue()

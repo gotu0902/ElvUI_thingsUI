@@ -875,6 +875,8 @@ function M.InstallWatcher()
         if InCombatLockdown() then return end
         local function tick() EnsureClassPowerHook(); M.ApplyStack() end
         C_Timer.After(0.5, tick)
+        -- a fight's end only has what combat held back; the later passes are for loading in
+        if event == "PLAYER_REGEN_ENABLED" then return end
         C_Timer.After(2.0, tick)
         C_Timer.After(4.0, tick)
     end)

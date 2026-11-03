@@ -98,6 +98,9 @@ local VIEWER_BY_KEY = {
     buffIcon  = "BuffIconCooldownViewer",
 }
 
+local ROW_VIEWERS  = { "EssentialCooldownViewer", "UtilityCooldownViewer" }
+local BUFF_VIEWERS = { "BuffIconCooldownViewer", "BuffBarCooldownViewer" }
+
 local overflowOut = {}
 -- any Spell Editor Show rule set (visibility / cooldown state)
 local anySpellRule, anyCDState = false, false
@@ -507,7 +510,7 @@ end
 -- the CDM frame drawing a spell, shown or not (its state flags are what we want)
 local ruleKids = {}
 local function AnyChildForSpell(sid)
-    for _, name in ipairs({ "EssentialCooldownViewer", "UtilityCooldownViewer" }) do
+    for _, name in ipairs(ROW_VIEWERS) do
         local v = _G[name]
         if v then
             for i = 1, H.ChildrenInto(v, ruleKids) do
@@ -652,7 +655,7 @@ end
 
 function M.AuraUp(ids)
     local tracked = false
-    for _, name in ipairs({ "BuffIconCooldownViewer", "BuffBarCooldownViewer" }) do
+    for _, name in ipairs(BUFF_VIEWERS) do
         local v = _G[name]
         if v then
             for i = 1, H.ChildrenInto(v, buffKids) do
@@ -668,7 +671,7 @@ function M.AuraUp(ids)
             end
         end
     end
-    for _, name in ipairs({ "EssentialCooldownViewer", "UtilityCooldownViewer" }) do
+    for _, name in ipairs(ROW_VIEWERS) do
         local v = _G[name]
         if v then
             for i = 1, H.ChildrenInto(v, buffKids) do
@@ -696,7 +699,7 @@ end
 
 -- hooks the buff frames of these auras so OnAuraState hears them turn on
 function M.WatchBuffFrames(ids)
-    for _, name in ipairs({ "BuffIconCooldownViewer", "BuffBarCooldownViewer" }) do
+    for _, name in ipairs(BUFF_VIEWERS) do
         local v = _G[name]
         if v then
             for i = 1, H.ChildrenInto(v, buffKids) do
@@ -710,7 +713,7 @@ end
 -- the Essential/Utility frame showing a spell now, and the row it shows in
 local spellKids = {}
 function M.ChildForSpell(spellID)
-    for _, name in ipairs({ "EssentialCooldownViewer", "UtilityCooldownViewer" }) do
+    for _, name in ipairs(ROW_VIEWERS) do
         local v = _G[name]
         if v then
             for i = 1, H.ChildrenInto(v, spellKids) do
