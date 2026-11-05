@@ -757,9 +757,11 @@ local function UpdateRow(win, i, rank, src, maxAmt, db)
         row.icon:Hide()
     end
     row.icon:SetWidth(barH)
+    -- on the row, not the icon: a secret icon (Forever's spec icons) gives what hangs on it a secret size
     row.iconBorder:ClearAllPoints()
-    row.iconBorder:SetPoint("TOPLEFT", row.icon, "TOPLEFT", 0, 0)
-    row.iconBorder:SetPoint("BOTTOMRIGHT", row.icon, "BOTTOMRIGHT", 0, 0)
+    row.iconBorder:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+    row.iconBorder:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+    row.iconBorder:SetWidth(barH)
     row.iconBorder:SetShown(db.iconBorder and row.icon:IsShown() or false)
 
     row.fill:ClearAllPoints()
