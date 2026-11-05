@@ -53,8 +53,8 @@ end
 CB._InvalidateLayoutCache = InvalidateLayoutCache
 
 local function GetCurrentSpecID()
-    local idx = GetSpecialization and GetSpecialization() or nil
-    return idx and select(1, GetSpecializationInfo(idx)) or 0
+    local idx = C_SpecializationInfo.GetSpecialization() or nil
+    return idx and select(1, C_SpecializationInfo.GetSpecializationInfo(idx)) or 0
 end
 
 local function GetSpecEntry()
@@ -758,8 +758,8 @@ local function UpdateNow()
     if not wasShown and ns.ClassbarMode and ns.ClassbarMode.RequestUpdate then
         local cdb = E.db.thingsUI.classbarMode
         if cdb and cdb.enabled and cdb.specs then
-            local idx = GetSpecialization and GetSpecialization() or nil
-            local id  = idx and select(1, GetSpecializationInfo(idx)) or 0
+            local idx = C_SpecializationInfo.GetSpecialization() or nil
+            local id  = idx and select(1, C_SpecializationInfo.GetSpecializationInfo(idx)) or 0
             local cEntry = id ~= 0 and cdb.specs[tostring(id)]
             if cEntry and cEntry.slot == "ABOVE_CHARGEBAR" then
                 ns.ClassbarMode.RequestUpdate()

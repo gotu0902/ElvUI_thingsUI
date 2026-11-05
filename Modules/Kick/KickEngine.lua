@@ -68,8 +68,8 @@ local function DemonKick(unit)
 end
 
 local function RefreshPlayer(m)
-    local idx = GetSpecialization()
-    local id = idx and GetSpecializationInfo(idx)
+    local idx = C_SpecializationInfo.GetSpecialization()
+    local id = idx and C_SpecializationInfo.GetSpecializationInfo(idx)
     m.spec = (id and id ~= 0) and id or nil
     m.talents = wipe(m.talents or {})
     for sid in pairs(KD.TALENTS) do

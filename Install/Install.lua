@@ -447,7 +447,7 @@ end
 
 -- healer spec (or Augmentation) = FHT, everything else = NHT
 function ns.QuickSetupAuto()
-    local spec = GetSpecialization and GetSpecialization()
+    local spec = C_SpecializationInfo.GetSpecialization()
     local role = spec and GetSpecializationRole and GetSpecializationRole(spec)
     local mainKey = ns.Setup and ns.Setup.SpecPackKey and ns.Setup.SpecPackKey() or ((role == "HEALER") and "FHT" or "NHT")
     local otherKey = (mainKey == "FHT") and "NHT" or "FHT"
@@ -516,6 +516,9 @@ ns.installTable = {
                     if not ok then
                         geterrorhandler()(err)
                         print("|cFF8080FFthingsUI|r - Quick setup hit an error (see BugSack); parts may not have applied.")
+                    else
+                        -- a reload before Finished must not bring the installer back
+                        Store().installComplete = true
                     end
                     StepDone(d.key .. " done - accept BigWigs' popups, then Finished")
                     local fr = PIF()
@@ -532,6 +535,8 @@ ns.installTable = {
                     geterrorhandler()(key)
                     print("|cFF8080FFthingsUI|r - Quick setup hit an error (see BugSack); parts may not have applied.")
                     key = nil
+                else
+                    Store().installComplete = true
                 end
                 StepDone((key or "Quick") .. " done - accept BigWigs' popups, then Finished")
                 local fr = PIF()

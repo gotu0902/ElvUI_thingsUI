@@ -20,8 +20,8 @@ end
 
 local editSpec, editClass
 local function curSpecID()
-    local idx = GetSpecialization()
-    return tostring((idx and GetSpecializationInfo(idx)) or 1)
+    local idx = C_SpecializationInfo.GetSpecialization()
+    return tostring((idx and C_SpecializationInfo.GetSpecializationInfo(idx)) or 1)
 end
 local function curClassFile() local _, cf = UnitClass("player"); return cf end
 local function getEditSpec()  return editSpec  or curSpecID()  end

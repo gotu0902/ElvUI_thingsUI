@@ -17,8 +17,8 @@ local lastEnableState = nil
 local HookEssential = function() end
 
 local function GetCurrentSpecID()
-    local idx = GetSpecialization and GetSpecialization() or nil
-    return idx and select(1, GetSpecializationInfo(idx)) or 0
+    local idx = C_SpecializationInfo.GetSpecialization() or nil
+    return idx and select(1, C_SpecializationInfo.GetSpecializationInfo(idx)) or 0
 end
 
 local function GetSpecEntry()
@@ -102,8 +102,8 @@ end
 local function ChargeBarWantsUs()
     local cbDB = E.db.thingsUI and E.db.thingsUI.chargeBar
     if not cbDB or not cbDB.enabled or not cbDB.specs then return false end
-    local idx = GetSpecialization and GetSpecialization() or nil
-    local id  = idx and select(1, GetSpecializationInfo(idx)) or 0
+    local idx = C_SpecializationInfo.GetSpecialization() or nil
+    local id  = idx and select(1, C_SpecializationInfo.GetSpecializationInfo(idx)) or 0
     if id == 0 then return false end
     local entry = cbDB.specs[tostring(id)]
     return entry and (entry.slot == "ABOVE_CLASSBAR") or false

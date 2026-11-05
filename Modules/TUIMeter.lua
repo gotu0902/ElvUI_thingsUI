@@ -874,8 +874,8 @@ local function TestSources()
         local classID = ((i - 1) % numClasses) + 1
         local _, classFile = GetClassInfo(classID)
         local specIcon = 0
-        if GetNumSpecializationsForClassID and GetSpecializationInfoForClassID then
-            local n = GetNumSpecializationsForClassID(classID)
+        if GetSpecializationInfoForClassID then
+            local n = C_SpecializationInfo.GetNumSpecializationsForClassID(classID)
             if n and n > 0 then
                 local _, _, _, icon = GetSpecializationInfoForClassID(classID, ((i - 1) % n) + 1)
                 specIcon = icon or 0

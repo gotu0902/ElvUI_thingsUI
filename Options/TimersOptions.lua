@@ -4,8 +4,8 @@ local TUI = ns.TUI
 local NotifyChange = ns.NotifyChange
 
 local function CurrentSpecID()
-    local i = GetSpecialization and GetSpecialization()
-    return i and select(1, GetSpecializationInfo(i)) or 0
+    local i = C_SpecializationInfo.GetSpecialization()
+    return i and select(1, C_SpecializationInfo.GetSpecializationInfo(i)) or 0
 end
 
 local CDM_HEX, CG_HEX = "FFD27F", "F20553"

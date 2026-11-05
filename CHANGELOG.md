@@ -6,6 +6,8 @@
 - Forever's own lists: racials (Skyborne too), potions and healthstones (the best one you own), the Aura Collection presets (Defensives, Externals, Movement Speed; Bloodlust and Time Spiral don't exist there), the spell lists in the pickers, and the Kick Tracker's interrupts (Kick, Pummel or Shield Bash for tanks, Earth Shock, Counterspell, Spell Lock, Rebuke, Skull Bash, Feral Charge, Silence)
 - One spec per class there, so per-spec settings sit on the class. The Visibility role rule goes by your group role (every Forever spec counts as DPS), and Delve is gone from the places
 - The installer's Cooldown Manager layouts are retail specs and stay out on Forever; Character Setup gives Forever characters the NHT profiles
+- Fixed: a Lua error at login on Forever stopped most of thingsUI from starting
+- A Quick Setup counts as a finished install, so a reload before Finished no longer opens the installer again
 ### Groups - Text
 - New module: auras and cooldowns as lines of text. Write a line as [name] [cd], or put anything around them: [name] - [cd], NO WILD CHARGE [cd]. [stacks] shows stacks on an aura and charges on a cooldown
 - Auras work like Groups - Bars: Spec / Class / Global lists, Aura Collections, Blizzard filters, order and sorting, Visibility. Every aura line can have its own text

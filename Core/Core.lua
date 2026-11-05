@@ -170,8 +170,8 @@ local curSpec, curSpecAt
 function ns.CurrentSpecID()
     local now = GetTime()
     if curSpecAt ~= now then
-        local idx = GetSpecialization()
-        curSpec, curSpecAt = idx and GetSpecializationInfo(idx) or 0, now
+        local idx = C_SpecializationInfo.GetSpecialization()
+        curSpec, curSpecAt = idx and C_SpecializationInfo.GetSpecializationInfo(idx) or 0, now
     end
     return curSpec
 end
@@ -198,12 +198,12 @@ end
 local _allSpecs, _specByID, _specsByClass
 local function BuildSpecCache()
     _allSpecs, _specByID, _specsByClass = {}, {}, {}
-    if not (GetNumClasses and GetClassInfo and GetNumSpecializationsForClassID and GetSpecializationInfoForClassID) then return end
+    if not (GetNumClasses and GetClassInfo and GetSpecializationInfoForClassID) then return end
     for cid = 1, GetNumClasses() do
         local className, classToken, classID = GetClassInfo(cid)
         if classID then
             local list = {}
-            for i = 1, (GetNumSpecializationsForClassID(classID) or 0) do
+            for i = 1, (C_SpecializationInfo.GetNumSpecializationsForClassID(classID) or 0) do
                 local id, name, _, icon = GetSpecializationInfoForClassID(classID, i)
                 if id then
                     local rec = { id = id, name = name, icon = icon, classID = classID,

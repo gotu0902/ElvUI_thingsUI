@@ -70,9 +70,7 @@ local Res = M.Res
 
 local function NumSpecs()
     local classID = select(3, UnitClass("player"))
-    local getNum = (C_SpecializationInfo and C_SpecializationInfo.GetNumSpecializationsForClassID)
-        or GetNumSpecializationsForClassID
-    return classID and getNum and getNum(classID) or 0
+    return classID and C_SpecializationInfo.GetNumSpecializationsForClassID(classID) or 0
 end
 
 local function SpecKeyFor(classID, n)
@@ -92,7 +90,7 @@ local function ClassSpecKeys()
 end
 
 function M.SpecPackKey()
-    local n = GetSpecialization and GetSpecialization()
+    local n = C_SpecializationInfo.GetSpecialization()
     local classID = select(3, UnitClass("player"))
     if not (n and classID) then return "NHT" end
     return SpecKeyFor(classID, n)

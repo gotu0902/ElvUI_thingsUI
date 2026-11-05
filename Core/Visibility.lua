@@ -20,7 +20,7 @@ local function Role()
         local r = UnitGroupRolesAssigned("player")
         if r and r ~= "NONE" then return r end
     end
-    local spec = GetSpecialization and GetSpecialization()
+    local spec = C_SpecializationInfo.GetSpecialization()
     return (spec and GetSpecializationRole(spec)) or "DAMAGER"
 end
 V.Role = Role

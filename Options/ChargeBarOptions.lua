@@ -32,8 +32,8 @@ end
 local selectedEditSpec = nil
 
 local function CurrentSpecID()
-    local idx = GetSpecialization and GetSpecialization()
-    return idx and select(1, GetSpecializationInfo(idx)) or nil
+    local idx = C_SpecializationInfo.GetSpecialization()
+    return idx and select(1, C_SpecializationInfo.GetSpecializationInfo(idx)) or nil
 end
 
 local function GetEnabledSpecsList()
@@ -91,8 +91,8 @@ local function GetEditSpec()
         end
     end
     if not valid then
-        local idx = GetSpecialization and GetSpecialization() or nil
-        local curID = idx and select(1, GetSpecializationInfo(idx)) or 0
+        local idx = C_SpecializationInfo.GetSpecialization() or nil
+        local curID = idx and select(1, C_SpecializationInfo.GetSpecializationInfo(idx)) or 0
         local curKey = curID ~= 0 and tostring(curID) or nil
         local pick
         if curKey then

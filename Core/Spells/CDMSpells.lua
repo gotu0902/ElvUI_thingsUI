@@ -14,8 +14,8 @@ local function CurrentSpecID()
         local id = PlayerUtil.GetCurrentSpecID()
         if id then return id end
     end
-    local idx = GetSpecialization and GetSpecialization()
-    return idx and select(1, GetSpecializationInfo(idx)) or nil
+    local idx = C_SpecializationInfo.GetSpecialization()
+    return idx and select(1, C_SpecializationInfo.GetSpecializationInfo(idx)) or nil
 end
 
 local function Store()

@@ -2014,7 +2014,7 @@ f:SetScript("OnEvent", function(_, event, arg1)
 
     M.MaybeAutoEnableCDM()
     if event == "PLAYER_SPECIALIZATION_CHANGED" then
-        local spec = GetSpecialization and GetSpecialization()
+        local spec = C_SpecializationInfo.GetSpecialization()
         if lastSpec ~= nil and spec ~= lastSpec then
             cdmRebuilding = true
             local function finish()
@@ -2039,7 +2039,7 @@ f:SetScript("OnEvent", function(_, event, arg1)
         M.RefreshAll()
         for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAllSoft) end
     else
-        local spec = GetSpecialization and GetSpecialization()
+        local spec = C_SpecializationInfo.GetSpecialization()
         if spec ~= nil then lastSpec = spec end
         M.RefreshAll()
         for _, t in ipairs({ 0.5, 1.0, 2.0, 4.0 }) do C_Timer.After(t, M.RefreshAllSoft) end
@@ -2063,9 +2063,9 @@ ns.SlashCommand("cdm", function(rest)
     local cvs = _G.CooldownViewerSettings
     print(("|cFF8080FFtuicdm|r editmode=%s cvs=%s rebuilding=%s"):format(
         tostring(emm and emm:IsShown()), tostring(cvs and cvs:IsShown()), tostring(M.IsRebuilding())))
-    local specIdx = GetSpecialization and GetSpecialization()
+    local specIdx = C_SpecializationInfo.GetSpecialization()
     local sid, sname
-    if specIdx and GetSpecializationInfo then sid, sname = GetSpecializationInfo(specIdx) end
+    if specIdx then sid, sname = C_SpecializationInfo.GetSpecializationInfo(specIdx) end
     print(("  spec idx=%s id=%s %s"):format(tostring(specIdx), tostring(sid), tostring(sname)))
     local cat = Enum.CooldownViewerCategory and Enum.CooldownViewerCategory.Essential
     if cat and C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCategorySet then

@@ -41,9 +41,9 @@ function M.GetBarLabel(key)
 end
 
 local function GetCurrentSpecID()
-    local idx = GetSpecialization and GetSpecialization()
+    local idx = C_SpecializationInfo.GetSpecialization()
     if not idx then return 0 end
-    local id = GetSpecializationInfo and GetSpecializationInfo(idx)
+    local id = C_SpecializationInfo.GetSpecializationInfo(idx)
     return id or 0
 end
 M.GetCurrentSpecID = GetCurrentSpecID

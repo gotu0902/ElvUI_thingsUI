@@ -13,8 +13,8 @@ local function ESpec()
     return SB.EditingSpec and SB.EditingSpec() or nil
 end
 local function CurSpecID()
-    local idx = GetSpecialization()
-    return idx and GetSpecializationInfo(idx) or 0
+    local idx = C_SpecializationInfo.GetSpecialization()
+    return idx and C_SpecializationInfo.GetSpecializationInfo(idx) or 0
 end
 
 local function SettleAfterSlotChange()

@@ -27,8 +27,8 @@ local function CascadeKeyToSpecKey(value)
 end
 
 local function CurrentSpecID()
-    local idx = GetSpecialization and GetSpecialization()
-    return idx and (select(1, GetSpecializationInfo(idx))) or nil
+    local idx = C_SpecializationInfo.GetSpecialization()
+    return idx and (select(1, C_SpecializationInfo.GetSpecializationInfo(idx))) or nil
 end
 
 function TUI:ClassbarModeOptions()

@@ -122,8 +122,8 @@ local function ComputeBarLayout()
     local s = SB and SB.GetSpecRoot(es)
     local inStack = {}
     if s then
-        local idx = GetSpecialization()
-        for i, k in ipairs(StackBars(es or (idx and GetSpecializationInfo(idx)) or 0)) do inStack[k] = i end
+        local idx = C_SpecializationInfo.GetSpecialization()
+        for i, k in ipairs(StackBars(es or (idx and C_SpecializationInfo.GetSpecializationInfo(idx)) or 0)) do inStack[k] = i end
     end
     for i = 1, (s and s.barCount) or 0 do
         local key = "bar" .. i
@@ -168,9 +168,9 @@ local function BarSlot(key)
 end
 
 local function CurrentSpecIDStr()
-    local idx = GetSpecialization()
+    local idx = C_SpecializationInfo.GetSpecialization()
     if not idx then return "0" end
-    local sid = select(1, GetSpecializationInfo(idx))
+    local sid = select(1, C_SpecializationInfo.GetSpecializationInfo(idx))
     return tostring(sid or 0)
 end
 

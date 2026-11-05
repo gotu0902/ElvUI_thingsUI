@@ -23,8 +23,8 @@ local function ActiveSetupIndex()
 end
 
 local function CurrentSpecName()
-    local idx = GetSpecialization and GetSpecialization()
-    local id = idx and select(1, GetSpecializationInfo(idx))
+    local idx = C_SpecializationInfo.GetSpecialization()
+    local id = idx and select(1, C_SpecializationInfo.GetSpecializationInfo(idx))
     local m = id and ns.SpecMeta and ns.SpecMeta(id)
     return m and (m.name .. " " .. m.className) or "your spec"
 end

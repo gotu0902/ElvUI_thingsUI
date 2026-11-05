@@ -838,8 +838,8 @@ local function SpellEditorPage(order, buffs)
             end
             return out
         end
-        local spec = GetSpecialization and GetSpecialization()
-        local specID = spec and GetSpecializationInfo(spec)
+        local spec = C_SpecializationInfo.GetSpecialization()
+        local specID = spec and C_SpecializationInfo.GetSpecializationInfo(spec)
         return (ns.CDMSpells and ns.CDMSpells.GetForSpec and ns.CDMSpells.GetForSpec(specID)) or {}
     end
     local function byName(a, b) return spellName(a) < spellName(b) end
