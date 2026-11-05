@@ -228,17 +228,18 @@ local function ProfAll(P, M)
         local name = C_AddOns.GetAddOnInfo(i)
         if name and C_AddOns.IsAddOnLoaded(i) then
             rows[#rows + 1] = { name = name, over = P.GetAddOnMetric(name, M.CountTimeOver5Ms),
-                peak = P.GetAddOnMetric(name, M.PeakTime), now = P.GetAddOnMetric(name, M.RecentAverageTime) }
+                peak = P.GetAddOnMetric(name, M.PeakTime), now = P.GetAddOnMetric(name, M.RecentAverageTime),
+                boss = P.GetAddOnMetric(name, M.EncounterAverageTime) }
         end
     end
     table.sort(rows, function(a, b)
         if a.over ~= b.over then return a.over > b.over end
         return a.peak > b.peak
     end)
-    print("|cFF8080FFthingsUI|r frames over 5 ms | peak ms | now ms per frame (since login)")
+    print("|cFF8080FFthingsUI|r frames over 5 ms (since login) | peak ms | ms per frame: boss | now")
     for i = 1, math.min(12, #rows) do
         local r = rows[i]
-        print(("  %-24s %4.0f | %6.1f | %.3f"):format(r.name, r.over, r.peak, r.now))
+        print(("  %-24s %4.0f | %6.1f | %.3f | %.3f"):format(r.name, r.over, r.peak, r.boss, r.now))
     end
 end
 
@@ -348,6 +349,10 @@ ns.SlashCommand("prof", function(arg)
                 P.GetAddOnMetric(name, M.CountTimeOver5Ms)))
         end
     end
-    print(("  all addons %.3f of %.3f ms per frame"):format(
-        P.GetOverallMetric(M.RecentAverageTime), P.GetApplicationMetric(M.RecentAverageTime)))
+    -- the whole game's frame on the last boss: says whether addons are even the problem
+    local bossFrame = P.GetApplicationMetric(M.EncounterAverageTime)
+    print(("  all addons %.3f of %.3f ms per frame%s"):format(
+        P.GetOverallMetric(M.RecentAverageTime), P.GetApplicationMetric(M.RecentAverageTime),
+        bossFrame > 0 and (" | last boss %.3f of %.1f (%.0f fps)"):format(
+            P.GetOverallMetric(M.EncounterAverageTime), bossFrame, 1000 / bossFrame) or ""))
 end)
