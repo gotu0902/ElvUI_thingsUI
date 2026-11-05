@@ -79,8 +79,14 @@ local function Build(spellID, why)
             base = nil
         end
     end
+    -- Forever: each rank has its own ID, and a lower one gets cast on purpose
+    local rank = {}
+    for _, id in ipairs(ns.SpellRanks(spellID) or {}) do
+        rank[id] = true
+        if not map[id] then map[id] = true; Note("rank %d", id) end
+    end
     local rows = CDMRows()
-    local function Is(id) return id ~= nil and (id == spellID or id == base) end
+    local function Is(id) return id ~= nil and (id == spellID or id == base or rank[id] == true) end
     local function Name(id) return id and PlainID(C_Spell.GetSpellName(id)) end
     -- the CDM entry for this spell brings all its auras; an entry that lists this aura
     -- brings just it (entries can share a spell: Violent Outburst and Seeing Red both sit on 386477)

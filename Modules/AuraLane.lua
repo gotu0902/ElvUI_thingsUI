@@ -654,16 +654,29 @@ function A.FilterFor(def)
         filter = def.onlyMine and "HELPFUL|PLAYER" or "HELPFUL"
     end
     if def.filterToken then filter = filter .. "|" .. def.filterToken end
+    -- Forever: a listed spell brings its other ranks
+    local function Add(m, n)
+        m[n] = true
+        for _, r in ipairs(ns.SpellRanks(n) or {}) do m[r] = true end
+    end
     local map
     for id in pairs(def.spells or {}) do
         local n = tonumber(id)
-        if n then map = map or {}; map[n] = true end
+        if n then map = map or {}; Add(map, n) end
     end
     local cf
     if map then cf = { includeSpellIDs = map } end
     if def.exclude and next(def.exclude) then
         cf = cf or {}
-        cf.excludeSpellIDs = def.exclude
+        local ex = def.exclude
+        if ns.FOREVER then
+            ex = {}
+            for id in pairs(def.exclude) do
+                local n = tonumber(id)
+                if n then Add(ex, n) end
+            end
+        end
+        cf.excludeSpellIDs = ex
     end
     return filter, cf
 end

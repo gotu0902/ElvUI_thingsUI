@@ -1,4 +1,4 @@
-## Interface: 120100, 120105
+## Interface: 16001, 120100, 120105
 ## Title: |cFF8080FFElvUI_thingsUI|r
 ## Notes: ElvUI plugin for doing things
 ## Author: geir, Dan G, pat_skr, Claude
@@ -13,6 +13,7 @@
 Core\load_core.xml
 Install\load_install.xml
 Defaults\load_defaults.xml
+Core\Forever.lua [AllowLoadGameType camelot][ExcludeLoadGameType standard, classic]
 Modules\load_modules.xml
 Options\load_options.xml
 Core\Init.lua

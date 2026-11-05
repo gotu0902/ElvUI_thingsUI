@@ -169,7 +169,7 @@ local function ResolveItemID(id)
 end
 
 -- best first: Fleeting gold, gold, Fleeting silver, silver (where they exist)
-local POTION_GROUPS = {
+local POTION_GROUPS = (ns.FV and ns.FV.POTION_GROUPS) or {
     { 245916, 241300, 245917, 241301 },  -- Lightfused Mana Potion
     { 245904, 241294, 245905, 241295 },  -- Potion of Devoured Dreams
     { 245902, 241288, 245903, 241289 },  -- Potion of Recklessness
@@ -182,7 +182,7 @@ local POTION_GROUPS = {
     { 245901, 241296, 245900, 241297 },  -- Potion of Zealotry
 }
 -- the Fleeting versions by ID: not every potion has them, so never by position
-local FLEETING_IDS = {
+local FLEETING_IDS = ns.FV and {} or {
     245916, 245917, 245904, 245905, 245902, 245903, 245898, 245897,
     245918, 245919, 245910, 245911, 274764, 274763, 274765, 245901, 245900,
 }

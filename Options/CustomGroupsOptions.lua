@@ -337,7 +337,7 @@ end
 local CG_UP   = "|TInterface\\Buttons\\Arrow-Up-Up:16:16:0:2|t"
 local CG_DOWN = "|TInterface\\Buttons\\Arrow-Up-Up:16:16:0:-2:32:32:0:32:32:0|t"
 local CG_X    = "|TInterface\\RaidFrame\\ReadyCheck-NotReady:13|t"
-local CURATED_ITEMS = {
+local CURATED_ITEMS = (ns.FV and ns.FV.CURATED_ITEMS) or {
     5512, 241304, 271884, 271887, 271890, 241308, 241300, 241294, 241288, 241292, 241296,
 }
 local editSpec, editClass

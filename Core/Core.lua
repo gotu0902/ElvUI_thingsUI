@@ -21,6 +21,9 @@ TUI.name = "thingsUI"
 ns.skinnedBars = ns.skinnedBars or {}
 ns.yoinkedBars = ns.yoinkedBars or {}
 
+-- WoW Forever: the 12.1 engine with vanilla content (Core\Forever.lua holds its data)
+ns.FOREVER = WOW_PROJECT_ID == WOW_PROJECT_CAMELOT
+
 local function FireNotify()
     local E = ns.E
     local reg = (E and E.Libs and E.Libs.AceConfigRegistry)
@@ -176,6 +179,20 @@ do
     local ev = CreateFrame("Frame")
     ev:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
     ev:SetScript("OnEvent", function() curSpecAt = nil end)
+end
+
+-- Forever: every rank of a spell, nil for a spell with one
+local rankOf
+function ns.SpellRanks(spellID)
+    local fams = ns.FV and ns.FV.RANKS
+    if not (fams and spellID) or (issecretvalue and issecretvalue(spellID)) then return nil end
+    if not rankOf then
+        rankOf = {}
+        for _, fam in ipairs(fams) do
+            for _, id in ipairs(fam) do rankOf[id] = fam end
+        end
+    end
+    return rankOf[spellID]
 end
 
 local _allSpecs, _specByID, _specsByClass

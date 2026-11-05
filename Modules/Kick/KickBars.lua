@@ -24,7 +24,7 @@ local ELAPSED = Enum.StatusBarTimerDirection.ElapsedTime
 local REMAINING = Enum.StatusBarTimerDirection.RemainingTime
 
 -- class, kick, seconds left
-local PREVIEW = {
+local PREVIEW = (ns.FV and ns.FV.KICK_PREVIEW) or {
     { "WARRIOR", 6552, 0 },
     { "MAGE", 2139, 9 },
     { "DEATHKNIGHT", 47528, 0 },

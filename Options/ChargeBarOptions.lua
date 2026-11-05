@@ -45,11 +45,11 @@ local function GetEnabledSpecsList()
         local name = "Spec "..key
         local className, classFile, icon
         if id and id > 0 then
-            local _, sName, _, sIcon, _, cFile, cName = GetSpecializationInfoByID(id)
-            name      = sName  or name
-            className = cName
-            classFile = cFile
-            icon      = sIcon
+            local m = ns.SpecMeta(id)
+            name      = (m and m.name) or name
+            className = m and m.className
+            classFile = m and m.classToken
+            icon      = m and m.icon
         end
         list[#list+1] = {
             key = key, name = name, className = className,
@@ -127,7 +127,8 @@ end
 local function EditedSpecLabel()
     local specID = tonumber(selectedEditSpec)
     if not specID then return "this spec" end
-    local _, sName, _, _, _, _, cName = GetSpecializationInfoByID(specID)
+    local m = ns.SpecMeta(specID)
+    local sName, cName = m and m.name, m and m.className
     if sName and cName then return sName .. " " .. cName end
     return sName or "this spec"
 end
@@ -565,7 +566,8 @@ function TUI:ChargeBarOptions()
                                     local src = selectedEditSpec and E.db.thingsUI.chargeBar.specs[selectedEditSpec]
                                     if not src then return end
                                     local srcID = tonumber(selectedEditSpec); if not srcID then return end
-                                    local _, _, _, _, _, srcClassFile = GetSpecializationInfoByID(srcID)
+                                    local srcMeta = ns.SpecMeta(srcID)
+                                    local srcClassFile = srcMeta and srcMeta.classToken
                                     if not srcClassFile then return end
 
                                     local function copyColor(c) return c and { r = c.r, g = c.g, b = c.b, a = c.a } or nil end

@@ -11,10 +11,15 @@ V.PLACES = {
     world = "Open World", dungeon = "Dungeon", raid = "Raid", delve = "Delve",
     scenario = "Scenario", arena = "Arena", pvp = "Battleground", housing = "Housing",
 }
+if ns.FOREVER then V.PLACES.delve = nil end
 V.ROLES = { TANK = "Tank", HEALER = "Healer", DAMAGER = "DPS" }
 
--- the current spec's role
+-- the current spec's role; Forever's one spec per class reads DPS for all, so the group role goes first there
 local function Role()
+    if ns.FOREVER then
+        local r = UnitGroupRolesAssigned("player")
+        if r and r ~= "NONE" then return r end
+    end
     local spec = GetSpecialization and GetSpecialization()
     return (spec and GetSpecializationRole(spec)) or "DAMAGER"
 end
@@ -147,6 +152,7 @@ for _, e in ipairs({ "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_EN
 end
 -- it also fires for every group member
 ev:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+if ns.FOREVER then ev:RegisterEvent("PLAYER_ROLES_ASSIGNED") end
 ev:SetScript("OnEvent", function(_, event)
     -- combat flips at once; the rest coalesce (zone loads fire several)
     if event == "PLAYER_REGEN_DISABLED" then inCombat = true; Check()

@@ -532,6 +532,8 @@ local function CDMEntries()
     if cdmEntries then return cdmEntries end
     if not LM() then return {} end
     cdmEntries = {}
+    -- the pack's layouts are retail specs and spells
+    if ns.FOREVER then return cdmEntries end
     for _, s in ipairs(PACK.cdm and PACK.cdm.layouts or {}) do
         s = strtrim(s)
         if s ~= "" then

@@ -16,6 +16,7 @@ M.FILTERS = {
     CROWD_CONTROL      = { name = "Crowd Control",       kind = "HARMFUL", sample = 118 },
 }
 M.FILTER_ORDER = { "BIG_DEFENSIVE", "EXTERNAL_DEFENSIVE", "IMPORTANT", "RAID_IN_COMBAT", "CROWD_CONTROL" }
+for k, id in pairs((ns.FV and ns.FV.FILTER_SAMPLES) or {}) do M.FILTERS[k].sample = id end
 
 local function Root()
     local db = E.db.thingsUI
@@ -246,8 +247,8 @@ local function EachLinked(fn)
                 local roots = { { "Global", m[3](g) } }
                 for k, r in pairs(g.classes or {}) do roots[#roots + 1] = { k, r } end
                 for k, r in pairs(g.specs or {}) do
-                    local _, nm = GetSpecializationInfoByID(tonumber(k) or 0)
-                    roots[#roots + 1] = { nm or k, r }
+                    local m = ns.SpecMeta(tonumber(k) or 0)
+                    roots[#roots + 1] = { (m and m.name) or k, r }
                 end
                 for _, rr in ipairs(roots) do
                     for uid, def in pairs((rr[2] and rr[2].auras) or {}) do

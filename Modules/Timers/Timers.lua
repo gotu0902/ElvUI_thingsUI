@@ -89,6 +89,10 @@ function M.GetAllTriggerSpellIDs(timer)
     local out = {}
     if timer.kind == "spell" then
         if timer.spellID then out[1] = timer.spellID end
+        -- Forever: a cast of any rank starts it
+        for _, r in ipairs(ns.SpellRanks(timer.spellID) or {}) do
+            if r ~= timer.spellID then out[#out + 1] = r end
+        end
         return out
     end
     if timer.kind ~= "item" or not timer.itemID then return out end

@@ -11,7 +11,7 @@ local function Specs(...)
 end
 
 -- [1] = spell, [2] = cooldown; first one fits a member of unknown spec; node = a read tree without it has no kick
-local BY_CLASS = {
+local BY_CLASS = (ns.FV and ns.FV.KICKS) or {
     DEATHKNIGHT = { { 47528, 15, node = true } },
     DEMONHUNTER = { { 183752, 15 } },
     DRUID = {
@@ -34,7 +34,7 @@ local BY_CLASS = {
 
 local SPELL_LOCK, AXE_TOSS, SACRIFICE_LOCK = 19647, 89766, 132409
 local GRIMOIRE_OF_SACRIFICE = 108503
-local CD = { [SPELL_LOCK] = 24, [AXE_TOSS] = 30, [SACRIFICE_LOCK] = 24 }
+local CD = { [SPELL_LOCK] = (ns.FV and ns.FV.SPELL_LOCK_CD) or 24, [AXE_TOSS] = 30, [SACRIFICE_LOCK] = 24 }
 
 -- the demon out, by creature ID
 KD.DEMONS = { [417] = SPELL_LOCK, [17252] = AXE_TOSS, [58965] = AXE_TOSS, [110397] = AXE_TOSS }
@@ -71,6 +71,14 @@ end
 for _, m in pairs(MOD) do
     if m.talent then KD.TALENTS[m.talent] = true end
 end
+-- Forever: a cast of any rank is that kick
+local ranked = {}
+for id, kick in pairs(CASTS) do
+    for _, r in ipairs(ns.SpellRanks(id) or {}) do ranked[r] = kick end
+end
+for r, kick in pairs(ranked) do
+    if not CASTS[r] then CASTS[r] = kick end
+end
 
 function KD.CastKick(spellID) return CASTS[spellID] end
 function KD.OnDemon(spellID) return ON_DEMON[spellID] or false end
@@ -86,7 +94,8 @@ function KD.Pick(class, spec, role, talents, demon)
     for _, k in ipairs(BY_CLASS[class] or {}) do
         local specOK = not (spec and k.specs) or k.specs[spec]
         local nodeOK = not (k.node and talents) or talents[k[1]]
-        if specOK and nodeOK then return k[1], spec end
+        local roleOK = not (role and k.roles) or k.roles[role]
+        if specOK and nodeOK and roleOK then return k[1], spec end
     end
     return nil, spec
 end
