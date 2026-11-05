@@ -1,7 +1,7 @@
 # Changelog
 ## 4.2.1
 ### WoW Forever
-- thingsUI loads on WoW Forever too (with ElvUI 16.00 or newer): the same addon as on retail
+- Forever build beta thing idno.
 - Spell ranks: an Aura Icon, Aura Bar, Groups aura, Aura Collection, Custom Timer or Kick Tracker row on one rank of a spell tracks every rank, so a downranked cast or another player's rank counts too
 - Forever's own lists: racials (Skyborne too), potions and healthstones (the best one you own), the Aura Collection presets (Defensives, Externals, Movement Speed; Bloodlust and Time Spiral don't exist there), the spell lists in the pickers, and the Kick Tracker's interrupts (Kick, Pummel or Shield Bash for tanks, Earth Shock, Counterspell, Spell Lock, Rebuke, Skull Bash, Feral Charge, Silence)
 - One spec per class there, so per-spec settings sit on the class. The Visibility role rule goes by your group role (every Forever spec counts as DPS), and Delve is gone from the places
