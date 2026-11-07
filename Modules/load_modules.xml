@@ -24,6 +24,7 @@
 	<Script file="Timers\TimersCDM.lua"/>
 	<Script file="CDM\RacialsCDM.lua"/>
 	<Script file="CDM\TrinketsCDM.lua"/>
+	<Script file="CDM\SpellsCDM.lua"/>
 	<Script file="Bars\BarCopy.lua"/>
 	<Script file="AuraCollections.lua"/>
 	<Script file="CustomGroups.lua"/>

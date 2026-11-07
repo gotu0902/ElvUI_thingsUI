@@ -294,6 +294,98 @@ local function HideWrapperVisuals(wrapper)
     if wrapper.tuiBorderHost then wrapper.tuiBorderHost:Hide() end
 end
 
+-- the icon's art: its custom icon, else the spell's
+local function ArtTexture(db)
+    local raw = SB.GetRawSpellList and SB.GetRawSpellList()[db.spellID]
+    local tex = db.customIcon or (raw and raw.icon)
+    if not tex then
+        local si = SB.GetCachedSpellInfo and SB.GetCachedSpellInfo(db.spellID)
+        tex = si and si.iconID
+    end
+    return tex
+end
+
+-- ------------------------------------------- not enough power / not usable
+
+-- "art" when the art is always on screen, else "alpha" (the art comes and goes with the aura)
+local useMode = {}
+local H = ns.CDHelpers
+
+local function UseLayer(wrapper)
+    local u = wrapper._tuiUse
+    if u then return u end
+    u = CreateFrame("Frame", nil, wrapper)
+    u:SetAllPoints(wrapper)
+    u.art = u:CreateTexture(nil, "ARTWORK")
+    u.mod = u:CreateTexture(nil, "ARTWORK")
+    if ns.AuraLane and ns.AuraLane.NoSnap then
+        ns.AuraLane.NoSnap(u.art)
+        ns.AuraLane.NoSnap(u.mod)
+    end
+    wrapper._tuiUse = u
+    return u
+end
+
+-- our own layer over the art (a secret aura locks its button); the containers hang on UIParent
+function SB.ApplyUse(key, force)
+    local wrapper = _G["TUI_SpecialIcon_" .. key]
+    local db = SB.GetIconDB(key)
+    if not (wrapper and db) then return end
+    local mode = useMode[key]
+    local st = false
+    if mode then
+        st = H.CastState(db.spellID)
+        if st == nil then st = wrapper._tuiUseSt or false end
+    end
+    if not force and st == wrapper._tuiUseSt then return end
+    wrapper._tuiUseSt = st
+    local o = st and db[st]
+    if type(o) ~= "table" then o = nil end
+    local a = (o and o.alpha) or 1
+    if a < 1 or wrapper._tuiUseA then
+        wrapper:SetAlpha(a)
+        if wrapper._tuiAuraP then wrapper._tuiAuraP:SetAlpha(a) end
+        if wrapper._tuiAuraT then wrapper._tuiAuraT:SetAlpha(a) end
+        wrapper._tuiUseA = (a < 1) or nil
+    end
+    local tint = o and o.tint and (o.color or H.CAST_TINT[st])
+    local desat = o and o.desat
+    if mode ~= "art" or not (tint or desat) then
+        if wrapper._tuiUse then wrapper._tuiUse:Hide() end
+        return
+    end
+    local u = UseLayer(wrapper)
+    u:SetFrameLevel(wrapper:GetFrameLevel() + 4)
+    local k = SB.ArtInset(db)
+    if desat then
+        u.art:SetTexture(ArtTexture(db))
+        SB.PlaceArt(u.art, wrapper, k)
+        u.art:SetTexCoord(ComputeIconTexCoord(db))
+        u.art:SetDesaturated(true)
+        u.art:SetVertexColor(tint and tint.r or 1, tint and tint.g or 1, tint and tint.b or 1)
+        u.art:Show()
+        u.mod:Hide()
+    else
+        -- tint alone multiplies what's under it, so the aura's sweep still shows
+        u.mod:SetColorTexture(tint.r, tint.g, tint.b)
+        u.mod:SetBlendMode("MOD")
+        SB.PlaceArt(u.mod, wrapper, k)
+        u.mod:Show()
+        u.art:Hide()
+    end
+    u:Show()
+end
+
+do
+    local ev = CreateFrame("Frame")
+    ev:RegisterEvent("SPELL_UPDATE_USABLE")
+    ev:RegisterEvent("SPELLS_CHANGED")
+    ev:SetScript("OnEvent", function(_, event)
+        if event == "SPELLS_CHANGED" then H.ResetCastCache() end
+        for key in pairs(useMode) do SB.ApplyUse(key) end
+    end)
+end
+
 -- options preview: sample duration and stacks in the icon's real text style (row text unless overridden)
 local function PreviewText(wrapper, db, test)
     local p = wrapper._tuiPrevText
@@ -339,6 +431,10 @@ local function ReleaseIcon(iconKey)
         QueueRowCheck()
     end
     missingOf[iconKey] = nil
+    if useMode[iconKey] then
+        useMode[iconKey] = nil
+        SB.ApplyUse(iconKey, true)
+    end
     if overOf[iconKey] then
         overOf[iconKey] = nil
         if wrapper then
@@ -482,15 +578,12 @@ local function UpdateIconSlot(iconKey)
     local test = ns.CustomGroups and ns.CustomGroups.testMode
     local missing = db.showMissing and not over or nil
     missingOf[iconKey] = missing and db.spellID or nil
+    useMode[iconKey] = (not over and (db.noMana or db.unusable))
+        and ((test or missing or row or db.desaturateWhenInactive) and "art" or "alpha") or nil
     -- a row keeps its cell: idle shows the spell greyed out, like a cooldown; on top of
     -- a cooldown the cooldown itself is what shows while idle
     if test or missing or ((db.desaturateWhenInactive or row) and not over) then
-        local raw = SB.GetRawSpellList and SB.GetRawSpellList()[db.spellID]
-        local tex = db.customIcon or (raw and raw.icon)
-        if not tex then
-            local si = SB.GetCachedSpellInfo and SB.GetCachedSpellInfo(db.spellID)
-            tex = si and si.iconID
-        end
+        local tex = ArtTexture(db)
         if tex then wrapper.fallback:SetTexture(tex) end
         SB.PlaceArt(wrapper.fallback, wrapper, SB.ArtInset(db))
         wrapper.fallback:SetTexCoord(ComputeIconTexCoord(db))
@@ -563,12 +656,14 @@ local function UpdateIconSlot(iconKey)
         if ns.SpecialAura then ns.SpecialAura.Detach(wrapper, iconKey) end
         wrapper:SetShown((VisibleNow(db) and (test or not SB.MissingUp(db))) and true or false)
         SB.WatchOverSpells()
+        SB.ApplyUse(iconKey, true)
         return
     end
     wrapper:SetShown((VisibleNow(db) and (not over or wrapper._overChild or test)) and true or false)
     if over then SB.UpdateOverCD(iconKey) end
 
     if ns.SpecialAura then ns.SpecialAura.AttachIcon(wrapper, iconKey, db, w, h) end
+    SB.ApplyUse(iconKey, true)
 end
 
 -- ------------------------------------------------------- only when missing

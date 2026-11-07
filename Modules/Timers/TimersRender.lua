@@ -181,6 +181,7 @@ function R.Update(btn, timer)
         SetDesat(btn.icon, 0)
     end
     UpdateItemCount(btn, timer)
+    H.ApplyCastLook(btn, timer.kind == "spell" and timer.spellID)
     UpdateGlow(btn, timer, now)
 end
 

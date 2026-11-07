@@ -91,7 +91,7 @@ function TUI:QueueClusterUpdate()
     end)
 end
 
-local INLINE_SOURCES = { "TimersCDM", "RacialsCDM", "TrinketsCDM" }
+local INLINE_SOURCES = { "TimersCDM", "RacialsCDM", "TrinketsCDM", "SpellsCDM" }
 
 local function CountClusterIcons()
     local essentialCount = EssentialCooldownViewer and CountVisibleChildren(EssentialCooldownViewer) or 0

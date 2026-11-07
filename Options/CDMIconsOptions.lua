@@ -806,6 +806,9 @@ local function SpellEditorPage(order, buffs)
         if TUI.UpdateCDMGlow then TUI:UpdateCDMGlow() end
         if ns.CDMText and ns.CDMText.RefreshAll then ns.CDMText.RefreshAll() end
         if ns.CDMIcons and ns.CDMIcons.RefreshCustomIcons then ns.CDMIcons.RefreshCustomIcons() end
+        if ns.CDMIcons and ns.CDMIcons.RefreshCastLooks then ns.CDMIcons.RefreshCastLooks() end
+        if ns.SpellsCDM then ns.SpellsCDM.Refresh() end
+        if ns.Timers and ns.Timers.QueueRepaint then ns.Timers.QueueRepaint() end
         if TUI.QueueSpecialBarsUpdate then TUI:QueueSpecialBarsUpdate() end
         ns.NotifyChange()
     end
@@ -888,6 +891,28 @@ local function SpellEditorPage(order, buffs)
         return out
     end
     local ON_TOP = " |cFFFFD27F(Aura On Top)|r"
+    local NOT_IN_CDM = " |cFF888888(not in CDM)|r"
+    local ROW_NAMES = { essential = "Essential", utility = "Utility" }
+    local function inCDM(id, spec) return ns.CDMSpells and ns.CDMSpells.InCDM(id, spec) end
+    local function rowTag(id)
+        local e = store()[id]
+        local r = e and ROW_NAMES[e.row]
+        return r and (" |cFF80FF80[" .. r .. "]|r") or ""
+    end
+    -- known spells the CDM doesn't list; one already set up here (any rank) is listed as that
+    local function extraSpells(spec)
+        local out = {}
+        if buffs or not (ns.CDMSpells and ns.CDMSpells.NotInCDM) then return out end
+        local ps = store()
+        for id in pairs(ns.CDMSpells.NotInCDM(spec)) do
+            local set = ps[id] ~= nil
+            for _, r in ipairs(ns.SpellRanks(id) or {}) do
+                if ps[r] then set = true end
+            end
+            if not set then out[id] = true end
+        end
+        return out
+    end
     local function iconKey() return type(sel) == "string" and sel:match("^si:(.+)$") or nil end
     local function barKey() return type(sel) == "string" and sel:match("^sb:(.+)$") or nil end
     local function own(k, def)
@@ -984,7 +1009,7 @@ local function SpellEditorPage(order, buffs)
             desc = {
                 order = 0, type = "description",
                 name = buffs and "Glow and text for one buff in Buff Icons. Buffs set up here are green, buffs an Aura Icon or Aura Bar already shows are pink. Glow needs Custom Glow on in CDM > Layout > Glow.\n"
-                    or "Glow and text for one cooldown in Essential or Utility. Spells set up here are green, Aura Icons in a row are pink. Glow needs Custom Glow on in CDM > Layout > Glow.\n",
+                    or "Glow and text for one cooldown in Essential or Utility. Spells set up here are green, Aura Icons in a row are pink, spells the CDM doesn't list are at the bottom (Show In puts one in a row). Glow needs Custom Glow on in CDM > Layout > Glow.\n",
             },
             spell = {
                 order = 1, type = "select", dialogControl = "TUI_SpellDropdown", name = "Spell", width = "double",
@@ -996,7 +1021,10 @@ local function SpellEditorPage(order, buffs)
                         if not covered[id] then out[id] = spellLabel(id) end
                     end
                     for id in pairs(store()) do
-                        if listed(id, spec) then out[id] = "|cFF40FF40" .. spellLabel(id) .. "|r" end
+                        if listed(id, spec) then out[id] = "|cFF40FF40" .. spellLabel(id) .. "|r" .. rowTag(id) end
+                    end
+                    for id in pairs(extraSpells(spec)) do
+                        if not out[id] then out[id] = spellLabel(id) .. NOT_IN_CDM end
                     end
                     if isSpell() and not out[sel] then out[sel] = spellLabel(sel) end
                     for id in pairs(over) do
@@ -1019,12 +1047,18 @@ local function SpellEditorPage(order, buffs)
                     for id in pairs(spec) do
                         if not store()[id] and not covered[id] then other[#other + 1] = id end
                     end
-                    if isSpell() and not store()[sel] and (spec[sel] == nil or covered[sel]) then other[#other + 1] = sel end
+                    local extra, ex = {}, extraSpells(spec)
+                    for id in pairs(ex) do extra[#extra + 1] = id end
+                    if isSpell() and not store()[sel] and not ex[sel] and (spec[sel] == nil or covered[sel]) then
+                        other[#other + 1] = sel
+                    end
                     table.sort(set, byName)
                     table.sort(icons, function(a, b) return spellName(ri[a].spellID) < spellName(ri[b].spellID) end)
                     table.sort(other, byName)
+                    table.sort(extra, byName)
                     for _, k in ipairs(icons) do set[#set + 1] = k end
                     for _, id in ipairs(other) do set[#set + 1] = id end
+                    for _, id in ipairs(extra) do set[#set + 1] = id end
                     return set
                 end,
                 get = function() return sel end,
@@ -1163,6 +1197,48 @@ local function SpellEditorPage(order, buffs)
                             frequency = pandemicLook.frequency,
                             offset = pandemicLook.offset,
                         },
+                    },
+                    rowGrp = {
+                        order = 0.4, type = "group", inline = true, name = "Show In Cooldown Manager",
+                        hidden = function() return buffs or inCDM(sel, specSpells()) end,
+                        args = {
+                            showIn = {
+                                order = 1, type = "select", name = "Show In",
+                                values = { none = "Not Shown", essential = "Essential", utility = "Utility" },
+                                sorting = { "none", "essential", "utility" },
+                                get = function() local e = entry() return (e and e.row) or "none" end,
+                                set = function(_, v) setField("row", (v ~= "none") and v or nil) end,
+                            },
+                            rowIndex = {
+                                order = 2, type = "range", name = "Position in Row", min = 1, max = 30, step = 1,
+                                hidden = function() local e = entry() return not (e and e.row) end,
+                                get = function() local e = entry() return (e and e.rowIndex) or 30 end,
+                                set = function(_, v) setField("rowIndex", (v ~= 30) and v or nil) end,
+                            },
+                            unknown = {
+                                order = 3, type = "description", width = "full",
+                                hidden = function() return not isSpell() or ns.CDHelpers.CastID(sel) end,
+                                name = "|cFF888888You don't know this spell on this character, so it won't show here.|r",
+                            },
+                        },
+                    },
+                    castGrp = {
+                        order = 0.53, type = "group", inline = true, name = "When You Can't Cast It",
+                        hidden = buffs,
+                        args = ns.CastLookArgs(
+                            function(st, create)
+                                local e = entry(create)
+                                if not e then return nil end
+                                if create and type(e[st]) ~= "table" then e[st] = {} end
+                                return type(e[st]) == "table" and e[st] or nil
+                            end,
+                            function(st)
+                                local e = entry()
+                                if e and type(e[st]) == "table" and not next(e[st]) then e[st] = nil end
+                                apply()
+                            end,
+                            nil,
+                            function() return isSpell() and sel end),
                     },
                     iconGrp = {
                         order = 0.5, type = "group", inline = true, name = "Icon",

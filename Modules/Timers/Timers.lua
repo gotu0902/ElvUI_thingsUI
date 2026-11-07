@@ -139,6 +139,20 @@ local function ParseDurationFromText(text)
     if n then return tonumber(n) * 60 end
 end
 
+-- the tooltip's cast time line ("2 sec cast") is no duration
+local castPre, castSuf
+local function IsCastTimeLine(text)
+    if castPre == nil then
+        local f = type(SPELL_CAST_TIME_SEC) == "string" and SPELL_CAST_TIME_SEC or ""
+        local a, b = f:find("%%[%d%.]*[sdgf]")
+        if a then castPre, castSuf = f:sub(1, a - 1), f:sub(b + 1) else castPre = false end
+    end
+    if not castPre or type(text) ~= "string" or (issecretvalue and issecretvalue(text)) then return false end
+    local n = #text - #castSuf
+    if n <= #castPre or text:sub(1, #castPre) ~= castPre or text:sub(n + 1) ~= castSuf then return false end
+    return text:sub(#castPre + 1, n):match("^[%d%.,]+$") ~= nil
+end
+
 local function TooltipDuration(timer)
     local data
     if timer.kind == "item" and timer.itemID and C_TooltipInfo and C_TooltipInfo.GetItemByID then
@@ -150,7 +164,7 @@ local function TooltipDuration(timer)
     if not data or not data.lines then return end
     local best
     for _, line in ipairs(data.lines) do
-        local d = ParseDurationFromText(line.leftText)
+        local d = not IsCastTimeLine(line.leftText) and ParseDurationFromText(line.leftText)
         if d and d > 0 and (not best or d > best) then best = d end
     end
     return best
@@ -339,6 +353,8 @@ local function QueueCDRepaint()
     cdRepaintQueued = true
     C_Timer.After(0, function() cdRepaintQueued = false; FireRepaint() end)
 end
+M.QueueRepaint = QueueCDRepaint
+ns.CDHelpers.OnCastChange(QueueCDRepaint)
 
 local ev = CreateFrame("Frame")
 ev:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")

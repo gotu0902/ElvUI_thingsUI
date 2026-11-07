@@ -194,6 +194,7 @@ local function CollectAndHook(viewer, out, hookFn)
         local c = kids[i]
         if c and c.GetCooldownID then
             if hookFn then hookFn(c, viewer) end
+            if M.AnyCastLook and M.AnyCastLook() then M.ApplyCastLookChild(c) end
 
             if c:IsShown() and not (ns.yoinkedBars and ns.yoinkedBars[c]) and not passiveHidden[c] then
                 out[#out + 1] = c
@@ -205,6 +206,9 @@ end
 
 local passiveMouse = {}
 local pendingMouse = {}
+-- Spell Editor > When You Can't Cast It: the alpha a frame wants (<1), the icons it greys
+local lookAlpha = setmetatable({}, { __mode = "k" })
+local lookDesat = setmetatable({}, { __mode = "k" })
 
 local function SetChildMouse(child, on)
     if InCombatLockdown() then
@@ -225,7 +229,7 @@ local function ApplyPassiveState(child, hide)
         end
     elseif passiveHidden[child] then
         passiveHidden[child] = nil
-        child:SetAlpha(1)
+        child:SetAlpha(lookAlpha[child] or 1)
         SetChildMouse(child, passiveMouse[child] ~= false)
         passiveMouse[child] = nil
     end
@@ -600,6 +604,7 @@ function M.CheckCDStates()
         QueuePassiveRebuild()
         local CG = ns.CustomGroups
         if CG and CG.QueueLayout then CG.QueueLayout(false) end
+        if ns.SpellsCDM then ns.SpellsCDM.Refresh() end
     end
 end
 
@@ -867,7 +872,7 @@ local lastDesatAt = setmetatable({}, { __mode = "k" })
 
 local function PutDesat(icon, v)
     if not icon then return end
-    SetDesat(icon, v)
+    SetDesat(icon, lookDesat[icon] and 1 or v)
     lastDesat[icon], lastDesatAt[icon] = v, GetTime()
 end
 
@@ -1029,12 +1034,148 @@ local function ReassertDesat(child)
     if icon and lastDesatAt[icon] == GetTime() then
         if not OverlayActive(child) then return end
         applyingOverlay[cd] = true
-        SetDesat(icon, lastDesat[icon])
+        SetDesat(icon, lookDesat[icon] and 1 or lastDesat[icon])
         applyingOverlay[cd] = nil
         return
     end
     ProcessCooldownFrame(child)
 end
+
+-- When You Can't Cast It on Blizzard's frames: tint after its RefreshIconColor (its out-of-range
+-- red still wins), grey through the icon's own writes, alpha under the passive hide
+local anyCastLook = false
+local lookHooked  = setmetatable({}, { __mode = "k" })
+local lookTint    = setmetatable({}, { __mode = "k" })
+local lookSt      = setmetatable({}, { __mode = "k" })
+local baseDesat   = setmetatable({}, { __mode = "k" })
+local baseKind    = setmetatable({}, { __mode = "k" })
+local tintObj     = setmetatable({}, { __mode = "k" })
+local lookGuard   = false
+
+local function CVColor(k, r, g, b)
+    local C = _G.CooldownViewerConstants
+    return (C and C[k]) or CreateColor(r, g, b, 1)
+end
+
+local function PaintTint(child, icon, r, g, b)
+    local c = tintObj[child] or CreateColor(1, 1, 1, 1)
+    tintObj[child] = c
+    c:SetRGBA(r, g, b, 1)
+    local oor = child.spellOutOfRange
+    if type(oor) == "boolean" and icon.SetVertexColorFromBoolean then
+        icon:SetVertexColorFromBoolean(oor, CVColor("ITEM_NOT_IN_RANGE_COLOR", 0.64, 0.15, 0.15), c)
+    elseif not IsSecret(oor) and not oor then
+        icon:SetVertexColor(r, g, b)
+    end
+end
+
+-- Blizzard's own tint, painted from the same reads its RefreshIconColor makes (never calling it)
+local function BlizzardTint(child, icon, sid)
+    local usable, noMana = C_Spell.IsSpellUsable(sid)
+    if IsSecret(usable) or IsSecret(noMana) then return end
+    local c = (usable and CVColor("ITEM_USABLE_COLOR", 1, 1, 1))
+        or (noMana and CVColor("ITEM_NOT_ENOUGH_MANA_COLOR", 0.5, 0.5, 1))
+        or CVColor("ITEM_NOT_USABLE_COLOR", 0.4, 0.4, 0.4)
+    PaintTint(child, icon, c:GetRGB())
+end
+
+local function GuardedDesat(icon, kind, v)
+    lookGuard = true
+    if kind == "bool" then icon:SetDesaturated(v) else icon:SetDesaturation(v) end
+    lookGuard = false
+end
+
+-- every desaturation write: remember it, and keep the icon grey while the look wants it
+local function OnIconDesat(icon, kind, v)
+    if lookGuard then return end
+    baseDesat[icon], baseKind[icon] = v, kind
+    if lookDesat[icon] then GuardedDesat(icon, "num", 1) end
+end
+
+local function EnsureLookHooks(child)
+    if lookHooked[child] then return end
+    lookHooked[child] = true
+    if type(child.RefreshIconColor) == "function" then
+        hooksecurefunc(child, "RefreshIconColor", function(self) M.ApplyCastLookChild(self, true) end)
+    end
+    local icon = child.Icon
+    if icon and not icon._tuiLookHooked then
+        icon._tuiLookHooked = true
+        if icon.SetDesaturated then hooksecurefunc(icon, "SetDesaturated", function(s, v) OnIconDesat(s, "bool", v) end) end
+        if icon.SetDesaturation then hooksecurefunc(icon, "SetDesaturation", function(s, v) OnIconDesat(s, "num", v) end) end
+    end
+end
+
+-- fromColor: Blizzard has just painted its own tint
+function M.ApplyCastLookChild(child, fromColor)
+    local icon = child.Icon
+    if not icon then return end
+    local p = child:GetParent()
+    local row = p == _G.EssentialCooldownViewer or p == _G.UtilityCooldownViewer
+    local sid, base = M.ChildSpell(child)
+    local look = row and anyCastLook and (H.CastLook(sid) or H.CastLook(base)) or nil
+    if not (look or lookAlpha[child] or lookDesat[icon] or lookTint[child]) then return end
+    local st = false
+    if look then
+        EnsureLookHooks(child)
+        st = H.CastState(sid or base)
+        if st == nil then st = lookSt[child] or false end
+    end
+    lookSt[child] = st
+    local o = st and look[st]
+    if type(o) ~= "table" then o = nil end
+
+    local a = (o and o.alpha) or 1
+    local wantA = (a < 1) and a or nil
+    if lookAlpha[child] ~= wantA then
+        lookAlpha[child] = wantA
+        if not passiveHidden[child] then child:SetAlpha(a) end
+    end
+
+    local d = (o and o.desat) and true or nil
+    if lookDesat[icon] ~= d then
+        lookDesat[icon] = d
+        if d then
+            GuardedDesat(icon, "num", 1)
+        elseif OverlayActive(child) then
+            ProcessCooldownFrame(child)
+        elseif baseKind[icon] then
+            GuardedDesat(icon, baseKind[icon], baseDesat[icon])
+        else
+            GuardedDesat(icon, "num", 0)
+        end
+    end
+
+    local tint = o and o.tint and (o.color or H.CAST_TINT[st])
+    if tint then
+        PaintTint(child, icon, tint.r, tint.g, tint.b)
+        lookTint[child] = true
+    elseif lookTint[child] then
+        lookTint[child] = nil
+        if not fromColor and (sid or base) then BlizzardTint(child, icon, sid or base) end
+    end
+end
+
+local lookKids = {}
+local function EachRowChild(fn)
+    for _, name in ipairs(ROW_VIEWERS) do
+        local v = _G[name]
+        if v then
+            for i = 1, H.ChildrenInto(v, lookKids) do
+                local c = lookKids[i]
+                if c and c.cooldownInfo then fn(c) end
+            end
+        end
+    end
+end
+
+function M.RefreshCastLooks()
+    H.InvalidateCastLooks()
+    anyCastLook = H.AnyCastLook()
+    EachRowChild(M.ApplyCastLookChild)
+end
+H.OnCastChange(function() if anyCastLook then EachRowChild(M.ApplyCastLookChild) end end)
+function M.AnyCastLook() return anyCastLook end
 
 -- Essential/Utility swipe while a spell's aura runs: Blizzard sets ITEM_AURA_COLOR first on
 -- every repaint, so a post-hook restyles it right there (not while the overlay is hidden)
@@ -1399,6 +1540,11 @@ LayoutViewer = function(viewer)
     if TR and TR.GetInlineButtonsFor then
         local trb = TR.GetInlineButtonsFor(viewer)
         if trb then for i = 1, #trb do visible[#visible + 1] = trb[i] end end
+    end
+    local SC = ns.SpellsCDM
+    if SC and SC.GetInlineButtonsFor then
+        local scb = SC.GetInlineButtonsFor(viewer)
+        if scb then for i = 1, #scb do visible[#visible + 1] = scb[i] end end
     end
     local SBI = ns.SpecialBars
     if SBI and SBI.GetInlineIconsFor then
@@ -1944,7 +2090,9 @@ end
 function TUI:UpdateCDMIcons()
     M.RefreshSpellRules()
     M.RefreshCustomIcons()
+    M.RefreshCastLooks()
     M.RefreshAll()
+    if ns.SpellsCDM then ns.SpellsCDM.Refresh() end
     if ns.EssentialMover and ns.EssentialMover.OnGrowthDirectionChanged then
         ns.EssentialMover.OnGrowthDirectionChanged()
     end

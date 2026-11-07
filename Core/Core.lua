@@ -132,6 +132,34 @@ function ns.CustomIconArgs(get, set, base, hidden, disabled)
     }
 end
 
+-- Not Enough Power / Not Usable looks; tbl(state, create) -> its table, onChange(state), noArt() greys Desaturate and Tint
+function ns.CastLookArgs(tbl, onChange, noArt, spellID)
+    local args = {
+        unknown = { order = 0, type = "description", width = "full",
+            hidden = function() local id = spellID() return not id or ns.CDHelpers.CastID(id) end,
+            name = "|cFF888888Not a spell you know, so there is nothing to check.|r" },
+    }
+    local function add(st, label, order)
+        local function g(k) local x = tbl(st) return x and x[k] end
+        local function s(k, v) tbl(st, true)[k] = v; onChange(st) end
+        args[st .. "Head"] = { order = order, type = "description", width = "full", fontSize = "medium", name = label }
+        args[st .. "Desat"] = { order = order + 0.1, type = "toggle", name = "Desaturate", disabled = noArt,
+            get = function() return g("desat") end, set = function(_, v) s("desat", v or nil) end }
+        args[st .. "Tint"] = { order = order + 0.2, type = "toggle", name = "Tint", disabled = noArt,
+            get = function() return g("tint") end, set = function(_, v) s("tint", v or nil) end }
+        args[st .. "Color"] = { order = order + 0.3, type = "color", name = "Tint Color",
+            disabled = function() return (noArt and noArt()) or not g("tint") end,
+            get = function() local c = g("color") or ns.CDHelpers.CAST_TINT[st] return c.r, c.g, c.b end,
+            set = function(_, r, gr, b) s("color", { r = r, g = gr, b = b }) end }
+        args[st .. "Alpha"] = { order = order + 0.4, type = "range", name = "Alpha", min = 0, max = 1, step = 0.01, isPercent = true,
+            get = function() return g("alpha") or 1 end,
+            set = function(_, v) s("alpha", (v < 1) and v or nil) end }
+    end
+    add("noMana", "Not Enough Power", 1)
+    add("unusable", "Not Usable", 2)
+    return args
+end
+
 -- 12.1.5+: a cap of 0 also disables the group, so it stops parsing UNIT_AURA
 function ns.SetAuraGroupCap(container, key, cap)
     if container.SetAuraGroupEnabled then

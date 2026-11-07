@@ -124,3 +124,119 @@ local function TimerActive(timer, now)
     return false
 end
 H.TimerActive = TimerActive
+
+-- ------------------------------------------------------------- can you cast it
+
+-- Blizzard's tints on its own CDM icons
+H.CAST_TINT = { noMana = { r = 0.5, g = 0.5, b = 1 }, unusable = { r = 0.4, g = 0.4, b = 0.4 } }
+
+local castCache = {}
+function H.ResetCastCache() wipe(castCache) end
+
+local function Known(id) return C_SpellBook.IsSpellKnown(id) end
+
+-- the spell you cast for this ID (highest known rank, else the known spell by name); false when you don't
+function H.CastID(id)
+    if not id then return false end
+    local hit = castCache[id]
+    if hit ~= nil then return hit end
+    local best = false
+    for _, r in ipairs(ns.SpellRanks(id) or {}) do
+        if Known(r) then best = r end
+    end
+    if not best and Known(id) then best = id end
+    if not best then
+        local name = C_Spell.GetSpellName(id)
+        local info = NotSecret(name) and C_Spell.GetSpellInfo(name)
+        local kid = info and info.spellID
+        if NotSecret(kid) and Known(kid) then best = kid end
+    end
+    castCache[id] = best
+    return best
+end
+
+-- "noMana" / "unusable" / false (castable); nil when the game won't say
+function H.CastState(id)
+    local cid = H.CastID(id)
+    if not cid then return false end
+    local usable, noMana = C_Spell.IsSpellUsable(cid)
+    if IsSecret(usable) or IsSecret(noMana) then return nil end
+    if usable then return false end
+    return noMana and "noMana" or "unusable"
+end
+
+-- Spell Editor (cooldowns) entries with a When You Can't Cast It look
+local lookIDs
+function H.InvalidateCastLooks() lookIDs = nil end
+local function LookIDs()
+    if lookIDs then return lookIDs end
+    lookIDs = {}
+    local E = ns.E
+    local cdm = E and E.db and E.db.thingsUI and E.db.thingsUI.cdmIcons
+    for id, o in pairs((cdm and cdm.perSpell) or {}) do
+        if type(o) == "table" and (o.noMana or o.unusable) then lookIDs[id] = o end
+    end
+    return lookIDs
+end
+function H.AnyCastLook() return next(LookIDs()) ~= nil end
+
+-- the look for a spell: its own entry, else one on another rank of it
+function H.CastLook(id)
+    if not id then return nil end
+    local ids = LookIDs()
+    if ids[id] then return ids[id] end
+    for _, r in ipairs(ns.SpellRanks(id) or {}) do
+        if ids[r] then return ids[r] end
+    end
+end
+
+-- tell the hosts when a looked spell turns castable or not
+local castFns, castLast = {}, {}
+function H.OnCastChange(fn) castFns[#castFns + 1] = fn end
+do
+    local ev = CreateFrame("Frame")
+    ev:RegisterEvent("SPELL_UPDATE_USABLE")
+    ev:RegisterEvent("SPELLS_CHANGED")
+    ev:SetScript("OnEvent", function(_, event)
+        if event == "SPELLS_CHANGED" then wipe(castCache) end
+        local changed = false
+        for id in pairs(LookIDs()) do
+            local st = H.CastState(id)
+            if st ~= nil and st ~= castLast[id] then
+                castLast[id] = st
+                changed = true
+            end
+        end
+        if changed then
+            for i = 1, #castFns do castFns[i]() end
+        end
+    end)
+end
+
+-- one of our own buttons: the look for its spell's state, over the cooldown's own desaturation
+function H.ApplyCastLook(btn, spellID)
+    local look = H.CastLook(spellID)
+    local st = false
+    if look then
+        st = H.CastState(spellID)
+        if st == nil then st = btn._castSt or false end
+    end
+    btn._castSt = st
+    local o = st and look[st]
+    if type(o) ~= "table" then o = nil end
+    local a = (o and o.alpha) or 1
+    if a < 1 or btn._castA then
+        btn:SetAlpha(a)
+        btn._castA = (a < 1) or nil
+    end
+    local icon = btn.icon
+    if not icon then return end
+    if o and o.desat then SetDesat(icon, 1) end
+    local tint = o and o.tint and (o.color or H.CAST_TINT[st])
+    if tint then
+        icon:SetVertexColor(tint.r, tint.g, tint.b)
+    elseif btn._castTint then
+        icon:SetVertexColor(1, 1, 1)
+    end
+    btn._castTint = tint and true or nil
+end

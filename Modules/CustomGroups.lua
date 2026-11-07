@@ -144,6 +144,7 @@ local function UpdateSpellIcon(btn)
         SetCooldown(btn.cooldown, C_Spell.GetSpellCooldownDuration and C_Spell.GetSpellCooldownDuration(id))
     end
     UpdateSpellIconDesaturation(btn, id)
+    H.ApplyCastLook(btn, id)
 end
 
 -- Spell Editor > Show follows the spell into its group: out of the grid, the rest closes up
@@ -395,6 +396,7 @@ local function UpdateTimerIcon(btn)
         SetDesat(btn.icon, 0)
     end
     if btn.count then btn.count:SetText("") end
+    H.ApplyCastLook(btn, timer.kind == "spell" and timer.spellID)
     UpdateTimerGlow(btn, timer, now)
 end
 
@@ -1382,6 +1384,7 @@ local function RefreshSpellsAll()
         for _, b in pairs(gs.spellIcons) do if b:IsShown() then UpdateSpellIcon(b) end end
     end
 end
+H.OnCastChange(RefreshSpellsAll)
 local function RefreshItemsAll()
     for _, gs in pairs(groupState) do
         for _, b in pairs(gs.itemIcons) do if b:IsShown() then UpdateItemIcon(b) end end

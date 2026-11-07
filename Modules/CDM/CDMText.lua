@@ -296,6 +296,12 @@ local function ApplyToViewer(viewerName)
         local trb = TR.GetInlineButtonsFor(viewer)
         if trb then for i = 1, #trb do StyleChild(trb[i], t) end end
     end
+
+    local SC = ns.SpellsCDM
+    if SC and SC.GetInlineButtonsFor then
+        local scb = SC.GetInlineButtonsFor(viewer)
+        if scb then for i = 1, #scb do StyleChild(scb[i], t) end end
+    end
 end
 
 local function OnViewerRefresh(viewer)

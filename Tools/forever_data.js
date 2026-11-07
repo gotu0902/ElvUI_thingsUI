@@ -143,6 +143,9 @@ async function main() {
       [5118, "Aspect of the Cheetah"], [2983, "Sprint"], [1850, "Dash"]] },
   ];
   for (const p of PRESETS) for (const [id, n] of p.spells) S(id, n);
+  // every drink has its own buff, all named Drink (Refreshment: food and drink in one)
+  const DRINKS = [...spellName].filter(([, n]) => n === "Drink" || n === "Refreshment").sort((a, b) => a[0] - b[0]);
+  PRESETS.push({ key: "drink", name: "Drink", max: 1, spells: DRINKS });
 
   const CLASS_SPELLS = {
     WARRIOR: [[6673, "Battle Shout"], [871, "Shield Wall"], [1719, "Recklessness"], [20230, "Retaliation"], [12975, "Last Stand"],

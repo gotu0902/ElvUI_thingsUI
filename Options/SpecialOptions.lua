@@ -1400,6 +1400,21 @@ function TUI:SpecialIconOptions(keyArg, ctx)
     end
     local function GroupBorderOnly() return isGrouped() and not OwnBorderOn() end
 
+    -- desaturate and tint need the art always on screen
+    local useArgs = ns.CastLookArgs(
+        function(st, create)
+            local d = db()
+            if create and type(d[st]) ~= "table" then d[st] = {} end
+            return type(d[st]) == "table" and d[st] or nil
+        end,
+        function(st)
+            local d = db()
+            if type(d[st]) == "table" and not next(d[st]) then d[st] = nil end
+            set(st, d[st])
+        end,
+        function() return not (styleMode or inRow() or get("showMissing") or get("desaturateWhenInactive")) end,
+        function() return not styleMode and db().spellID end)
+
     -- 5 s of the pandemic look on this icon (a style: the first icon wearing it)
     local function PreviewPandemic()
         local AL, CG = ns.AuraLane, ns.CustomGroups
@@ -1823,6 +1838,11 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             get = function() return get("pandemicSpeed") or 0.25 end,
                             set = function(_, v) set("pandemicSpeed", v) end },
                     },
+                },
+                usableGroup = {
+                    order = 11.5, type = "group", name = "When You Can't Cast It", inline = true,
+                    hidden = function() return isGrouped() or onTop() end,
+                    args = useArgs,
                 },
                 borderGroup = {
                     order = 12, type = "group", name = "Border", inline = true,

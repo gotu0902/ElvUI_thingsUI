@@ -8,6 +8,7 @@
 - The installer's Cooldown Manager layouts are retail specs and stay out on Forever; Character Setup gives Forever characters the NHT profiles
 - Fixed: a Lua error at login on Forever stopped most of thingsUI from starting
 - A Quick Setup counts as a finished install, so a reload before Finished no longer opens the installer again
+- New Aura Collection: Drink. Every drink has its own buff (all named Drink), so the collection holds them all; put it in Groups - Text, Icons or Bars
 ### Groups - Text
 - New module: auras and cooldowns as lines of text. Write a line as [name] [cd], or put anything around them: [name] - [cd], NO WILD CHARGE [cd]. [stacks] shows stacks on an aura and charges on a cooldown
 - Auras work like Groups - Bars: Spec / Class / Global lists, Aura Collections, Blizzard filters, order and sorting, Visibility. Every aura line can have its own text
@@ -56,6 +57,9 @@
 - Aura Icon On Top: put an Aura Icon over a cooldown. It covers the cooldown while its aura is up (Garrote's DoT over Garrote), you see the cooldown again when it isn't. Its list works like Aura Icons': free auras in green get a new icon, ones in use show where they sit and move here. Optional Spell Cooldown On Top: the spell's own cooldown over the aura, with its own size, color and spot. Also under Aura Icons > Show In > On Top of a Cooldown, with a Cooldown dropdown of what the CDM shows (or a Spell ID / name). Its text is the text of the frame it covers, Spell Editor text included, and without a border of its own it keeps the frame's 1px border in sight. The Spell Editor list marks these (Aura On Top), the Aura Icons list keeps them under their own On Top heading
 - Cooldowns: Aura Overlay per spell (Settings / Hide / Show) with the aura swipe's direction and color. Buff Icons: glow per buff (While Shown, own color) and Invert Swipe (Settings / Reversed / Normal) with its swipe color. Both pages: Pandemic Glow per spell (Settings / Blizzard / Hidden / Custom Glow) with its own color, and Own Glow Style per spell or buff (style, lines, thickness, particles, scale, speed, offset), starting from Layout > Glow
 ### More
+- CDM Spell Editor: spells you know that the Cooldown Manager doesn't list (Wrath) sit at the bottom of the Cooldowns list (or type a Spell ID). Show In puts one in Essential or Utility at the Position in Row you pick, with the row's size and text, its Spell Editor Show rules and Custom Icon. Spells of another class or a rank you don't have stay out, and one the CDM starts showing itself isn't doubled
+- CDM Spell Editor > When You Can't Cast It: Not Enough Power and Not Usable, each with Desaturate, Tint (Blizzard's blue and grey to start) and Alpha. Per spell, wherever it shows: the CDM's own icons (its out-of-range red still wins), the spells above, Groups - Icons, Custom Timers and racials. Any rank of the spell counts
+- Aura Icons get the same When You Can't Cast It for the spell behind the aura. Desaturate and Tint need the icon on screen all the time: in a CDM row, or Show on Always or Only When Missing. Not for Aura Icons in a group or on top of a cooldown
 - Spell lists in the options show the spell's tooltip when you hover an entry (Add Aura Icon / Buff / Aura Bar / Spell CD / Cooldown / Racial, the Aura Icon and Aura Bar spell pickers, the Spell Editor and the Charge Bar)
 - Aura Icons / Aura Bars: no more three empty Icon 1-3 / Bar 1-3 on every spec. A spec can have none, empty ones stay out of the list and a new icon or bar takes their place first
 - Aura Icons > Aura Type says Auto (was "Buff or Debuff"): leave it unless a spell is both a buff and a debuff, like Fiery Brand
@@ -98,6 +102,8 @@
 - Profile switches (FHT / NHT per spec) rebuild thingsUI's option pages when you next open the options, not during the switch
 - New /tui prof spec: type it, swap spec, and 8 s later it lists every addon's CPU time during the swap, the longest frames and, on a profile switch, thingsUI's share of it
 ### Fixes
+- Mini Meter: a per-second value under 1 in combat showed with every decimal (0.61538461538462)
+- Custom Timers: Auto Duration took a spell's cast time ("2 sec cast") for its duration, so a Wrath timer ran 2 s after every cast
 - Groups - Icons: an Aura Icon on Aura Type Auto that turns out to be your debuff on the target (Freezing) no longer jumps half an icon up and to the side when it shows. It learns the side from the Cooldown Manager the first time it's up and keeps its own place in the group from then on (Aura Type then reads Auto (Debuff)). In a centered group, buffs on you and debuffs on the target now center together as one row, like in the preview
 - Aura Icons > Only When Missing found debuffs like Rend in the Cooldown Manager: their entry is the ability (Rend) with the debuff linked to it, and only the ability was matched, so the icon counted as not tracked in combat (and the options said so)
 - Aura Icons and Aura Bars track what the Cooldown Manager tracks for that spell: the entry that lists the aura, not every entry on the same spell (a Violent Outburst icon showed Seeing Red too). A buff whose CDM entry carries another ID than the aura keeps tracking: 12.1.5 broke Lifebloom set to 1227806 (the HoT on you is 33763); the spell you know by that name, tracked CDM buffs with the same name and buffs your layout moved into Buff Icons/Bars count too

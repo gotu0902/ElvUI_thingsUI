@@ -580,6 +580,29 @@ ns.AURA_PRESETS = {
             1850,   -- Dash
         },
     },
+    {
+        key = "drink", name = "Drink", kind = "HELPFUL", unit = "player", max = 1,
+        spells = {
+            430,    -- Drink
+            431,    -- Drink
+            432,    -- Drink
+            1133,   -- Drink
+            1135,   -- Drink
+            1137,   -- Drink
+            10250,  -- Drink
+            22734,  -- Drink
+            24355,  -- Drink
+            25696,  -- Drink
+            26261,  -- Drink
+            26402,  -- Drink
+            26473,  -- Drink
+            26475,  -- Drink
+            29007,  -- Drink
+            167152, -- Refreshment
+            446714, -- Drink
+            468767, -- Drink
+        },
+    },
 }
 
 -- one spec per class here: the whole list sits on the class

@@ -145,6 +145,45 @@ function M.GetForClass(classToken)
     return any and merged or nil
 end
 
+-- a spell (or another rank of it) in this spec's Cooldown Manager list
+function M.InCDM(id, specMap)
+    if not (id and specMap) then return false end
+    if specMap[id] ~= nil then return true end
+    for _, r in ipairs(ns.SpellRanks(id) or {}) do
+        if specMap[r] ~= nil then return true end
+    end
+    return false
+end
+
+-- spells you know and cast that the Cooldown Manager doesn't list, one per spell (its highest rank)
+function M.NotInCDM(specMap)
+    local out, seen = {}, {}
+    local SBk = C_SpellBook
+    local bank = Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player
+    local SPELL = Enum.SpellBookItemType and Enum.SpellBookItemType.Spell
+    if not (SBk and SBk.GetNumSpellBookSkillLines and bank and SPELL) then return out end
+    for i = 1, SBk.GetNumSpellBookSkillLines() do
+        local line = SBk.GetSpellBookSkillLineInfo(i)
+        if line and not line.shouldHide and not line.offSpecID then
+            for slot = line.itemIndexOffset + 1, line.itemIndexOffset + line.numSpellBookItems do
+                local it = SBk.GetSpellBookItemInfo(slot, bank)
+                local id = it and it.itemType == SPELL and not it.isPassive and PlainID(it.spellID)
+                if id then
+                    local fam = ns.SpellRanks(id)
+                    local key = fam and fam[1] or id
+                    if not seen[key] then
+                        seen[key] = true
+                        if not M.InCDM(id, specMap) and not (ns.RacialSet and ns.RacialSet[id]) then
+                            out[ns.CDHelpers.CastID(id) or id] = true
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return out
+end
+
 local f = CreateFrame("Frame")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
 f:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
