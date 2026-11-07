@@ -62,7 +62,7 @@
 - Mini Meter: your own row works in combat (tooltip, spell list, popout), Reset on New Instance asks, Reset When M+ Starts, swap options, nicknames stay in combat
 - Visibility: Only As Tank / Healer / DPS everywhere, Timers got Visibility
 - Spell pickers show tooltips, ElvUI Party Frames in Anchor To, Account Settings > ElvUI Private imports everything
-- New commands: /tui icons, /tui aura <spellID>, /tui prof all, /tui prof spec
+- New commands: /tui icons, /tui aura <spellID> [watch], /tui prof all, /tui prof spec
 ### Performance
 - Raids and spec swaps: far fewer rebuilds of Buff Bars, Bar Setup, Groups, CDM text and the player frame; group members' spec changes are ignored
 - Stealth and form changes: hidden CDM icons no longer flash back, and the bar stack only rebuilds when the width changes
@@ -71,6 +71,7 @@
 - Profile switches rebuild the options later, item cooldowns in groups update at most 10 times a second
 ### Fixes
 - Auras: Auto debuffs no longer jump in groups, Only When Missing finds linked debuffs (Rend), and the right CDM entry is tracked (Lifebloom after 12.1.5)
+- Auras the game only shows on the personal nameplate (Crusading Strikes) now show in Aura Icons, Aura Bars and Groups
 - Stack and charge numbers stay above glows, previews follow the role rule, dragging a mover keeps its anchor
 - Aura Bars: Ticks work in combat. Aura Icons keep their 1px edge when active
 - Trinkets and items no longer grey out on the GCD or vanish after a loading screen; Hide Aura Overlay keeps a Custom Icon

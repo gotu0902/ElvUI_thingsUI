@@ -160,10 +160,54 @@ function SA.ExpandSpellIDs(spellID)
     return map
 end
 
--- /tui aura <spellID>: the IDs an Aura Icon or Bar for it tracks, and why
+local function Say(v)
+    if issecretvalue and issecretvalue(v) then return "secret" end
+    return tostring(v)
+end
+
+-- what Blizzard's buff frames for these IDs run on right now
+local function CDMState(map)
+    for _, name in ipairs({ "BuffIconCooldownViewer", "BuffBarCooldownViewer" }) do
+        local v = _G[name]
+        for _, c in ipairs(v and { v:GetChildren() } or {}) do
+            local i = c.cooldownInfo
+            local s, o = i and PlainID(i.spellID), i and PlainID(i.overrideSpellID)
+            if (s and map[s]) or (o and map[o]) then
+                local a = c.auraInstanceID
+                local hasAura = (issecretvalue and issecretvalue(a)) or a ~= nil
+                local t = c.totemData
+                print(("  CDM %s %s: %s, aura %s, totem %s"):format(name:gsub("CooldownViewer", ""), tostring(s or o),
+                    c:IsShown() and "shown" or "hidden", hasAura and Say(c.auraSpellID) or "none",
+                    t and ("slot " .. Say(t.slot) .. " dur " .. Say(t.duration)) or "none"))
+            end
+        end
+    end
+end
+
+local watcher
+local function Watch(map)
+    watcher = watcher or CreateFrame("Frame")
+    watcher:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+    watcher:RegisterEvent("PLAYER_TOTEM_UPDATE")
+    watcher:SetScript("OnEvent", function(_, ev, a1, _, a3)
+        local what
+        if ev == "PLAYER_TOTEM_UPDATE" then
+            what = "totem slot " .. Say(a1)
+        else
+            local plain = not (issecretvalue and issecretvalue(a3))
+            what = "cast " .. Say(a3) .. " " .. (plain and tostring(C_Spell.GetSpellName(a3)) or "")
+        end
+        print(("|cFF8080FFthingsUI|r %.1f %s"):format(GetTime() % 100, what))
+        CDMState(map)
+    end)
+    C_Timer.After(10, function() watcher:UnregisterAllEvents(); print("|cFF8080FFthingsUI|r watch done") end)
+end
+
+-- /tui aura <spellID> [watch]: the IDs an Aura Icon or Bar for it tracks, and why
 ns.SlashCommand("aura", function(arg)
-    local id = tonumber(strtrim(arg or ""))
-    if not id then print("|cFF8080FFthingsUI|r: /tui aura <spellID>") return end
+    local idText, mode = strsplit(" ", strtrim(arg or ""), 2)
+    local id = tonumber(idText)
+    if not id then print("|cFF8080FFthingsUI|r: /tui aura <spellID> [watch]") return end
     local why = {}
     local map = Build(id, why)
     local ids = {}
@@ -171,6 +215,12 @@ ns.SlashCommand("aura", function(arg)
     table.sort(ids)
     print(("|cFF8080FFthingsUI|r %d %s tracks: %s"):format(id, tostring(C_Spell.GetSpellName(id)), table.concat(ids, " | ")))
     for _, line in ipairs(why) do print("  " .. line) end
+    CDMState(map)
+    local TM = ns.Timers
+    if TM and TM.GetLearnedDuration then
+        print(("  No Aura Timer: duration %s, %s"):format(Say(TM.GetLearnedDuration(id)), TM.GetTotemState(id) and "running" or "idle"))
+    end
+    if mode == "watch" then Watch(map) end
 end)
 
 local function EnsureContainer(wrapper, field)
@@ -569,6 +619,9 @@ function SA.StyleBarButton(button, r, wrapper, key)
     button:SetMouseMotionEnabled(true)
 end
 
+-- named auras count even when flagged personal-nameplate only (Crusading Strikes 1226662)
+local NP_ONLY = "INCLUDE_NAME_PLATE_ONLY"
+
 -- kind: nil = both sides, HELPFUL = buff on you only, HARMFUL = your debuff on the target only
 local function Attach(wrapper, key, spellID, w, h, styler, kind)
     if not (wrapper and spellID) then return end
@@ -582,7 +635,7 @@ local function Attach(wrapper, key, spellID, w, h, styler, kind)
     if kind ~= "HARMFUL" then
         local cp = EnsureContainer(wrapper, "_tuiAuraP")
         ConfigureContainer(cp, wrapper, w, h)
-        ApplyGroupTo(cp, gkey, "HELPFUL", spells, w, h, styler)
+        ApplyGroupTo(cp, gkey, "HELPFUL|" .. NP_ONLY, spells, w, h, styler)
         SetUnitLast(cp, "player")
         cp:SetShown(PlayerAssistOK())
     else
@@ -593,7 +646,7 @@ local function Attach(wrapper, key, spellID, w, h, styler, kind)
     if kind ~= "HELPFUL" then
         local ct = EnsureContainer(wrapper, "_tuiAuraT")
         ConfigureContainer(ct, wrapper, w, h)
-        ApplyGroupTo(ct, gkey, "HARMFUL|PLAYER", spells, w, h, styler)
+        ApplyGroupTo(ct, gkey, "HARMFUL|PLAYER|" .. NP_ONLY, spells, w, h, styler)
         SetUnitLast(ct, "target")
         ct:SetShown(HarmfulTargetOK())
     else

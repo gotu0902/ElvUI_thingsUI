@@ -665,7 +665,8 @@ function A.FilterFor(def)
         if n then map = map or {}; Add(map, n) end
     end
     local cf
-    if map then cf = { includeSpellIDs = map } end
+    -- listed spells count even when flagged personal-nameplate only
+    if map then cf = { includeSpellIDs = map }; filter = filter .. "|INCLUDE_NAME_PLATE_ONLY" end
     if def.exclude and next(def.exclude) then
         cf = cf or {}
         local ex = def.exclude
