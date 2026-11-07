@@ -86,12 +86,7 @@ end
 local function SetupFor(specID)
     local bsdb = E.db.thingsUI and E.db.thingsUI.barSetup
     if not (bsdb and bsdb.enabled and bsdb.setups) then return nil end
-    if specID and specID ~= 0 then
-        for _, s in ipairs(bsdb.setups) do
-            if s.specs and s.specs[specID] then return s end
-        end
-    end
-    return bsdb.setups[bsdb.active] or bsdb.setups[1]
+    return ns.BarSetup.SetupForSpec(specID)
 end
 
 -- a spec's Aura Bars that ride Bar Setup, in stack order

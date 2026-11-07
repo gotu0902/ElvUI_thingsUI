@@ -385,18 +385,7 @@ end
 
 local function IsManagedByBarSetup(barKey)
     local bs = ns.BarSetup
-    if not bs or not bs.GetActiveSetup then return false end
-    local setup = bs.GetActiveSetup()
-    if not (setup and setup.bars and setup.order) then return false end
-    local target = "special:" .. barKey
-
-    local inOrder = false
-    for _, k in ipairs(setup.order) do
-        if k == target then inOrder = true; break end
-    end
-    if not inOrder then return false end
-    local b = setup.bars[target]
-    return b ~= nil and b.enabled == true
+    return bs.UsesKey(bs.GetActiveSetup(), "special:" .. barKey)
 end
 
 -- a Bar Setup bar takes its place's height (Bar Setup > Height by Position), else its own

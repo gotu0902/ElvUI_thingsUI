@@ -194,16 +194,67 @@ local function EnsureDB()
 end
 M.EnsureDB = EnsureDB
 
-function M.GetActiveSetup()
+-- the setup a spec uses: the first with it ticked, else the fallback
+function M.SetupForSpec(specID)
     EnsureDB()
     local db = E.db.thingsUI.barSetup
-    local specID = GetCurrentSpecID()
-    if specID ~= 0 then
+    if specID and specID ~= 0 then
         for _, s in ipairs(db.setups) do
             if s.specs and s.specs[specID] then return s end
         end
     end
     return db.setups[db.active] or db.setups[1]
+end
+
+function M.GetActiveSetup()
+    return M.SetupForSpec(GetCurrentSpecID())
+end
+
+function M.UsesKey(setup, key)
+    if not (setup and setup.order and setup.bars) then return false end
+    for _, k in ipairs(setup.order) do
+        if k == key then
+            local b = setup.bars[k]
+            return b ~= nil and b.enabled == true
+        end
+    end
+    return false
+end
+
+-- a new Aura Bar place goes right after the last one in the order
+function M.IncludeSpecialBar(setup, key)
+    local at
+    for i, k in ipairs(setup.order) do
+        if k == key then at = false break end
+        if k:sub(1, 8) == "special:" then at = i + 1 end
+    end
+    if at ~= false then table.insert(setup.order, at or (#setup.order + 1), key) end
+    if setup.bars[key] then
+        setup.bars[key].enabled = true
+    else
+        setup.bars[key] = {
+            enabled = true, mode = "NHT", widthOffset = 0,
+            anchorFrame = "UIParent", anchorPoint = "CENTER",
+            anchorTo = "CENTER", xOffset = 0, yOffset = 0,
+        }
+    end
+end
+
+-- Show In > Bar Setup: the spec's setup takes this bar's number; other specs on it keep theirs Standalone
+function M.AddAuraBar(slotKey, specID)
+    specID = specID or GetCurrentSpecID()
+    local setup = M.SetupForSpec(specID)
+    local key = "special:" .. slotKey
+    if not setup or M.UsesKey(setup, key) then return end
+    local own = tostring(specID == 0 and 1 or specID)
+    local sb = E.db.thingsUI.specialBars
+    for sk, root in pairs((sb and sb.specs) or {}) do
+        local d = sk ~= own and type(root) == "table" and type(root.bars) == "table" and root.bars[slotKey]
+        if type(d) == "table" and d.spellID and d.customGroup == nil and M.SetupForSpec(tonumber(sk)) == setup then
+            d.customGroup = -1
+        end
+    end
+    M.IncludeSpecialBar(setup, key)
 end
 
 function M.AddSetup()
@@ -265,6 +316,19 @@ local function IsSpecialBarAvailable(key)
     return (bdb.enabled == true) and (bdb.spellID ~= nil)
 end
 M.IsSpecialBarAvailable = IsSpecialBarAvailable
+
+-- why an Aura Bar sits out of the stack on this spec
+function M.AuraBarOutReason(key)
+    local SB = ns.SpecialBars
+    local bdb = SB and SB.GetBarDB and SB.GetBarDB(key:sub(9))
+    if type(bdb) ~= "table" or not bdb.spellID then return "empty on this spec" end
+    local gid = bdb.customGroup
+    local g = type(gid) == "number" and gid > 0 and ns.CustomBars and ns.CustomBars.GroupByID and ns.CustomBars.GroupByID(gid)
+    if g then return "in " .. (g.name or "a Bar Group") .. " on this spec" end
+    if gid ~= nil then return "Standalone on this spec" end
+    if not bdb.enabled then return "off on this spec" end
+    return "not talented"
+end
 
 function M.GetTopmostBarFrame()
     EnsureDB()

@@ -223,10 +223,9 @@ local function BarRows(setup)
                 local col = BAR_COLORS[k] or "FFFFFF"
 
                 local inactiveReason
-                if ns.BarSetup.IsSpecialBarAvailable
-                   and type(k) == "string" and k:sub(1, 8) == "special:"
+                if type(k) == "string" and k:sub(1, 8) == "special:"
                    and not ns.BarSetup.IsSpecialBarAvailable(k) then
-                    inactiveReason = "inactive on this spec"
+                    inactiveReason = ns.BarSetup.AuraBarOutReason(k)
                 elseif k == "chargebar" then
                     local CB = ns.ChargeBar
                     if CB and CB.GetInactiveReason then
@@ -564,14 +563,7 @@ local function SetupEditor(idx)
                         if key == k then existingIndex = idx; break end
                     end
                     if v then
-                        if not existingIndex then
-                            setup.order[#setup.order + 1] = k
-                            setup.bars[k] = setup.bars[k] or {
-                                enabled = true, mode = "NHT", widthOffset = 0,
-                                anchorFrame = "UIParent", anchorPoint = "CENTER",
-                                anchorTo = "CENTER", xOffset = 0, yOffset = 0,
-                            }
-                        end
+                        if not existingIndex then ns.BarSetup.IncludeSpecialBar(setup, k) end
                     elseif existingIndex then
                         table.remove(setup.order, existingIndex)
                     end
