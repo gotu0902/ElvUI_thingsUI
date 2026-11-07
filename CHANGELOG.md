@@ -51,6 +51,7 @@
 - Frame Level next to Frame Strata, Custom Icon, sample text in the previews
 - Aura Bars: Fill By Stacks (Groups - Bars too), list split like Aura Icons', Move Up / Down in Bar Setup per spec
 - Aura Bars: Show In > Bar Setup works on any bar. Other specs' bar with the same number stays Standalone, and Bar Order says why a bar sits out
+- Position in Row is the icon's real place in Essential/Utility (1, 2, 3 = the first three), for Aura Icons and Spell Editor spells
 ### Groups
 - Add Buff lists your spec's Cooldown Manager buffs (on Class: every spec's), then the common ones
 - Borders sit inside the icon like WeakAuras and Spacing shows the real gap (your groups look the same). The group's border covers everything in it unless an Aura Icon overrides it

@@ -754,8 +754,33 @@ local function ByLayoutIndex(a, b)
     return (a.layoutIndex or math.huge) < (b.layoutIndex or math.huge)
 end
 
+local pinned = {}
+local function ByRowPos(a, b)
+    if a._tuiRowPos ~= b._tuiRowPos then return a._tuiRowPos < b._tuiRowPos end
+    return (a.layoutIndex or 0) < (b.layoutIndex or 0)
+end
+
+-- _tuiRowPos = the final place in the row; racials/trinkets/timers (90000+) stay last
 local function SortByCooldownID(children)
     table.sort(children, ByLayoutIndex)
+    local n = 0
+    for i = #children, 1, -1 do
+        local c = children[i]
+        if c._tuiRowPos then n = n + 1; pinned[n] = c; table.remove(children, i) end
+    end
+    if n == 0 then return end
+    table.sort(pinned, ByRowPos)
+    local limit = #children + 1
+    for i = 1, #children do
+        if (children[i].layoutIndex or 0) >= 90000 then limit = i break end
+    end
+    local at = 0
+    for i = 1, n do
+        at = math.min(math.max(pinned[i]._tuiRowPos, at + 1), limit)
+        table.insert(children, at, pinned[i])
+        limit = limit + 1
+        pinned[i] = nil
+    end
 end
 
 local cdmRebuilding = false

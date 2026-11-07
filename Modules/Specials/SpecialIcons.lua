@@ -7,7 +7,7 @@ local SB = ns.SpecialBars
 local iconGroupState = SB.iconGroupState
 
 -- icons shown in a CDM row: CDMIcons folds them into that viewer's grid,
--- ordered by layoutIndex between Blizzard's own (1..N)
+-- at their Position in Row (_tuiRowPos), Blizzard's own fill the rest
 local CDM_VIEWER = { essential = "EssentialCooldownViewer", utility = "UtilityCooldownViewer" }
 local cdmRowOf = {}
 -- icons on top of a cooldown: the spell they sit on, and the row of the frame they cover
@@ -493,6 +493,7 @@ local function UpdateIconSlot(iconKey)
         Pixel.SetSize(wrapper, w, h)
         wrapper._tuiOwnSize = true
         wrapper.layoutIndex = (db.cdmIndex or 30) - 0.5
+        wrapper._tuiRowPos = db.cdmIndex or 30
         cdmRowOf[iconKey] = row
         QueueRowCheck()
         if E and E.CreatedMovers and E.CreatedMovers[moverName] and E.DisableMover then
@@ -502,6 +503,7 @@ local function UpdateIconSlot(iconKey)
         if cdmRowOf[iconKey] then
             cdmRowOf[iconKey] = nil
             wrapper.layoutIndex = nil
+            wrapper._tuiRowPos = nil
             QueueRowCheck()
         end
         wrapper._tuiOwnSize = nil
@@ -517,6 +519,7 @@ local function UpdateIconSlot(iconKey)
         if cdmRowOf[iconKey] then
             cdmRowOf[iconKey] = nil
             wrapper.layoutIndex = nil
+            wrapper._tuiRowPos = nil
             QueueRowCheck()
         end
         if overOf[iconKey] then

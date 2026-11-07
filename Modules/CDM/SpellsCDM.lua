@@ -78,6 +78,7 @@ function M.Refresh()
             local btn = EnsureButton(id)
             local i = #list + 1
             btn.layoutIndex = (o.rowIndex or 30) - 0.4 + i * 0.001
+            btn._tuiRowPos = o.rowIndex or 30
             btn:Show()
             list[i] = btn
             shown[id] = true
@@ -86,7 +87,7 @@ function M.Refresh()
         end
     end
     for id, btn in pairs(buttons) do
-        if not shown[id] then btn:Hide(); btn.layoutIndex = nil end
+        if not shown[id] then btn:Hide(); btn.layoutIndex = nil; btn._tuiRowPos = nil end
     end
 
     local s = tconcat(sig, ",")
