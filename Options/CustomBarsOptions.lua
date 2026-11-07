@@ -207,28 +207,6 @@ local function AskScope(title, apply)
     end
 end
 
-local function auraCommonValues()
-    local out = {}
-    for _, id in ipairs(ns.AURA_COMMON or {}) do
-        local nm = C_Spell.GetSpellName and C_Spell.GetSpellName(id)
-        if not nm and C_Spell.RequestLoadSpellData then C_Spell.RequestLoadSpellData(id) end
-        local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)) or 0
-        out[tostring(id)] = ("|T%d:14:14|t %s"):format(tex, nm or ("Spell " .. id))
-    end
-    return out
-end
-
-local function auraCommonSorting()
-    local list = {}
-    for _, id in ipairs(ns.AURA_COMMON or {}) do
-        list[#list + 1] = { key = tostring(id), nm = (C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or tostring(id) }
-    end
-    table.sort(list, function(a, b) return a.nm < b.nm end)
-    local out = {}
-    for _, e in ipairs(list) do out[#out + 1] = e.key end
-    return out
-end
-
 local function EntryLabel(e)
     if e.kind == "specialbar" then
         local sid = e.def.spellID
@@ -713,8 +691,8 @@ local function GroupTab(gi)
         local args = {
             addAura = {
                 order = 1, type = "select", dialogControl = "TUI_SpellDropdown", name = "|cFF60E0A0Add Buff|r", width = "double",
-                values = auraCommonValues,
-                sorting = auraCommonSorting,
+                values = function() return (ns.AuraPick(scope, keyFor(scope))) end,
+                sorting = function() return select(2, ns.AuraPick(scope, keyFor(scope))) end,
                 disabled = full,
                 get = function() return "" end,
                 set = function(_, v)

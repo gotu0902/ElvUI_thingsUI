@@ -481,33 +481,12 @@ function TUI:CustomGroupsOptions()
             if p.key == key then return p end
         end
     end
-    local function auraCommonOrdered()
-        local list = {}
-        for _, id in ipairs(ns.AURA_COMMON or {}) do
-            local nm = C_Spell.GetSpellName and C_Spell.GetSpellName(id)
-            if not nm and C_Spell.RequestLoadSpellData then C_Spell.RequestLoadSpellData(id) end
-            list[#list + 1] = { key = tostring(id), id = id, nm = nm }
-        end
+    -- the spec's CDM buffs, the common ones, and Bloodlust as one entry
+    local function auraPick(scope, key)
         local lust = auraPresetByKey("bloodlust")
-        if lust then
-            list[#list + 1] = { key = "p:bloodlust", id = lust.spells[1],
-                nm = "Bloodlust & Heroism", suffix = " |cff888888" .. #lust.spells .. " spells|r" }
-        end
-        table.sort(list, function(a, b) return (a.nm or tostring(a.id)) < (b.nm or tostring(b.id)) end)
-        return list
-    end
-    local function auraCommonValues()
-        local out = {}
-        for _, e in ipairs(auraCommonOrdered()) do
-            local tex = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(e.id)) or 0
-            out[e.key] = ("|T%d:14:14|t %s%s"):format(tex, e.nm or ("Spell " .. e.id), e.suffix or "")
-        end
-        return out
-    end
-    local function auraCommonSorting()
-        local out = {}
-        for _, e in ipairs(auraCommonOrdered()) do out[#out + 1] = e.key end
-        return out
+        local extra = lust and { { key = "p:bloodlust", id = lust.spells[1],
+            nm = "Bloodlust & Heroism", suffix = " |cff888888" .. #lust.spells .. " spells|r" } } or nil
+        return ns.AuraPick(scope, key, extra)
     end
     local function entriesFor(group, scope, key)
         local out, itemSeen = {}, {}
@@ -725,8 +704,8 @@ function TUI:CustomGroupsOptions()
             },
             addAura = {
                 order = 11.5, type = "select", dialogControl = "TUI_SpellDropdown", name = "|cFF60E0A0Add Buff|r", width = "double",   -- auras = green
-                values = auraCommonValues,
-                sorting = auraCommonSorting,
+                values = function() return (auraPick(scope, getKey())) end,
+                sorting = function() return select(2, auraPick(scope, getKey())) end,
                 get = function() return "" end,
                 set = function(_, v)
                     if not CG then return end

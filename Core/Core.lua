@@ -132,6 +132,48 @@ function ns.CustomIconArgs(get, set, base, hidden, disabled)
     }
 end
 
+-- Add Buff pickers: the spec's Cooldown Manager buffs (a class: all its specs'), then the common ones; -> values, sorting
+function ns.AuraPick(scope, key, extra)
+    local mine, common, seen = {}, {}, {}
+    local SB = ns.SpecialBars
+    local specs = {}
+    if scope == "spec" then
+        specs[1] = tonumber(key)
+    elseif scope == "class" then
+        for _, rec in ipairs(ns.AllSpecs() or {}) do
+            if rec.classToken == key then specs[#specs + 1] = rec.id end
+        end
+    end
+    for _, sid in ipairs(specs) do
+        for id in pairs((SB and SB.GetRawSpellList and SB.GetRawSpellList(sid)) or {}) do
+            if not seen[id] then seen[id] = true; mine[#mine + 1] = { key = tostring(id), id = id } end
+        end
+    end
+    for _, id in ipairs(ns.AURA_COMMON or {}) do
+        if not seen[id] then seen[id] = true; common[#common + 1] = { key = tostring(id), id = id, common = true } end
+    end
+    for _, e in ipairs(extra or {}) do common[#common + 1] = e end
+    local function nm(e)
+        if not e.nm then
+            e.nm = C_Spell.GetSpellName(e.id)
+            if not e.nm and C_Spell.RequestLoadSpellData then C_Spell.RequestLoadSpellData(e.id) end
+        end
+        return e.nm or tostring(e.id)
+    end
+    local function byName(a, b) return nm(a) < nm(b) end
+    table.sort(mine, byName)
+    table.sort(common, byName)
+    local values, sorting = {}, {}
+    for _, list in ipairs({ mine, common }) do
+        for _, e in ipairs(list) do
+            local tex = C_Spell.GetSpellTexture(e.id) or 0
+            values[e.key] = ("|T%d:14:14|t %s%s"):format(tex, nm(e), e.suffix or (e.common and " |cFF888888(common)|r" or ""))
+            sorting[#sorting + 1] = e.key
+        end
+    end
+    return values, sorting
+end
+
 -- Not Enough Power / Not Usable looks; tbl(state, create) -> its table, onChange(state), noArt() greys Desaturate and Tint
 function ns.CastLookArgs(tbl, onChange, noArt, spellID)
     local args = {
