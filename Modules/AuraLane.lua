@@ -655,9 +655,12 @@ function A.FilterFor(def)
     end
     if def.filterToken then filter = filter .. "|" .. def.filterToken end
     -- Forever: a listed spell brings its other ranks
+    local SA = ns.SpecialAura
     local function Add(m, n)
         m[n] = true
         for _, r in ipairs(ns.SpellRanks(n) or {}) do m[r] = true end
+        -- a CDM entry's ID brings the aura it tracks (Nightfall 1260279 -> 264571)
+        for x in pairs((SA and SA.ExpandSpellIDs and SA.ExpandSpellIDs(n)) or {}) do m[x] = true end
     end
     local map
     for id in pairs(def.spells or {}) do
