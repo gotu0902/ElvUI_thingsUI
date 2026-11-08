@@ -82,7 +82,7 @@ function R.UpdateGlow(btn, timer)
     local th = timer.glowThickness or 2
     local n = math.min(12, timer.glowN or 8)
     local freq = math.abs(timer.glowFrequency or 0.25)
-    local len = math.min(6, timer.glowLength or 3)
+    local len = ns.AuraLane.GlowLength(timer.glowLength)
     local off = timer.glowOffset or 0
     local w = math.floor((btn:GetWidth() or 36) + 0.5)
     local h = math.floor((btn:GetHeight() or 36) + 0.5)

@@ -1924,7 +1924,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                                 return (AL and AL.MapGlowStyle(get("glowType")) or "pulse") ~= "pixel"
                             end,
                             disabled = function() return not get("showGlow") end,
-                            get = function() return get("glowLength") or 3 end,
+                            get = function() return ns.AuraLane.GlowLength(get("glowLength")) end,
                             set = function(_, v) set("glowLength", v) end },
                         glowOffset = { order = 7, type = "range", name = "Offset", min = -6, max = 8, step = 0.01, bigStep = 1,
                             hidden = function()

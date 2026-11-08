@@ -25,7 +25,7 @@ function ns.Defaults.Timer(id)
         glowType            = "pixel",
         glowColor           = { r = 1, g = 1, b = 0, a = 1 },
         glowThickness       = 2,
-        glowLength          = 10,
+        glowLength          = 3,
         glowN               = 8,
         glowFrequency       = 0.25,
         glowXOffset         = 0,

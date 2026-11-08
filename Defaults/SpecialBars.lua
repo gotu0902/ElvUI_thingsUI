@@ -106,7 +106,7 @@ ns.SPECIAL_ICON_DEFAULTS = {
     glowColor             = { r = 1, g = 1, b = 0, a = 1 },
     glowN                 = 8,
     glowFrequency         = 0.25,
-    glowLength            = 10,
+    glowLength            = 3,
     glowThickness         = 2,
     glowXOffset           = 0,
     glowYOffset           = 0,

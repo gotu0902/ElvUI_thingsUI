@@ -7,6 +7,13 @@ function A.MapGlowStyle(v)
     return "pulse"
 end
 
+-- line length is a 1-6 level; anything above is the old pixel default (10), read as 3
+function A.GlowLength(v)
+    v = tonumber(v)
+    if not v or v > 6 then return 3 end
+    return math.max(1, v)
+end
+
 function A.GlowOptsFor(group, def)
     local idb = def and def.iconDB
     local style, gColor, gTh, gSrc
@@ -44,7 +51,7 @@ function A.GlowOptsFor(group, def)
     local outline = (gSrc.glowBorderStroke and bOn) and true or false
     return {
         style = style, color = gColor, thickness = gTh, outline = outline,
-        lines = gSrc.glowLines, length = gSrc.glowLength,
+        lines = gSrc.glowLines, length = A.GlowLength(gSrc.glowLength),
         offset = gSrc.glowOffset, frequency = gSrc.glowSpeed,
     }
 end

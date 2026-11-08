@@ -462,7 +462,7 @@ function SA.StyleIconButton(button, r, wrapper, key)
             anchor = r.icon,
             thickness = db.glowThickness,
             outline = (db.glowBorderStroke and db.showBorder) and true or false,
-            lines = db.glowLines, length = db.glowLength,
+            lines = db.glowLines, length = AL.GlowLength(db.glowLength),
             offset = db.glowOffset, frequency = db.glowSpeed,
             w = w, h = h,
             pandemic = db.showPandemic and true or false,

@@ -198,7 +198,7 @@ local function TimerTab(t, id, order, Rebuild)
                 glowLength = {
                     order = 6, type = "range", name = "Length", min = 1, max = 6, step = 1,
                     disabled = function() return not t.glowReadyInCombat or (t.glowType or "pixel") ~= "pixel" end,
-                    get = function() return math.min(6, t.glowLength or 3) end,
+                    get = function() return ns.AuraLane.GlowLength(t.glowLength) end,
                     set = function(_, v) t.glowLength = v; T.Update() end,
                 },
                 glowN = {
