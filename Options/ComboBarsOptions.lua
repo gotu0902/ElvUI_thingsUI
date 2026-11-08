@@ -4,6 +4,7 @@ local E = ns.E
 local NotifyChange = ns.NotifyChange
 
 local CG_X = "|TInterface\\RaidFrame\\ReadyCheck-NotReady:13|t"
+local LINK = { 0.6, 0.72, 0.85 }
 local MAX_ROWS = 12
 local editing = {}
 
@@ -87,6 +88,17 @@ local function BarTab(bi)
         return out
     end
 
+    -- where else an aura shows: built once per frame while the panel draws
+    local idxCache, idxStamp
+    local function UsesOf(id)
+        local t = GetTime()
+        if idxStamp ~= t or not idxCache then
+            local b = bar()
+            idxStamp, idxCache = t, CB().UsageIndex(b and b.id)
+        end
+        return CB().UsesOf(id, bar(), sel(), idxCache)
+    end
+
     local rows = {}
     for ri = 1, MAX_ROWS do
         local function rowID() return spellIDs()[ri] end
@@ -102,23 +114,67 @@ local function BarTab(bi)
                 if id and x and x.spells then x.spells[id] = nil; Refresh() end
             end,
         }
+        -- where else this aura shows: links (another minibar of this bar selects it)
+        local uses = ns.OptionLinkRowDynamic(10 + ri + 0.15, function()
+            local id, b = rowID(), bar()
+            if not (id and b) then return {} end
+            local out = {}
+            for _, e in ipairs(UsesOf(id)) do
+                if e.minibar then
+                    local i = e.minibar
+                    out[#out + 1] = { label = e.label, color = LINK,
+                        onClick = function() editing[b.id] = i; C_Timer.After(0, NotifyChange) end }
+                else
+                    out[#out + 1] = { label = e.label, path = e.path, color = LINK }
+                end
+            end
+            return out
+        end)
+        uses.width, uses.hidden = 1.6, hidden
+        rows["u" .. ri] = uses
         rows["b" .. ri] = { order = 10 + ri + 0.2, type = "description", name = "", width = "full", hidden = hidden }
     end
     rows.addAura = {
         order = 1, type = "select", dialogControl = "TUI_SpellDropdown", name = "|cFF60E0A0Add Aura|r", width = "double",
         values = function()
             local vals = ns.AuraPick("spec", CurSpec())
-            -- where an aura already shows (fine to use it here too)
+            local own = sget("spells") or {}
+            -- where an aura already shows (fine to use it here too), this bar's other minibars first
             local b = bar()
             local idx = CB().UsageIndex(b and b.id)
+            local mine = {}
+            for i, x in ipairs(segs()) do
+                if i ~= sel() then
+                    for id in pairs(CB().SegSpells(x)) do mine[id] = mine[id] or ("Minibar " .. i) end
+                end
+            end
             local out = {}
             for k, v in pairs(vals) do
-                local used = idx[tonumber(k)]
-                out[k] = used and (v .. " |cFF888888(" .. used[1].label .. ((#used > 1) and " +" or "") .. ")|r") or v
+                local id = tonumber(k)
+                local used = idx[id]
+                local where = mine[id] or (used and used[1].label)
+                local more = (mine[id] and used) or (used and #used > 1)
+                if own[id] then
+                    out[k] = v .. " |cFF60E0A0(added)|r"
+                elseif where then
+                    out[k] = v .. " |cFF888888(" .. where .. (more and " +" or "") .. ")|r"
+                else
+                    out[k] = v
+                end
             end
             return out
         end,
-        sorting = function() return select(2, ns.AuraPick("spec", CurSpec())) end,
+        -- the ones already in this minibar on top
+        sorting = function()
+            local list = select(2, ns.AuraPick("spec", CurSpec()))
+            local own = sget("spells") or {}
+            local top, rest = {}, {}
+            for _, k in ipairs(list) do
+                if own[tonumber(k)] then top[#top + 1] = k else rest[#rest + 1] = k end
+            end
+            for _, k in ipairs(rest) do top[#top + 1] = k end
+            return top
+        end,
         disabled = function() return #spellIDs() >= MAX_ROWS end,
         get = function() return "" end,
         set = function(_, v)
@@ -269,7 +325,7 @@ local function BarTab(bi)
                             for i, x in ipairs(segs()) do
                                 local c = x.color or {}
                                 out[i] = ("|cFF%02x%02x%02x%d.|r %s"):format((c.r or 1) * 255, (c.g or 1) * 255, (c.b or 1) * 255,
-                                    i, CB().SegLabel(x, i))
+                                    i, CB().SegName(x, i))
                             end
                             return out
                         end,
@@ -327,16 +383,34 @@ local function BarTab(bi)
                         order = 10, type = "group", inline = true, hidden = noSeg,
                         name = function() return ("Minibar %d"):format(sel()) end,
                         args = {
+                            -- shows what the minibar says; empty = no text
                             label = {
                                 order = 1, type = "input", name = "Text",
-                                get = function() return sget("label") or "" end,
+                                get = function() local x = seg() return x and CB().SegLabel(x, sel()) or "" end,
                                 set = function(_, v)
                                     v = (v or ""):gsub("^%s+", ""):gsub("%s+$", "")
-                                    sset("label", (v ~= "") and v or nil)
+                                    sset("label", v)
                                 end,
+                            },
+                            auraName = {
+                                order = 1.5, type = "execute", name = "Use Aura Name", width = 0.8,
+                                hidden = function() return sget("label") == nil end,
+                                func = function() sset("label", nil) end,
                             },
                             color = ColorArg(2, "Color", function() return sget("color") end,
                                 function(c) sset("color", c) end),
+                            ownText = {
+                                order = 2.1, type = "toggle", name = "Own Text Color", width = 0.9,
+                                hidden = isText,
+                                get = function() return sget("textColor") ~= nil end,
+                                set = function(_, v)
+                                    local b = bar()
+                                    sset("textColor", v and ns.DeepCopy((b and CB().Get(b, "nameColor")) or { r = 1, g = 1, b = 1 }) or nil)
+                                end,
+                            },
+                            textColor = ColorArg(2.2, "Text Color", function() return sget("textColor") end,
+                                function(c) sset("textColor", c) end,
+                                function() return isText() or sget("textColor") == nil end),
                             brk = { order = 2.5, type = "description", name = "", width = "full" },
                             lights = {
                                 order = 3, type = "select", name = "Color When",
@@ -378,17 +452,6 @@ local function BarTab(bi)
                                 get = function() return sget("glow") or false end,
                                 set = function(_, v) sset("glow", v or nil) end,
                             },
-                            alsoIn = ns.OptionLinkRowDynamic(19, function()
-                                local x, b = seg(), bar()
-                                if not (x and b) then return {} end
-                                local list = CB().AlsoIn(x, b.id)
-                                if #list == 0 then return {} end
-                                local out = { { label = "Also in:", color = { 0.55, 0.55, 0.55 } } }
-                                for _, e in ipairs(list) do
-                                    out[#out + 1] = { label = e.label, path = e.path, color = { 0.6, 0.72, 0.85 } }
-                                end
-                                return out
-                            end),
                             auras = {
                                 order = 20, type = "group", inline = true, name = "Auras",
                                 args = rows,
@@ -499,7 +562,7 @@ local function BarTab(bi)
                     },
                     textNote = {
                         order = 6, type = "description", width = "full",
-                        name = "|cff888888Each minibar's text is its Text in the Minibars tab (empty: the aura's name).|r\n",
+                        name = "|cff888888Each minibar's text and its own text color are in the Minibars tab.|r\n",
                     },
                     nameGroup = {
                         order = 10, type = "group", inline = true, name = "Name",

@@ -93,8 +93,19 @@ local function Expand(id)
     return (SA and SA.ExpandSpellIDs and SA.ExpandSpellIDs(id)) or { [id] = true }
 end
 
+-- the minibar's text: its own (may be blank), else the aura's name
 function M.SegLabel(seg, i)
+    if seg.label ~= nil then return seg.label end
+    return M.AutoName(seg, i)
+end
+
+-- for menus: never blank
+function M.SegName(seg, i)
     if seg.label and seg.label ~= "" then return seg.label end
+    return M.AutoName(seg, i)
+end
+
+function M.AutoName(seg, i)
     local AC = ns.AuraCollections
     local c = seg.collection and AC and AC.Exists(seg.collection) and AC.Get(seg.collection)
     if c then return c.name end
@@ -405,7 +416,7 @@ local function LayoutBar(bar, st)
                 ss.barLabel:ClearAllPoints()
                 local np = G(bar, "namePoint")
                 ss.barLabel:SetPoint(np, ss.host, np, G(bar, "nameXOffset"), G(bar, "nameYOffset"))
-                ns.TextColor(ss.barLabel, G(bar, "nameColor"))
+                ns.TextColor(ss.barLabel, seg.textColor or G(bar, "nameColor"))
                 ss.barLabel:Show()
             else
                 ss.barLabel:Hide()
@@ -1018,17 +1029,30 @@ function M.UsageIndex(skipBarID)
 end
 
 -- the other places a minibar's auras show
-function M.AlsoIn(seg, barID)
-    local idx = M.UsageIndex(barID)
-    local out, seen = {}, {}
-    for id in pairs(M.SegSpells(seg)) do
-        for x in pairs(Expand(id)) do
-            for _, e in ipairs(idx[x] or {}) do
-                if not seen[e.label] then seen[e.label] = true; out[#out + 1] = e end
+-- one aura of a minibar: the bar's other minibars with it ({ minibar = i }), then other places
+function M.UsesOf(id, bar, selfIndex, idx)
+    idx = idx or M.UsageIndex(bar and bar.id)
+    local ex = Expand(id)
+    local out, others, seen = {}, {}, {}
+    for i, x in ipairs((bar and bar.segments) or {}) do
+        if i ~= selfIndex then
+            local hit = false
+            for s in pairs(M.SegSpells(x)) do
+                for y in pairs(Expand(s)) do
+                    if ex[y] then hit = true break end
+                end
+                if hit then break end
             end
+            if hit then out[#out + 1] = { label = "Minibar " .. i, minibar = i } end
         end
     end
-    table.sort(out, function(a, b) return a.label < b.label end)
+    for x in pairs(ex) do
+        for _, e in ipairs(idx[x] or {}) do
+            if not seen[e.label] then seen[e.label] = true; others[#others + 1] = e end
+        end
+    end
+    table.sort(others, function(a, b) return a.label < b.label end)
+    for _, e in ipairs(others) do out[#out + 1] = e end
     return out
 end
 
@@ -1050,7 +1074,7 @@ function M.UsedBy(key)
     for _, bar in ipairs(M.GetBars()) do
         for i, seg in ipairs(bar.segments or {}) do
             if seg.collection == key then
-                out[#out + 1] = ("Aura Combo Bars: %s (%s)"):format(bar.name or "Bar", M.SegLabel(seg, i))
+                out[#out + 1] = ("Aura Combo Bars: %s (%s)"):format(bar.name or "Bar", M.SegName(seg, i))
             end
         end
     end
