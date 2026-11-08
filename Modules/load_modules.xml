@@ -32,6 +32,7 @@
 	<Script file="Glow.lua"/>
 	<Script file="CustomBars.lua"/>
 	<Script file="GroupText.lua"/>
+	<Script file="Bars\ComboBars.lua"/>
 	<Script file="TUIMeter.lua"/>
 	<Script file="Kick\KickData.lua"/>
 	<Script file="Kick\KickEngine.lua"/>

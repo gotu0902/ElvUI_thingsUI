@@ -17,6 +17,7 @@ function M.GetBarLabel(key)
     if type(key) ~= "string" then return tostring(key) end
     local fixed = M.BAR_LABELS[key]
     if fixed then return fixed end
+    if key:sub(1, 6) == "combo:" and ns.ComboBars then return ns.ComboBars.Label(key) end
     if key:sub(1, 8) == "special:" then
         local slotKey = key:sub(9)
         local idx = tonumber(slotKey:match("^bar(%d+)$")) or "?"
@@ -300,11 +301,22 @@ local function GetBarFrame(key)
         return _G.ElvUI_thingsUI_ChargeBar
     elseif type(key) == "string" and key:sub(1, 8) == "special:" then
         return _G["TUI_SpecialBar_" .. key:sub(9)]
+    elseif type(key) == "string" and key:sub(1, 6) == "combo:" then
+        return ns.ComboBars and ns.ComboBars.Frame(key)
     end
 end
 M.GetBarFrame = GetBarFrame
 
+-- Aura Bars and Aura Combo Bars keep their own height
+local function OwnHeight(key)
+    return type(key) == "string" and (key:sub(1, 8) == "special:" or key:sub(1, 6) == "combo:")
+end
+M.OwnHeight = OwnHeight
+
 local function IsSpecialBarAvailable(key)
+    if type(key) == "string" and key:sub(1, 6) == "combo:" then
+        return ns.ComboBars ~= nil and ns.ComboBars.Available(key)
+    end
     if type(key) ~= "string" or key:sub(1, 8) ~= "special:" then return true end
     local slotKey = key:sub(9)
     local SB = ns.SpecialBars
@@ -369,6 +381,9 @@ local function GetBarHeight(key, setup)
             local bdb = SB.GetBarDB(key:sub(9))
             if type(bdb) == "table" and bdb.height then return bdb.height end
         end
+    elseif type(key) == "string" and key:sub(1, 6) == "combo:" then
+        local h = ns.ComboBars and ns.ComboBars.StackHeight(key)
+        if h then return h end
     end
     local f = GetBarFrame(key)
     if f and f.GetHeight then return f:GetHeight() or 0 end
@@ -465,6 +480,9 @@ local function WriteBarHeightToDB(key, value)
             end
         end
         if TUI.QueueSpecialBarsUpdate then TUI:QueueSpecialBarsUpdate() end
+
+    elseif type(key) == "string" and key:sub(1, 6) == "combo:" then
+        if ns.ComboBars then ns.ComboBars.SetHeight(key, value) end
     end
 end
 
@@ -473,7 +491,7 @@ local function SetBarHeight(key, value, setup)
     setup = setup or M.GetActiveSetup()
     local b = setup and setup.bars and setup.bars[key]
     local mode = b and b.mode
-    local isSpecial = type(key) == "string" and key:sub(1, 8) == "special:"
+    local isSpecial = OwnHeight(key)
     local isActive = setup == M.GetActiveSetup()
 
     if HasAttachedMode(key) and mode == "ATTACHED" then
@@ -535,7 +553,7 @@ function M.StackKeysInOrder(setup)
     local out = {}
     for _, key in ipairs((setup and setup.order) or {}) do
         local b = setup.bars and setup.bars[key]
-        if b and b.enabled and b.mode == "NHT" and (key:sub(1, 8) ~= "special:" or IsSpecialBarAvailable(key)) then
+        if b and b.enabled and b.mode == "NHT" and IsSpecialBarAvailable(key) then
             out[#out + 1] = key
         end
     end
@@ -628,6 +646,10 @@ local function ApplyBarWidth(key, width)
         local f = _G["TUI_SpecialBar_" .. slotKey]
         if f and f.SetWidth then f:SetWidth(width) end
         if TUI.QueueSpecialBarsUpdate then TUI:QueueSpecialBarsUpdate() end
+
+    elseif type(key) == "string" and key:sub(1, 6) == "combo:" then
+        local f = ns.ComboBars and ns.ComboBars.Frame(key)
+        if f and math.abs((f:GetWidth() or 0) - width) > 0.01 then f:SetWidth(width) end
     end
 end
 
@@ -689,7 +711,7 @@ function M.PositionStack(positionOnly)
                 return CB.IsNHTForCurrentSpec()
             end
             return false
-        elseif type(key) == "string" and key:sub(1, 8) == "special:" then
+        elseif type(key) == "string" and (key:sub(1, 8) == "special:" or key:sub(1, 6) == "combo:") then
             return IsSpecialBarAvailable(key)
         end
         return true
@@ -712,15 +734,22 @@ function M.PositionStack(positionOnly)
             end
         end
         posPlace = place
-        local auraChanged = false
+        local auraChanged, comboChanged = false, false
         for key in pairs(posHeight) do
-            if key:sub(1, 8) == "special:" and pos[key] ~= posHeight[key] then auraChanged = true end
+            if pos[key] ~= posHeight[key] then
+                if key:sub(1, 8) == "special:" then auraChanged = true end
+                if key:sub(1, 6) == "combo:" then comboChanged = true end
+            end
         end
         for key, h in pairs(pos) do
-            if key:sub(1, 8) == "special:" and posHeight[key] ~= h then auraChanged = true end
+            if posHeight[key] ~= h then
+                if key:sub(1, 8) == "special:" then auraChanged = true end
+                if key:sub(1, 6) == "combo:" then comboChanged = true end
+            end
         end
         posHeight = pos
         if auraChanged and TUI.QueueSpecialBarsUpdate then TUI:QueueSpecialBarsUpdate() end
+        if comboChanged and ns.ComboBars then ns.ComboBars.QueueRefresh() end
     end
 
     local UF = (E and E.GetModule) and E:GetModule("UnitFrames", true) or nil
@@ -797,7 +826,7 @@ function M.PositionStack(positionOnly)
         for _, key in ipairs(setup.order) do
             local b = setup.bars[key]
             local h = posHeight[key] or (setup.barHeights and setup.barHeights[key])
-            if h and b and b.enabled and key ~= "power" and key:sub(1, 8) ~= "special:"
+            if h and b and b.enabled and key ~= "power" and not OwnHeight(key)
                and b.mode ~= "ATTACHED" and b.mode ~= "DISABLED" then
                 WriteBarHeightToDB(key, h)
             end

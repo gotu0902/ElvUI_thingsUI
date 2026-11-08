@@ -665,6 +665,7 @@ function M.SetTestMode(on)
     QueueLayout()
     if TUI.UpdateSpecialBars then TUI:UpdateSpecialBars() end
     if TUI.UpdateCustomBars then TUI:UpdateCustomBars() end
+    if TUI.UpdateComboBars then TUI:UpdateComboBars() end
     if ns.CDMText and ns.CDMText.SetPreview then ns.CDMText.SetPreview(on) end
     if ns.CDMGlow and ns.CDMGlow.SetPreview then ns.CDMGlow.SetPreview(on) end
 end

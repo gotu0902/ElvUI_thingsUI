@@ -13,6 +13,7 @@
 	<Script file="CustomGroupsOptions.lua"/>
 	<Script file="CustomBarsOptions.lua"/>
 	<Script file="AuraCollectionsOptions.lua"/>
+	<Script file="ComboBarsOptions.lua"/>
 	<Script file="TimersOptions.lua"/>
 	<Script file="RaidOrderOptions.lua"/>
 	<Script file="DamageMeterOptions.lua"/>

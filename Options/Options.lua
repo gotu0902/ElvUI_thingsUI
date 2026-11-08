@@ -171,7 +171,8 @@ local function EnsureCloseHook()
     end
 end
 
-local TEST_SECTIONS = { customGroups = true, customBars = true, customText = true, specialIcons = true, specialBars = true }
+local TEST_SECTIONS = { customGroups = true, customBars = true, customText = true, specialIcons = true, specialBars = true,
+    comboBars = true }
 
 local function SectionShown(key)
     EnsureCloseHook()
@@ -222,6 +223,7 @@ function TUI.ConfigTable()
             customBars   = WithSentinel(withOrder(SyncMark(Colorize(TUI:CustomBarsOptions(), "F27D2A"), { "customBars" }), 6.2), "customBars"),
             customText   = WithSentinel(withOrder(SyncMark(Colorize(TUI:CustomTextOptions(), "F2C12E"), { "customText" }), 6.3), "customText"),
             auraCollections = WithSentinel(withOrder(SyncMark(Colorize(TUI:AuraCollectionsOptions(), "B0A0FF"), { "auraCollections" }), 0.5), "auraCollections"),
+            comboBars    = WithSentinel(withOrder(SyncMark(Colorize(TUI:ComboBarsOptions(),    "60D0FF"), { "comboBars" }), 0.45), "comboBars"),
             damageMeter  = WithSentinel(withOrder(SyncMark(Colorize(TUI:DamageMeterOptions(),  "FF5C5C"), { "damageMeter" }), 5.5), "damageMeter"),
             kickTracker  = WithSentinel(withOrder(SyncMark(Colorize(TUI:KickTrackerOptions(),  "FF9E4A"), { "kickTracker" }), 5.6), "kickTracker"),
             specialBars  = WithSentinel(withOrder(SyncMark(Colorize(TUI:SpecialBarsOptions(),  "80FF80"), { "specialBars" }), 0.4), "specialBars"),

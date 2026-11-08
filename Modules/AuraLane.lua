@@ -1076,6 +1076,7 @@ local function ReparseEverything()
     A.ReparseAll()
     if ns.SpecialAura and ns.SpecialAura.ReparseAll then ns.SpecialAura.ReparseAll() end
     if ns.CustomBars and ns.CustomBars.ReparseAll then ns.CustomBars.ReparseAll() end
+    if ns.ComboBars and ns.ComboBars.ReparseAll then ns.ComboBars.ReparseAll() end
 end
 
 local assistTicker

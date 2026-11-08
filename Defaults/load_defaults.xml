@@ -11,6 +11,7 @@
 	<Script file="BarSetup.lua"/>
 	<Script file="ClassbarMode.lua"/>
 	<Script file="ChargeBar.lua"/>
+	<Script file="ComboBars.lua"/>
 	<Script file="SpecialBars.lua"/>
 	<Script file="EssentialMover.lua"/>
 	<Script file="DamageMeter.lua"/>

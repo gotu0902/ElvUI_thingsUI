@@ -183,7 +183,7 @@ local function BarRows(setup)
 
         local function isSpecial()
             local k = key()
-            return type(k) == "string" and k:sub(1, 8) == "special:"
+            return type(k) == "string" and (k:sub(1, 8) == "special:" or k:sub(1, 6) == "combo:")
         end
         local function isFHT()
             if isSpecial() then return false end
@@ -226,6 +226,8 @@ local function BarRows(setup)
                 if type(k) == "string" and k:sub(1, 8) == "special:"
                    and not ns.BarSetup.IsSpecialBarAvailable(k) then
                     inactiveReason = ns.BarSetup.AuraBarOutReason(k)
+                elseif type(k) == "string" and k:sub(1, 6) == "combo:" and ns.ComboBars then
+                    inactiveReason = ns.ComboBars.OutReason(k)
                 elseif k == "chargebar" then
                     local CB = ns.ChargeBar
                     if CB and CB.GetInactiveReason then
@@ -568,6 +570,35 @@ local function SetupEditor(idx)
                         table.remove(setup.order, existingIndex)
                     end
                     ApplyStack(); TUI:UpdateSpecialBars(); NotifyChange()
+                end,
+            },
+            addComboBars = {
+                order = 2, type = "multiselect",
+                name = "Include Aura Combo Bars",
+                hidden = function() return not (ns.ComboBars and #ns.ComboBars.GetBars() > 0) end,
+                values = function()
+                    local out = {}
+                    for _, b in ipairs(ns.ComboBars.GetBars()) do out["combo:" .. b.id] = b.name or ("Combo Bar " .. b.id) end
+                    return out
+                end,
+                get = function(_, k)
+                    for _, key in ipairs(setup.order or {}) do
+                        if key == k then return true end
+                    end
+                    return false
+                end,
+                set = function(_, k, v)
+                    local at
+                    for i, key in ipairs(setup.order) do
+                        if key == k then at = i break end
+                    end
+                    local b = ns.ComboBars.ByID(tonumber(k:match("^combo:(%d+)$")))
+                    if v and b then
+                        ns.ComboBars.SetShowIn(b, "barsetup", setup)
+                    elseif at then
+                        table.remove(setup.order, at)
+                    end
+                    ApplyStack(); ns.ComboBars.QueueRefresh(); NotifyChange()
                 end,
             },
             rows = {

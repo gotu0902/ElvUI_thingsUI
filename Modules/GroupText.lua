@@ -62,6 +62,7 @@ local function Cased(group, str)
     if str and group.textCase == "upper" then return Upper(str) end
     return str
 end
+ns.TextCased = Cased
 
 local measure
 local function Measure(group, str)

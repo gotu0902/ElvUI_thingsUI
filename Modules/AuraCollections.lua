@@ -268,6 +268,7 @@ end
 function M.UsedBy(key)
     local out = {}
     EachLinked(function(k, _, _, _, label) if k == key then out[#out + 1] = label end end)
+    for _, label in ipairs((ns.ComboBars and ns.ComboBars.UsedBy(key)) or {}) do out[#out + 1] = label end
     table.sort(out)
     return out
 end
@@ -296,6 +297,7 @@ function M.Delete(key)
             def.collection = nil
         end
     end)
+    if ns.ComboBars then ns.ComboBars.CollectionDeleted(key, c) end
     r.custom[key] = nil
     M.Changed()
 end
@@ -309,6 +311,7 @@ function M.Changed()
     wipe(getCache)
     if TUI.UpdateCustomGroups then TUI:UpdateCustomGroups() end
     if TUI.UpdateCustomBars then TUI:UpdateCustomBars() end
+    if ns.ComboBars then ns.ComboBars.QueueRefresh() end
     if ns.CustomGroups and ns.CustomGroups._rebuildOptions then ns.CustomGroups._rebuildOptions() end
     if ns.CustomBars and ns.CustomBars._rebuildOptions then ns.CustomBars._rebuildOptions() end
     if M._rebuildOptions then M._rebuildOptions() end

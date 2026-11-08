@@ -177,6 +177,7 @@ function TUI:Initialize()
     self:UpdateEssentialMover()
     self:UpdateCustomGroups()
     if self.UpdateCustomBars then self:UpdateCustomBars() end
+    if self.UpdateComboBars then self:UpdateComboBars() end
     if self.UpdateTUIMeter then self:UpdateTUIMeter() end
     if self.UpdateKickTracker then self:UpdateKickTracker() end
     if self.UpdateMBB then self:UpdateMBB() end
@@ -220,6 +221,7 @@ function TUI:Initialize()
             TUI:UpdateChargeBar()
             TUI:UpdateCustomGroups()
             if TUI.UpdateCustomBars then TUI:UpdateCustomBars() end
+            if TUI.UpdateComboBars then TUI:UpdateComboBars() end
         end
         C_Timer.After(0.5, pass)
         C_Timer.After(2.5, pass)
@@ -236,6 +238,7 @@ local function RebuildOptionTables()
     if ns.CustomGroups and ns.CustomGroups._rebuildOptions then ns.CustomGroups._rebuildOptions() end
     if ns.CustomBars and ns.CustomBars._rebuildOptions then ns.CustomBars._rebuildOptions() end
     if ns.AuraCollections and ns.AuraCollections._rebuildOptions then ns.AuraCollections._rebuildOptions() end
+    if ns.ComboBars and ns.ComboBars._rebuildOptions then ns.ComboBars._rebuildOptions() end
     if ns.SB_RebuildSlotPages then ns.SB_RebuildSlotPages() end
     if ns.BarSetup and ns.BarSetup._rebuildSetupOptions then ns.BarSetup._rebuildSetupOptions() end
 end
@@ -275,6 +278,7 @@ function TUI:ProfileUpdate()
     self:UpdateEssentialMover()
     self:UpdateCustomGroups()
     if self.UpdateCustomBars then self:UpdateCustomBars() end
+    if self.UpdateComboBars then self:UpdateComboBars() end
     if self.UpdateTUIMeter then self:UpdateTUIMeter() end
     if self.UpdateKickTracker then self:UpdateKickTracker() end
     if self.UpdateMBB then self:UpdateMBB() end

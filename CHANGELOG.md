@@ -2,11 +2,18 @@
 ## 4.2.1
 ### WoW Forever (beta)
 - Forever build beta thing idno.
-- One addon for both clients. Fixed a login error that stopped most of thingsUI there
+- One addon for both clients
 - Spell ranks: anything set on one rank (Aura Icons/Bars, Groups, Aura Collections, Timers, Kick Tracker, Spell Editor) counts every rank
 - Forever's own racials, potions, healthstones, interrupts, spell lists and Aura Collections, plus a new Drink collection (every drink buff)
 - One spec per class: per-spec settings sit on the class, the role rule uses your group role, Delve is gone from places
 - Installer: retail CDM layouts stay out, Character Setup gives NHT. A Quick Setup now counts as a finished install
+### New: Aura Combo Bars
+- A bar of minibars that color in while their auras are up: one per buff or debuff, or a count minibar that fills one step per aura (Withering Bolt: 3 DoTs up = 3 colored)
+- Color When: Any / All / None Is Up, or How Many. Auras from the spec's list, an ID or name, or a linked Aura Collection
+- Bar or Text (a line of words that color in), your own text per minibar, UPPERCASE, name / duration / stacks text like Groups - Bars, a fill that drains with the shortest aura
+- Glow the bar when all are active or when one is missing (in combat only if you want), Glow While Active per minibar
+- Standalone with its own mover or in Bar Setup, Load On spec, Visibility, exports and Profile Sync
+- Works on secret auras in combat. All / None and the glow need the aura in Blizzard's Cooldown Manager: the menu names the ones missing and opens Cooldown Settings
 ### New: Groups - Text
 - Auras and cooldowns as lines of text: [name] [cd] [stacks], with anything you like around them
 - Auras work like Groups - Bars (Spec/Class/Global, Aura Collections, Blizzard filters, sorting, Visibility). A cooldown line shows while the spell is on cooldown (not the GCD), then hides, stays or shows a Ready Text
@@ -32,7 +39,7 @@
 - Pushes on profile switch, logout or Sync Now; Take It From... pulls first. Groups match by name and ask on differences; Aura Icons/Bars and Aura Collections follow along
 - A reset, imported or outside-copied profile leaves the sync. Green S on synced modules, exports carry the setup, installer page
 - Copy modules or single items between profiles: Import - Export - Install > Profiles (and ElvUI's Module Copy)
-- Groups - Bars and Groups - Text are separate in exports, copies and sync; Damage Meter and Minimap are exported now
+- Damage Meter and Minimap are exported now
 ### CDM & Spell Editor
 - Spell Editor has its own Modules entry and lists only this spec's spells (plus ones you dragged between categories)
 - Spells the CDM doesn't list (Wrath) sit at the bottom of the list, or type a Spell ID. Show In puts one in Essential or Utility at the position you pick
@@ -51,7 +58,7 @@
 - Frame Level next to Frame Strata, Custom Icon, sample text in the previews
 - Aura Bars: Fill By Stacks (Groups - Bars too), list split like Aura Icons', Move Up / Down in Bar Setup per spec
 - Aura Bars: Show In > Bar Setup works on any bar. Other specs' bar with the same number stays Standalone, and Bar Order says why a bar sits out
-- Position in Row is the icon's real place in Essential/Utility (1, 2, 3 = the first three), for Aura Icons and Spell Editor spells
+- Position in Row is the icon's real place in Essential/Utility (1, 2, 3 = the first three)
 ### Groups
 - Add Buff lists your spec's Cooldown Manager buffs (on Class: every spec's), then the common ones
 - Borders sit inside the icon like WeakAuras and Spacing shows the real gap (your groups look the same). The group's border covers everything in it unless an Aura Icon overrides it
@@ -71,11 +78,11 @@
 - A tracked cast only updates what uses it; Visibility and Aura Collections only work when asked
 - Profile switches rebuild the options later, item cooldowns in groups update at most 10 times a second
 ### Fixes
-- Auras: Auto debuffs no longer jump in groups, Only When Missing finds linked debuffs (Rend), and the right CDM entry is tracked (Lifebloom after 12.1.5)
+- Auras: Auto debuffs no longer jump in groups, and the right CDM entry is tracked (Lifebloom after 12.1.5)
 - Auras the game only shows on the personal nameplate (Crusading Strikes) now show in Aura Icons, Aura Bars and Groups
-- Stack and charge numbers stay above glows, previews follow the role rule, dragging a mover keeps its anchor
+- Stack and charge numbers stay above glows, dragging a mover keeps its anchor
 - Aura Bars: Ticks work in combat. Aura Icons keep their 1px edge when active
-- Trinkets and items no longer grey out on the GCD or vanish after a loading screen; Hide Aura Overlay keeps a Custom Icon
+- Trinkets and items no longer grey out on the GCD or vanish after a loading screen
 - A druid's hidden classbar keeps the CDM width; ElvUI raid frames start a new column in the right spot
 - New Groups - Bars groups start at screen center; MinimapButtonButton mouseover is instant
 - Timers: Auto Duration no longer takes the cast time for a duration

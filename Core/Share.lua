@@ -18,6 +18,7 @@ M.SECTIONS = {
     { name = "Groups - Bars", id = "customBars", keys = { "customBars" }, collection = "customBars", only = "bars", color = "F27D2A" },
     { name = "Groups - Text", id = "customText", keys = { "customBars" }, collection = "customBars", only = "text", color = "F2C12E" },
     { name = "Aura Collections",     keys = { "auraCollections" },                            color = "B0A0FF" },
+    { name = "Aura Combo Bars",      keys = { "comboBars" },                                  color = "60D0FF" },
     { name = "Aura Bars & Icons", keys = { "specialBars" },  collection = "specialBars",   color = "80FF80" },
     { name = "Aura Styles",       keys = { "specialStyles" }, collection = "specialStyles", color = "FF80C0" },
     { name = "Timers",               keys = { "timers" },                                     color = "FFC04D" },
