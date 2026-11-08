@@ -106,7 +106,18 @@ local function BarTab(bi)
     end
     rows.addAura = {
         order = 1, type = "select", dialogControl = "TUI_SpellDropdown", name = "|cFF60E0A0Add Aura|r", width = "double",
-        values = function() return (ns.AuraPick("spec", CurSpec())) end,
+        values = function()
+            local vals = ns.AuraPick("spec", CurSpec())
+            -- where an aura already shows (fine to use it here too)
+            local b = bar()
+            local idx = CB().UsageIndex(b and b.id)
+            local out = {}
+            for k, v in pairs(vals) do
+                local used = idx[tonumber(k)]
+                out[k] = used and (v .. " |cFF888888(" .. used[1].label .. ((#used > 1) and " +" or "") .. ")|r") or v
+            end
+            return out
+        end,
         sorting = function() return select(2, ns.AuraPick("spec", CurSpec())) end,
         disabled = function() return #spellIDs() >= MAX_ROWS end,
         get = function() return "" end,
@@ -367,6 +378,17 @@ local function BarTab(bi)
                                 get = function() return sget("glow") or false end,
                                 set = function(_, v) sset("glow", v or nil) end,
                             },
+                            alsoIn = ns.OptionLinkRowDynamic(19, function()
+                                local x, b = seg(), bar()
+                                if not (x and b) then return {} end
+                                local list = CB().AlsoIn(x, b.id)
+                                if #list == 0 then return {} end
+                                local out = { { label = "Also in:", color = { 0.55, 0.55, 0.55 } } }
+                                for _, e in ipairs(list) do
+                                    out[#out + 1] = { label = e.label, path = e.path, color = { 0.6, 0.72, 0.85 } }
+                                end
+                                return out
+                            end),
                             auras = {
                                 order = 20, type = "group", inline = true, name = "Auras",
                                 args = rows,

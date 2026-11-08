@@ -952,6 +952,86 @@ function M.DeleteBar(id)
     M.Refresh()
 end
 
+-- where else auras show on this spec (options): aura id -> { { label, path } }
+function M.UsageIndex(skipBarID)
+    local idx = {}
+    local function put(ids, label, path)
+        for id in pairs(ids or {}) do
+            for x in pairs(Expand(id)) do
+                local l = idx[x]
+                if not l then l = {}; idx[x] = l end
+                if not l[label] then l[label] = true; l[#l + 1] = { label = label, path = path } end
+            end
+        end
+    end
+    local SB = ns.SpecialBars
+    if SB and SB.GetIconCount then
+        for i = 1, SB.GetIconCount() do
+            local d = SB.GetIconDB("icon" .. i)
+            if type(d) == "table" and d.enabled and d.spellID then
+                put({ [d.spellID] = true }, "Aura Icon " .. i,
+                    { "thingsUI", "modulesTab", "specialIcons", "iconsTab", "icon" .. i .. "Group" })
+            end
+        end
+        for i = 1, SB.GetBarCount() do
+            local d = SB.GetBarDB("bar" .. i)
+            if type(d) == "table" and d.enabled and d.spellID then
+                put({ [d.spellID] = true }, "Aura Bar " .. i,
+                    { "thingsUI", "modulesTab", "specialBars", "barsTab", "bar" .. i .. "Group" })
+            end
+        end
+    end
+    local AC = ns.AuraCollections
+    local _, classToken = UnitClass("player")
+    local spec = CurSpec()
+    local function scan(g, global, label, path)
+        if type(g) ~= "table" or g.enabled == false then return end
+        local specs = g.specs or {}
+        for _, root in ipairs({ global, g.classes and g.classes[classToken], specs[spec] or specs[tostring(spec)] }) do
+            for uid, def in pairs((type(root) == "table" and root.auras) or {}) do
+                if type(def) == "table" and def.enabled ~= false then
+                    local key = AC and AC.LinkOf(uid, def)
+                    local c = key and AC.Get(key)
+                    put((c and c.spells) or def.spells, label, path)
+                end
+            end
+        end
+    end
+    local cg = E.db.thingsUI.customGroups
+    for gi, g in ipairs((cg and cg.groups) or {}) do
+        scan(g, g.global, "Groups - Icons: " .. tostring(g.name or gi), { "thingsUI", "modulesTab", "customGroups", "group" .. gi })
+    end
+    local cb = E.db.thingsUI.customBars
+    for gi, g in ipairs((cb and cb.groups) or {}) do
+        local text = g.display == "text"
+        scan(g, g, (text and "Groups - Text: " or "Groups - Bars: ") .. tostring(g.name or gi),
+            { "thingsUI", "modulesTab", text and "customText" or "customBars", "group" .. gi })
+    end
+    for bi, b in ipairs(M.GetBars()) do
+        if b.id ~= skipBarID and M.LoadedHere(b) then
+            for _, seg in ipairs(b.segments or {}) do
+                put(M.SegSpells(seg), "Combo Bar: " .. tostring(b.name or b.id), { "thingsUI", "modulesTab", "comboBars", "bar" .. bi })
+            end
+        end
+    end
+    return idx
+end
+
+-- the other places a minibar's auras show
+function M.AlsoIn(seg, barID)
+    local idx = M.UsageIndex(barID)
+    local out, seen = {}, {}
+    for id in pairs(M.SegSpells(seg)) do
+        for x in pairs(Expand(id)) do
+            for _, e in ipairs(idx[x] or {}) do
+                if not seen[e.label] then seen[e.label] = true; out[#out + 1] = e end
+            end
+        end
+    end
+    table.sort(out, function(a, b) return a.label < b.label end)
+    return out
+end
+
 -- Bar Setup: takes a place in the setup this spec uses (or the one given)
 function M.SetShowIn(bar, v, setup)
     bar.showIn = v

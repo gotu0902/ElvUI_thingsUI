@@ -9,7 +9,7 @@
 - Installer: retail CDM layouts stay out, Character Setup gives NHT. A Quick Setup now counts as a finished install
 ### New: Aura Combo Bars
 - A bar of minibars that color in while their auras are up: one per buff or debuff, or a count minibar that fills one step per aura (Withering Bolt: 3 DoTs up = 3 colored)
-- Color When: Any / All / None Is Up, or How Many. Auras from the spec's list, an ID or name, or a linked Aura Collection
+- Color When: Any / All / None Is Up, or How Many. Auras from the spec's list, an ID or name, or a linked Aura Collection. An aura can show here and in Aura Icons, Aura Bars or Groups too: the menu says where else it shows, with links
 - Bar or Text (a line of words that color in), your own text per minibar, UPPERCASE, name / duration / stacks text like Groups - Bars, a fill that drains with the shortest aura
 - Glow the bar when all are active or when one is missing (in combat only if you want), Glow While Active per minibar
 - Standalone with its own mover or in Bar Setup, Load On spec, Visibility, exports and Profile Sync
