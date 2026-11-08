@@ -82,7 +82,7 @@
 - Auras picked from the Cooldown Manager list find their buff when it has another ID (Nightfall), in Aura Icons, Aura Bars and Groups
 - Auras the game only shows on the personal nameplate (Crusading Strikes) now show in Aura Icons, Aura Bars and Groups
 - Aura Icons and Bars with Totem / No Aura Timer hide Blizzard's buff copy too (Summon Darkglare showed twice)
-- Groups - Icons: auras make room for a totem icon that shows up in combat instead of sitting on top of it
+- Groups - Icons: auras make room for a totem icon that shows up in combat instead of sitting on top of it, and the totem icon follows the group's aura swipe (inverse, off)
 - Pixel Glow on Aura Icons and Timers starts with short lines again (it covered the whole icon like a border)
 - Stack and charge numbers stay above glows, dragging a mover keeps its anchor
 - Aura Bars: Ticks work in combat. Aura Icons keep their 1px edge when active

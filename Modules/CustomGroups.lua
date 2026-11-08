@@ -462,7 +462,10 @@ local function UpdateTotemIcon(btn)
     if ns.Timers and ns.Timers.GetTotemState then start, dur = ns.Timers.GetTotemState(sid) end
     if not start and M.testMode then start, dur = GetTime() - 8, 30 end
     if btn.cooldown then
-        if btn.cooldown.SetReverse then btn.cooldown:SetReverse(false) end
+        -- a totem runs like an aura: the group's aura swipe settings
+        local au = (btn._group and btn._group.auras) or {}
+        if btn.cooldown.SetReverse then btn.cooldown:SetReverse(au.swipeInverse and true or false) end
+        if btn.cooldown.SetDrawSwipe then btn.cooldown:SetDrawSwipe(au.swipe ~= false) end
         if btn.cooldown.SetHideCountdownNumbers then
             btn.cooldown:SetHideCountdownNumbers((idb and idb.showDuration == false) and true or false)
         end
