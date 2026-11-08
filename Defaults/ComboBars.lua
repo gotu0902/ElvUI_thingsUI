@@ -12,6 +12,7 @@ ns.COMBO_BAR_DEFAULTS = {
     width = 220,
     height = 12,
     gap = 2,
+    fill = "full",
     statusBarTexture = "ElvUI Norm",
     emptyColor = { r = 0.08, g = 0.08, b = 0.08, a = 0.8 },
     showBorder = true,
@@ -26,6 +27,7 @@ ns.COMBO_BAR_DEFAULTS = {
     nameXOffset = 3,
     nameYOffset = 0,
     nameColor = { r = 1, g = 1, b = 1 },
+    nameHideActive = false,
     dimTextColor = { r = 0.45, g = 0.45, b = 0.45, a = 1 },
     showDuration = false,
     durationPoint = "RIGHT",
@@ -75,6 +77,6 @@ end
 
 function ns.Defaults.ComboSegment(i)
     local c = ns.COMBO_SEGMENT_COLORS[((i or 1) - 1) % #ns.COMBO_SEGMENT_COLORS + 1]
-    return { lights = "any", side = "auto", pieces = 3, fill = "full", spells = {},
+    return { lights = "any", side = "auto", pieces = 3, spells = {},
         color = { r = c.r, g = c.g, b = c.b, a = 1 } }
 end

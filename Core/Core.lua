@@ -132,6 +132,52 @@ function ns.CustomIconArgs(get, set, base, hidden, disabled)
     }
 end
 
+-- is an aura up (side HELPFUL = on you, HARMFUL = yours on the target, nil = either): the CDM's
+-- answer holds in combat, plain reads only out of it; an untracked aura keeps its last answer
+-- in combat. 2nd return: the CDM follows it (Aura Combo Bars, Groups - Text When Missing)
+local lastUp = {}
+local function PlainUp(ids, side)
+    if side ~= "HARMFUL" then
+        for id in pairs(ids) do
+            if C_UnitAuras.GetPlayerAuraBySpellID(id) then return true end
+        end
+    end
+    if side ~= "HELPFUL" and UnitExists("target") then
+        for i = 1, 40 do
+            local a = C_UnitAuras.GetAuraDataByIndex("target", i, "HARMFUL|PLAYER")
+            if not a then break end
+            local sid = a.spellId
+            if not (issecretvalue and issecretvalue(sid)) and ids[sid] then return true end
+        end
+    end
+    return false
+end
+
+function ns.AuraUp(id, side)
+    local SA = ns.SpecialAura
+    local ids = (SA and SA.ExpandSpellIDs and SA.ExpandSpellIDs(id)) or { [id] = true }
+    local CI = ns.CDMIcons
+    local up = CI and CI.AuraUp and CI.AuraUp(ids)
+    if up ~= nil then
+        lastUp[id] = up
+        return up, true
+    end
+    if InCombatLockdown() then return lastUp[id] or false, false end
+    up = PlainUp(ids, side)
+    lastUp[id] = up
+    return up, false
+end
+
+-- an options button: Blizzard's Cooldown Settings, to add an aura the CDM should follow
+function ns.OpenCooldownSettings()
+    if InCombatLockdown() then return end
+    if not _G.CooldownViewerSettings and C_AddOns and C_AddOns.LoadAddOn then
+        C_AddOns.LoadAddOn("Blizzard_CooldownViewer")
+    end
+    local cvs = _G.CooldownViewerSettings
+    if cvs and cvs.ShowUIPanel and not cvs:IsShown() then cvs:ShowUIPanel() end
+end
+
 -- Add Buff pickers: the spec's Cooldown Manager buffs (a class: all its specs'), then the common ones; -> values, sorting
 function ns.AuraPick(scope, key, extra)
     local mine, common, seen = {}, {}, {}

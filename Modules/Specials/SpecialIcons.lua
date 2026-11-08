@@ -102,8 +102,9 @@ end
 function SB.AuraSet()
     local set = {}
     local SA = ns.SpecialAura
+    -- totem / no-aura ones too: Blizzard's buff row follows totems (Summon Darkglare)
     local function add(db)
-        if not (db and db.enabled and db.spellID) or db.totemTimer then return end
+        if not (db and db.enabled and db.spellID) then return end
         set[db.spellID] = true
         local ex = SA and SA.ExpandSpellIDs and SA.ExpandSpellIDs(db.spellID)
         for id in pairs(ex or {}) do set[id] = true end

@@ -37,10 +37,15 @@ local function CDMRows()
     local rows = {}
     local function consider(info)
         if not info then return end
+        -- every field the CDM ties an aura to (GetAssociatedAuraSpellPriority): Nightfall's
+        -- entry 1260279 reaches its buff 264571 through one of the last two
         local r = { s = PlainID(info.spellID), o = PlainID(info.overrideSpellID), linked = {} }
         for _, lid in ipairs(info.linkedSpellIDs or {}) do
             local pl = PlainID(lid)
             if pl then r.linked[#r.linked + 1] = pl end
+        end
+        for _, extra in ipairs({ PlainID(info.linkedSpellID), PlainID(info.overrideTooltipSpellID) }) do
+            if extra and extra ~= r.s and extra ~= r.o then r.linked[#r.linked + 1] = extra end
         end
         rows[#rows + 1] = r
     end
@@ -90,6 +95,18 @@ local function Build(spellID, why)
     local function Name(id) return id and PlainID(C_Spell.GetSpellName(id)) end
     -- the CDM entry for this spell brings all its auras; an entry that lists this aura
     -- brings just it (entries can share a spell: Violent Outburst and Seeing Red both sit on 386477)
+    -- how many different entries sit on each spell (a row can come twice: category list + frame)
+    local onSpell, seenEntry = {}, {}
+    for _, r in ipairs(rows) do
+        local s = r.s or r.o
+        if s then
+            local key = tostring(s) .. ":" .. table.concat(r.linked, ",")
+            if not seenEntry[key] then
+                seenEntry[key] = true
+                onSpell[s] = (onSpell[s] or 0) + 1
+            end
+        end
+    end
     local direct = false
     for _, r in ipairs(rows) do
         if Is(r.s) or Is(r.o) then
@@ -102,7 +119,16 @@ local function Build(spellID, why)
             for _, l in ipairs(r.linked) do
                 if Is(l) then
                     direct = true
-                    Note("CDM entry %s lists it", tostring(r.s or r.o))
+                    -- an entry alone on its spell: that spell is the aura (Nightfall: picked 1260279,
+                    -- the entry and its buff are 264571); a shared one stays out
+                    local s = r.s or r.o
+                    if s and onSpell[s] == 1 then
+                        if r.s then map[r.s] = true end
+                        if r.o then map[r.o] = true end
+                        Note("CDM entry %s lists it, and is the only one on that spell", tostring(s))
+                    else
+                        Note("CDM entry %s lists it", tostring(s))
+                    end
                     break
                 end
             end
@@ -166,13 +192,42 @@ local function Say(v)
 end
 
 -- what Blizzard's buff frames for these IDs run on right now
-local function CDMState(map)
+-- every field the CDM can tie an aura to, as it reads right now
+local function InfoFields(i)
+    local links = {}
+    for _, l in ipairs(i.linkedSpellIDs or {}) do links[#links + 1] = Say(l) end
+    return ("spell %s override %s tooltip %s linked %s links [%s]"):format(Say(i.spellID), Say(i.overrideSpellID),
+        Say(i.overrideTooltipSpellID), Say(i.linkedSpellID), table.concat(links, ","))
+end
+
+-- a CDM entry for this spell: by any of its fields, or the same name
+local function InfoMatches(i, map, name)
+    for _, v in ipairs({ i.spellID, i.overrideSpellID, i.overrideTooltipSpellID, i.linkedSpellID }) do
+        local p = PlainID(v)
+        if p and (map[p] or (name and PlainID(C_Spell.GetSpellName(p)) == name)) then return true end
+    end
+    for _, l in ipairs(i.linkedSpellIDs or {}) do
+        local p = PlainID(l)
+        if p and map[p] then return true end
+    end
+    return false
+end
+
+local function CDMState(map, name)
+    if C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCategorySet then
+        for _, cat in ipairs({ CAT_BUFF, CAT_BAR }) do
+            for _, cdID in ipairs((cat and C_CooldownViewer.GetCooldownViewerCategorySet(cat, true)) or {}) do
+                local i = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
+                if i and InfoMatches(i, map, name) then print(("  CDM entry %d: %s"):format(cdID, InfoFields(i))) end
+            end
+        end
+    end
     for _, name in ipairs({ "BuffIconCooldownViewer", "BuffBarCooldownViewer" }) do
         local v = _G[name]
         for _, c in ipairs(v and { v:GetChildren() } or {}) do
             local i = c.cooldownInfo
             local s, o = i and PlainID(i.spellID), i and PlainID(i.overrideSpellID)
-            if (s and map[s]) or (o and map[o]) then
+            if i and InfoMatches(i, map, nil) then
                 local a = c.auraInstanceID
                 local hasAura = (issecretvalue and issecretvalue(a)) or a ~= nil
                 local t = c.totemData
@@ -215,7 +270,7 @@ ns.SlashCommand("aura", function(arg)
     table.sort(ids)
     print(("|cFF8080FFthingsUI|r %d %s tracks: %s"):format(id, tostring(C_Spell.GetSpellName(id)), table.concat(ids, " | ")))
     for _, line in ipairs(why) do print("  " .. line) end
-    CDMState(map)
+    CDMState(map, PlainID(C_Spell.GetSpellName(id)))
     local TM = ns.Timers
     if TM and TM.GetLearnedDuration then
         print(("  No Aura Timer: duration %s, %s"):format(Say(TM.GetLearnedDuration(id)), TM.GetTotemState(id) and "running" or "idle"))

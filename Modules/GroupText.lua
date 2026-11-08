@@ -352,7 +352,151 @@ Rebuild = function(L)
     BuildCD(L, L.ready, L.readySegs, L.group.readyFormat or "", L.group, false)
 end
 
--- the shown lines stacked from the top (or bottom); the aura lines follow right after
+-- ------------------------------------------------------- missing auras
+
+-- When Missing: a line of our own while none of an entry's auras is up (the game only
+-- draws aura lines while they run). Read like Only When Missing: through the CDM in combat
+local missGroups = {}
+local MissDriver
+
+local function EntryUp(def)
+    local side = (def.kind == "HARMFUL") and "HARMFUL" or "HELPFUL"
+    for id in pairs(def.spells or {}) do
+        if ns.AuraUp(id, side) then return true end
+    end
+    return false
+end
+
+local function MissName(def)
+    if def.name and def.name ~= "" then return def.name end
+    local AL = ns.AuraLane
+    local l = (AL and AL.SpellListUnique and AL.SpellListUnique(def)) or {}
+    return (l[1] and C_Spell.GetSpellName(l[1])) or ""
+end
+
+local function BuildMiss(f, group, def)
+    local fmt = (group.auraMissing == "text") and (group.missingFormat or "[name]") or M.FormatFor(group, def)
+    local nm = Cased(group, MissName(def))
+    local sw = SpaceWidth(group)
+    local list = {}
+    local p = M.Parse(fmt)
+    for i, seg in ipairs(p) do
+        local fs = Piece(f.segs, f, i)
+        StyleSeg(fs, group, seg.tok)
+        if group.missingColor then ns.TextColor(fs, group.missingColor) end
+        NoGap(fs)
+        if seg.tok == "name" then
+            fs:SetText(nm)
+        elseif seg.tok then
+            fs:SetText("")
+        else
+            Literal(fs, seg.text, sw, group)
+        end
+        fs:Show()
+        list[#list + 1] = fs
+    end
+    HideFrom(f.segs, #p + 1)
+    Chain(list, f, group.justify, f.W)
+end
+
+-- the auras the CDM doesn't follow (When Missing goes stale on them in combat)
+function M.MissingUntracked(group)
+    local out, seen = {}, {}
+    local CI = ns.CDMIcons
+    local SA = ns.SpecialAura
+    for _, e in ipairs(ns.CustomBars.Entries(group)) do
+        if not e.def.filterToken then
+            for id in pairs(e.def.spells or {}) do
+                local ids = (SA and SA.ExpandSpellIDs and SA.ExpandSpellIDs(id)) or { [id] = true }
+                if not seen[id] and not (CI and CI.AuraUp and CI.AuraUp(ids) ~= nil) then
+                    seen[id] = true
+                    out[#out + 1] = id
+                end
+            end
+        end
+    end
+    table.sort(out)
+    return out
+end
+
+local function EvalMissing(st)
+    local changed = false
+    for _, f in ipairs(st.missLines or {}) do
+        if f.def then
+            local shown = not EntryUp(f.def)
+            if f.shown ~= shown then f.shown = shown; changed = true end
+        end
+    end
+    if changed then QueueRelayout(st) end
+end
+
+function M.SyncMissing(st, group, W, Hh, test)
+    st.missLines = st.missLines or {}
+    local mode = group.auraMissing or "hide"
+    local list = {}
+    -- a preview shows the aura lines as up: no missing lines in it
+    if mode ~= "hide" and group.enabled ~= false and not test then
+        for _, e in ipairs(ns.CustomBars.Entries(group)) do
+            if not e.def.filterToken and next(e.def.spells or {}) then list[#list + 1] = e end
+        end
+    end
+    for i, e in ipairs(list) do
+        local f = st.missLines[i]
+        if not f then
+            f = CreateFrame("Frame", nil, st.cdHost)
+            f.segs = {}
+            st.missLines[i] = f
+        end
+        f:SetSize(W, Hh)
+        f.W, f.def, f.shown = W, e.def, nil
+        BuildMiss(f, group, e.def)
+    end
+    for i = #list + 1, #st.missLines do
+        local f = st.missLines[i]
+        f.def, f.shown = nil, nil
+        f:Hide()
+    end
+    missGroups[st] = (#list > 0) or nil
+    MissDriver()
+    for _, f in ipairs(st.missLines) do
+        if f.def then f.shown = not EntryUp(f.def) end
+    end
+end
+
+do
+    local driver = CreateFrame("Frame")
+    driver:Hide()
+    local ev = CreateFrame("Frame")
+    local dirty, since, hooked = false, 0, false
+    local function Mark() dirty = true end
+    ev:SetScript("OnEvent", Mark)
+    driver:SetScript("OnUpdate", function(_, el)
+        since = since + el
+        if not dirty or since < 0.1 then return end
+        dirty, since = false, 0
+        for st in pairs(missGroups) do
+            if st.cdHost and st.cdHost:IsVisible() then EvalMissing(st) end
+        end
+    end)
+    MissDriver = function()
+        if next(missGroups) then
+            ev:RegisterUnitEvent("UNIT_AURA", "player", "target")
+            ev:RegisterEvent("PLAYER_TARGET_CHANGED")
+            ev:RegisterEvent("PLAYER_REGEN_ENABLED")
+            if not hooked and ns.CDMIcons and ns.CDMIcons.OnAuraState then
+                hooked = true
+                ns.CDMIcons.OnAuraState(function() if driver:IsShown() then dirty = true end end)
+            end
+            dirty = true
+            driver:Show()
+        else
+            ev:UnregisterAllEvents()
+            driver:Hide()
+        end
+    end
+end
+
+-- the shown lines stacked from the top (or bottom): cooldowns, missing auras, then the aura lines
 local function Layout(st)
     local group = st.group
     if not (group and st.cdHost) then return 0 end
@@ -372,6 +516,18 @@ local function Layout(st)
             n = n + 1
         else
             L:Hide()
+        end
+    end
+    for _, f in ipairs(st.missLines or {}) do
+        if f.def and f.shown and (cap == 0 or n < cap) then
+            local y = n * (Hh + sp)
+            f:ClearAllPoints()
+            if up then f:SetPoint("BOTTOMLEFT", st.cdHost, "BOTTOMLEFT", 0, y)
+            else f:SetPoint("TOPLEFT", st.cdHost, "TOPLEFT", 0, -y) end
+            f:Show()
+            n = n + 1
+        else
+            f:Hide()
         end
     end
     local cdH = n * (Hh + sp)
@@ -505,6 +661,7 @@ function M.SyncCooldowns(st, group, W, Hh, test)
         active[L] = nil
     end
     if #list > 0 then Events() end
+    M.SyncMissing(st, group, W, Hh, test)
     st.cdHost:SetShown(group.enabled ~= false and (test or ns.Visibility.Shown(group.visibility)))
     return Layout(st)
 end
@@ -514,6 +671,7 @@ function M.UpdateLines(st)
     for _, L in ipairs(st.cdLines or {}) do
         if L.spellID then M.UpdateLine(L) end
     end
+    if missGroups[st] then EvalMissing(st) end
 end
 
 -- ------------------------------------------------------------- preview

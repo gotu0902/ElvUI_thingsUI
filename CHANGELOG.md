@@ -10,13 +10,13 @@
 ### New: Aura Combo Bars
 - A bar of minibars that color in while their auras are up: one per buff or debuff, or a count minibar that fills one step per aura (Withering Bolt: 3 DoTs up = 3 colored)
 - Color When: Any / All / None Is Up, or How Many. Auras from the spec's list, an ID or name, or a linked Aura Collection. An aura can show here and in Aura Icons, Aura Bars or Groups too: the menu says where else it shows, with links
-- Bar or Text (a line of words that color in), your own text (or none) and text color per minibar, UPPERCASE, name / duration / stacks text like Groups - Bars, a fill that drains with the shortest aura
+- Bar or Text (a line of words that color in), your own text (or none) and text color per minibar, UPPERCASE, name / duration / stacks text like Groups - Bars, a name that gives way to the time while active, a Static or Duration fill (the shortest aura or one you pick, for the whole bar or per minibar)
 - Glow the bar when all are active or when one is missing (in combat only if you want), Glow While Active per minibar
 - Standalone with its own mover or in Bar Setup, Load On spec, Visibility, exports and Profile Sync
 - Works on secret auras in combat. All / None and the glow need the aura in Blizzard's Cooldown Manager: the menu names the ones missing and opens Cooldown Settings
 ### New: Groups - Text
 - Auras and cooldowns as lines of text: [name] [cd] [stacks], with anything you like around them
-- Auras work like Groups - Bars (Spec/Class/Global, Aura Collections, Blizzard filters, sorting, Visibility). A cooldown line shows while the spell is on cooldown (not the GCD), then hides, stays or shows a Ready Text
+- Auras work like Groups - Bars (Spec/Class/Global, Aura Collections, Blizzard filters, sorting, Visibility). A cooldown line shows while the spell is on cooldown (not the GCD), then hides, stays or shows a Ready Text. An aura line can stay or show a Missing Text while the aura is down
 - One group serves every class: a character gets its spec, class and Global lines for spells it knows. Max Lines fills cooldowns first
 - Own colors per part, left/right/center alignment that doesn't wobble, UPPERCASE option
 ### New: Kick Tracker
@@ -79,7 +79,10 @@
 - Profile switches rebuild the options later, item cooldowns in groups update at most 10 times a second
 ### Fixes
 - Auras: Auto debuffs no longer jump in groups, and the right CDM entry is tracked (Lifebloom after 12.1.5)
+- Auras picked from the Cooldown Manager list find their buff when it has another ID (Nightfall), in Aura Icons, Aura Bars and Groups
 - Auras the game only shows on the personal nameplate (Crusading Strikes) now show in Aura Icons, Aura Bars and Groups
+- Aura Icons and Bars with Totem / No Aura Timer hide Blizzard's buff copy too (Summon Darkglare showed twice)
+- Groups - Icons: auras make room for a totem icon that shows up in combat instead of sitting on top of it
 - Stack and charge numbers stay above glows, dragging a mover keeps its anchor
 - Aura Bars: Ticks work in combat. Aura Icons keep their 1px edge when active
 - Trinkets and items no longer grey out on the GCD or vanish after a loading screen

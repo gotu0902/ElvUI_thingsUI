@@ -41,14 +41,6 @@ local function SpellIDFrom(v)
     if id and C_Spell.GetSpellName and C_Spell.GetSpellName(id) then return id end
 end
 
-local function OpenCooldownSettings()
-    if InCombatLockdown() then return end
-    if not _G.CooldownViewerSettings and C_AddOns and C_AddOns.LoadAddOn then
-        C_AddOns.LoadAddOn("Blizzard_CooldownViewer")
-    end
-    local cvs = _G.CooldownViewerSettings
-    if cvs and cvs.ShowUIPanel and not cvs:IsShown() then cvs:ShowUIPanel() end
-end
 
 local function ColorArg(order, name, get, set, hidden, alpha)
     return {
@@ -77,6 +69,9 @@ local function BarTab(bi)
     end
     local function sset(k, v) local x = seg() if x then x[k] = v; Refresh() end end
     local function isText() return g("display") == "text" end
+    -- Hide While Active: the time takes the name's place
+    local function swapsName() return g("nameHideActive") and (isText() or g("showLabels")) or false end
+    local function durFollows() return isText() or swapsName() end
     local function stacked() local b = bar() return b and CB().InStack(b) end
     local function noSeg() return seg() == nil end
     local function isCount() return sget("lights") == "count" end
@@ -450,13 +445,47 @@ local function BarTab(bi)
                             },
                             fill = {
                                 order = 6, type = "select", name = "Fill",
-                                values = { full = "Full", time = "Drains With Time" }, sorting = { "full", "time" },
-                                hidden = function()
-                                    local x = seg()
-                                    return isText() or not x or isCount() or CB().LuaLit(x)
+                                values = function()
+                                    local b = bar()
+                                    local d = (b and CB().Get(b, "fill") == "time") and "Duration" or "Static"
+                                    return { [""] = "Bar Setting (" .. d .. ")", full = "Static", time = "Duration" }
                                 end,
-                                get = function() return sget("fill", "full") end,
-                                set = function(_, v) sset("fill", v) end,
+                                sorting = { "", "full", "time" },
+                                hidden = function() return isText() or not seg() or sget("lights") == "none" end,
+                                get = function() return sget("fill") or "" end,
+                                set = function(_, v) sset("fill", (v ~= "") and v or nil) end,
+                            },
+                            -- with several auras: which one the fill and time follow
+                            timeFrom = {
+                                order = 6.5, type = "select", name = "Time From",
+                                values = function()
+                                    local x = seg()
+                                    local out = { [""] = "Shortest Remaining" }
+                                    for id in pairs((x and CB().SegSpells(x)) or {}) do
+                                        out[tostring(id)] = C_Spell.GetSpellName(id) or tostring(id)
+                                    end
+                                    return out
+                                end,
+                                sorting = function()
+                                    local x = seg()
+                                    local ids = {}
+                                    for id in pairs((x and CB().SegSpells(x)) or {}) do ids[#ids + 1] = id end
+                                    table.sort(ids)
+                                    local out = { "" }
+                                    for _, id in ipairs(ids) do out[#out + 1] = tostring(id) end
+                                    return out
+                                end,
+                                hidden = function()
+                                    local x, b = seg(), bar()
+                                    if not (x and b) or x.lights == "none" or isCount() then return true end
+                                    local n = 0
+                                    for _ in pairs(CB().SegSpells(x)) do n = n + 1 end
+                                    if n < 2 then return true end
+                                    if isText() then return not CB().Get(b, "showDuration") end
+                                    return CB().FillOf(b, x) ~= "time" and not CB().Get(b, "showDuration")
+                                end,
+                                get = function() local v = sget("timeFrom") return v and tostring(v) or "" end,
+                                set = function(_, v) sset("timeFrom", tonumber(v)) end,
                             },
                             glow = {
                                 order = 7, type = "toggle", name = "Glow While Active",
@@ -482,7 +511,7 @@ local function BarTab(bi)
                     trackOpen = {
                         order = 31, type = "execute", name = "Open Cooldown Settings",
                         hidden = function() return #untracked() == 0 end,
-                        func = OpenCooldownSettings,
+                        func = function() ns.OpenCooldownSettings() end,
                     },
                 },
             },
@@ -507,6 +536,13 @@ local function BarTab(bi)
                         hidden = isText,
                         get = function() return g("gap") end,
                         set = function(_, v) s("gap", v) end,
+                    },
+                    fill = {
+                        order = 3.5, type = "select", name = "Fill",
+                        values = { full = "Static", time = "Duration" }, sorting = { "full", "time" },
+                        hidden = isText,
+                        get = function() return g("fill") end,
+                        set = function(_, v) s("fill", v) end,
                     },
                     textSpacing = {
                         order = 3, type = "range", name = "Spacing", min = 0, max = 60, step = 1,
@@ -584,6 +620,12 @@ local function BarTab(bi)
                                 get = function() return g("showLabels") end,
                                 set = function(_, v) s("showLabels", v) end,
                             },
+                            nameHideActive = {
+                                order = 1.5, type = "toggle", name = "Hide While Active",
+                                disabled = function() return not isText() and not g("showLabels") end,
+                                get = function() return g("nameHideActive") end,
+                                set = function(_, v) s("nameHideActive", v) end,
+                            },
                             namePoint = {
                                 order = 2, type = "select", name = "Align",
                                 values = { LEFT = "Left", CENTER = "Center", RIGHT = "Right" }, sorting = { "LEFT", "CENTER", "RIGHT" },
@@ -625,21 +667,26 @@ local function BarTab(bi)
                             durationPoint = {
                                 order = 2, type = "select", name = "Align",
                                 values = { LEFT = "Left", CENTER = "Center", RIGHT = "Right" }, sorting = { "LEFT", "CENTER", "RIGHT" },
-                                hidden = isText,
+                                hidden = durFollows,
                                 get = function() return g("durationPoint") end,
                                 set = function(_, v) s("durationPoint", v) end,
                             },
                             durationXOffset = {
                                 order = 3, type = "range", name = "X Offset", min = -50, max = 50, step = 0.01, bigStep = 1,
-                                hidden = isText,
+                                hidden = durFollows,
                                 get = function() return g("durationXOffset") end,
                                 set = function(_, v) s("durationXOffset", v) end,
                             },
                             durationYOffset = {
                                 order = 4, type = "range", name = "Y Offset", min = -20, max = 20, step = 0.01, bigStep = 1,
-                                hidden = isText,
+                                hidden = durFollows,
                                 get = function() return g("durationYOffset") end,
                                 set = function(_, v) s("durationYOffset", v) end,
+                            },
+                            swapNote = {
+                                order = 4.5, type = "description", width = "full",
+                                hidden = function() return not swapsName() end,
+                                name = "|cff888888In the name's place while active.|r",
                             },
                             durationColor = ColorArg(5, "Color", function() return g("durationColor") end,
                                 function(c) s("durationColor", c) end, isText),

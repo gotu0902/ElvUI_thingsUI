@@ -540,7 +540,7 @@ local function CooldownsArgs(grp, scope)
     return args
 end
 
-local function TextArgs(gget, gset)
+local function TextArgs(gget, gset, grp)
     local function color(k, label, order)
         return { order = order, type = "color", name = label,
             get = function() local c = gget(k) or {} return c.r or 1, c.g or 1, c.b or 1 end,
@@ -590,6 +590,51 @@ local function TextArgs(gget, gset)
                     hidden = function() return (gget("cdReady") or "hide") ~= "text" end,
                     get = function() return gget("readyFormat") or "" end,
                     set = function(_, v) gset("readyFormat", strtrim(v or "")) end },
+            },
+        },
+        missing = {
+            order = 21, type = "group", inline = true, name = "Auras",
+            args = {
+                auraMissing = { order = 1, type = "select", name = "When Missing",
+                    values = { hide = "Hide the line", keep = "Keep the line", text = "Missing Text" },
+                    sorting = { "hide", "keep", "text" },
+                    get = function() return gget("auraMissing") or "hide" end,
+                    set = function(_, v) gset("auraMissing", (v ~= "hide") and v or nil) end },
+                missingFormat = { order = 2, type = "input", name = "Missing Text", width = 1.5,
+                    hidden = function() return gget("auraMissing") ~= "text" end,
+                    get = function() return gget("missingFormat") or "[name]" end,
+                    set = function(_, v)
+                        v = strtrim(v or "")
+                        gset("missingFormat", (v ~= "") and v or nil)
+                    end },
+                missingOwn = { order = 3, type = "toggle", name = "Own Color", width = 0.7,
+                    hidden = function() return not gget("auraMissing") end,
+                    get = function() return gget("missingColor") ~= nil end,
+                    set = function(_, v) gset("missingColor", v and { r = 0.6, g = 0.6, b = 0.6 } or nil) end },
+                missingColor = { order = 4, type = "color", name = "Color", width = 0.6,
+                    hidden = function() return not (gget("auraMissing") and gget("missingColor")) end,
+                    get = function() local c = gget("missingColor") or {} return c.r or 1, c.g or 1, c.b or 1 end,
+                    set = function(_, r, g, b) gset("missingColor", { r = r, g = g, b = b }) end },
+                trackNote = { order = 10, type = "description", width = "full",
+                    hidden = function()
+                        local g = grp and grp()
+                        return not (g and gget("auraMissing")) or #ns.GroupText.MissingUntracked(g) == 0
+                    end,
+                    name = function()
+                        local g = grp and grp()
+                        local names = {}
+                        for _, id in ipairs((g and ns.GroupText.MissingUntracked(g)) or {}) do
+                            names[#names + 1] = C_Spell.GetSpellName(id) or tostring(id)
+                        end
+                        return "|cFFFFD200When Missing follows auras in combat through Blizzard's Cooldown Manager. Add these to Buffs or Bars there (out of combat they work anyway):|r\n"
+                            .. table.concat(names, ", ")
+                    end },
+                trackOpen = { order = 11, type = "execute", name = "Open Cooldown Settings",
+                    hidden = function()
+                        local g = grp and grp()
+                        return not (g and gget("auraMissing")) or #ns.GroupText.MissingUntracked(g) == 0
+                    end,
+                    func = function() ns.OpenCooldownSettings() end },
             },
         },
     }
@@ -660,7 +705,7 @@ local function Textify(tab, gi, grp, gget, gset)
                 get = function() return gget("unit") or "player" end, set = function(_, v) gset("unit", v) end },
         },
     }
-    a.textTab.args = TextArgs(gget, gset)
+    a.textTab.args = TextArgs(gget, gset, grp)
     a.copy.disabled = function() return CountOf(true) >= MAX_GROUPS end
     a.copy.func = function()
         local _, ni = CB().CopyGroup(gi)

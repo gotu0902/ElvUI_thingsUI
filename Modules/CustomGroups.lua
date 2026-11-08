@@ -594,6 +594,12 @@ local function CreateIcon(gs, group, kind, id)
     return btn
 end
 
+-- /tui lane: what a group's grid holds right now ({ kind, id })
+function M.GridEntries(id)
+    local gs = groupState[id]
+    return gs and gs.shown or {}
+end
+
 local function EnsureContainer(group)
     local gs = groupState[group.id]
     if gs and gs.container then return gs end

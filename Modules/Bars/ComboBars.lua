@@ -12,7 +12,6 @@ local D = ns.COMBO_BAR_DEFAULTS
 local NP_ONLY = "INCLUDE_NAME_PLATE_ONLY"
 local DIR_REMAINING = Enum.StatusBarTimerDirection and Enum.StatusBarTimerDirection.RemainingTime
 local MAX_PIECES = 10
-local issecret = issecretvalue
 local WHITE = { r = 1, g = 1, b = 1, a = 1 }
 
 local state = {}
@@ -25,6 +24,15 @@ local function Root()
     local r = db.comboBars
     r.bars = r.bars or {}
     r.nextID = r.nextID or 1
+    -- minibars were made with fill "full": that was the default, the bar's Fill now is
+    if not r.fillV2 then
+        r.fillV2 = true
+        for _, b in ipairs(r.bars) do
+            for _, s in ipairs(b.segments or {}) do
+                if s.fill == "full" then s.fill = nil end
+            end
+        end
+    end
     return r
 end
 
@@ -73,8 +81,38 @@ function M.Side(seg)
     return s
 end
 
-local function LuaLit(seg) return seg.lights == "all" or seg.lights == "none" end
+local function SpellCount(seg)
+    local n = 0
+    for _ in pairs(M.SegSpells(seg)) do n = n + 1 end
+    return n
+end
+
+-- All of one aura is Any: the aura engine colors it (secret-safe)
+local function LuaLit(seg)
+    return seg.lights == "none" or (seg.lights == "all" and SpellCount(seg) > 1)
+end
 M.LuaLit = LuaLit
+
+local function FillOf(bar, seg) return seg.fill or G(bar, "fill") end
+M.FillOf = FillOf
+
+-- the chosen aura the fill and time follow (nil = the shortest one)
+local function TimeAura(seg)
+    local id = seg.timeFrom
+    if type(id) == "number" and M.SegSpells(seg)[id] then return id end
+end
+
+-- All Are Up: an aura frame draws fill, time and stacks; Lua only shows it while all are up
+local function Gated(bar, seg)
+    if not (seg.lights == "all" and LuaLit(seg)) then return false end
+    if G(bar, "display") == "text" then return G(bar, "showDuration") and true or false end
+    return true
+end
+
+-- Any with a chosen aura: one frame colors on any of them, a second one over it times the chosen
+local function Split(seg)
+    return (seg.lights or "any") == "any" and TimeAura(seg) ~= nil
+end
 
 -- its own spells plus a linked collection's (spell-list collections only)
 function M.SegSpells(seg)
@@ -123,40 +161,7 @@ end
 
 -- ------------------------------------------------------------------ aura state (Lua)
 
-local lastUp = {}
-
-local function PlainUp(ids, side)
-    if side ~= "HARMFUL" then
-        for id in pairs(ids) do
-            if C_UnitAuras.GetPlayerAuraBySpellID(id) then return true end
-        end
-    end
-    if side ~= "HELPFUL" and UnitExists("target") then
-        for i = 1, 40 do
-            local a = C_UnitAuras.GetAuraDataByIndex("target", i, "HARMFUL|PLAYER")
-            if not a then break end
-            local sid = a.spellId
-            if not (issecret and issecret(sid)) and ids[sid] then return true end
-        end
-    end
-    return false
-end
-
--- one aura up: the CDM's answer holds in combat, plain reads only out of it
--- (an untracked aura keeps its last answer in combat); 2nd return = the CDM follows it
-function M.AuraUp(id, side)
-    local ids = Expand(id)
-    local CI = ns.CDMIcons
-    local up = CI and CI.AuraUp and CI.AuraUp(ids)
-    if up ~= nil then
-        lastUp[id] = up
-        return up, true
-    end
-    if InCombatLockdown() then return lastUp[id] or false, false end
-    up = PlainUp(ids, side)
-    lastUp[id] = up
-    return up, false
-end
+M.AuraUp = function(id, side) return ns.AuraUp(id, side) end
 
 -- lit (a count: full), how many are up, every aura followed by the CDM
 function M.SegState(seg)
@@ -176,10 +181,21 @@ function M.SegState(seg)
     return lit, up, tracked
 end
 
+-- Hide While Active: the name gives way to the time (Any minibars, the ones with an aura frame)
+local function Swaps(bar, seg)
+    if not G(bar, "nameHideActive") or seg.lights == "count" or LuaLit(seg) then return false end
+    return G(bar, "display") == "text" or G(bar, "showLabels") and true or false
+end
+
+-- a word can't be covered: Text mode hides it from Lua
+local function TextSwaps(bar, seg)
+    return G(bar, "display") == "text" and Swaps(bar, seg)
+end
+
 local function NeedsLua(bar)
     if G(bar, "glowWhen") ~= "off" then return true end
     for _, seg in ipairs(bar.segments or {}) do
-        if LuaLit(seg) then return true end
+        if LuaLit(seg) or TextSwaps(bar, seg) then return true end
     end
     return false
 end
@@ -191,7 +207,7 @@ function M.Untracked(bar)
     local glow = G(bar, "glowWhen") ~= "off"
     local CI = ns.CDMIcons
     for _, seg in ipairs(bar.segments or {}) do
-        if glow or LuaLit(seg) then
+        if glow or LuaLit(seg) or TextSwaps(bar, seg) then
             for id in pairs(M.SegSpells(seg)) do
                 if not seen[id] and not (CI and CI.AuraUp and CI.AuraUp(Expand(id)) ~= nil) then
                     seen[id] = true
@@ -277,6 +293,14 @@ local function Seg(st, i)
         ss.label = host:CreateFontString(nil, "OVERLAY", nil, 0)
         ss.litLabel = host:CreateFontString(nil, "OVERLAY", nil, 1)
         ss.barLabel = st.top:CreateFontString(nil, "OVERLAY")
+        -- under the aura frames: an active minibar's fill covers it
+        ss.under = CreateFrame("Frame", nil, host)
+        ss.under:SetAllPoints(host)
+        ss.underLabel = ss.under:CreateFontString(nil, "OVERLAY")
+        -- holds the aura containers; an All minibar shows it while all are up
+        ss.gate = CreateFrame("Frame", nil, host)
+        ss.gate:SetAllPoints(host)
+        ss.prevDur = st.top:CreateFontString(nil, "OVERLAY")
         st.segs[i] = ss
     end
     return ss
@@ -329,8 +353,10 @@ local function LayoutBar(bar, st)
             local w
             if seg.lights == "count" then
                 w = lw + 4 + n * pip + (n - 1) * 2
+            elseif Swaps(bar, seg) then
+                w = math.max(lw, durW)
             else
-                w = lw + ((durW > 0 and not LuaLit(seg)) and (durW + 3) or 0)
+                w = lw + ((durW > 0 and (not LuaLit(seg) or Gated(bar, seg))) and (durW + 3) or 0)
             end
             cells[i] = { lw = lw, w = w }
             sum = sum + w + (i > 1 and sp or 0)
@@ -344,6 +370,10 @@ local function LayoutBar(bar, st)
             local c = cells[i]
             local n = M.Pieces(seg)
             ss.n, ss.lw, ss.inset, ss.tex = n, c.lw, 0, tex
+            ss.swap = Swaps(bar, seg)
+            ss.gated, ss.split = Gated(bar, seg), Split(seg)
+            ss.gate:SetShown(not ss.gated)
+            ss.underLabel:Hide()
             ss.host:ClearAllPoints()
             ss.host:SetPoint("TOPLEFT", f, "TOPLEFT", x, 0)
             ss.host:SetSize(math.max(1, c.w), h)
@@ -410,16 +440,25 @@ local function LayoutBar(bar, st)
                 p._seg = i
                 p:Show()
             end
+            ss.swap = Swaps(bar, seg)
+            ss.gated, ss.split = Gated(bar, seg), Split(seg)
+            ss.gate:SetShown(not ss.gated)
+            ss.under:SetFrameLevel(f:GetFrameLevel() + 2)
             if G(bar, "showLabels") then
-                E:SetFont(ss.barLabel, font, fsize, outline)
-                ss.barLabel:SetText(Cased(bar, M.SegLabel(seg, i)))
-                ss.barLabel:ClearAllPoints()
+                local fs = ss.swap and ss.underLabel or ss.barLabel
+                local other = ss.swap and ss.barLabel or ss.underLabel
+                other:Hide()
+                E:SetFont(fs, font, fsize, outline)
+                fs:SetText(Cased(bar, M.SegLabel(seg, i)))
+                fs:ClearAllPoints()
                 local np = G(bar, "namePoint")
-                ss.barLabel:SetPoint(np, ss.host, np, G(bar, "nameXOffset"), G(bar, "nameYOffset"))
-                ns.TextColor(ss.barLabel, seg.textColor or G(bar, "nameColor"))
-                ss.barLabel:Show()
+                fs:SetPoint(np, ss.host, np, G(bar, "nameXOffset"), G(bar, "nameYOffset"))
+                ns.TextColor(fs, seg.textColor or G(bar, "nameColor"))
+                fs:SetAlpha(1)
+                fs:Show()
             else
                 ss.barLabel:Hide()
+                ss.underLabel:Hide()
             end
             ss.host:Show()
             x = x + sw + gap
@@ -431,6 +470,8 @@ local function LayoutBar(bar, st)
         local ss = st.segs[i]
         ss.host:Hide()
         ss.barLabel:Hide()
+        ss.underLabel:Hide()
+        ss.prevDur:Hide()
     end
     st.laying = false
 end
@@ -453,27 +494,45 @@ local function StyleButton(button, r, ss)
     r.top:SetAllPoints(button)
     r.top:SetFrameLevel(button:GetFrameLevel() + 3)
 
+    -- "time" frames time the chosen aura (or, on All, everything): they own time, stacks, the drain
+    local timer = r.role == "time"
+    local owner = timer or not ss.split
+
     if cell then
         if r.bar then r.bar:Hide() end
-        -- the lit copy sits exactly over the dim label and covers it
+        if r.back then r.back:Hide() end
+        -- the lit copy sits exactly over the dim label and covers it (swapped: the time takes its place)
         r.label = r.label or r.top:CreateFontString(nil, "OVERLAY")
         E:SetFont(r.label, font, fsize, outline)
         r.label:ClearAllPoints()
         r.label:SetPoint("LEFT", button, "LEFT", 0, 0)
         r.label:SetText(ss.text or "")
         r.label:SetTextColor(col.r, col.g, col.b, 1)
-        r.label:Show()
+        r.label:SetShown(not timer and not ss.swap)
     else
         if r.label then r.label:Hide() end
-        r.bar = r.bar or CreateFrame("StatusBar", nil, button)
         local inset = ss.inset or 0
+        -- an opaque backing hides what's under it while the aura is up: the name (swapped), or
+        -- the full fill of the colored frame below a timing one
+        if (ss.swap and not timer) or (ss.split and timer) then
+            local ec = G(bar, "emptyColor")
+            r.back = r.back or button:CreateTexture(nil, "BACKGROUND")
+            r.back:ClearAllPoints()
+            r.back:SetPoint("TOPLEFT", button, "TOPLEFT", inset, -inset)
+            r.back:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -inset, inset)
+            r.back:SetColorTexture(ec.r, ec.g, ec.b, 1)
+            r.back:Show()
+        elseif r.back then
+            r.back:Hide()
+        end
+        r.bar = r.bar or CreateFrame("StatusBar", nil, button)
         r.bar:ClearAllPoints()
         r.bar:SetPoint("TOPLEFT", button, "TOPLEFT", inset, -inset)
         r.bar:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -inset, inset)
         r.bar:SetFrameLevel(button:GetFrameLevel() + 1)
         r.bar:SetStatusBarTexture(ss.tex)
         r.bar:SetStatusBarColor(col.r, col.g, col.b, 1)
-        local timed = not text and seg.fill == "time" and seg.lights ~= "count"
+        local timed = not text and owner and FillOf(bar, seg) == "time"
             and type(button.SetDurationBar) == "function"
         if timed then
             if not r.bound then button:SetDurationBar(r.bar, { direction = DIR_REMAINING }); r.bound = true end
@@ -485,14 +544,18 @@ local function StyleButton(button, r, ss)
         r.bar:Show()
     end
 
-    if G(bar, "showDuration") and seg.lights ~= "count" then
+    if G(bar, "showDuration") and seg.lights ~= "count" and owner then
         r.dur = r.dur or r.top:CreateFontString(nil, "OVERLAY")
         E:SetFont(r.dur, font, fsize, outline)
         r.dur:ClearAllPoints()
         if cell then
-            -- a word: its time follows it, in its color
-            r.dur:SetPoint("LEFT", button, "LEFT", (ss.lw or 0) + 3, 0)
+            -- a word: its time follows it (or takes its place), in its color
+            r.dur:SetPoint("LEFT", button, "LEFT", ss.swap and 0 or ((ss.lw or 0) + 3), 0)
             r.dur:SetTextColor(col.r, col.g, col.b, 1)
+        elseif ss.swap then
+            local np = G(bar, "namePoint")
+            r.dur:SetPoint(np, button, np, G(bar, "nameXOffset"), G(bar, "nameYOffset"))
+            ns.TextColor(r.dur, G(bar, "durationColor"))
         else
             local dp = G(bar, "durationPoint")
             r.dur:SetPoint(dp, button, dp, G(bar, "durationXOffset"), G(bar, "durationYOffset"))
@@ -506,7 +569,7 @@ local function StyleButton(button, r, ss)
         if r.dur then r.dur:SetText(""); r.dur:Hide() end
     end
 
-    if G(bar, "showStacks") and not text and seg.lights ~= "count" then
+    if G(bar, "showStacks") and not text and seg.lights ~= "count" and owner then
         r.count = r.count or r.top:CreateFontString(nil, "OVERLAY")
         E:SetFont(r.count, font, G(bar, "stackFontSize"), G(bar, "stackFontOutline"))
         r.count:ClearAllPoints()
@@ -520,24 +583,25 @@ local function StyleButton(button, r, ss)
         if r.count then r.count:SetText(""); r.count:Hide() end
     end
 
-    SetGlow(button, r, seg.glow and true or false, M.GlowOpts(bar), ss.ew, ss.eh)
+    -- the glow goes on the frame that colors the minibar
+    local glowHere = (not timer) or ss.gated
+    SetGlow(button, r, (seg.glow and glowHere) and true or false, M.GlowOpts(bar), ss.ew, ss.eh)
 end
 
 local function EnsureC(ss, field)
     local c = ss[field]
     if not c then
-        c = CreateFrame("AuraContainer", nil, ss.host, "CustomAuraContainerTemplate")
+        c = CreateFrame("AuraContainer", nil, ss.gate, "CustomAuraContainerTemplate")
         ss[field] = c
     end
     return c
 end
 
-local function ConfigC(c, ss, st)
-    local n = ss.n or 1
+local function ConfigC(c, ss, st, n, lvl)
     c:ClearAllPoints()
     c:SetPoint("TOPLEFT", ss.host, "TOPLEFT", ss.cx or 0, ss.cy or 0)
     c:SetSize(math.max(1, n * ss.ew + (n - 1) * ss.eg), math.max(1, ss.eh))
-    c:SetFrameLevel(st.frame:GetFrameLevel() + 3)
+    c:SetFrameLevel(st.frame:GetFrameLevel() + lvl)
     c:SetFlowLayoutAxis(AnchorUtil.FlowLayoutAxis.Horizontal)
     c:SetFlowLayoutAnchorPoint("TOPLEFT")
     c:SetFlowLayoutGrowthDirection(AnchorUtil.FlowDirection.Right, AnchorUtil.FlowDirection.Down)
@@ -554,24 +618,25 @@ end
 
 local function GroupKey(id, i) return "CB" .. id .. "_" .. i end
 
-local function ApplyGroup(c, key, filter, ids, ss)
+-- role "lit": the frames that color the minibar; "time": the one timing it (see StyleButton)
+local function ApplyGroup(c, key, filter, ids, ss, n, role)
     local layout = { elementWidth = ss.ew, elementHeight = ss.eh, elementSpacing = ss.eg, lineSpacing = 0 }
     local SM, SD = _G.AuraContainerSortMethod, _G.AuraContainerSortDirection
     local sm, sd = SM and SM.ExpirationOnly, SD and SD.Normal
     local cf = { includeSpellIDs = ids }
     if c:HasAuraGroup(key) then
-        ns.SetAuraGroupCap(c, key, ss.n)
+        ns.SetAuraGroupCap(c, key, n)
         c:SetAuraGroupFilterString(key, filter)
         c:SetAuraGroupCandidateFilters(key, cf)
         c:SetAuraGroupLayout(key, layout)
         if sm then c:SetAuraGroupSortMethod(key, sm, sd) end
     else
         c:AddAuraGroup(key, filter, {
-            maxFrameCount = ss.n, candidateFilters = cf, layout = layout,
+            maxFrameCount = n, candidateFilters = cf, layout = layout,
             sortMethod = sm, sortDirection = sd,
             initializeFrame = function(button)
                 local r = ss.regions[button]
-                if not r then r = {}; ss.regions[button] = r end
+                if not r then r = { role = role }; ss.regions[button] = r end
                 StyleButton(button, r, ss)
             end,
         })
@@ -582,34 +647,53 @@ local function Off(c, key)
     if c and c:HasAuraGroup(key) then ns.SetAuraGroupCap(c, key, 0) end
 end
 
-local function SyncSegAuras(st, i, seg)
-    local ss = st.segs[i]
-    local key = GroupKey(st.id, i)
+local function IDsOf(list)
     local ids, any = {}, false
-    if seg and not LuaLit(seg) then
-        for id in pairs(M.SegSpells(seg)) do
-            for x in pairs(Expand(id)) do ids[x] = true; any = true end
-        end
+    for id in pairs(list) do
+        for x in pairs(Expand(id)) do ids[x] = true; any = true end
     end
-    local side = seg and M.Side(seg)
-    if any and side ~= "HARMFUL" then
-        local cp = EnsureC(ss, "cp")
-        ConfigC(cp, ss, st)
-        ApplyGroup(cp, key, "HELPFUL|" .. NP_ONLY, ids, ss)
+    return any and ids or nil
+end
+
+-- one pair of containers (you / your target) for a set of auras
+local function ApplySides(st, ss, fp, ft, key, ids, side, n, lvl, role)
+    if ids and side ~= "HARMFUL" then
+        local cp = EnsureC(ss, fp)
+        ConfigC(cp, ss, st, n, lvl)
+        ApplyGroup(cp, key, "HELPFUL|" .. NP_ONLY, ids, ss, n, role)
         SetUnitLast(cp, "player")
         cp:SetShown(PlayerOK())
     else
-        Off(ss.cp, key)
+        Off(ss[fp], key)
     end
-    if any and side ~= "HELPFUL" then
-        local ct = EnsureC(ss, "ct")
-        ConfigC(ct, ss, st)
-        ApplyGroup(ct, key, "HARMFUL|PLAYER|" .. NP_ONLY, ids, ss)
+    if ids and side ~= "HELPFUL" then
+        local ct = EnsureC(ss, ft)
+        ConfigC(ct, ss, st, n, lvl)
+        ApplyGroup(ct, key, "HARMFUL|PLAYER|" .. NP_ONLY, ids, ss, n, role)
         SetUnitLast(ct, "target")
         ct:SetShown(TargetOK())
     else
-        Off(ss.ct, key)
+        Off(ss[ft], key)
     end
+end
+
+local function SyncSegAuras(st, i, seg)
+    local ss = st.segs[i]
+    local key = GroupKey(st.id, i)
+    local litIDs, timeIDs
+    if seg then
+        local bar = st.bar
+        local chosen = TimeAura(seg)
+        if Gated(bar, seg) then
+            timeIDs = IDsOf(chosen and { [chosen] = true } or M.SegSpells(seg))
+        elseif not LuaLit(seg) then
+            litIDs = IDsOf(M.SegSpells(seg))
+            if Split(seg) then timeIDs = IDsOf({ [chosen] = true }) end
+        end
+    end
+    local side = seg and M.Side(seg)
+    ApplySides(st, ss, "cp", "ct", key, litIDs, side, ss.n or 1, 3, "lit")
+    ApplySides(st, ss, "tp", "tt", key .. "t", timeIDs, side, 1, 4, "time")
     -- aura frames already made pick up the new look (a secret aura denies access: retry later)
     for button, r in pairs(ss.regions) do
         if not pcall(StyleButton, button, r, ss) then pending = true end
@@ -622,6 +706,8 @@ local function ReleaseAuras(st, from)
         local key = GroupKey(st.id, i)
         Off(ss.cp, key)
         Off(ss.ct, key)
+        Off(ss.tp, key .. "t")
+        Off(ss.tt, key .. "t")
     end
 end
 
@@ -768,8 +854,20 @@ local function Evaluate(st)
         local lit, up
         if test then
             lit, up = i < #segs, (i < #segs) and n or math.max(0, n - 1)
-        elseif LuaLit(seg) or gw ~= "off" then
+        elseif LuaLit(seg) or gw ~= "off" or (text and ss.swap) then
             lit, up = M.SegState(seg)
+        end
+        -- Hide While Active: Text mode hides the word itself; the preview fakes the time
+        if ss.swap then
+            if text then
+                ss.label:SetShown(not lit)
+                if test then
+                    ss.litLabel:SetText(G(bar, "showDuration") and "12" or "")
+                    ss.litLabel:SetShown(lit and true or false)
+                end
+            elseif test then
+                ss.underLabel:SetAlpha(lit and 0 or 1)
+            end
         end
         if not lit then allLit = false end
         local col = seg.color or WHITE
@@ -778,13 +876,42 @@ local function Evaluate(st)
             local p = st.pieces[k]
             local on = false
             if test then on = (seg.lights == "count") and (j <= up) or lit
-            elseif LuaLit(seg) then on = lit end
+            elseif LuaLit(seg) and not ss.gated then on = lit end
             if p then
                 if on then p.lit:SetVertexColor(col.r, col.g, col.b, 1) end
+                -- the preview shows what a draining fill looks like (StylePiece makes it full again)
+                if test and on and seg.lights ~= "count" and FillOf(bar, seg) == "time" then
+                    local inset = G(bar, "showBorder") and ns.Pixel.Size(p) or 0
+                    p.lit:ClearAllPoints()
+                    p.lit:SetPoint("TOPLEFT", p, "TOPLEFT", inset, -inset)
+                    p.lit:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", inset, inset)
+                    p.lit:SetWidth(math.max(1, ((p:GetWidth() or 0) - 2 * inset) * 0.6))
+                end
                 p.lit:SetShown(on and true or false)
             end
         end
-        if text and seg.lights ~= "count" then
+        -- and a sample time where the time goes
+        local pd = test and lit and G(bar, "showDuration") and seg.lights ~= "count" and not (text and ss.swap)
+        if pd then
+            local font = LSM:Fetch("font", G(bar, "font"))
+            E:SetFont(ss.prevDur, font, G(bar, "fontSize"), G(bar, "fontOutline"))
+            ss.prevDur:SetText("12")
+            ss.prevDur:ClearAllPoints()
+            if text then
+                ss.prevDur:SetPoint("LEFT", ss.host, "LEFT", (ss.lw or 0) + 3, 0)
+                ss.prevDur:SetTextColor(col.r, col.g, col.b, 1)
+            else
+                local pt = ss.swap and G(bar, "namePoint") or G(bar, "durationPoint")
+                local x = ss.swap and G(bar, "nameXOffset") or G(bar, "durationXOffset")
+                local y = ss.swap and G(bar, "nameYOffset") or G(bar, "durationYOffset")
+                ss.prevDur:SetPoint(pt, ss.host, pt, x, y)
+                ns.TextColor(ss.prevDur, G(bar, "durationColor"))
+            end
+        end
+        ss.prevDur:SetShown(pd and true or false)
+        -- All Are Up drawn by an aura frame: shown while all are up
+        if ss.gated and not test then ss.gate:SetShown(lit and true or false) end
+        if text and seg.lights ~= "count" and not (ss.swap and test) then
             ss.litLabel:SetShown((test and lit) or (LuaLit(seg) and lit) or false)
         end
         -- glow on a piece the Lua side lights (aura frames glow on their own)
@@ -846,6 +973,8 @@ local function UpdateDriver()
             for _, ss in ipairs(st.segs) do
                 if ss.fx.tuiOn then SetGlow(ss.host, ss.fx, false) end
                 ss.litLabel:Hide()
+                ss.underLabel:SetAlpha(1)
+                ss.prevDur:Hide()
             end
             for _, p in ipairs(st.pieces) do p.lit:Hide() end
         end
@@ -929,8 +1058,10 @@ function TUI:UpdateComboBars() M.Refresh() end
 function M.ReparseAll()
     for _, st in pairs(state) do
         for _, ss in ipairs(st.segs) do
-            if ss.cp and ss.cp.UpdateAllAuras then ss.cp:UpdateAllAuras() end
-            if ss.ct and ss.ct.UpdateAllAuras then ss.ct:UpdateAllAuras() end
+            for _, f in ipairs({ "cp", "ct", "tp", "tt" }) do
+                local c = ss[f]
+                if c and c.UpdateAllAuras then c:UpdateAllAuras() end
+            end
         end
     end
 end
@@ -1096,6 +1227,62 @@ function M.CollectionDeleted(key, c)
     M.QueueRefresh()
 end
 
+-- /tui combo: each minibar's IDs, containers and the aura frames the game made for it
+local function Say(v)
+    if issecretvalue and issecretvalue(v) then return "secret" end
+    return tostring(v)
+end
+
+ns.SlashCommand("combo", function()
+    local P = function(...) print("|cFF8080FFcombo|r", ...) end
+    P(("combat=%s preview=%s"):format(tostring(InCombatLockdown()), tostring(TestMode() or false)))
+    for _, bar in ipairs(M.GetBars()) do
+        local st = state[bar.id]
+        local f = st and st.frame
+        P(("bar %d '%s' loaded=%s stacked=%s shown=%s visible=%s size=%s x %s"):format(bar.id, tostring(bar.name),
+            tostring(M.LoadedHere(bar)), tostring(st and st.stacked), Say(f and f:IsShown()), Say(f and f:IsVisible()),
+            Say(f and math.floor(f:GetWidth())), Say(f and math.floor(f:GetHeight()))))
+        for i, seg in ipairs(bar.segments or {}) do
+            local ss = st and st.segs[i]
+            local ids = {}
+            for id in pairs(M.SegSpells(seg)) do
+                local ex = {}
+                for x in pairs(Expand(id)) do ex[#ex + 1] = x end
+                table.sort(ex)
+                ids[#ids + 1] = id .. "->" .. table.concat(ex, "/")
+            end
+            P(("  %d '%s' %s side=%s luaLit=%s gated=%s split=%s fill=%s ids: %s"):format(i, M.SegName(seg, i),
+                tostring(seg.lights), tostring(M.Side(seg)), tostring(LuaLit(seg)), tostring(ss and ss.gated),
+                tostring(ss and ss.split), tostring(FillOf(bar, seg)), table.concat(ids, ", ")))
+            if ss then
+                P(("     host shown=%s gate shown=%s size=%sx%s"):format(Say(ss.host:IsShown()), Say(ss.gate:IsShown()),
+                    Say(math.floor(ss.host:GetWidth())), Say(math.floor(ss.host:GetHeight()))))
+                local key = GroupKey(bar.id, i)
+                for _, fld in ipairs({ "cp", "ct", "tp", "tt" }) do
+                    local c = ss[fld]
+                    if c then
+                        local k = (fld == "tp" or fld == "tt") and (key .. "t") or key
+                        P(("     %s unit=%s group=%s shown=%s visible=%s level=%s"):format(fld, tostring(c._tuiUnit),
+                            tostring(c:HasAuraGroup(k)), Say(c:IsShown()), Say(c:IsVisible()), Say(c:GetFrameLevel())))
+                    end
+                end
+                local n = 0
+                for button, r in pairs(ss.regions) do
+                    n = n + 1
+                    -- a frame showing a secret aura denies addon access
+                    local ok, line = pcall(function()
+                        return ("frame %d role=%s shown=%s visible=%s size=%sx%s fill=%s"):format(n, tostring(r.role),
+                            Say(button:IsShown()), Say(button:IsVisible()), Say(button:GetWidth()), Say(button:GetHeight()),
+                            Say(r.bar and r.bar:IsVisible()))
+                    end)
+                    P("     " .. (ok and line or ("frame " .. n .. " role=" .. tostring(r.role) .. " (locked: secret aura)")))
+                end
+                if n == 0 then P("     no aura frames made yet") end
+            end
+        end
+    end
+end)
+
 -- ------------------------------------------------------------------ events
 
 local ev = CreateFrame("Frame")
@@ -1109,6 +1296,7 @@ ev:SetScript("OnEvent", function(_, event)
         for _, st in pairs(state) do
             for _, ss in ipairs(st.segs) do
                 if ss.ct and ss.ct._tuiUnit == "target" then ss.ct:SetShown(ok) end
+                if ss.tt and ss.tt._tuiUnit == "target" then ss.tt:SetShown(ok) end
             end
         end
         dirty = true

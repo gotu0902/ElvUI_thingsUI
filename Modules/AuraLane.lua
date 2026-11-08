@@ -777,6 +777,16 @@ function A.Sync(group, frame)
         return
     end
     if InCombatLockdown() then
+        -- the grid grew or shrank in combat (a totem came): move the pin the containers hang
+        -- on (our own frame), the containers themselves wait for combat to end
+        local lane = lanes[group.id]
+        if lane and lane.tail then
+            local pt, tx, ty = ns.CustomGroups.SlotPoint(frame, ns.CustomGroups.NextFreeSlot(group, frame))
+            if pt then
+                lane.tail:ClearAllPoints()
+                ns.Pixel.SetPoint(lane.tail, pt, frame, pt, tx, ty)
+            end
+        end
         if lanes[group.id] or A.HasSets(group) then pendingSync = true end
         return
     end
@@ -1185,9 +1195,19 @@ ns.SlashCommand("lane", function()
         for _, e in ipairs(entries) do if e.def.iconDB then si = si + 1 end end
         local keys = 0
         if lane then for _ in pairs(lane.keys) do keys = keys + 1 end end
-        print(("  g%d '%s' en=%s entries=%d(si=%d) frameShown=%s"):format(
+        print(("  g%d '%s' en=%s entries=%d(si=%d) frameShown=%s growth=%s"):format(
             g.id, tostring(g.name), tostring(g.enabled),
-            #entries, si, tostring(frame and frame:IsShown())))
+            #entries, si, tostring(frame and frame:IsShown()), tostring(g.growth)))
+        -- the grid in front of the lane: spells, items, timers, totems, missing slots
+        local grid = {}
+        for _, e in ipairs((CG.GridEntries and CG.GridEntries(g.id)) or {}) do
+            local t = e.kind == "timer" and ns.Timers and ns.Timers.GetByID and ns.Timers.GetByID(e.id)
+            local nm = (t and ("timer " .. tostring(t.spellID and C_Spell.GetSpellName(t.spellID) or t.itemID or t.kind)))
+                or (e.kind == "item" and C_Item.GetItemNameByID and C_Item.GetItemNameByID(e.id))
+                or (type(e.id) == "number" and C_Spell.GetSpellName(e.id)) or ""
+            grid[#grid + 1] = ("%s:%s %s"):format(e.kind, tostring(e.id), nm)
+        end
+        if #grid > 0 then print("    grid: " .. table.concat(grid, ", ")) end
         if lane then
             print(("    lane keys=%d unit=%s shown=%s visOK=%s pureH=%s hasH=%s tShown=%s tVisOK=%s"):format(
                 keys, tostring(lane.unit),
