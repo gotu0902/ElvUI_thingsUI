@@ -130,7 +130,8 @@ local function BarTab(bi)
             end
             return out
         end)
-        uses.width, uses.hidden = 1.6, hidden
+        uses.width, uses.hidden = 1.45, hidden
+        rows["s" .. ri] = { order = 10 + ri + 0.12, type = "description", name = "", width = 0.15, hidden = hidden }
         rows["u" .. ri] = uses
         rows["b" .. ri] = { order = 10 + ri + 0.2, type = "description", name = "", width = "full", hidden = hidden }
     end
@@ -224,6 +225,16 @@ local function BarTab(bi)
         name = "|cFF888888No auras of its own yet.|r",
         hidden = function() return spellIDs()[1] ~= nil end,
     }
+    -- a heading over the links column, while any aura shows somewhere else
+    local function noUses()
+        for _, id in ipairs(spellIDs()) do
+            if #UsesOf(id) > 0 then return false end
+        end
+        return true
+    end
+    rows.hdrA = { order = 10.01, type = "description", name = "", width = 2.05, hidden = noUses }
+    rows.hdrU = { order = 10.02, type = "description", name = "|cFFFFD200Also In|r", width = 1.45, hidden = noUses }
+    rows.hdrB = { order = 10.03, type = "description", name = "", width = "full", hidden = noUses }
 
     local function untracked()
         local b = bar()
