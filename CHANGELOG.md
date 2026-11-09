@@ -31,6 +31,7 @@
 - New window like the things for EUI installer: a row per addon (Install / Reinstall / Update / Load), Profile... and 1440p / 1080p
 - ElvUI and BigWigs switch per spec on classes with a healer or Aug spec: FHT there, NHT on the rest
 - New: BigWigs (NHT + FHT) and Blizzard CDM layouts per spec from the things for EUI pack, also in the installer
+- New: Platynator profile import.
 - The login popup lists what it loads and the CDM layouts you're missing (Everything / Everything but CDM / Skip), and no longer blocks keybinds
 - Pack updates: you're told at login when the NHT/FHT pack changes. Review shows only what changed, with your own edits unticked (/tui updates)
 - Old presets, Multi-Spec role profiles and per-spec Edit Mode switching are gone

@@ -790,10 +790,23 @@ PROVIDERS[#PROVIDERS + 1] = SpecProvider({
     hasProfile = function(name) return (BRDB().profiles or {})[name] ~= nil end,
 })
 
+local PLATY_NAME = "things"
+
 PROVIDERS[#PROVIDERS + 1] = {
     key = "platynator", title = "Platynator", color = "FF6EB4", perChar = true,
-    loaded = function() return _G.PLATYNATOR_CONFIG and _G.PLATYNATOR_CONFIG.Profiles and true or false end,
-    pack = function() return "things" end,
+    loaded = function()
+        return _G.PLATYNATOR_CONFIG and _G.PLATYNATOR_CONFIG.Profiles and _G.Platynator and _G.Platynator.API and true or false
+    end,
+    has = function() return ns.InstallString("PLATYNATOR_PROFILE") ~= nil end,
+    installed = function() return _G.PLATYNATOR_CONFIG.Profiles[PLATY_NAME] ~= nil end,
+    -- Platynator's own import: makes or overwrites the profile and switches this character to it
+    install = function(_, done)
+        -- it rejects a bad string with error()
+        local ok, err = pcall(_G.Platynator.API.ImportString, ns.InstallString("PLATYNATOR_PROFILE"), PLATY_NAME)
+        if not ok then Say("Platynator: " .. tostring(err)) end
+        done(ok)
+    end,
+    pack = function() return PLATY_NAME end,
     list = function()
         local out = {}
         for name in pairs(_G.PLATYNATOR_CONFIG.Profiles) do out[#out + 1] = name end

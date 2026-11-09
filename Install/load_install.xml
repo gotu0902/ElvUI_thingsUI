@@ -5,6 +5,7 @@
 	<Script file="FHT_Profile.lua"/>
 	<Script file="Elv_Extras.lua"/>
 	<Script file="Details_Profile.lua"/>
+	<Script file="Platynator_Profile.lua"/>
 	<Script file="Res1080p.lua"/>
 	<Script file="BigWigs.lua"/>
 	<Script file="CooldownManager.lua"/>
