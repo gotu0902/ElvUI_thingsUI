@@ -419,6 +419,45 @@ local function IsAttachedNow(key)
 end
 M.IsAttachedNow = IsAttachedNow
 
+-- Attached class bar away from ElvUI's top spot: detached, parent FRAME, hung on the player frame
+local HANG = {
+    HEALTH_BOTTOM = { "BOTTOMLEFT", "health", "BOTTOMLEFT" },
+    ABOVE = { "BOTTOMLEFT", "frame", "TOPLEFT" },
+    BELOW = { "TOPLEFT", "frame", "BOTTOMLEFT" },
+}
+local function ClassbarHang(setup)
+    local b = setup and setup.bars and setup.bars.classbar
+    return (b and b.enabled and b.mode == "ATTACHED" and HANG[b.attachPoint or ""]) and b or nil
+end
+
+function M.PlaceHungClassbar()
+    if not M.IsActive() then return end
+    local b = ClassbarHang(M.GetActiveSetup())
+    local p = _G.ElvUF_Player
+    local holder = p and p.ClassBarHolder
+    if not (b and holder) or (InCombatLockdown() and holder:IsProtected()) then return end
+    local h = HANG[b.attachPoint]
+    local health = p.Health and (p.Health.backdrop or p.Health)
+    local ref = (h[2] == "health" and health) or p
+    -- under/over the frame, lined up with the health bar (a portrait sits beside it)
+    local dx = 0
+    if ref == p and health and health:GetLeft() and p:GetLeft() then dx = health:GetLeft() - p:GetLeft() end
+    holder:ClearAllPoints()
+    holder:SetPoint(h[1], ref, h[3], dx + (b.attachX or 0), b.attachY or 0)
+end
+
+local classbarHooked = false
+local function HookClassbarConfigure(UF)
+    if classbarHooked or not (UF and UF.Configure_ClassBar) then return end
+    classbarHooked = true
+    hooksecurefunc(UF, "Configure_ClassBar", function(_, frame)
+        if not (frame and frame.unit == "player" and M.IsActive() and ClassbarHang(M.GetActiveSetup())) then return end
+        M.PlaceHungClassbar()
+        -- ElvUI turns the detached bar's mover back on
+        if ns.MoverSync and ns.MoverSync.Queue then ns.MoverSync.Queue() end
+    end)
+end
+
 local function SafeUpdatePlayerUF(UF)
     if not UF or not UF.CreateAndUpdateUF then return false end
     local frame = _G.ElvUF_Player
@@ -822,12 +861,23 @@ function M.PositionStack(positionOnly)
         end
         local cBar = setup.bars.classbar
         if udb.classbar and cBar and cBar.enabled then
+            local hang = ClassbarHang(setup) ~= nil
             local want = (cBar.mode == "NHT" or cBar.mode == "FHT")
-            if SetDetached(udb.classbar, want) then needsPlayerUF = true end
+            if SetDetached(udb.classbar, want or hang) then needsPlayerUF = true end
             local wantParent = want and "UIPARENT" or "FRAME"
             if udb.classbar.parent ~= wantParent then
                 udb.classbar.parent = wantParent
                 needsPlayerUF = true
+            end
+            if hang then
+                HookClassbarConfigure(UF)
+                -- the width ElvUI gives it attached
+                local w = _G.ElvUF_Player and _G.ElvUF_Player.CLASSBAR_WIDTH
+                if w and udb.classbar.detachedWidth ~= w then
+                    udb.classbar.detachedWidth = w
+                    lastWidth.classbar = nil
+                    needsPlayerUF = true
+                end
             end
             if cBar.mode == "ATTACHED"
                and PushAttachedHeight(udb.classbar, "classbar") then
@@ -838,6 +888,7 @@ function M.PositionStack(positionOnly)
     if needsPlayerUF and not positionOnly then
         SafeUpdatePlayerUF(UF)
     end
+    M.PlaceHungClassbar()
 
     -- Aura Bars keep their own height: their position's height only sizes them in the stack
     if not positionOnly then

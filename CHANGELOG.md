@@ -70,6 +70,7 @@
 ### Other
 - Charge Bar: Fill Direction (left, right, toward or from the middle); a spell down to one charge shows as a single bar or in the CDM
 - Bar Setup: Height by Position, and a red ! when a spec sits in two setups
+- Bar Setup: an Attached class bar picks its Position: Top (ElvUI), Bottom of Health, Above or Below the player frame, with X / Y
 - Cluster Positioning: FocusTarget frame, right of Focus with a 1px gap
 - ElvUI Filters: Copy Auras From on Aura Indicator filters (Class, Profile, Global, Pet or any class) adds the auras it lacks, nothing gets overwritten
 - Mini Meter: your own row works in combat (tooltip, spell list, popout), Reset on New Instance asks, Reset When M+ Starts, swap options, nicknames stay in combat
