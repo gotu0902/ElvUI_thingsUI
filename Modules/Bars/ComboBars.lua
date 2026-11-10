@@ -772,6 +772,7 @@ function M.SetHeight(key, v)
 end
 
 local function MoverName(id) return "TUI_ComboBarMover" .. id end
+M.MoverName = MoverName
 
 local function EnsureMover(bar, st)
     local ms = ns.MoverSync
@@ -786,7 +787,7 @@ local function EnsureMover(bar, st)
         configString = "thingsUI,modulesTab,comboBars",
         shouldDisable = function()
             local b = M.ByID(id)
-            return not (b and M.LoadedHere(b)) or M.InStack(b)
+            return not (b and M.LoadedHere(b) and #(b.segments or {}) > 0)
         end,
         onSave = function(point, relPoint, x, y)
             local b = M.ByID(id)
@@ -805,6 +806,11 @@ local function EnsureMover(bar, st)
     moverMade[id] = true
 end
 
+function M.EnsureMover(bar)
+    local st = state[bar.id]
+    if st and st.bar then EnsureMover(bar, st) end
+end
+
 local function Place(bar, st)
     local f = st.frame
     local ms = ns.MoverSync
@@ -812,7 +818,8 @@ local function Place(bar, st)
     if st.stacked then
         local BS = ns.BarSetup
         st.stackH = BS.PositionHeight and BS.PositionHeight(M.Key(bar)) or nil
-        if moverMade[bar.id] and ms then ms.SetManagedEnabled(MoverName(bar.id), false) end
+        EnsureMover(bar, st)
+        if moverMade[bar.id] and ms then ms.SetManagedEnabled(MoverName(bar.id), true) end
         return
     end
     st.stackH = nil
@@ -1041,6 +1048,7 @@ function M.Refresh()
     end
     UpdateDriver()
     dirty = true
+    if ns.MoverSync and ns.MoverSync.Queue then ns.MoverSync.Queue() end
 end
 
 local queued = false

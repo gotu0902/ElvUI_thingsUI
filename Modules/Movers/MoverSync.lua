@@ -611,6 +611,31 @@ function M.SyncAll()
         for _, o in ipairs(orphans) do M.RemoveManaged(o[1], _G["TUI_CustomBars" .. o[2]]) end
     end
 
+    local CBx = ns.ComboBars
+    for _, bar in ipairs((CBx and CBx.GetBars and CBx.GetBars()) or {}) do
+        CBx.EnsureMover(bar)
+        local mname = CBx.MoverName(bar.id)
+        local mover = _G[mname]
+        local frame = CBx.Frame(CBx.Key(bar))
+        if mover and frame and not (E.DisabledMovers and E.DisabledMovers[mname]) then
+            local label, lock, fixed = "Combo: " .. (bar.name or tostring(bar.id)), false, false
+            if CBx.InStack(bar) then
+                label, lock, fixed = label .. " |cFF888888(Bar Setup)|r", true, true
+            else
+                local af = bar.anchorFrame
+                if af == "CUSTOM" then af = bar.anchorFrameCustom end
+                if af and af ~= "UIParent" and af ~= "" then
+                    label = label .. " |cFFFFAA00(Anchor: " .. ShortAnchor(af) .. ")|r"
+                    lock = true
+                end
+            end
+            SyncMoverToFrame(mover, frame)
+            if mover.text and mover.text.SetText then mover.text:SetText(label) end
+            SetMoverLock(mover, lock, fixed)
+            ColorMover(mname)
+        end
+    end
+
     local ktMover = _G.TUI_KickTrackerMover
     if ktMover then
         local mname = "TUI_KickTrackerMover"
