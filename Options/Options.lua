@@ -298,5 +298,6 @@ function TUI.ConfigTable()
             syncTab              = WithSentinel(TUI:SyncOptions(), "sync"),
         },
     }
+    TUI:AuraIndicatorCopy()
 end
 ns.LoadMark("options")
