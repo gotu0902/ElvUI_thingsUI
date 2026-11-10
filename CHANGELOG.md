@@ -43,11 +43,11 @@
 - Copy modules or single items between profiles: Import - Export - Install > Profiles (and ElvUI's Module Copy)
 - Damage Meter and Minimap are exported now
 ### CDM & Spell Editor
-- Spell Editor has its own Modules entry and lists only this spec's spells (plus ones you dragged between categories)
+- Spell Editor has its own Modules entry, its settings in tabs (Show, Look, Glow, Text, Aura On Top), and lists only this spec's spells (plus ones you dragged between categories)
 - Spells the CDM doesn't list (Wrath) sit at the bottom of the list, or type a Spell ID. Show In puts one in Essential or Utility at the position you pick
 - When You Can't Cast It per spell: Not Enough Power / Not Usable with Desaturate, Tint and Alpha, wherever the spell shows (CDM icons, the spells above, Groups - Icons, Timers, racials). Out-of-range red still wins
 - Show per spell: Visibility rules or Only On Cooldown / Only When Ready take it out of the row (and out of Groups - Icons)
-- Aura Icon On Top: an Aura Icon covers a cooldown while its aura is up (Garrote's DoT over Garrote), with optional Spell Cooldown On Top
+- Aura Icon On Top: an Aura Icon covers a cooldown while its aura is up (Garrote's DoT over Garrote, or any other aura), with optional Spell Cooldown On Top while it covers it
 - Per spell: Aura Overlay, swipe direction and color, Recharge Swipe, Pandemic Glow and own glow style. Per buff: glow and Invert Swipe
 - New Layout > Aura Overlay: Hide Aura Overlay, aura swipe color and direction, Pandemic Glow (Blizzard / Hidden / Custom)
 - Charge spells show the full swipe while a charge recharges (off in Settings or per spell)

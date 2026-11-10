@@ -1003,7 +1003,7 @@ local function SpellEditorPage(order, buffs)
         glowOff, noOwnLook)
     local countBrk, countPoint, countX, countY = place("count", "hideCount")
 
-    return {
+    local page = {
         order = order, type = "group", name = buffs and "Buff Icons" or "Cooldowns",
         args = {
             desc = {
@@ -1475,6 +1475,30 @@ local function SpellEditorPage(order, buffs)
             },
         },
     }
+
+    -- the spell's settings as tabs under the picker
+    local S = page.args.settings.args
+    page.args.settings = nil
+    page.childGroups = "tab"
+    local function noSpell() return not isSpell() end
+    page.args.title = {
+        order = 8, type = "description", fontSize = "large", width = 1.6, hidden = noSpell,
+        name = function() return isSpell() and spellLabel(sel) or "" end,
+    }
+    S.reset.order, S.reset.hidden = 8.5, noSpell
+    page.args.reset = S.reset
+    S.glowGrp.order, S.pandemicGrp.order = 1, 2
+    local function tab(o, name, keys, hidden)
+        local args = {}
+        for _, k in ipairs(keys) do args[k] = S[k] end
+        return { order = o, type = "group", name = name, hidden = hidden or noSpell, args = args }
+    end
+    page.args.showTab = tab(10, "Show", { "rowGrp", "showGrp" })
+    page.args.lookTab = tab(11, "Look", { "iconGrp", "castGrp", "overlayGrp" })
+    page.args.glowTab = tab(12, "Glow", { "glowGrp", "pandemicGrp" })
+    page.args.textTab = tab(13, "Text", { "cooldownGrp", "countGrp" })
+    page.args.onTopTab = tab(14, "Aura On Top", { "onTopGrp" }, function() return buffs or not isSpell() end)
+    return page
 end
 
 -- its own Modules entry: per-spell look for Essential/Utility cooldowns and Buff Icons

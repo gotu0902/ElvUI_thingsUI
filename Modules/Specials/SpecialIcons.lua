@@ -840,7 +840,8 @@ local function StyleOverText(cd, db)
     return true
 end
 
--- the spell's own cooldown on top, while its frame shows the aura
+-- the spell's own cooldown on top, while something covers it: our aura (any aura, not just the
+-- one the frame links) or Blizzard's aura look on the frame
 function SB.UpdateOverCD(iconKey)
     local wrapper = _G["TUI_SpecialIcon_" .. iconKey]
     local spell = overOf[iconKey]
@@ -854,7 +855,7 @@ function SB.UpdateOverCD(iconKey)
     cd:SetFrameLevel(wrapper:GetFrameLevel() + 40)
     local test = ns.CustomGroups and ns.CustomGroups.testMode
     local child = wrapper._overChild
-    if not (test or (child and ns.CDMIcons.ChildAuraActive(child))) then
+    if not (test or (child and (ns.CDMIcons.ChildAuraActive(child) or SB.MissingUp(db)))) then
         cd:Clear()
         cd:Hide()
         return
@@ -926,21 +927,24 @@ do
         queued = false
         for key in pairs(overOf) do SB.UpdateOverCD(key) end
     end
-    local ev = CreateFrame("Frame")
-    ev:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-    ev:SetScript("OnEvent", function()
+    local function Queue()
         if queued or not next(overOf) then return end
         queued = true
         C_Timer.After(0, Flush)
-    end)
-    if ns.CDMIcons and ns.CDMIcons.OnAuraState then
-        ns.CDMIcons.OnAuraState(function(child)
-            for key in pairs(overOf) do
-                local wrapper = _G["TUI_SpecialIcon_" .. key]
-                if wrapper and wrapper._overChild == child then SB.UpdateOverCD(key) end
-            end
-        end)
     end
+    local ev = CreateFrame("Frame")
+    ev:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+    ev:SetScript("OnEvent", Queue)
+    -- the icon's own aura coming and going (a buff frame of the CDM, or out of combat a scan)
+    if ns.CDMIcons and ns.CDMIcons.OnAuraState then ns.CDMIcons.OnAuraState(Queue) end
+    local auras = CreateFrame("Frame")
+    auras:RegisterUnitEvent("UNIT_AURA", "player", "target")
+    auras:RegisterEvent("PLAYER_TARGET_CHANGED")
+    auras:RegisterEvent("PLAYER_REGEN_ENABLED")
+    auras:SetScript("OnEvent", function(_, event)
+        if event == "UNIT_AURA" and InCombatLockdown() then return end
+        Queue()
+    end)
 end
 
 SB.UpdateIconSlot = UpdateIconSlot
