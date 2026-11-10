@@ -177,8 +177,7 @@ function M.StyleAura(button, r, group, def, w, h, staticName, single)
             end
         elseif tok == "cd" and not bound.cd then
             bound.cd = true
-            local AL = ns.AuraLane
-            button:SetDurationText(fs, { textFormatter = AL and AL.DurFormatter() or nil })
+            button:SetDurationText(fs, ns.AuraLane.DurationTextOpts(group, group.durationColor))
             fs._estW = Measure(group, "00")
         elseif tok == "stacks" and not bound.stacks then
             bound.stacks = true
@@ -224,6 +223,25 @@ end
 
 local Rebuild, QueueRelayout
 
+-- Color When Low: [cd] is our own text on a duration binding (a Cooldown's countdown has no color curve)
+local function RunCD(L, dur)
+    H.SetCooldownFromDuration(L.cd, dur)
+    if L.bindFS then
+        L.binding:SetDuration(dur)
+        L.binding:SetEnabled(true)
+    end
+end
+
+local function StopBind(L)
+    if L.binding then L.binding:SetEnabled(false) end
+    if L.bindFS then L.bindFS:SetText("") end
+end
+
+local function StopCD(L)
+    L.cd:Clear()
+    StopBind(L)
+end
+
 function M.UpdateLine(L)
     local id = L.spellID
     if not id then return end
@@ -236,7 +254,7 @@ function M.UpdateLine(L)
     local onCD = CI and CI.OnRealCD and CI.OnRealCD(id)
     local on, off = Curves()
     if onCD ~= nil then
-        if onCD and dur then H.SetCooldownFromDuration(L.cd, dur) else L.cd:Clear() end
+        if onCD and dur then RunCD(L, dur) else StopCD(L) end
         L.main:SetAlpha((onCD or L.keep) and 1 or 0)
         L.ready:SetAlpha((L.readyOn and not onCD) and 1 or 0)
         local shown = (onCD or L.keep or L.readyOn) and true or false
@@ -246,11 +264,11 @@ function M.UpdateLine(L)
         end
     -- the GCD is not this spell's cooldown
     elseif not (dur and on) or (info and info.isOnGCD) then
-        L.cd:Clear()
+        StopCD(L)
         L.main:SetAlpha(L.keep and 1 or 0)
         L.ready:SetAlpha(L.readyOn and 1 or 0)
     else
-        H.SetCooldownFromDuration(L.cd, dur)
+        RunCD(L, dur)
         L.main:SetAlpha(L.keep and 1 or dur:EvaluateRemainingDuration(on, 0))
         if L.readyOn and off then L.ready:SetAlpha(dur:EvaluateRemainingDuration(off, 1)) else L.ready:SetAlpha(0) end
     end
@@ -271,6 +289,7 @@ end
 -- the game can still say active in that frame, and no event follows)
 function M.LineDone(L)
     if L.needCD and CountdownText(L.cd) then Rebuild(L) end
+    StopBind(L)
     if L.test or not L.spellID then return end
     L.main:SetAlpha(L.keep and 1 or 0)
     L.ready:SetAlpha(L.readyOn and 1 or 0)
@@ -310,7 +329,18 @@ local function BuildCD(L, frame, store, fmt, group, withCD)
     if withCD then L.needCD = nil end
     for _, seg in ipairs(M.Parse(fmt)) do
         local fs
-        if seg.tok == "cd" and withCD and not cdUsed then
+        if seg.tok == "cd" and withCD and not cdUsed and L.binding and L.useBind then
+            cdUsed = true
+            n = n + 1
+            fs = Piece(store, frame, n)
+            StyleSeg(fs, group, "cd")
+            NoGap(fs)
+            fs._estW = Measure(group, "00")
+            fs:SetText("")
+            fs:Show()
+            L.binding:SetFontString(fs)
+            L.bindFS = fs
+        elseif seg.tok == "cd" and withCD and not cdUsed then
             cdUsed = true
             fs = CountdownText(L.cd)
             if fs then
@@ -348,6 +378,20 @@ end
 
 Rebuild = function(L)
     wipe(L.charges)
+    local g = L.group
+    local want = g.colorThreshold and C_DurationUtil and C_DurationUtil.CreateDurationTextBinding and true or false
+    if want then
+        local AL = ns.AuraLane
+        L.binding = L.binding or C_DurationUtil.CreateDurationTextBinding()
+        L.binding:SetFormatter(AL.DurFormatter())
+        local tc = AL.ThresholdTextColor(g.thresholdSeconds, g.thresholdColor, g.durationColor)
+        if tc then L.binding:SetTextColorCurve(tc.curve, tc.property) end
+    else
+        StopBind(L)
+    end
+    L.useBind = want
+    L.bindFS = nil
+    L.cd:SetHideCountdownNumbers(want)
     BuildCD(L, L.main, L.mainSegs, L.fmt, L.group, true)
     BuildCD(L, L.ready, L.readySegs, L.group.readyFormat or "", L.group, false)
 end
@@ -645,6 +689,12 @@ function M.SyncCooldowns(st, group, W, Hh, test)
         L.test = test or nil
         if test then
             L.cd:SetCooldown(GetTime() - 3, 15)
+            if L.bindFS then
+                local d = C_DurationUtil.CreateDuration()
+                d:SetTimeFromStart(GetTime() - 3, 15)
+                L.binding:SetDuration(d)
+                L.binding:SetEnabled(true)
+            end
             L.main:SetAlpha(1)
             L.ready:SetAlpha(0)
             for _, fs in ipairs(L.charges) do fs:SetText("2") end
@@ -656,7 +706,7 @@ function M.SyncCooldowns(st, group, W, Hh, test)
         local L = st.cdLines[i]
         L.spellID = nil
         L.test = nil
-        L.cd:Clear()
+        StopCD(L)
         L:Hide()
         active[L] = nil
     end

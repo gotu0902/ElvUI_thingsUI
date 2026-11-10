@@ -19,7 +19,7 @@
 - Auras and cooldowns as lines of text: [name] [cd] [stacks], with anything you like around them
 - Auras work like Groups - Bars (Spec/Class/Global, Aura Collections, Blizzard filters, sorting, Visibility). A cooldown line shows while the spell is on cooldown (not the GCD), then hides, stays or shows a Ready Text. An aura line can stay or show a Missing Text while the aura is down
 - One group serves every class: a character gets its spec, class and Global lines for spells it knows. Max Lines fills cooldowns first
-- Own colors per part, left/right/center alignment that doesn't wobble, UPPERCASE option
+- Own colors per part (the time can turn a Low Color under N seconds), left/right/center alignment that doesn't wobble, UPPERCASE option
 ### New: Kick Tracker
 - Your group's interrupts as bars (off by default). Nobody else needs an addon: in keys it reads Blizzard's meter, so a cooldown only starts when that member's interrupt count went up
 - Cooldowns from class, spec and talents (inspected before the key). Healers without a kick get no row, warlocks follow their demon
