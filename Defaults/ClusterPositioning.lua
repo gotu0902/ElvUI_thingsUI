@@ -20,6 +20,7 @@ P["thingsUI"].clusterPositioning = {
         xOffset = 0, yOffset = -10,
         matchWidth = true,
     },
+    focusTargetFrame = { enabled = true, gap = 1 },
     focusCastBar = {
         enabled = false,
         anchorPoint = "TOP", anchorRelativePoint = "BOTTOM",

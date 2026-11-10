@@ -68,6 +68,17 @@ local TARGETS = {
         end,
     },
     {
+        moverName = "ElvUF_FocusTargetMover",
+        frame     = function() return _G.ElvUF_FocusTarget end,
+        baseLabel = "FocusTarget Frame",
+        tag       = function()
+            local cp = E.db.thingsUI and E.db.thingsUI.clusterPositioning
+            if cp and cp.enabled and cp.focusTargetFrame and cp.focusTargetFrame.enabled then
+                return "|cFF888888(Cluster)|r"
+            end
+        end,
+    },
+    {
         moverName = "ElvUF_FocusCastbarMover",
         frame     = function()
             local f = _G.ElvUF_Focus

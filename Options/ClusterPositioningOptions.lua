@@ -18,7 +18,7 @@ function TUI:ClusterPositioningSubTab()
                     description = {
                         order = 2,
                         type = "description",
-                        name = "Anchor ElvUI unit frames to the Essential Cooldown Viewer.\n\nWhen enabled:\n• ElvUF_Player anchors to the left\n• ElvUF_Target anchors to the right\n• ElvUF_TargetTarget anchors to Target\n• ElvUF_Target_CastBar anchors below Target\n• Focus frame + castbar anchor wherever you choose (default: below Target)\n\n|cFFFF4040Warning:|r This overrides ElvUI's unit frame positioning, it will look weird in /emove.\n\n",
+                        name = "Anchor ElvUI unit frames to the Essential Cooldown Viewer.\n\nWhen enabled:\n• ElvUF_Player anchors to the left\n• ElvUF_Target anchors to the right\n• ElvUF_TargetTarget anchors to Target\n• ElvUF_Target_CastBar anchors below Target\n• Focus frame + castbar anchor wherever you choose (default: below Target)\n• ElvUF_FocusTarget anchors right of Focus\n\n|cFFFF4040Warning:|r This overrides ElvUI's unit frame positioning, it will look weird in /emove.\n\n",
                     },
                     enabled = {
                         order = 3,
@@ -287,12 +287,41 @@ function TUI:ClusterPositioningSubTab()
                                     },
                                 }
                             end)(),
+                    focusTargetGroup = (function()
+                                local function tdb() return E.db.thingsUI.clusterPositioning.focusTargetFrame end
+                                return {
+                                    order = 24, type = "group", name = "FocusTarget Frame", inline = true,
+                                    disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
+                                    args = {
+                                        enabled = {
+                                            order = 1, type = "toggle", name = "Position FocusTarget Frame",
+                                            get = function() return tdb().enabled end,
+                                            set = function(_, v)
+                                                tdb().enabled = v
+                                                local f, m = _G.ElvUF_FocusTarget, _G.ElvUF_FocusTargetMover
+                                                if not v and f and m and not InCombatLockdown() then
+                                                    f:ClearAllPoints()
+                                                    f:SetPoint("CENTER", m, "CENTER", 0, 0)
+                                                end
+                                                TUI:QueueClusterUpdate()
+                                            end,
+                                        },
+                                        gap = {
+                                            order = 2, type = "range", name = "FocusTarget Gap",
+                                            min = -50, max = 50, step = 0.01, bigStep = 1,
+                                            disabled = function() return not E.db.thingsUI.clusterPositioning.enabled or not tdb().enabled end,
+                                            get = function() return tdb().gap end,
+                                            set = function(_, v) tdb().gap = v; TUI:QueueClusterUpdate() end,
+                                        },
+                                    },
+                                }
+                            end)(),
                     focusCastBarGroup = (function()
                                 local function cdb() return E.db.thingsUI.clusterPositioning.focusCastBar end
                                 local function cset(k, v) cdb()[k] = v; TUI:QueueClusterUpdate() end
                                 local function off() return not E.db.thingsUI.clusterPositioning.enabled or not cdb().enabled end
                                 return {
-                                    order = 24, type = "group", name = "Focus Cast Bar", inline = true,
+                                    order = 25, type = "group", name = "Focus Cast Bar", inline = true,
                                     disabled = function() return not E.db.thingsUI.clusterPositioning.enabled end,
                                     args = {
                                         enabled = {

@@ -68,6 +68,7 @@
 ### Other
 - Charge Bar: Fill Direction (left, right, toward or from the middle); a spell down to one charge shows as a single bar or in the CDM
 - Bar Setup: Height by Position, and a red ! when a spec sits in two setups
+- Cluster Positioning: FocusTarget frame, right of Focus with a 1px gap
 - Mini Meter: your own row works in combat (tooltip, spell list, popout), Reset on New Instance asks, Reset When M+ Starts, swap options, nicknames stay in combat
 - Visibility: Only As Tank / Healer / DPS everywhere, Timers got Visibility
 - Spell pickers show tooltips, ElvUI Party Frames in Anchor To, Account Settings > ElvUI Private imports everything

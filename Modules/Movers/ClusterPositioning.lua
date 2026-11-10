@@ -65,7 +65,7 @@ local function HookUFUpdates()
     if not UF then return end
     hookedUF = true
     hooksecurefunc(UF, "CreateAndUpdateUF", function(_, unit)
-        if unit == "player" or unit == "target" or unit == "focus" then TUI:QueueClusterUpdate() end
+        if unit == "player" or unit == "target" or unit == "focus" or unit == "focustarget" then TUI:QueueClusterUpdate() end
     end)
     hooksecurefunc(UF, "Update_AllFrames", function() TUI:QueueClusterUpdate() end)
 end
@@ -278,6 +278,14 @@ local function UpdateClusterPositioning()
         end
     end
 
+    if db.focusTargetFrame and db.focusTargetFrame.enabled then
+        local ft, focus = _G["ElvUF_FocusTarget"], _G["ElvUF_Focus"]
+        if ft and focus then
+            ft:ClearAllPoints()
+            ft:SetPoint("LEFT", focus, "RIGHT", db.focusTargetFrame.gap or 1, 0)
+        end
+    end
+
     if db.focusCastBar and db.focusCastBar.enabled then
         local cdb = db.focusCastBar
         local focus = _G["ElvUF_Focus"]
@@ -377,6 +385,12 @@ local function RestoreFramesToElvUI()
         focusFrame:SetPoint("CENTER", focusMover, "CENTER", 0, 0)
         local uf = E.db.unitframe and E.db.unitframe.units and E.db.unitframe.units.focus
         if uf and uf.width then focusFrame:SetWidth(uf.width) end
+    end
+
+    local ftFrame, ftMover = _G["ElvUF_FocusTarget"], _G["ElvUF_FocusTargetMover"]
+    if ftFrame and ftMover then
+        ftFrame:ClearAllPoints()
+        ftFrame:SetPoint("CENTER", ftMover, "CENTER", 0, 0)
     end
 
     local fCastBar, fCastBarMover = _G["ElvUF_Focus_CastBar"], _G["ElvUF_FocusCastbarMover"]
