@@ -25,6 +25,22 @@ local function CurSpec()
     return (BS and BS.GetCurrentSpecID and BS.GetCurrentSpecID()) or 0
 end
 
+-- the spec the list shows; nil = yours
+local editSpec
+local function ViewSpec() return editSpec or CurSpec() end
+local function ViewClass()
+    local m = ns.SpecMeta(ViewSpec())
+    return (m and m.classToken) or select(2, UnitClass("player"))
+end
+local function InView(b) return b ~= nil and CB().LoadsOn(b, ViewSpec(), ViewClass()) end
+
+-- cascade value -> Load On key: a spec ID, or "CLASS:<token>" for a whole class
+local function LoadKey(v)
+    local tok = type(v) == "string" and v:match("^([A-Z_]+):CLASS$")
+    if tok then return "CLASS:" .. tok end
+    return tonumber(type(v) == "string" and v:match("^[A-Z_]+:(%d+)$"))
+end
+
 local function SpellLabel(id)
     local nm = C_Spell.GetSpellName and C_Spell.GetSpellName(id)
     local tex = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)
@@ -133,7 +149,7 @@ local function BarTab(bi)
     rows.addAura = {
         order = 1, type = "select", dialogControl = "TUI_SpellDropdown", name = "|cFF60E0A0Add Aura|r", width = "double",
         values = function()
-            local vals = ns.AuraPick("spec", CurSpec())
+            local vals = ns.AuraPick("spec", ViewSpec())
             local own = sget("spells") or {}
             -- where an aura already shows (fine to use it here too), this bar's other minibars first
             local b = bar()
@@ -162,7 +178,7 @@ local function BarTab(bi)
         end,
         -- the ones already in this minibar on top
         sorting = function()
-            local list = select(2, ns.AuraPick("spec", CurSpec()))
+            local list = select(2, ns.AuraPick("spec", ViewSpec()))
             local own = sget("spells") or {}
             local top, rest = {}, {}
             for _, k in ipairs(list) do
@@ -238,6 +254,7 @@ local function BarTab(bi)
 
     local tab = {
         order = 10 + bi, type = "group", childGroups = "tab",
+        hidden = function() return not InView(bar()) end,
         name = function()
             local b = bar()
             if not b then return "" end
@@ -271,15 +288,26 @@ local function BarTab(bi)
                 get = function() return g("showIn") end,
                 set = function(_, v) local b = bar() if b then CB().SetShowIn(b, v) end end,
             },
+            global = {
+                order = 4.5, type = "toggle", name = "Global", width = 0.6,
+                get = function() local b = bar() return b ~= nil and b.class == nil end,
+                set = function(_, v)
+                    local b = bar()
+                    if b then CB().SetGlobal(b, v, ViewClass()) end
+                    NotifyChange()
+                end,
+            },
             loadOn = {
                 order = 5, type = "multiselect", name = "Load On (none ticked: every spec)",
+                hidden = function() local b = bar() return not (b and b.class) end,
                 values = function()
                     local out = {}
-                    local _, _, classID = UnitClass("player")
-                    for _, rec in ipairs(ns.SpecsForClass(classID)) do
-                        out[rec.id] = ("|T%d:14:14|t %s"):format(rec.icon or 0, rec.name or rec.id)
-                    end
                     local b = bar()
+                    for _, rec in ipairs(ns.AllSpecs()) do
+                        if b and rec.classToken == b.class then
+                            out[rec.id] = ("|T%d:14:14|t %s"):format(rec.icon or 0, rec.name or rec.id)
+                        end
+                    end
                     for sid in pairs((b and b.specs) or {}) do
                         if not out[sid] then
                             local m = ns.SpecMeta(sid)
@@ -294,6 +322,24 @@ local function BarTab(bi)
                     if not b then return end
                     b.specs = b.specs or {}
                     b.specs[k] = v or nil
+                    Refresh()
+                end,
+            },
+            -- a global bar picks specs or whole classes
+            loadOnAny = {
+                order = 5.1, type = "multiselect", name = "Load On (none ticked: every class)", width = 2,
+                dialogControl = "TUI_CascadeDropdown",
+                hidden = function() local b = bar() return not b or b.class ~= nil end,
+                values = function() return ns.CascadeDropdown.AllSpecsWithClassEntries() end,
+                get = function(_, v)
+                    local b, k = bar(), LoadKey(v)
+                    return (b and k and b.specs and b.specs[k]) or false
+                end,
+                set = function(_, v, on)
+                    local b, k = bar(), LoadKey(v)
+                    if not (b and k) then return end
+                    b.specs = b.specs or {}
+                    b.specs[k] = on or nil
                     Refresh()
                 end,
             },
@@ -869,13 +915,58 @@ end
 
 function TUI:ComboBarsOptions()
     args = {
+        picker = {
+            order = 0.1, type = "select", name = "Editing Spec", width = "double",
+            dialogControl = "TUI_CascadeDropdown",
+            values = function()
+                local counts = {}
+                for _, r in ipairs(ns.AllSpecs()) do
+                    local n = 0
+                    for _, b in ipairs(CB().GetBars()) do
+                        if CB().LoadsOn(b, r.id, r.classToken) then n = n + 1 end
+                    end
+                    counts[r.id] = n
+                end
+                return ns.CascadeDropdown.AllSpecsWithCounts(counts)
+            end,
+            get = function()
+                local m = ns.SpecMeta(ViewSpec())
+                return m and (m.classToken .. ":" .. m.id) or nil
+            end,
+            set = function(_, v)
+                local sid = tonumber(type(v) == "string" and v:match("^[A-Z_]+:(%d+)$"))
+                if sid then editSpec = sid; NotifyChange() end
+            end,
+        },
+        gotoCur = {
+            order = 0.2, type = "execute", width = 1.2,
+            hidden = function() return ViewSpec() == CurSpec() end,
+            name = function()
+                local m = ns.SpecMeta(CurSpec())
+                if not m then return "Go to Current Spec" end
+                local icon = m.icon and ("|T" .. m.icon .. ":14:14|t ") or ""
+                return "Go to " .. icon .. ns.ClassColor(m.classToken) .. (m.name or "?") .. "|r"
+            end,
+            func = function() editSpec = nil; NotifyChange() end,
+        },
+        pickerGap = { order = 0.3, type = "description", width = "full", name = " " },
         new = {
             order = 1, type = "execute", name = "+ New Combo Bar", width = 1.2,
             func = function()
-                CB().NewBar()
+                CB().NewBar(nil, ViewSpec())
                 Rebuild()
                 NotifyChange()
             end,
+        },
+        none = {
+            order = 3, type = "description", width = "full",
+            hidden = function()
+                for _, b in ipairs(CB().GetBars()) do
+                    if InView(b) then return false end
+                end
+                return true
+            end,
+            name = "|cFF888888No Combo Bars on this spec yet.|r",
         },
         desc = {
             order = 2, type = "description",

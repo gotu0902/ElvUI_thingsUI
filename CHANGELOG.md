@@ -12,7 +12,8 @@
 - Color When: Any / All / None Is Up, or How Many. Auras from the spec's list, an ID or name, or a linked Aura Collection. An aura can show here and in Aura Icons, Aura Bars or Groups too: the menu says where else it shows, with links
 - Bar or Text (a line of words that color in), your own text (or none) and text color per minibar, UPPERCASE, name / duration / stacks text like Groups - Bars, a name that gives way to the time while active, a Static or Duration fill (the shortest aura or one you pick, for the whole bar or per minibar)
 - Glow the bar when all are active or when one is missing (in combat only if you want), Glow While Active per minibar
-- Standalone with its own mover or in Bar Setup, Load On spec, Visibility, exports and Profile Sync
+- A bar belongs to its class (Load On picks the specs), or Global with Load On any spec or class. Editing Spec shows and edits any spec's bars
+- Standalone with its own mover or in Bar Setup, Visibility, exports and Profile Sync
 - Works on secret auras in combat. All / None and the glow need the aura in Blizzard's Cooldown Manager: the menu names the ones missing and opens Cooldown Settings
 ### New: Groups - Text
 - Auras and cooldowns as lines of text: [name] [cd] [stacks], with anything you like around them

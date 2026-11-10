@@ -33,6 +33,21 @@ local function Root()
             end
         end
     end
+    -- bars belong to a class now: the one their ticked specs name; the rest stay global
+    if not r.classV1 and #ns.AllSpecs() > 0 then
+        r.classV1 = true
+        for _, b in ipairs(r.bars) do
+            if b.class == nil then
+                local cls
+                for sid in pairs(b.specs or {}) do
+                    local m = ns.SpecMeta(sid)
+                    if not m or (cls and cls ~= m.classToken) then cls = false break end
+                    cls = m.classToken
+                end
+                if cls then b.class = cls end
+            end
+        end
+    end
     return r
 end
 
@@ -62,11 +77,40 @@ local function CurSpec()
     return (BS and BS.GetCurrentSpecID and BS.GetCurrentSpecID()) or 0
 end
 
+local function MyClass() return select(2, UnitClass("player")) end
+
+-- bar.class owns it (nil = global); a global bar's list can name whole classes as "CLASS:<token>"
+function M.LoadsOn(bar, specID, classToken)
+    if bar.class and bar.class ~= classToken then return false end
+    local specs = bar.specs
+    if not (specs and next(specs)) then return true end
+    return specs[specID] == true or (not bar.class and classToken ~= nil and specs["CLASS:" .. classToken] == true)
+end
+
 function M.LoadedHere(bar)
     if not (bar and bar.enabled) then return false end
-    local specs = bar.specs
-    if specs and next(specs) then return specs[CurSpec()] == true end
-    return true
+    return M.LoadsOn(bar, CurSpec(), MyClass())
+end
+
+-- Global off: the class its list names, else the given one; other classes' specs go
+function M.SetGlobal(bar, on, classToken)
+    if on then
+        bar.class = nil
+    else
+        local only
+        for k in pairs(bar.specs or {}) do
+            local m = type(k) == "number" and ns.SpecMeta(k)
+            local c = (m and m.classToken) or (type(k) == "string" and k:match("^CLASS:(.+)$"))
+            if not c or (only and only ~= c) then only = false break end
+            only = c
+        end
+        bar.class = only or classToken or MyClass()
+        for k in pairs(bar.specs or {}) do
+            local m = type(k) == "number" and ns.SpecMeta(k)
+            if not (m and m.classToken == bar.class) then bar.specs[k] = nil end
+        end
+    end
+    M.Refresh()
 end
 
 function M.Pieces(seg)
@@ -1076,11 +1120,14 @@ end
 
 -- ------------------------------------------------------------------ edits
 
-function M.NewBar(name)
+function M.NewBar(name, specID)
     local r = Root()
     local id = r.nextID
     r.nextID = id + 1
-    local bar = ns.Defaults.ComboBar(id, name, CurSpec())
+    specID = tonumber(specID) or CurSpec()
+    local bar = ns.Defaults.ComboBar(id, name, specID)
+    local m = ns.SpecMeta(specID)
+    bar.class = (m and m.classToken) or MyClass()
     bar.segments[1] = ns.Defaults.ComboSegment(1)
     r.bars[#r.bars + 1] = bar
     M.Refresh()

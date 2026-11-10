@@ -578,7 +578,13 @@ local function SetupEditor(idx)
                 hidden = function() return not (ns.ComboBars and #ns.ComboBars.GetBars() > 0) end,
                 values = function()
                     local out = {}
-                    for _, b in ipairs(ns.ComboBars.GetBars()) do out["combo:" .. b.id] = b.name or ("Combo Bar " .. b.id) end
+                    local mine, inSetup = select(2, UnitClass("player")), {}
+                    for _, key in ipairs(setup.order or {}) do inSetup[key] = true end
+                    -- your class's bars and global ones; another class's only while it's in here
+                    for _, b in ipairs(ns.ComboBars.GetBars()) do
+                        local key = "combo:" .. b.id
+                        if not b.class or b.class == mine or inSetup[key] then out[key] = b.name or ("Combo Bar " .. b.id) end
+                    end
                     return out
                 end,
                 get = function(_, k)
