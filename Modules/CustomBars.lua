@@ -382,10 +382,10 @@ local function StyleBar(button, r, group, def)
         r.dur:ClearAllPoints()
         r.dur:SetPoint(group.durationPoint or "RIGHT", r.bar, group.durationPoint or "RIGHT",
             group.durationXOffset or -4, group.durationYOffset or 0)
-        E:SetFont(r.dur, font, group.fontSize or 12, group.fontOutline or "OUTLINE")
+        E:SetFont(r.dur, font, group.durationFontSize or group.fontSize or 12, group.fontOutline or "OUTLINE")
         ns.TextColor(r.dur, group.durationColor)
         r.dur:Show()
-        button:SetDurationText(r.dur, { textFormatter = AL and AL.DurFormatter() or nil })
+        button:SetDurationText(r.dur, AL.DurationTextOpts(group, group.durationColor))
     else
         button:ClearDurationText()
         if r.dur then r.dur:SetText("") r.dur:Hide() end
@@ -548,7 +548,7 @@ local function RenderTestBars(st, group)
                 f.name:Hide()
             end
             if group.showDuration ~= false then
-                E:SetFont(f.dur, font, group.fontSize or 12, group.fontOutline or "OUTLINE")
+                E:SetFont(f.dur, font, group.durationFontSize or group.fontSize or 12, group.fontOutline or "OUTLINE")
                 ns.TextColor(f.dur, group.durationColor)
                 f.dur:ClearAllPoints()
                 f.dur:SetPoint(group.durationPoint or "RIGHT", f.bar, group.durationPoint or "RIGHT",

@@ -736,6 +736,29 @@ local function BarTab(bi)
                             },
                             durationColor = ColorArg(5, "Color", function() return g("durationColor") end,
                                 function(c) s("durationColor", c) end, isText),
+                            durationFontSize = {
+                                order = 1.5, type = "range", name = "Font Size", min = 6, max = 36, step = 1,
+                                get = function() return g("durationFontSize") or g("fontSize") end,
+                                set = function(_, v) s("durationFontSize", v) end,
+                            },
+                            colorThreshold = {
+                                order = 6, type = "toggle", name = "Color When Low",
+                                get = function() return g("colorThreshold") or false end,
+                                set = function(_, v) s("colorThreshold", v or nil) end,
+                            },
+                            thresholdSeconds = {
+                                order = 7, type = "range", name = "Below", min = 1, max = 30, step = 1,
+                                disabled = function() return not g("colorThreshold") end,
+                                get = function() return g("thresholdSeconds") or 3 end,
+                                set = function(_, v) s("thresholdSeconds", v) end,
+                            },
+                            thresholdColor = (function()
+                                local a = ColorArg(8, "Low Color",
+                                    function() return g("thresholdColor") or { r = 1, g = 0.3, b = 0.3 } end,
+                                    function(c) s("thresholdColor", c) end)
+                                a.disabled = function() return not g("colorThreshold") end
+                                return a
+                            end)(),
                         },
                     },
                     stackGroup = {

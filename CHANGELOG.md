@@ -10,7 +10,7 @@
 ### New: Aura Combo Bars
 - A bar of minibars that color in while their auras are up: one per buff or debuff, or a count minibar that fills one step per aura (Withering Bolt: 3 DoTs up = 3 colored)
 - Color When: Any / All / None Is Up, or How Many. Auras from the spec's list, an ID or name, or a linked Aura Collection. An aura can show here and in Aura Icons, Aura Bars or Groups too: the menu says where else it shows, with links
-- Bar or Text (a line of words that color in), your own text (or none) and text color per minibar, UPPERCASE, name / duration / stacks text like Groups - Bars, a name that gives way to the time while active, a Static or Duration fill (the shortest aura or one you pick, for the whole bar or per minibar)
+- Bar or Text (a line of words that color in), your own text (or none) and text color per minibar, UPPERCASE, name / duration / stacks text like Groups - Bars (the time in its own size, a Low Color under N seconds), a name that gives way to the time while active, a Static or Duration fill (the shortest aura or one you pick, for the whole bar or per minibar)
 - Glow the bar when all are active or when one is missing (in combat only if you want), Glow While Active per minibar
 - A bar belongs to its class (Load On picks the specs), or Global with Load On any spec or class. Editing Spec shows and edits any spec's bars
 - Standalone with its own mover or in Bar Setup, Visibility, exports and Profile Sync
@@ -23,7 +23,7 @@
 ### New: Kick Tracker
 - Your group's interrupts as bars (off by default). Nobody else needs an addon: in keys it reads Blizzard's meter, so a cooldown only starts when that member's interrupt count went up
 - Cooldowns from class, spec and talents (inspected before the key). Healers without a kick get no row, warlocks follow their demon
-- The usual look and anchor options (own bar color on cooldown if you want), Visibility (dungeons to start), exports and Profile Sync. Off means nothing runs; /tui kick shows what it knows
+- The usual look and anchor options (own bar color on cooldown if you want), the time in its own size, Almost Ready: a color and/or glow when the kick is a few seconds from ready, Visibility (dungeons to start), exports and Profile Sync. Off means nothing runs; /tui kick shows what it knows
 ### New: Raid Frame Builder
 - Sorts ElvUI's raid frames by your own name list, everyone else by name. Open Builder (/tui rf): drag frames, Sort by Role, Stack Classes, Save
 - Layouts are account-wide, Enable is per profile. Export/Import shared with things for EUI
@@ -62,6 +62,7 @@
 - Aura Bars: Fill By Stacks (Groups - Bars too), list split like Aura Icons', Move Up / Down in Bar Setup per spec
 - Aura Bars: Show In > Bar Setup works on any bar. Other specs' bar with the same number stays Standalone, and Bar Order says why a bar sits out
 - Position in Row is the icon's real place in Essential/Utility (1, 2, 3 = the first three)
+- Duration: Color When Low (a color under N seconds, secret auras too) and, on Aura Bars, its own Font Size. Groups - Bars got both
 ### Groups
 - Add Buff lists your spec's Cooldown Manager buffs (on Class: every spec's), then the common ones
 - Borders sit inside the icon like WeakAuras and Spacing shows the real gap (your groups look the same). The group's border covers everything in it unless an Aura Icon overrides it

@@ -442,7 +442,7 @@ function SA.StyleIconButton(button, r, wrapper, key)
         local dc = tx.durationColor or {}
         r.dur:SetTextColor(dc.r or 1, dc.g or 1, dc.b or 1)
         r.dur:Show()
-        button:SetDurationText(r.dur, { textFormatter = AL and AL.DurFormatter() or nil })
+        button:SetDurationText(r.dur, AL.DurationTextOpts(tx, dc))
     else
         button:ClearDurationText()
         if r.dur then r.dur:SetText("") r.dur:Hide() end
@@ -656,10 +656,10 @@ function SA.StyleBarButton(button, r, wrapper, key)
         r.dur:ClearAllPoints()
         r.dur:SetPoint(db.durationPoint or "RIGHT", r.bar, db.durationPoint or "RIGHT",
             db.durationXOffset or -4, db.durationYOffset or 0)
-        E:SetFont(r.dur, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
+        E:SetFont(r.dur, font, db.durationFontSize or db.fontSize or 12, db.fontOutline or "OUTLINE")
         ns.TextColor(r.dur, db.durationColor)
         r.dur:Show()
-        button:SetDurationText(r.dur, { textFormatter = AL and AL.DurFormatter() or nil })
+        button:SetDurationText(r.dur, AL.DurationTextOpts(db, db.durationColor))
     else
         button:ClearDurationText()
         if r.dur then r.dur:SetText("") r.dur:Hide() end

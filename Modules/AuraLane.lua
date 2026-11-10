@@ -241,25 +241,38 @@ end
 
 A.DurFormatter = Formatter
 
+-- the time turns c below sec seconds, n above: the engine colors it, so secret auras work
 local colourCache = {}
-local function ThresholdColour(group)
-    local t = group.auras or {}
-    if t.colorThreshold == false then return nil end
-    local sec = math.min(math.max(tonumber(t.thresholdSeconds) or 3, 0.1), 59.9)
-    local c = t.thresholdColor or { r = 1, g = 0.3, b = 0.3 }
-    local n = (group.text and group.text.cooldownColor) or { r = 1, g = 1, b = 1 }
-    local key = ("%d:%.1f:%.2f,%.2f,%.2f:%.2f,%.2f,%.2f")
-        :format(group.id or 0, sec, c.r, c.g, c.b, n.r, n.g, n.b)
+function A.ThresholdTextColor(sec, c, n)
+    sec = math.min(math.max(tonumber(sec) or 3, 0.1), 59.9)
+    c = c or { r = 1, g = 0.3, b = 0.3 }
+    n = n or { r = 1, g = 1, b = 1 }
+    local key = ("%.1f:%.2f,%.2f,%.2f:%.2f,%.2f,%.2f")
+        :format(sec, c.r or 1, c.g or 1, c.b or 1, n.r or 1, n.g or 1, n.b or 1)
     local hit = colourCache[key]
     if hit then return hit end
     if not (C_CurveUtil and C_CurveUtil.CreateColorCurve) then return nil end
     local curve = C_CurveUtil.CreateColorCurve()
     curve:SetType(Enum.LuaCurveType.Step)
-    curve:AddPoint(0, CreateColor(c.r, c.g, c.b, 1))
-    curve:AddPoint(sec, CreateColor(n.r, n.g, n.b, 1))
+    curve:AddPoint(0, CreateColor(c.r or 1, c.g or 1, c.b or 1, 1))
+    curve:AddPoint(sec, CreateColor(n.r or 1, n.g or 1, n.b or 1, 1))
     hit = { curve = curve, property = Enum.DurationTextBindingProperty.RemainingDuration }
     colourCache[key] = hit
     return hit
+end
+
+-- SetDurationText options for a db with colorThreshold / thresholdSeconds / thresholdColor
+function A.DurationTextOpts(db, normal)
+    return {
+        textFormatter = Formatter(),
+        textColor = (db and db.colorThreshold) and A.ThresholdTextColor(db.thresholdSeconds, db.thresholdColor, normal) or nil,
+    }
+end
+
+local function ThresholdColour(group)
+    local t = group.auras or {}
+    if t.colorThreshold == false then return nil end
+    return A.ThresholdTextColor(t.thresholdSeconds, t.thresholdColor, group.text and group.text.cooldownColor)
 end
 
 -- an Aura Icon in a group that overrides the group's text, in group-text shape

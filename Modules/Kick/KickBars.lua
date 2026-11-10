@@ -44,6 +44,7 @@ local effW, effH = 220, 22
 local ticker
 local fillDir, tenths = REMAINING, 5
 local cdColor                 -- the bar's color while the kick is down; nil = same as ready
+local lowSec, lowColor, normColor, glowOpts   -- Almost Ready: under lowSec seconds
 
 local function DB()
     return E.db.thingsUI and E.db.thingsUI.kickTracker
@@ -144,15 +145,22 @@ local function StyleRow(r, db)
 
     local font = LSM:Fetch("font", db.font or "Expressway")
     local size, outline = db.fontSize or 12, db.fontOutline or "OUTLINE"
+    local tsize = db.durationFontSize or size
     local timeOn = db.showDuration ~= false
     E:SetFont(r.name, font, size, outline)
-    E:SetFont(r.time, font, size, outline)
+    E:SetFont(r.time, font, tsize, outline)
+    -- Almost Ready is applied again from scratch
+    if r.glowOn then
+        ns.AuraLane.ApplyButtonFX(r, r.fx, {})
+        r.glowOn = nil
+    end
+    r.low = nil
     if db.showName ~= false then
         local pt = db.namePoint or "LEFT"
         r.name:ClearAllPoints()
         r.name:SetPoint(pt, r.bar, pt, db.nameXOffset or 4, db.nameYOffset or 0)
         r.name:SetJustifyH(pt)
-        r.name:SetWidth(math.max(1, effW - off - 2 * bs - 8 - (timeOn and size * 2.4 or 0)))
+        r.name:SetWidth(math.max(1, effW - off - 2 * bs - 8 - (timeOn and tsize * 2.4 or 0)))
         r.name:Show()
     else
         r.name:Hide()
@@ -185,7 +193,26 @@ local function PaintMember(r, db, class, kick, name)
     r.bg:SetColorTexture(bg.r or 0, bg.g or 0, bg.b or 0, r.opaque and 1 or (bg.a or 0.6))
 end
 
+local function SetLow(r, low)
+    if r.low == low then return end
+    r.low = low
+    if lowColor then
+        local c = low and lowColor or normColor
+        r.time:SetTextColor(c.r or 1, c.g or 1, c.b or 1)
+    end
+    if low and glowOpts then
+        r.fx = r.fx or {}
+        glowOpts.w, glowOpts.h = r:GetWidth(), r:GetHeight()
+        ns.AuraLane.ApplyButtonFX(r, r.fx, glowOpts)
+        r.glowOn = true
+    elseif r.glowOn then
+        ns.AuraLane.ApplyButtonFX(r, r.fx, {})
+        r.glowOn = nil
+    end
+end
+
 local function PaintTime(r, left)
+    SetLow(r, lowSec ~= nil and left < lowSec)
     if left < tenths then
         local q = math.floor(left * 10 + 0.5)
         if r.q ~= q then
@@ -216,6 +243,7 @@ local function PaintCd(r, start, dur)
         r.readyAt = nil
         r.q = nil
         r.time:SetText("")
+        SetLow(r, false)
     end
     BarColor(r)
 end
@@ -570,6 +598,13 @@ function TUI:UpdateKickTracker()
     fillDir = (db.cooldownFill == "fill") and ELAPSED or REMAINING
     tenths = db.tenthsBelow or 5
     cdColor = db.useCooldownColor and db.cooldownColor or nil
+    lowSec = (db.colorThreshold or db.glowThreshold) and (db.thresholdSeconds or 3) or nil
+    lowColor = db.colorThreshold and (db.thresholdColor or { r = 1, g = 0.3, b = 0.3 }) or nil
+    normColor = db.durationColor or { r = 1, g = 1, b = 1 }
+    glowOpts = db.glowThreshold and {
+        style = db.glowType or "pixel", color = db.glowColor, thickness = 2,
+        lines = 8, length = 3, frequency = 0.25, offset = 0,
+    } or nil
     ns.STRATA.Apply(frame, db.frameStrata, db.frameLevel)
     Place(db)
     if not moverMade then

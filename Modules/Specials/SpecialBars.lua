@@ -235,7 +235,7 @@ local function RenderTestBar(wrapper, db, w, h)
         fx.name:Hide()
     end
     if db.showDuration then
-        E:SetFont(fx.dur, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
+        E:SetFont(fx.dur, font, db.durationFontSize or db.fontSize or 12, db.fontOutline or "OUTLINE")
         ns.TextColor(fx.dur, db.durationColor)
         fx.dur:ClearAllPoints()
         fx.dur:SetPoint(db.durationPoint or "RIGHT", fx.bar, db.durationPoint or "RIGHT",
@@ -370,7 +370,7 @@ local function RenderTotemBar(wrapper, db, w, h, start, dur)
         fx.cdText:SetCooldown(start, dur)
         local fs = CooldownText(fx.cdText)
         if fs then
-            E:SetFont(fs, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
+            E:SetFont(fs, font, db.durationFontSize or db.fontSize or 12, db.fontOutline or "OUTLINE")
             ns.TextColor(fs, db.durationColor)
             fs:ClearAllPoints()
             fs:SetPoint(db.durationPoint or "RIGHT", fx, db.durationPoint or "RIGHT",

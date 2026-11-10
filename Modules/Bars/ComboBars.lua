@@ -138,6 +138,8 @@ end
 M.LuaLit = LuaLit
 
 local function FillOf(bar, seg) return seg.fill or G(bar, "fill") end
+-- the time's own size (nil = the font size)
+local function DurSize(bar) return bar.durationFontSize or G(bar, "fontSize") end
 M.FillOf = FillOf
 
 -- the chosen aura the fill and time follow (nil = the shortest one)
@@ -382,9 +384,10 @@ local function LayoutBar(bar, st)
 
     st.top:SetFrameLevel(f:GetFrameLevel() + 8)
     if text then
-        local h = fsize + 4
+        local dsize = G(bar, "showDuration") and DurSize(bar) or fsize
+        local h = math.max(fsize, dsize) + 4
         local pip = math.max(4, math.floor(fsize * 0.6 + 0.5))
-        local durW = G(bar, "showDuration") and math.floor(fsize * 2.2 + 0.5) or 0
+        local durW = G(bar, "showDuration") and math.floor(dsize * 2.2 + 0.5) or 0
         local sp = G(bar, "textSpacing")
         local cells, sum = {}, 0
         for i, seg in ipairs(segs) do
@@ -590,7 +593,7 @@ local function StyleButton(button, r, ss)
 
     if G(bar, "showDuration") and seg.lights ~= "count" and owner then
         r.dur = r.dur or r.top:CreateFontString(nil, "OVERLAY")
-        E:SetFont(r.dur, font, fsize, outline)
+        E:SetFont(r.dur, font, DurSize(bar), outline)
         r.dur:ClearAllPoints()
         if cell then
             -- a word: its time follows it (or takes its place), in its color
@@ -606,8 +609,7 @@ local function StyleButton(button, r, ss)
             ns.TextColor(r.dur, G(bar, "durationColor"))
         end
         r.dur:Show()
-        local AL = ns.AuraLane
-        button:SetDurationText(r.dur, { textFormatter = AL and AL.DurFormatter and AL.DurFormatter() or nil })
+        button:SetDurationText(r.dur, ns.AuraLane.DurationTextOpts(bar, cell and col or G(bar, "durationColor")))
     else
         button:ClearDurationText()
         if r.dur then r.dur:SetText(""); r.dur:Hide() end
@@ -803,7 +805,9 @@ function M.StackHeight(key)
     local st = state[bar.id]
     local h = st and st.bar and st.frame:GetHeight()
     if h and h > 0 then return h end
-    if G(bar, "display") == "text" then return G(bar, "fontSize") + 4 end
+    if G(bar, "display") == "text" then
+        return math.max(G(bar, "fontSize"), G(bar, "showDuration") and DurSize(bar) or 0) + 4
+    end
     return G(bar, "height")
 end
 
@@ -945,7 +949,7 @@ local function Evaluate(st)
         local pd = test and lit and G(bar, "showDuration") and seg.lights ~= "count" and not (text and ss.swap)
         if pd then
             local font = LSM:Fetch("font", G(bar, "font"))
-            E:SetFont(ss.prevDur, font, G(bar, "fontSize"), G(bar, "fontOutline"))
+            E:SetFont(ss.prevDur, font, DurSize(bar), G(bar, "fontOutline"))
             ss.prevDur:SetText("12")
             ss.prevDur:ClearAllPoints()
             if text then
