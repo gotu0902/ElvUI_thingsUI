@@ -137,6 +137,9 @@ local function PreviewText(child, t)
     p.count:SetText("3")
     ApplyText(p.cd, t.cooldownFont, t.cooldownFontSize or 14, t.cooldownFontOutline,
         t.cooldownColor, t.cooldownPoint or "CENTER", t.cooldownXOffset, t.cooldownYOffset, t.showCooldown)
+    -- the sample stands in for a running countdown (a previewed totem runs one)
+    local cdText = (child.Cooldown or child.cooldown or {}).Text
+    if cdText and t.showCooldown then cdText:SetAlpha(0) end
     if child:GetParent() == _G.BuffIconCooldownViewer then
         ApplyText(p.count, t.stacksFont, t.stacksFontSize, t.stacksFontOutline,
             t.stacksColor, t.stacksPoint or "BOTTOMRIGHT", t.stacksXOffset, t.stacksYOffset, t.showStacks)

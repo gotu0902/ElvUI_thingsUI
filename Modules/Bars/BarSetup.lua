@@ -768,10 +768,28 @@ function M.PositionStack(positionOnly)
         udbBar.height = saved
         return true
     end
+    -- Custom Texts on the power bar (the pack's [perpp]) go with Hide Power Text; only ours come back
+    local function PowerCustomTexts(hide)
+        local ct, root = udb.customTexts, E.db.thingsUI.barSetup
+        if not ct then return false end
+        local ours = root.powerHiddenTexts or {}
+        root.powerHiddenTexts = ours
+        local changed = false
+        for name, t in pairs(ct) do
+            if hide and t.attachTextTo == "Power" and t.enable ~= false then
+                t.enable, ours[name], changed = false, true, true
+            elseif not hide and ours[name] then
+                t.enable, changed = true, true
+            end
+        end
+        if not hide then wipe(ours) end
+        return changed
+    end
     if udb then
         local pBar = setup.bars.power
         if udb.power and pBar and pBar.enabled then
             local p = udb.power
+            if PowerCustomTexts(pBar.mode == "ATTACHED" and pBar.hideText) then needsPlayerUF = true end
             if pBar.mode == "DISABLED" then
                 if p.enable ~= false then p.enable = false; needsPlayerUF = true end
             else
