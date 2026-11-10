@@ -43,6 +43,7 @@ local gen = 0                 -- bumped by every settings pass; a row restyles w
 local effW, effH = 220, 22
 local ticker
 local fillDir, tenths = REMAINING, 5
+local cdColor                 -- the bar's color while the kick is down; nil = same as ready
 
 local function DB()
     return E.db.thingsUI and E.db.thingsUI.kickTracker
@@ -167,12 +168,17 @@ local function StyleRow(r, db)
     end
 end
 
+local function BarColor(r)
+    local c = (r.readyAt and cdColor) or r.color
+    if c then r.bar:SetStatusBarColor(c.r or 0, c.g or 0, c.b or 0, c.a or 1) end
+end
+
 local function PaintMember(r, db, class, kick, name)
     r.icon:SetTexture((kick and C_Spell.GetSpellTexture(kick)) or 134400)
     r.name:SetText(name)
     local cc = class and E:ClassColor(class, true)
-    local c = (db.useClassColor ~= false and cc) or db.customColor or BLACK
-    r.bar:SetStatusBarColor(c.r, c.g, c.b)
+    r.color = (db.useClassColor ~= false and cc) or db.customColor or BLACK
+    BarColor(r)
     ns.TextColor(r.name, (db.nameClassColor and cc) or db.nameColor)
     local bg = db.backgroundColor or BLACK
     -- a layer hides the row under it, whatever the background's alpha
@@ -211,6 +217,7 @@ local function PaintCd(r, start, dur)
         r.q = nil
         r.time:SetText("")
     end
+    BarColor(r)
 end
 
 -- ---------------------------------------------------------------- layers
@@ -562,6 +569,7 @@ function TUI:UpdateKickTracker()
     gen = gen + 1
     fillDir = (db.cooldownFill == "fill") and ELAPSED or REMAINING
     tenths = db.tenthsBelow or 5
+    cdColor = db.useCooldownColor and db.cooldownColor or nil
     ns.STRATA.Apply(frame, db.frameStrata, db.frameLevel)
     Place(db)
     if not moverMade then

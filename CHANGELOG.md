@@ -22,7 +22,7 @@
 ### New: Kick Tracker
 - Your group's interrupts as bars (off by default). Nobody else needs an addon: in keys it reads Blizzard's meter, so a cooldown only starts when that member's interrupt count went up
 - Cooldowns from class, spec and talents (inspected before the key). Healers without a kick get no row, warlocks follow their demon
-- The usual look and anchor options, Visibility (dungeons to start), exports and Profile Sync. Off means nothing runs; /tui kick shows what it knows
+- The usual look and anchor options (own bar color on cooldown if you want), Visibility (dungeons to start), exports and Profile Sync. Off means nothing runs; /tui kick shows what it knows
 ### New: Raid Frame Builder
 - Sorts ElvUI's raid frames by your own name list, everyone else by name. Open Builder (/tui rf): drag frames, Sort by Role, Stack Classes, Save
 - Layouts are account-wide, Enable is per profile. Export/Import shared with things for EUI

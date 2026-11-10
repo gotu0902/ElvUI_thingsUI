@@ -19,6 +19,8 @@ P["thingsUI"].kickTracker = {
     customColor = { r = 0.2, g = 0.6, b = 1 },
     backgroundColor = { r = 0, g = 0, b = 0, a = 0.6 },
     cooldownFill = "drain",
+    useCooldownColor = false,
+    cooldownColor = { r = 0.4, g = 0.4, b = 0.4, a = 1 },
     reverseFill = false,
     showBorder = true,
     borderSize = 1,
