@@ -1907,7 +1907,7 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                                 local AL = ns.AuraLane
                                 return (AL and AL.MapGlowStyle(get("glowType")) or "pulse") ~= "pixel"
                             end,
-                            disabled = function() return not get("showGlow") or not get("showBorder") end,
+                            disabled = function() return not get("showGlow") end,
                             get = function() return get("glowBorderStroke") end,
                             set = function(_, v) set("glowBorderStroke", v) end },
                         glowLines = { order = 5, type = "range", name = "Particles", min = 1, max = 12, step = 1,

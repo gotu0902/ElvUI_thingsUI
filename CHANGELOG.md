@@ -57,6 +57,7 @@
 - When You Can't Cast It for the spell behind the aura (in a row, or on Always / Only When Missing)
 - Aura Type reads Auto, no more empty Icon/Bar 1-3 slots, and an aura you talented out of goes away (rows and Bar Setup close up)
 - Frame Level next to Frame Strata, Custom Icon, sample text in the previews
+- Pixel Glow's Bordered Stroke works without Show Border: a stroke only while it glows (Groups too)
 - Aura Bars: Fill By Stacks (Groups - Bars too), list split like Aura Icons', Move Up / Down in Bar Setup per spec
 - Aura Bars: Show In > Bar Setup works on any bar. Other specs' bar with the same number stays Standalone, and Bar Order says why a bar sits out
 - Position in Row is the icon's real place in Essential/Utility (1, 2, 3 = the first three)

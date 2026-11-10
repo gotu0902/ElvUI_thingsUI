@@ -221,7 +221,6 @@ local function EditAura(def, title, onChange, group)
             bstroke:SetLabel("Bordered Stroke")
             bstroke:SetWidth(170)
             bstroke:SetValue(def.glowBorderStroke and true or false)
-            bstroke:SetDisabled(not (group and group.showBorder))
             bstroke:SetCallback("OnValueChanged", function(_, _, v)
                 def.glowBorderStroke = v
                 onChange()
@@ -1230,7 +1229,7 @@ function TUI:CustomGroupsOptions()
             orderArgs.sortGlowBorderStroke = {
                 order = 2.45, type = "toggle", name = "Bordered Stroke",
                 hidden = pxHidden,
-                disabled = function() return pxDisabled() or not group.showBorder end,
+                disabled = pxDisabled,
                 get = function() return group.auras and group.auras.sortGlowBorderStroke end,
                 set = function(_, v)
                     group.auras.sortGlowBorderStroke = v

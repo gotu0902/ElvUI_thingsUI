@@ -42,13 +42,8 @@ function A.GlowOptsFor(group, def)
         end
     end
     if not style then return nil end
-    -- the border the aura really wears (group, its own override, or a style)
-    local bOn
-    if group and A.LaneBorder then bOn = (A.LaneBorder(group, idb, def)) and true or false
-    elseif idb then bOn = idb.showBorder
-    elseif gSrc ~= def then bOn = gSrc.showBorder
-    else bOn = false end
-    local outline = (gSrc.glowBorderStroke and bOn) and true or false
+    -- the stroke band only draws while glowing, so it needs no border of its own
+    local outline = gSrc.glowBorderStroke and true or false
     return {
         style = style, color = gColor, thickness = gTh, outline = outline,
         lines = gSrc.glowLines, length = A.GlowLength(gSrc.glowLength),
