@@ -82,6 +82,7 @@
 ### Fixes
 - Auras: Auto debuffs no longer jump in groups, and the right CDM entry is tracked (Lifebloom after 12.1.5)
 - Auras picked from the Cooldown Manager list find their buff when it has another ID (Nightfall), in Aura Icons, Aura Bars and Groups
+- A buff with several forms counts all of them: any Demonic Art shows Overlord, Mother of Chaos and Pit Lord
 - Auras the game only shows on the personal nameplate (Crusading Strikes) now show in Aura Icons, Aura Bars and Groups
 - Aura Icons and Bars with Totem / No Aura Timer hide Blizzard's buff copy too (Summon Darkglare showed twice)
 - Groups - Icons: auras make room for a totem icon that shows up in combat instead of sitting on top of it, and the totem icon follows the group's aura swipe (inverse, off)

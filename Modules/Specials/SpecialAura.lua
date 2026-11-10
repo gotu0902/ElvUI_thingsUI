@@ -129,6 +129,15 @@ local function Build(spellID, why)
                     else
                         Note("CDM entry %s lists it", tostring(s))
                     end
+                    -- forms of one buff on the entry: "Demonic Art: Pit Lord" brings the other Demonic Arts
+                    local fam = Name(l) and Name(l):match("^(.-):%s")
+                    for _, o in ipairs(fam and r.linked or {}) do
+                        local on = Name(o)
+                        if not map[o] and on and on:match("^(.-):%s") == fam then
+                            map[o] = true
+                            Note("%d %s (same entry, same \"%s:\")", o, on, fam)
+                        end
+                    end
                     break
                 end
             end
