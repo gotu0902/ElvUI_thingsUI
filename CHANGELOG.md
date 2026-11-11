@@ -21,9 +21,10 @@
 - One group serves every class: a character gets its spec, class and Global lines for spells it knows. Max Lines fills cooldowns first
 - Own colors per part (the time can turn a Low Color under N seconds), left/right/center alignment that doesn't wobble, UPPERCASE option
 ### New: Kick Tracker
-- Your group's interrupts as bars (off by default). Nobody else needs an addon: in keys it reads Blizzard's meter, so a cooldown only starts when that member's interrupt count went up
+- Your group's interrupts as bars (off by default). In keys it reads Blizzard's meter, so a cooldown only starts when that member's interrupt count went up
 - Cooldowns from class, spec and talents (inspected before the key). Healers without a kick get no row, warlocks follow their demon
-- The usual look and anchor options (own bar color on cooldown if you want), the time in its own size, Almost Ready: a color and/or glow when the kick is a few seconds from ready, Visibility (dungeons to start), exports and Profile Sync. Off means nothing runs; /tui kick shows what it knows
+- Colors tab customization: name, bar, background and time each get a color per state (Ready, On Cooldown, Almost Ready) or the class color. Almost Ready is the last few seconds before a kick is back, and can glow too.
+- The usual look and anchor options, the time in its own size, Visibility (dungeons to start), exports and Profile Sync. Off means nothing runs; /tui kick shows what it knows
 ### New: Raid Frame Builder
 - Sorts ElvUI's raid frames by your own name list, everyone else by name. Open Builder (/tui rf): drag frames, Sort by Role, Stack Classes, Save
 - Layouts are account-wide, Enable is per profile. Export/Import shared with things for EUI

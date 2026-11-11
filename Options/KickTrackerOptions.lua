@@ -34,6 +34,88 @@ local function AnchorOrder()
     return out
 end
 
+-- each part per state
+local STATES = { "ready", "cooldown", "low" }
+local PARTS = { { "bar", "Bar", true }, { "bg", "Background", true }, { "name", "Name" }, { "time", "Time" } }
+local W_LABEL, W_CELL, W_CLASS = 0.6, 0.55, 1.2
+
+local function ColorsArgs()
+    local function noLow() return not gget("almostReady") end
+    local function part(p) return DB().colors[p] end
+    local function classOf(p) return DB().classColors[p] end
+    local function head(o, text, w) return { order = o, type = "description", name = text, width = w, fontSize = "medium" } end
+    local args = {
+        h0 = head(1, "", W_LABEL),
+        h1 = head(1.1, "Ready", W_CELL),
+        h2 = head(1.2, "On Cooldown", W_CELL),
+        h3 = head(1.3, "Almost Ready", W_CELL),
+        h4 = head(1.4, "Class Color", W_CLASS),
+        hBrk = { order = 1.9, type = "description", name = "", width = "full" },
+    }
+    for i, p in ipairs(PARTS) do
+        local key, label, alpha = p[1], p[2], p[3]
+        local o = 2 + i
+        args[key] = head(o, label, W_LABEL)
+        for j, st in ipairs(STATES) do
+            -- the time only shows while the kick is down
+            if key == "time" and st == "ready" then
+                args[key .. st] = head(o + j * 0.1, "", W_CELL)
+            else
+                args[key .. st] = {
+                    order = o + j * 0.1, type = "color", name = "", width = W_CELL, hasAlpha = alpha,
+                    -- a class-colored bar still takes the alpha from here
+                    disabled = function() return (st == "low" and noLow()) or (not alpha and classOf(key)[st]) or false end,
+                    get = function() return unpackColor(part(key)[st]) end,
+                    set = function(_, r, g, b, a)
+                        part(key)[st] = { r = r, g = g, b = b, a = alpha and a or nil }
+                        TUI:UpdateKickTracker()
+                        NotifyChange()
+                    end,
+                }
+            end
+        end
+        args[key .. "Class"] = {
+            order = o + 0.4, type = "multiselect", dialogControl = "Dropdown", name = "", width = W_CLASS,
+            values = function()
+                local v = { cooldown = "On Cooldown" }
+                if key ~= "time" then v.ready = "Ready" end
+                if not noLow() then v.low = "Almost Ready" end
+                return v
+            end,
+            get = function(_, k) return classOf(key)[k] or false end,
+            set = function(_, k, v)
+                classOf(key)[k] = v and true or false
+                TUI:UpdateKickTracker()
+                NotifyChange()
+            end,
+        }
+        args[key .. "Brk"] = { order = o + 0.5, type = "description", name = "", width = "full" }
+    end
+    args.lowGroup = {
+        order = 20, type = "group", inline = true, name = "Almost Ready",
+        args = {
+            almostReady = { order = 1, type = "toggle", name = "Almost Ready",
+                get = function() return gget("almostReady") end, set = function(_, v) gset("almostReady", v) end },
+            thresholdSeconds = { order = 2, type = "range", name = "Below (Sec)", min = 1, max = 30, step = 1,
+                disabled = noLow,
+                get = function() return gget("thresholdSeconds") or 3 end, set = function(_, v) gset("thresholdSeconds", v) end },
+            brk = { order = 3, type = "description", name = "", width = "full" },
+            glowThreshold = { order = 4, type = "toggle", name = "Glow",
+                disabled = noLow,
+                get = function() return gget("glowThreshold") end, set = function(_, v) gset("glowThreshold", v) end },
+            glowType = { order = 5, type = "select", name = "Glow Type",
+                values = { pixel = "Pixel", ants = "Ants", proc = "Proc", pulse = "Pulse" }, sorting = { "pixel", "ants", "proc", "pulse" },
+                disabled = function() return noLow() or not gget("glowThreshold") end,
+                get = function() return gget("glowType") end, set = function(_, v) gset("glowType", v) end },
+            glowColor = { order = 6, type = "color", name = "Glow Color", hasAlpha = true,
+                disabled = function() return noLow() or not gget("glowThreshold") end,
+                get = function() return unpackColor(gget("glowColor")) end,
+                set = function(_, r, g, b, a) gset("glowColor", { r = r, g = g, b = b, a = a }) end },
+        },
+    }
+    return args
+end
+
 function TUI:KickTrackerOptions()
     return {
         order = 5.6, type = "group", name = "Kick Tracker", childGroups = "tab",
@@ -99,24 +181,9 @@ function TUI:KickTrackerOptions()
                             statusBarTexture = { order = 3, type = "select", dialogControl = "LSM30_Statusbar", name = "Bar Texture",
                                 values = function() return ns.LSM:HashTable("statusbar") end,
                                 get = function() return gget("statusBarTexture") end, set = function(_, v) gset("statusBarTexture", v) end },
-                            useClassColor = { order = 4, type = "toggle", name = "Class Color",
-                                get = function() return gget("useClassColor") ~= false end, set = function(_, v) gset("useClassColor", v) end },
-                            customColor = { order = 5, type = "color", name = "Custom Color",
-                                disabled = function() return gget("useClassColor") ~= false end,
-                                get = function() return unpackColor(gget("customColor")) end,
-                                set = function(_, r, g, b) gset("customColor", { r = r, g = g, b = b }) end },
-                            backgroundColor = { order = 6, type = "color", name = "Background Color", hasAlpha = true,
-                                get = function() return unpackColor(gget("backgroundColor")) end,
-                                set = function(_, r, g, b, a) gset("backgroundColor", { r = r, g = g, b = b, a = a }) end },
                             cooldownFill = { order = 7, type = "select", name = "On Cooldown",
                                 values = { drain = "Bar Drains", fill = "Bar Fills Up" }, sorting = { "drain", "fill" },
                                 get = function() return gget("cooldownFill") end, set = function(_, v) gset("cooldownFill", v) end },
-                            useCooldownColor = { order = 7.1, type = "toggle", name = "Cooldown Color",
-                                get = function() return gget("useCooldownColor") end, set = function(_, v) gset("useCooldownColor", v) end },
-                            cooldownColor = { order = 7.2, type = "color", name = "Color", hasAlpha = true,
-                                disabled = function() return not gget("useCooldownColor") end,
-                                get = function() return unpackColor(gget("cooldownColor")) end,
-                                set = function(_, r, g, b, a) gset("cooldownColor", { r = r, g = g, b = b, a = a }) end },
                             reverseFill = { order = 8, type = "toggle", name = "Reverse Fill",
                                 get = function() return gget("reverseFill") end, set = function(_, v) gset("reverseFill", v) end },
                         },
@@ -189,6 +256,10 @@ function TUI:KickTrackerOptions()
                     },
                 },
             },
+            colorsTab = {
+                order = 15, type = "group", name = "Colors", disabled = Off,
+                args = ColorsArgs(),
+            },
             textTab = {
                 order = 20, type = "group", name = "Text", disabled = Off,
                 args = {
@@ -212,12 +283,6 @@ function TUI:KickTrackerOptions()
                                 get = function() return gget("nameXOffset") end, set = function(_, v) gset("nameXOffset", v) end },
                             nameYOffset = { order = 4, type = "range", name = "Y Offset", min = -20, max = 20, step = 0.01, bigStep = 1,
                                 get = function() return gget("nameYOffset") end, set = function(_, v) gset("nameYOffset", v) end },
-                            nameClassColor = { order = 5, type = "toggle", name = "Class Color",
-                                get = function() return gget("nameClassColor") end, set = function(_, v) gset("nameClassColor", v) end },
-                            nameColor = { order = 6, type = "color", name = "Color",
-                                disabled = function() return gget("nameClassColor") end,
-                                get = function() return unpackColor(gget("nameColor")) end,
-                                set = function(_, r, g, b) gset("nameColor", { r = r, g = g, b = b }) end },
                         },
                     },
                     durationGroup = {
@@ -232,39 +297,11 @@ function TUI:KickTrackerOptions()
                                 get = function() return gget("durationXOffset") end, set = function(_, v) gset("durationXOffset", v) end },
                             durationYOffset = { order = 4, type = "range", name = "Y Offset", min = -20, max = 20, step = 0.01, bigStep = 1,
                                 get = function() return gget("durationYOffset") end, set = function(_, v) gset("durationYOffset", v) end },
-                            durationColor = { order = 5, type = "color", name = "Color",
-                                get = function() return unpackColor(gget("durationColor")) end,
-                                set = function(_, r, g, b) gset("durationColor", { r = r, g = g, b = b }) end },
                             tenthsBelow = { order = 6, type = "range", name = "Decimals Below (Sec)", min = 0, max = 30, step = 1,
                                 get = function() return gget("tenthsBelow") end, set = function(_, v) gset("tenthsBelow", v) end },
                             durationFontSize = { order = 1.5, type = "range", name = "Font Size", min = 6, max = 36, step = 1,
                                 get = function() return gget("durationFontSize") or gget("fontSize") end,
                                 set = function(_, v) gset("durationFontSize", v) end },
-                        },
-                    },
-                    lowGroup = {
-                        order = 30, type = "group", inline = true, name = "Almost Ready",
-                        args = {
-                            thresholdSeconds = { order = 1, type = "range", name = "Below (Sec)", min = 1, max = 30, step = 1,
-                                disabled = function() return not (gget("colorThreshold") or gget("glowThreshold")) end,
-                                get = function() return gget("thresholdSeconds") or 3 end, set = function(_, v) gset("thresholdSeconds", v) end },
-                            colorThreshold = { order = 2, type = "toggle", name = "Color When Low",
-                                get = function() return gget("colorThreshold") end, set = function(_, v) gset("colorThreshold", v) end },
-                            thresholdColor = { order = 3, type = "color", name = "Low Color",
-                                disabled = function() return not gget("colorThreshold") end,
-                                get = function() return unpackColor(gget("thresholdColor")) end,
-                                set = function(_, r, g, b) gset("thresholdColor", { r = r, g = g, b = b }) end },
-                            brk = { order = 4, type = "description", name = "", width = "full" },
-                            glowThreshold = { order = 5, type = "toggle", name = "Glow When Low",
-                                get = function() return gget("glowThreshold") end, set = function(_, v) gset("glowThreshold", v) end },
-                            glowType = { order = 6, type = "select", name = "Glow",
-                                values = { pixel = "Pixel", ants = "Ants", proc = "Proc", pulse = "Pulse" }, sorting = { "pixel", "ants", "proc", "pulse" },
-                                disabled = function() return not gget("glowThreshold") end,
-                                get = function() return gget("glowType") end, set = function(_, v) gset("glowType", v) end },
-                            glowColor = { order = 7, type = "color", name = "Glow Color", hasAlpha = true,
-                                disabled = function() return not gget("glowThreshold") end,
-                                get = function() return unpackColor(gget("glowColor")) end,
-                                set = function(_, r, g, b, a) gset("glowColor", { r = r, g = g, b = b, a = a }) end },
                         },
                     },
                 },

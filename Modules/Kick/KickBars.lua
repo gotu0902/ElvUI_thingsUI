@@ -43,8 +43,8 @@ local gen = 0                 -- bumped by every settings pass; a row restyles w
 local effW, effH = 220, 22
 local ticker
 local fillDir, tenths = REMAINING, 5
-local cdColor                 -- the bar's color while the kick is down; nil = same as ready
-local lowSec, lowColor, normColor, glowOpts   -- Almost Ready: under lowSec seconds
+local lowSec, glowOpts       -- Almost Ready: under lowSec seconds
+local WHITE = { r = 1, g = 1, b = 1 }
 
 local function DB()
     return E.db.thingsUI and E.db.thingsUI.kickTracker
@@ -154,7 +154,7 @@ local function StyleRow(r, db)
         ns.AuraLane.ApplyButtonFX(r, r.fx, {})
         r.glowOn = nil
     end
-    r.low = nil
+    r.low, r.state = nil, nil
     if db.showName ~= false then
         local pt = db.namePoint or "LEFT"
         r.name:ClearAllPoints()
@@ -169,37 +169,49 @@ local function StyleRow(r, db)
         local pt = db.durationPoint or "RIGHT"
         r.time:ClearAllPoints()
         r.time:SetPoint(pt, r.bar, pt, db.durationXOffset or -4, db.durationYOffset or 0)
-        ns.TextColor(r.time, db.durationColor)
         r.time:Show()
     else
         r.time:Hide()
     end
 end
 
-local function BarColor(r)
-    local c = (r.readyAt and cdColor) or r.color
-    if c then r.bar:SetStatusBarColor(c.r or 0, c.g or 0, c.b or 0, c.a or 1) end
+-- a part's color in a state: its own, or the member's class color (alpha stays the part's)
+local function Pick(db, r, part, state)
+    local own = (db.colors and db.colors[part] and db.colors[part][state]) or WHITE
+    local cc = db.classColors and db.classColors[part]
+    if cc and cc[state] and r.class then
+        local c = E:ClassColor(r.class, true)
+        if c then return c.r, c.g, c.b, own.a end
+    end
+    return own.r or 1, own.g or 1, own.b or 1, own.a
+end
+
+-- ready / cooldown / low (Almost Ready): repainted only when it changes
+local function PaintState(r)
+    local st = r.readyAt and (r.low and "low" or "cooldown") or "ready"
+    if r.state == st then return end
+    r.state = st
+    local db = DB()
+    local cr, cg, cb, ca = Pick(db, r, "bar", st)
+    r.bar:SetStatusBarColor(cr, cg, cb, ca or 1)
+    cr, cg, cb, ca = Pick(db, r, "bg", st)
+    -- a layer hides the row under it, whatever the background's alpha
+    r.bg:SetColorTexture(cr, cg, cb, r.opaque and 1 or (ca or 0.6))
+    r.name:SetTextColor(Pick(db, r, "name", st))
+    if st ~= "ready" then r.time:SetTextColor(Pick(db, r, "time", st)) end
 end
 
 local function PaintMember(r, db, class, kick, name)
     r.icon:SetTexture((kick and C_Spell.GetSpellTexture(kick)) or 134400)
     r.name:SetText(name)
-    local cc = class and E:ClassColor(class, true)
-    r.color = (db.useClassColor ~= false and cc) or db.customColor or BLACK
-    BarColor(r)
-    ns.TextColor(r.name, (db.nameClassColor and cc) or db.nameColor)
-    local bg = db.backgroundColor or BLACK
-    -- a layer hides the row under it, whatever the background's alpha
-    r.bg:SetColorTexture(bg.r or 0, bg.g or 0, bg.b or 0, r.opaque and 1 or (bg.a or 0.6))
+    r.class, r.state = class, nil
+    PaintState(r)
 end
 
 local function SetLow(r, low)
     if r.low == low then return end
     r.low = low
-    if lowColor then
-        local c = low and lowColor or normColor
-        r.time:SetTextColor(c.r or 1, c.g or 1, c.b or 1)
-    end
+    PaintState(r)
     if low and glowOpts then
         r.fx = r.fx or {}
         glowOpts.w, glowOpts.h = r:GetWidth(), r:GetHeight()
@@ -245,7 +257,7 @@ local function PaintCd(r, start, dur)
         r.time:SetText("")
         SetLow(r, false)
     end
-    BarColor(r)
+    PaintState(r)
 end
 
 -- ---------------------------------------------------------------- layers
@@ -582,8 +594,41 @@ local function EnsureMover()
     moverMade = true
 end
 
+-- the old single colors (Bar / Cooldown Color, Background, Name, Time, Low Color) into the Colors grid
+local OLD_COLORS = { "useClassColor", "customColor", "backgroundColor", "useCooldownColor", "cooldownColor",
+    "nameClassColor", "nameColor", "durationColor", "colorThreshold", "thresholdColor" }
+local function MigrateColors(db)
+    local any = false
+    for _, k in ipairs(OLD_COLORS) do if db[k] ~= nil then any = true end end
+    if not any then return end
+    local function old(k, def) local v = db[k] if v == nil then return def end return v end
+    local copy = ns.DeepCopy
+    local c, cc = db.colors, db.classColors
+    local readyClass = old("useClassColor", true) ~= false
+    local readyCol = old("customColor", { r = 0.2, g = 0.6, b = 1 })
+    cc.bar.ready, c.bar.ready = readyClass, copy(readyCol)
+    if old("useCooldownColor", false) then
+        cc.bar.cooldown, c.bar.cooldown = false, copy(old("cooldownColor", { r = 0.4, g = 0.4, b = 0.4, a = 1 }))
+    else
+        cc.bar.cooldown, c.bar.cooldown = readyClass, copy(readyCol)
+    end
+    cc.bar.low, c.bar.low = cc.bar.cooldown, copy(c.bar.cooldown)
+    local bg = old("backgroundColor", { r = 0, g = 0, b = 0, a = 0.6 })
+    local nameClass, nameCol = old("nameClassColor", false), old("nameColor", WHITE)
+    for _, st in ipairs({ "ready", "cooldown", "low" }) do
+        c.bg[st] = copy(bg)
+        cc.name[st], c.name[st] = nameClass and true or false, copy(nameCol)
+    end
+    local dc = old("durationColor", WHITE)
+    c.time.cooldown = copy(dc)
+    c.time.low = copy(old("colorThreshold", false) and old("thresholdColor", { r = 1, g = 0.3, b = 0.3 }) or dc)
+    if old("colorThreshold", false) or db.glowThreshold then db.almostReady = true end
+    for _, k in ipairs(OLD_COLORS) do db[k] = nil end
+end
+
 function TUI:UpdateKickTracker()
     local db = DB()
+    if db then MigrateColors(db) end
     if not (db and db.enabled) then
         SetMode(OFF)
         StopTicker()
@@ -597,11 +642,8 @@ function TUI:UpdateKickTracker()
     gen = gen + 1
     fillDir = (db.cooldownFill == "fill") and ELAPSED or REMAINING
     tenths = db.tenthsBelow or 5
-    cdColor = db.useCooldownColor and db.cooldownColor or nil
-    lowSec = (db.colorThreshold or db.glowThreshold) and (db.thresholdSeconds or 3) or nil
-    lowColor = db.colorThreshold and (db.thresholdColor or { r = 1, g = 0.3, b = 0.3 }) or nil
-    normColor = db.durationColor or { r = 1, g = 1, b = 1 }
-    glowOpts = db.glowThreshold and {
+    lowSec = db.almostReady and (db.thresholdSeconds or 3) or nil
+    glowOpts = db.almostReady and db.glowThreshold and {
         style = db.glowType or "pixel", color = db.glowColor, thickness = 2,
         lines = 8, length = 3, frequency = 0.25, offset = 0,
     } or nil
