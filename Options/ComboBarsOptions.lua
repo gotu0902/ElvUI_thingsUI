@@ -574,9 +574,25 @@ local function BarTab(bi)
                     width = {
                         order = 2, type = "range", name = "Width", min = 40, max = 800, step = 1,
                         hidden = function() return isText() or stacked() end,
+                        disabled = function() return g("inheritWidth") and g("anchorFrame") ~= "UIParent" end,
                         get = function() return g("width") end,
                         set = function(_, v) s("width", v) end,
                     },
+                    inheritWidth = {
+                        order = 2.1, type = "toggle", name = "Inherit Width from Anchor",
+                        hidden = stacked,
+                        disabled = function() return g("anchorFrame") == "UIParent" end,
+                        get = function() return g("inheritWidth") end,
+                        set = function(_, v) s("inheritWidth", v) end,
+                    },
+                    inheritWidthOffset = {
+                        order = 2.2, type = "range", name = "Width Nudge", min = -200, max = 200, step = 0.5, bigStep = 1,
+                        hidden = stacked,
+                        disabled = function() return not g("inheritWidth") or g("anchorFrame") == "UIParent" end,
+                        get = function() return g("inheritWidthOffset") end,
+                        set = function(_, v) s("inheritWidthOffset", v) end,
+                    },
+                    sizeBreak = { order = 2.3, type = "description", name = "", width = "full", hidden = stacked },
                     gap = {
                         order = 3, type = "range", name = "Gap", min = 0, max = 20, step = 1,
                         hidden = isText,

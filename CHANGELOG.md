@@ -13,7 +13,7 @@
 - Bar or Text (a line of words that color in), your own text (or none) and text color per minibar, UPPERCASE, name / duration / stacks text like Groups - Bars (the time in its own size, a Low Color under N seconds), a name that gives way to the time while active, a Static or Duration fill (the shortest aura or one you pick, for the whole bar or per minibar)
 - Glow the bar when all are active or when one is missing (in combat only if you want), Glow While Active per minibar
 - A bar belongs to its class (Load On picks the specs), or Global with Load On any spec or class. Editing Spec shows and edits any spec's bars
-- Standalone with its own mover or in Bar Setup, Visibility, exports and Profile Sync
+- Standalone with its own mover (Inherit Width from Anchor) or in Bar Setup, Visibility, exports and Profile Sync
 - Works on secret auras in combat. All / None and the glow need the aura in Blizzard's Cooldown Manager: the menu names the ones missing and opens Cooldown Settings
 ### New: Groups - Text
 - Auras and cooldowns as lines of text: [name] [cd] [stacks], with anything you like around them
@@ -71,6 +71,7 @@
 - Copy Group, Tab Color, Frame Strata / Level, Show Caster Name (with class color)
 ### Other
 - Charge Bar: Fill Direction (left, right, toward or from the middle); a spell down to one charge shows as a single bar or in the CDM
+- Charge Bar: new settings page. One Editing Spec picker, Show In (Bar Setup or Standalone) per spec, and a spec's own layout covers everything: height, ticks, text, anchor, width and offsets
 - Bar Setup: Height by Position, and a red ! when a spec sits in two setups
 - Bar Setup: an Attached class bar picks its Position: Top (ElvUI), Bottom of Health, Above or Below the player frame, with X / Y
 - Cluster Positioning: FocusTarget frame, right of Focus with a 1px gap
@@ -97,6 +98,7 @@
 - Pixel Glow on Aura Icons and Timers starts with short lines again (it covered the whole icon like a border)
 - Stack and charge numbers stay above glows, dragging a mover keeps its anchor
 - Buff Bars: stacks set to Icon sit on the icon again (after Bar they stayed in the middle of the bar), and a stack font change in Bar mode keeps them where you put them
+- Charge Bar: anchoring to the ElvUI Class Bar, the Top of the Bar Setup Stack or after the last Buff Icon works (it fell back to the screen), its mover moves it, and the position settings no longer hide while it sits in Bar Setup
 - Aura Bars: Ticks work in combat. Aura Icons keep their 1px edge when active
 - Trinkets and items no longer grey out on the GCD or vanish after a loading screen
 - A druid's hidden classbar keeps the CDM width; ElvUI raid frames start a new column in the right spot

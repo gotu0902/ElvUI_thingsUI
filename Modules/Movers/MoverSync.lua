@@ -97,23 +97,15 @@ local TARGETS = {
         moverName = "ElvUI_thingsUI_ChargeBarMover",
         frame     = function() return _G.ElvUI_thingsUI_ChargeBar end,
         baseLabel = "thingsUI Charge Bar",
+        alwaysSync = true,
         tag       = function()
-            if ns.BarSetup and not ns.BarSetup.IsActive() then
-                local af = E.db.thingsUI and E.db.thingsUI.chargeBar
-                              and E.db.thingsUI.chargeBar.anchorFrame
-                if af and af ~= "UIParent" then
-                    return "|cFFFFAA00(Anchor: "..ShortAnchor(af)..")|r"
-                end
-                return nil
-            end
             local CB = ns.ChargeBar
-
-            if CB and CB.IsNHTForCurrentSpec and CB.IsNHTForCurrentSpec() then
+            if not CB then return nil end
+            if CB.IsNHTForCurrentSpec() then
                 return "|cFF888888(Bar Setup)|r"
             end
-
-            if CB and CB.GetConfiguredMode and CB.GetConfiguredMode() == "FHT" then
-                local af = E.db.thingsUI.chargeBar.anchorFrame
+            if CB.GetConfiguredMode() == "FHT" then
+                local af = CB.Pick("anchorFrame")
                 if af and af ~= "UIParent" then
                     return "|cFFFFAA00(Anchor: "..ShortAnchor(af)..")|r"
                 end

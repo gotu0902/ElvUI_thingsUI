@@ -408,7 +408,12 @@ local function LayoutBar(bar, st)
             cells[i] = { lw = lw, w = w }
             sum = sum + w + (i > 1 and sp or 0)
         end
-        if not st.stacked then ns.Pixel.SetSize(f, math.max(1, sum), h) else f:SetHeight(h) end
+        if st.stacked then
+            f:SetHeight(h)
+        else
+            local tw = math.max(1, sum)
+            ns.Pixel.SetSize(f, math.max(tw, (ns.ANCHORS.InheritedSize(bar, f, st.target, tw, h))), h)
+        end
         local room = math.max(0, (f:GetWidth() or sum) - sum)
         local j = G(bar, "justify")
         local x = math.floor(((j == "LEFT") and 0 or (j == "RIGHT") and room or room / 2) + 0.5)
@@ -458,7 +463,11 @@ local function LayoutBar(bar, st)
         local total = 0
         for _, seg in ipairs(segs) do total = total + M.Pieces(seg) end
         local h = (st.stackH and st.stacked) and st.stackH or G(bar, "height")
-        if st.stacked then f:SetHeight(h) else ns.Pixel.SetSize(f, G(bar, "width"), h) end
+        if st.stacked then
+            f:SetHeight(h)
+        else
+            ns.Pixel.SetSize(f, (ns.ANCHORS.InheritedSize(bar, f, st.target, G(bar, "width"), h)), h)
+        end
         local W = f:GetWidth() or G(bar, "width")
         local gap = G(bar, "gap")
         local pw = math.max(1, math.floor((W - gap * (total - 1)) / math.max(1, total)))
@@ -868,6 +877,7 @@ local function Place(bar, st)
         st.stackH = BS.PositionHeight and BS.PositionHeight(M.Key(bar)) or nil
         EnsureMover(bar, st)
         if moverMade[bar.id] and ms then ms.SetManagedEnabled(MoverName(bar.id), true) end
+        st.target = nil
         return
     end
     st.stackH = nil
@@ -877,6 +887,14 @@ local function Place(bar, st)
         and ((ns.ANCHORS and ns.ANCHORS.ResolveAnchorTarget and ns.ANCHORS.ResolveAnchorTarget(af)) or _G[af])
         or nil
     if target == f then target = nil end
+    st.target = target
+    if target and bar.inheritWidth and target.HookScript and not target._tuiComboSizeHooked then
+        local tn = target:GetName()
+        if not (tn and tn:find("CooldownViewer$")) then
+            target._tuiComboSizeHooked = true
+            target:HookScript("OnSizeChanged", function() M.QueueRefresh() end)
+        end
+    end
     f:ClearAllPoints()
     ns.Pixel.SetPoint(f, G(bar, "anchorPoint"), target or UIParent, G(bar, "anchorRelativePoint"),
         G(bar, "anchorXOffset"), G(bar, "anchorYOffset"))

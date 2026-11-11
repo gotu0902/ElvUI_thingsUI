@@ -67,8 +67,20 @@ local function GetSpecEntry()
     return entry
 end
 
+-- a spec with its own layout reads every layout setting from itself first
+local function Pick(key, fallback)
+    local db = E.db.thingsUI.chargeBar
+    local e = GetSpecEntry()
+    if e and e.useGlobalLayout == false and e[key] ~= nil then return e[key] end
+    if db[key] ~= nil then return db[key] end
+    return fallback
+end
+CB.Pick = Pick
+
 local function IsFHT()
     if E.db.thingsUI.barSetup and E.db.thingsUI.barSetup.enabled == false then return true end
+    local e = GetSpecEntry()
+    if e and e.standalone then return true end
     local bs = ns.BarSetup
     if not bs or not bs.GetActiveSetup then return false end
     local setup = bs.GetActiveSetup()
@@ -114,14 +126,14 @@ function CB.GetInactiveReason()
     local entry = GetSpecEntry()
     if not entry then return "inactive on this spec" end
     if entry.spellID == nil or entry.spellID == "" then return "no spell ID" end
+    if entry.standalone then return "Standalone on this spec" end
     if oneChargeHidden then return "1 charge now, shown in the Cooldown Manager" end
     return nil
 end
 
 local function ApplyStrata()
     if not frame then return end
-    local s = (E.db.thingsUI.chargeBar and E.db.thingsUI.chargeBar.frameStrata) or "LOW"
-    frame:SetFrameStrata(s)
+    frame:SetFrameStrata(Pick("frameStrata", "LOW"))
 end
 
 local function EnsureFrame()
@@ -170,12 +182,28 @@ local function EnsureFrame()
     frame:ClearAllPoints()
     frame:SetPoint("CENTER", E.UIParent, "CENTER", 0, 0)
 
-    if E and E.CreateMover then
-        E:CreateMover(frame, "ElvUI_thingsUI_ChargeBarMover",
-            "thingsUI Charge Bar", nil, nil, nil, "ALL,THINGSUI",
-            function() return not (E.db.thingsUI.chargeBar and E.db.thingsUI.chargeBar.enabled) end,
-            "thingsUI,modulesTab,chargeBar")
+    local ms = ns.MoverSync
+    if ms and ms.CreateManaged then
+        ms.CreateManaged(frame, "ElvUI_thingsUI_ChargeBarMover", "thingsUI Charge Bar", {
+            configString = "thingsUI,modulesTab,chargeBar",
+            shouldDisable = function() return not (E.db.thingsUI.chargeBar and E.db.thingsUI.chargeBar.enabled) end,
+            onNudge = function(dx, dy)
+                if not IsFHT() then ms.Queue() return end
+                local t = CB.LayoutDB()
+                t.fhtXOffset = Pick("fhtXOffset", 0) + dx
+                t.fhtYOffset = Pick("fhtYOffset", 0) + dy
+                CB.RequestUpdateFull()
+                ns.NotifyChange()
+            end,
+        })
     end
+end
+
+-- where this spec's layout is stored: its own entry, or the global one
+function CB.LayoutDB()
+    local e = GetSpecEntry()
+    if e and e.useGlobalLayout == false then return e end
+    return E.db.thingsUI.chargeBar
 end
 
 local function ReleaseTicks()
@@ -242,12 +270,7 @@ local function Place(k, n, mode)
     return k, false
 end
 
-local function FillMode()
-    local db = E.db.thingsUI.chargeBar
-    local e = GetSpecEntry()
-    if e and e.useGlobalLayout == false and e.fillMode then return e.fillMode end
-    return db.fillMode or "ltr"
-end
+local function FillMode() return Pick("fillMode", "ltr") end
 
 -- Each piece holds one charge (min k-1, max k: the game clamps the secret count itself).
 -- Its recharge (and text) sits in two clips: the piece's empty part, and a gate the piece
@@ -315,17 +338,16 @@ local function ApplyChargeLayout()
         return
     end
 
-    local db = E.db.thingsUI.chargeBar
     local barW = barFrame:GetWidth()
     local barH = barFrame:GetHeight()
     if not barW or barW <= 0 then return end
 
     local n     = currentMaxCharges
     local barWInt = math.floor(barW + 0.5)
-    local showTicks = db.showTicks and db.tickWidth and db.tickWidth > 0
-    local tc = db.tickColor or {}
+    local tickW = Pick("tickWidth", 1)
+    local showTicks = Pick("showTicks") and tickW > 0
+    local tc = Pick("tickColor", {})
     local tcr, tcg, tcb, tca = tc.r or 0, tc.g or 0, tc.b or 0, tc.a or 1
-    local tickW = db.tickWidth or 1
 
     local mode = FillMode()
     if lastLayoutW == barWInt and lastLayoutH == barH
@@ -444,35 +466,34 @@ local function ApplyPosition(entry)
 end
 
 local function ResolveAnchorTarget(anchorName)
-    local proxy = ns.CDMIcons and ns.CDMIcons.ProxyForName and ns.CDMIcons.ProxyForName(anchorName)
-    if proxy then return proxy, anchorName end
-    local f = _G[anchorName]
-    if type(f) == "table" and type(f.GetObjectType) == "function" then
-        if anchorName == "ElvUF_Player_CastBar" and f.Holder then
-            f = f.Holder
-        end
-        if f ~= frame then return f, anchorName end
+    local f = anchorName ~= "UIParent" and ns.ANCHORS.ResolveAnchorTarget(anchorName)
+    if type(f) == "table" and type(f.GetObjectType) == "function" and f ~= frame then
+        return f, anchorName
     end
     return UIParent, "UIParent"
 end
 
 local function ApplyPositionFHT()
     if not frame then return end
-    local db = E.db.thingsUI.chargeBar
 
-    local target, resolvedName = ResolveAnchorTarget(db.anchorFrame or "UIParent")
-    local point = db.anchorPoint or "CENTER"
-    local relative = db.anchorRelativePoint or "CENTER"
+    local target, resolvedName = ResolveAnchorTarget(Pick("anchorFrame", "UIParent"))
+    local point = Pick("anchorPoint", "CENTER")
+    local relative = Pick("anchorRelativePoint", "CENTER")
 
-    local w = db.fhtWidth or 200
-    if db.inheritWidth and resolvedName ~= "UIParent" then
+    local w = Pick("fhtWidth", 200)
+    if Pick("inheritWidth") and resolvedName ~= "UIParent" then
         local aw = target:GetWidth()
-        if aw and aw > 0 then w = aw + (db.inheritWidthOffset or 0) end
+        if aw and aw > 0 then w = aw + Pick("inheritWidthOffset", 0) end
+        local tn = target:GetName()
+        if not target._tuiChargeSizeHooked and not (tn and tn:find("CooldownViewer$")) then
+            target._tuiChargeSizeHooked = true
+            target:HookScript("OnSizeChanged", function() CB.MarkDirty() end)
+        end
     end
     if w < 20 then w = 20 end
-    local h = db.height or 18
-    local xOff = db.fhtXOffset or 0
-    local yOff = db.fhtYOffset or 0
+    local h = Pick("height", 18)
+    local xOff = Pick("fhtXOffset", 0)
+    local yOff = Pick("fhtYOffset", 0)
 
     if lastFhtW == w and lastFhtH == h and lastFhtTarget == target
        and lastFhtPoint == point and lastFhtRel == relative
