@@ -14,6 +14,7 @@ local cdmRowOf = {}
 local overOf = {}
 -- Only When Missing icons (standalone or in a row): shown while their aura is down
 local missingOf = {}
+local anyGroupedMissing, anyGroupedAt
 local missingUp = {}
 local lastGroupedSig
 local overRow = setmetatable({}, { __mode = "k" })
@@ -452,6 +453,7 @@ local function ReleaseIcon(iconKey)
 end
 
 local function UpdateIconSlot(iconKey)
+    anyGroupedMissing = nil
     local db = SB.GetIconDB(iconKey)
     if not db or not db.enabled or not db.spellID then
         ReleaseIcon(iconKey)
@@ -741,13 +743,18 @@ function SB.RefreshMissing()
     end
 end
 
+-- asked on every aura event: the walk over all icons runs once per settings pass, or once a second
 function SB.AnyGroupedMissing()
+    local now = GetTime()
+    if anyGroupedMissing ~= nil and now - anyGroupedAt < 1 then return anyGroupedMissing end
+    anyGroupedMissing, anyGroupedAt = false, now
     for i = 1, (SB.GetIconCount and SB.GetIconCount() or 0) do
         local d = SB.GetIconDB("icon" .. i)
-        if d and d.enabled and d.showMissing and d.customGroup then return true end
+        if d and d.enabled and d.showMissing and d.customGroup then anyGroupedMissing = true break end
     end
-    return false
+    return anyGroupedMissing
 end
+function SB.ResetGroupedMissing() anyGroupedMissing = nil end
 
 do
     local queued = false

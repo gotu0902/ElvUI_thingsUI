@@ -153,7 +153,7 @@ function TUI:UpdateRacialsCDM() M.Refresh() end
 
 local cdPending = false
 local function ThrottledCooldowns()
-    if cdPending then return end
+    if cdPending or not next(buttons) then return end
     cdPending = true
     C_Timer.After(0.1, function() cdPending = false; M.RefreshCooldowns() end)
 end

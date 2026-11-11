@@ -126,6 +126,7 @@ end
 function TUI:UpdateSpecialBars()
     if not (E.db.thingsUI and E.db.thingsUI.specialBars) then return end
     HookCDMWindow()
+    if SB.ResetGroupedMissing then SB.ResetGroupedMissing() end
     if not InCombatLockdown() then RefreshKnownSpells() end
 
     local barCount = GetBarCount()
