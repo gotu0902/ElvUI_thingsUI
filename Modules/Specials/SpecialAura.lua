@@ -93,6 +93,20 @@ local function Build(spellID, why)
     local rows = CDMRows()
     local function Is(id) return id ~= nil and (id == spellID or id == base or rank[id] == true) end
     local function Name(id) return id and PlainID(C_Spell.GetSpellName(id)) end
+    -- an aura two entries list belongs to the one with its name (Enhancement's Spirit Walk entry lists Spirit Wolf 260881)
+    local function OwnedElsewhere(l, r)
+        local ln = Name(l)
+        if not ln or ln == Name(r.s) or ln == Name(r.o) then return nil end
+        local mine = r.s or r.o
+        for _, o in ipairs(rows) do
+            local os = o.s or o.o
+            if os and os ~= mine and (Name(o.s) == ln or Name(o.o) == ln) then
+                for _, x in ipairs(o.linked) do
+                    if x == l then return os end
+                end
+            end
+        end
+    end
     -- the CDM entry for this spell brings all its auras; an entry that lists this aura
     -- brings just it (entries can share a spell: Violent Outburst and Seeing Red both sit on 386477)
     -- how many different entries sit on each spell (a row can come twice: category list + frame)
@@ -113,8 +127,15 @@ local function Build(spellID, why)
             direct = true
             if r.s then map[r.s] = true end
             if r.o then map[r.o] = true end
-            for _, l in ipairs(r.linked) do map[l] = true end
             Note("CDM entry %s is this spell: %s", tostring(r.s or r.o), table.concat(r.linked, ", "))
+            for _, l in ipairs(r.linked) do
+                local other = OwnedElsewhere(l, r)
+                if other then
+                    Note("%d %s left out: CDM entry %d has it by name", l, tostring(Name(l)), other)
+                else
+                    map[l] = true
+                end
+            end
         else
             for _, l in ipairs(r.linked) do
                 if Is(l) then
@@ -122,7 +143,7 @@ local function Build(spellID, why)
                     -- an entry alone on its spell: that spell is the aura (Nightfall: picked 1260279,
                     -- the entry and its buff are 264571); a shared one stays out
                     local s = r.s or r.o
-                    if s and onSpell[s] == 1 then
+                    if s and onSpell[s] == 1 and not OwnedElsewhere(l, r) then
                         if r.s then map[r.s] = true end
                         if r.o then map[r.o] = true end
                         Note("CDM entry %s lists it, and is the only one on that spell", tostring(s))

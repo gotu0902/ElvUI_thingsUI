@@ -263,6 +263,10 @@ local function LayoutBuffBar(childFrame)
             if icon.Applications:GetParent() ~= icon then
                 icon.Applications:SetParent(icon)
                 icon.Applications:SetWidth(0)
+                -- ElvUI anchors it to its parent, which was still the bar when it last ran
+                local c = E.db.general.cooldownManager
+                icon.Applications:ClearAllPoints()
+                icon.Applications:Point(c.countPosition or "CENTER", c.countxOffset or 0, c.countyOffset or 0)
             end
         end
     end
@@ -488,8 +492,25 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     end
 end)
 
+-- ElvUI's text refresh puts the stack text on its own point: in Bar mode ours goes back on
+local hookedElvUIUpdate = false
+local function HookElvUIUpdate()
+    if hookedElvUIUpdate then return end
+    local S = E:GetModule("Skins", true)
+    if not (S and type(S.CooldownManager_UpdateViewers) == "function") then return end
+    hookedElvUIUpdate = true
+    hooksecurefunc(S, "CooldownManager_UpdateViewers", function()
+        if isEnabled and E.db.thingsUI.buffBars.stackAnchor == "BAR" then
+            wipe(skinnedBars)
+            InvalidateBarLayouts()
+            MarkDirty()
+        end
+    end)
+end
+
 function TUI:UpdateBuffBars()
     if E.db.thingsUI.buffBars.enabled then
+        HookElvUIUpdate()
         isEnabled = true
         StartViewerReadyTicker()
         eventFrame:RegisterUnitEvent("UNIT_AURA", "player")

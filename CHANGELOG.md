@@ -87,7 +87,7 @@
 - Profile switches rebuild the options later, item cooldowns in groups update at most 10 times a second
 ### Fixes
 - Auras: Auto debuffs no longer jump in groups, and the right CDM entry is tracked (Lifebloom after 12.1.5)
-- Auras picked from the Cooldown Manager list find their buff when it has another ID (Nightfall), in Aura Icons, Aura Bars and Groups
+- Auras picked from the Cooldown Manager list find their buff when it has another ID (Nightfall), in Aura Icons, Aura Bars and Groups, and no longer pull in another spell's buff the CDM wrongly lists with them (Spirit Walk showed Spirit Wolf, Blizzard's own bar does too)
 - A buff with several forms counts all of them: any Demonic Art shows Overlord, Mother of Chaos and Pit Lord
 - Auras the game only shows on the personal nameplate (Crusading Strikes) now show in Aura Icons, Aura Bars and Groups
 - Aura Icons and Bars with Totem / No Aura Timer hide Blizzard's buff copy too (Summon Darkglare showed twice)
@@ -96,6 +96,7 @@
 - Previews: the sample cooldown number replaces a running one instead of sitting on top of it (totem icons in Groups)
 - Pixel Glow on Aura Icons and Timers starts with short lines again (it covered the whole icon like a border)
 - Stack and charge numbers stay above glows, dragging a mover keeps its anchor
+- Buff Bars: stacks set to Icon sit on the icon again (after Bar they stayed in the middle of the bar), and a stack font change in Bar mode keeps them where you put them
 - Aura Bars: Ticks work in combat. Aura Icons keep their 1px edge when active
 - Trinkets and items no longer grey out on the GCD or vanish after a loading screen
 - A druid's hidden classbar keeps the CDM width; ElvUI raid frames start a new column in the right spot
