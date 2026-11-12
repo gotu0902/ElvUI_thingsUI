@@ -1119,8 +1119,8 @@ local function GroupTab(gi)
                             toggleMovers = { order = 1, type = "execute", name = "Toggle thingsUI Movers", width = 1.2,
                                 func = function() E:ToggleMoveMode("THINGSUI") end },
                             anchorFrame = { order = 2, type = "select", name = "Anchor To", width = "double",
-                                values = function() return ns.ANCHORS and ns.ANCHORS.FilteredValues and ns.ANCHORS.FilteredValues() or { UIParent = "UIParent" } end,
-                                sorting = function() return ns.ANCHORS and ns.ANCHORS.FilteredOrder and ns.ANCHORS.FilteredOrder() or nil end,
+                                values = function() local g = grp(); return ns.ANCHORS.ValuesExcept(g and ("TUI_CustomBars" .. g.id)) end,
+                                sorting = function() local g = grp(); return ns.ANCHORS.OrderExcept(g and ("TUI_CustomBars" .. g.id)) end,
                                 get = function() return gget("anchorFrame") or "UIParent" end,
                                 set = function(_, v)
                                     local g = grp()

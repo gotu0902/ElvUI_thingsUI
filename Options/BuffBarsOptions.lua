@@ -212,6 +212,21 @@ function TUI:BuffBarsOptions()
                                     TUI:UpdateBuffBars()
                                 end,
                             },
+                            backgroundColor = {
+                                order = 4,
+                                type = "color",
+                                name = "Background Color",
+                                hasAlpha = true,
+                                get = function()
+                                    local c = E.db.thingsUI.buffBars.backgroundColor or {}
+                                    return c.r or 0, c.g or 0, c.b or 0, c.a or 0.7
+                                end,
+                                set = function(_, r, g, b, a)
+                                    E.db.thingsUI.buffBars.backgroundColor = { r = r, g = g, b = b, a = a }
+                                    wipe(ns.skinnedBars)
+                                    TUI:UpdateBuffBars()
+                                end,
+                            },
                         },
                     },
                     iconGroup = {

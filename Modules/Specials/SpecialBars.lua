@@ -455,7 +455,7 @@ local function UpdateBarSlot(barKey)
     local managedByBS = IsManagedByBarSetup(barKey)
 
     local anchorName  = (db.anchorMode ~= "CUSTOM") and db.anchorMode or db.anchorFrame
-    local anchorFrame = SB.ResolveAnchorTarget(anchorName)
+    local anchorFrame = SB.ResolveAnchorTarget(anchorName, wrapper)
 
     local cdmInset = (anchorName == "EssentialCooldownViewer"
         or anchorName == "UtilityCooldownViewer"

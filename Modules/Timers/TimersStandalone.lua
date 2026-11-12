@@ -21,7 +21,7 @@ local function PositionContainer(timer, c)
     local target
     if af ~= "UIParent" then
         local SB = ns.SpecialBars
-        target = (SB and SB.ResolveAnchorTarget and SB.ResolveAnchorTarget(af)) or _G[af]
+        target = (SB and SB.ResolveAnchorTarget and SB.ResolveAnchorTarget(af, c))
     end
     c:ClearAllPoints()
     ns.Pixel.SetPoint(c, timer.anchorPoint or "CENTER", target or _G.UIParent,
@@ -90,6 +90,7 @@ function M.Refresh()
             ns.Pixel.SetSize(st.container, size, size)
             ns.Pixel.SetSize(st.btn, size, size)
             PositionContainer(timer, st.container)
+            ns.STRATA.Apply(st.container, timer.frameStrata, timer.frameLevel)
             local idle = timer.showIdle
             local preview = (E and E.ConfigurationMode) or (ns.CustomGroups and ns.CustomGroups.testMode)
             local show = preview or ((idle or ns.TimersRender.TimerActive(timer, now))

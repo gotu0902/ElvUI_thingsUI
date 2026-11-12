@@ -21,7 +21,7 @@ P["thingsUI"].buffBars = {
     stackPoint          = "CENTER",
     stackXOffset        = 0,
     stackYOffset        = 0,
-    backgroundColor     = { r = 0.1, g = 0.1, b = 0.1, a = 0.8 },
+    backgroundColor     = { r = 0, g = 0, b = 0, a = 0.7 },
     useClassColor       = true,
     customColor         = { r = 0.2, g = 0.6, b = 1.0 },
     anchorEnabled       = true,

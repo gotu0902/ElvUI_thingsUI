@@ -205,8 +205,8 @@ do
     end)
 end
 
-local function ResolveAnchorTarget(anchorName)
-    return ns.ANCHORS.ResolveAnchorTarget(anchorName)
+local function ResolveAnchorTarget(anchorName, frame)
+    return ns.ANCHORS.ResolveAnchorTarget(anchorName, frame)
 end
 
 local function RemoveBarSlot(index, specID)

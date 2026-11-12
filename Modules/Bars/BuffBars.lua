@@ -164,10 +164,11 @@ local function SkinBuffBar(childFrame)
     if not bar.tuiBackdrop then
         bar.tuiBackdrop = CreateFrame("Frame", nil, childFrame, "BackdropTemplate")
         bar.tuiBackdrop:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
-        bar.tuiBackdrop:SetBackdropColor(0, 0, 0, 0.7)
         bar.tuiBackdrop:SetBackdropBorderColor(0, 0, 0, 1)
         bar.tuiBackdrop:SetFrameLevel(childFrame:GetFrameLevel() - 1)
     end
+    local bg = db.backgroundColor or {}
+    bar.tuiBackdrop:SetBackdropColor(bg.r or 0, bg.g or 0, bg.b or 0, bg.a or 0.7)
     bar.tuiBackdrop:Show()
 
     local texture = LSM:Fetch("statusbar", db.statusBarTexture)

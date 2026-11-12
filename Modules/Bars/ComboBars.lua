@@ -884,7 +884,7 @@ local function Place(bar, st)
     local af = G(bar, "anchorFrame")
     if af == "CUSTOM" then af = bar.anchorFrameCustom or "UIParent" end
     local target = (af ~= "UIParent")
-        and ((ns.ANCHORS and ns.ANCHORS.ResolveAnchorTarget and ns.ANCHORS.ResolveAnchorTarget(af)) or _G[af])
+        and ((ns.ANCHORS and ns.ANCHORS.ResolveAnchorTarget and ns.ANCHORS.ResolveAnchorTarget(af, f)))
         or nil
     if target == f then target = nil end
     st.target = target

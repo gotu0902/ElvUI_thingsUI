@@ -891,8 +891,8 @@ local function BarTab(bi)
                 args = {
                     anchorFrame = {
                         order = 1, type = "select", name = "Anchor To",
-                        values = function() return ns.ANCHORS.FilteredValues() end,
-                        sorting = function() return ns.ANCHORS.FilteredOrder() end,
+                        values = function() local b = bar(); return ns.ANCHORS.ValuesExcept(b and ("TUI_ComboBar_" .. b.id)) end,
+                        sorting = function() local b = bar(); return ns.ANCHORS.OrderExcept(b and ("TUI_ComboBar_" .. b.id)) end,
                         get = function() return g("anchorFrame") end,
                         set = function(_, v)
                             local b = bar()

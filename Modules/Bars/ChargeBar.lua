@@ -466,7 +466,7 @@ local function ApplyPosition(entry)
 end
 
 local function ResolveAnchorTarget(anchorName)
-    local f = anchorName ~= "UIParent" and ns.ANCHORS.ResolveAnchorTarget(anchorName)
+    local f = anchorName ~= "UIParent" and ns.ANCHORS.ResolveAnchorTarget(anchorName, frame)
     if type(f) == "table" and type(f.GetObjectType) == "function" and f ~= frame then
         return f, anchorName
     end

@@ -484,7 +484,7 @@ local function UpdateIconSlot(iconKey)
     local over = not row and db.overSpell or nil
 
     local anchorName  = (db.anchorMode ~= 'CUSTOM') and db.anchorMode or db.anchorFrame
-    local anchorFrame = not row and not over and SB.ResolveAnchorTarget(anchorName)
+    local anchorFrame = not row and not over and SB.ResolveAnchorTarget(anchorName, wrapper)
 
     local w, h
     if row then

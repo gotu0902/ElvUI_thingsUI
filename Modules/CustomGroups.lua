@@ -1205,7 +1205,7 @@ local function ApplyGroup(group, force)
     if af == "CUSTOM" then af = group.anchorFrameCustom or "UIParent" end
     local SB = ns.SpecialBars
     local target = (af ~= "UIParent")
-        and ((SB and SB.ResolveAnchorTarget and SB.ResolveAnchorTarget(af)) or _G[af])
+        and ((SB and SB.ResolveAnchorTarget and SB.ResolveAnchorTarget(af, frame)))
         or nil
     local ox, oy = group.anchorXOffset or 0, group.anchorYOffset or 0
     if m_iw then

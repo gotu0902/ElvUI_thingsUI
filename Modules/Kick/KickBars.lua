@@ -557,7 +557,7 @@ end
 
 local function Place(db)
     local af = db.anchorFrame or "UIParent"
-    local target = (af ~= "UIParent") and ns.ANCHORS.ResolveAnchorTarget(af) or nil
+    local target = (af ~= "UIParent") and ns.ANCHORS.ResolveAnchorTarget(af, frame) or nil
     if target == frame then target = nil end
     if target and (db.inheritWidth or db.inheritHeight) and target.HookScript and not target._tuiKickHooked then
         target._tuiKickHooked = true

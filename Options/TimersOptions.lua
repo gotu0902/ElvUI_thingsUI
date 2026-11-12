@@ -310,7 +310,7 @@ local function TimerTab(t, id, order, Rebuild)
             set = function(_, v) t.anchorPoint = v; T.Update() end,
         }
         args.saAnchorRel = {
-            order = 35, type = "select", name = "Anchor To (point)", width = 1.2,
+            order = 35, type = "select", name = "To Point", width = 1.2,
             values = ns.POINTS.VALUES, sorting = ns.POINTS.ORDER,
             hidden = function() return (t.anchorFrame or "UIParent") == "UIParent" end,
             get = function() return t.anchorRelativePoint or "CENTER" end,
@@ -325,6 +325,21 @@ local function TimerTab(t, id, order, Rebuild)
             order = 37, type = "range", name = "Y Offset", width = 1.1, min = -800, max = 800, step = 1,
             get = function() return t.anchorYOffset or 0 end,
             set = function(_, v) t.anchorYOffset = v; T.Update() end,
+        }
+        args.saStrataBrk = { order = 37.5, type = "description", name = "", width = "full" }
+        args.saStrata = {
+            order = 38, type = "select", name = "Frame Strata", width = 1.1,
+            values = ns.STRATA.VALUES, sorting = ns.STRATA.ORDER,
+            get = function() return t.frameStrata or "MEDIUM" end,
+            set = function(_, v) t.frameStrata = (v ~= "MEDIUM") and v or nil; T.Update() end,
+        }
+        args.saLevel = {
+            order = 39, type = "range", name = "Frame Level", width = 1.1, min = 1, max = 100, step = 1,
+            get = function()
+                local f = _G["TUI_TimerStandalone" .. id]
+                return t.frameLevel or (f and f._tuiBaseLevel) or 1
+            end,
+            set = function(_, v) t.frameLevel = v; T.Update() end,
         }
         local function durShown() return (not t.text) or t.text.showCooldown ~= false end
         args.saTextHeader = { order = 40, type = "header", name = "Duration Text" }
@@ -353,10 +368,29 @@ local function TimerTab(t, id, order, Rebuild)
             set = function(_, v) txt().cooldownFontOutline = v; T.Update() end,
         }
         args.saTxtColor = {
-            order = 45, type = "color", name = "Colour",
+            order = 45, type = "color", name = "Color",
             hidden = function() return not durShown() end,
             get = function() local c = (t.text and t.text.cooldownColor) or {}; return c.r or 1, c.g or 1, c.b or 1 end,
             set = function(_, r, g, b) txt().cooldownColor = { r = r, g = g, b = b }; T.Update() end,
+        }
+        args.saTxtPoint = {
+            order = 46, type = "select", name = "Anchor Point", width = 1.1,
+            values = ns.POINTS.VALUES, sorting = ns.POINTS.ORDER,
+            hidden = function() return not durShown() end,
+            get = function() return (t.text and t.text.cooldownPoint) or "CENTER" end,
+            set = function(_, v) txt().cooldownPoint = v; T.Update() end,
+        }
+        args.saTxtX = {
+            order = 47, type = "range", name = "X Offset", min = -40, max = 40, step = 1,
+            hidden = function() return not durShown() end,
+            get = function() return (t.text and t.text.cooldownXOffset) or 0 end,
+            set = function(_, v) local x = txt(); x.cooldownPoint = x.cooldownPoint or "CENTER"; x.cooldownXOffset = v; T.Update() end,
+        }
+        args.saTxtY = {
+            order = 48, type = "range", name = "Y Offset", min = -40, max = 40, step = 1,
+            hidden = function() return not durShown() end,
+            get = function() return (t.text and t.text.cooldownYOffset) or 0 end,
+            set = function(_, v) local x = txt(); x.cooldownPoint = x.cooldownPoint or "CENTER"; x.cooldownYOffset = v; T.Update() end,
         }
 
         if t.kind == "item" then
@@ -387,7 +421,7 @@ local function TimerTab(t, id, order, Rebuild)
                 set = function(_, v) txt().countFontOutline = v; T.Update() end,
             }
             args.saCountColor = {
-                order = 55, type = "color", name = "Colour",
+                order = 55, type = "color", name = "Color",
                 hidden = function() return not cntShown() end,
                 get = function() local c = (t.text and t.text.countColor) or {}; return c.r or 1, c.g or 1, c.b or 1 end,
                 set = function(_, r, g, b) txt().countColor = { r = r, g = g, b = b }; T.Update() end,

@@ -682,7 +682,7 @@ local function SyncGroup(group)
     local af = group.anchorFrame or "UIParent"
     if af == "CUSTOM" then af = group.anchorFrameCustom or "UIParent" end
     local target = (af ~= "UIParent")
-        and ((ns.ANCHORS and ns.ANCHORS.ResolveAnchorTarget and ns.ANCHORS.ResolveAnchorTarget(af)) or _G[af])
+        and ((ns.ANCHORS and ns.ANCHORS.ResolveAnchorTarget and ns.ANCHORS.ResolveAnchorTarget(af, frame)))
         or nil
 
     if target and (group.inheritWidth or group.inheritHeight) and target.HookScript

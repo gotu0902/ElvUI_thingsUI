@@ -1571,7 +1571,9 @@ function TUI:CustomGroupsOptions()
                             args = {
                                 moveHint = { order = 0, type = "description",
                                     name = "UIParent = free (move via |cFFFFD200/emove|r). Pick a frame to snap to it.\n" },
-                                anchorFrame = { order = 1, type = "select", name = "Anchor To", values = ns.ANCHORS.GetSharedAnchorValues, sorting = ns.ANCHORS.GetSharedAnchorOrder,
+                                anchorFrame = { order = 1, type = "select", name = "Anchor To",
+                                    values = function() return ns.ANCHORS.ValuesExcept("TUI_CustomGroup" .. group.id, true) end,
+                                    sorting = function() return ns.ANCHORS.OrderExcept("TUI_CustomGroup" .. group.id, true) end,
                                     get = function() return group.anchorFrame or "UIParent" end,
                                     set = function(_, v)
                                         if v ~= group.anchorFrame then ns.ANCHORS.ResetPlacement(group) end

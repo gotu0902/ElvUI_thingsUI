@@ -84,7 +84,49 @@ end
 -- Old name kept for any caller that still uses it.
 local GetSpecialBarKeys = GetSpecialSlots
 
-function ns.ANCHORS.ResolveAnchorTarget(anchorName)
+-- our own groups and combo bars, the ones that have a frame right now
+local MODULE_FRAMES = {
+    { "CustomGroups", "GetGroups", "TUI_CustomGroup", "TUI Group" },
+    { "CustomBars",   "GetGroups", "TUI_CustomBars",  "TUI Bar Group" },
+    { "ComboBars",    "GetBars",   "TUI_ComboBar_",   "TUI Combo Bar" },
+}
+local function GetModuleFrames()
+    local out = {}
+    for _, m in ipairs(MODULE_FRAMES) do
+        local mod = ns[m[1]]
+        local list = mod and mod[m[2]] and mod[m[2]]()
+        for _, g in ipairs(list or {}) do
+            local fname = m[3] .. tostring(g.id)
+            if _G[fname] then
+                local kind = (g.display == "text" and m[1] == "CustomBars") and "TUI Text Group" or m[4]
+                out[#out + 1] = { frame = fname, label = col(C_TUI, kind .. ": " .. tostring(g.name or g.id)) }
+            end
+        end
+    end
+    return out
+end
+
+-- true when target already hangs off frame: SetPoint would throw
+function ns.ANCHORS.DependsOn(target, frame)
+    for _ = 1, 12 do
+        if not target or target == _G.UIParent then return false end
+        if target == frame then return true end
+        if not (target.GetNumPoints and target:GetNumPoints() > 0) then return false end
+        local _, rel = target:GetPoint(1)
+        if issecretvalue and issecretvalue(rel) then return false end
+        target = rel
+    end
+    return false
+end
+
+local ResolveName
+function ns.ANCHORS.ResolveAnchorTarget(anchorName, frame)
+    local target = ResolveName(anchorName)
+    if frame and target and ns.ANCHORS.DependsOn(target, frame) then return nil end
+    return target
+end
+
+function ResolveName(anchorName)
     if not anchorName or anchorName == "" then return nil end
     if anchorName == "BARSETUP_TOP" then
         local bs = ns.BarSetup
@@ -119,6 +161,7 @@ function ns.ANCHORS.GetSharedAnchorValues()
     if sbs then
         for _, e in ipairs(sbs) do values[e.frame] = e.label end
     end
+    for _, e in ipairs(GetModuleFrames()) do values[e.frame] = e.label end
     return values
 end
 
@@ -133,8 +176,23 @@ function ns.ANCHORS.GetSharedAnchorOrder()
     if sbs then
         for _, e in ipairs(sbs) do order[#order + 1] = e.frame end
     end
+    for _, e in ipairs(GetModuleFrames()) do order[#order + 1] = e.frame end
     for _, k in ipairs(TAIL_ORDER) do order[#order + 1] = k end
     return order
+end
+
+-- the shared list without one frame (the one being placed); custom = keep "Custom Frame..."
+function ns.ANCHORS.ValuesExcept(name, custom)
+    local out = custom and ns.ANCHORS.GetSharedAnchorValues() or ns.ANCHORS.FilteredValues()
+    if name then out[name] = nil end
+    return out
+end
+function ns.ANCHORS.OrderExcept(name, custom)
+    local out = {}
+    for _, k in ipairs(custom and ns.ANCHORS.GetSharedAnchorOrder() or ns.ANCHORS.FilteredOrder()) do
+        if k ~= name then out[#out + 1] = k end
+    end
+    return out
 end
 
 function ns.ANCHORS.FilteredValues()
