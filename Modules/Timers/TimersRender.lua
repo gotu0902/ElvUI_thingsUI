@@ -159,7 +159,7 @@ function R.Update(btn, timer)
     local bStart, bDur = T.GetActiveBuff(timer, now)
     if bStart and timer.showCDTimer then
         if ItemCooldownChanged(btn.cooldown, true, bStart, bDur) then btn.cooldown:SetCooldown(bStart, bDur) end
-        SetDesat(btn.icon, 0)
+        SetDesat(btn.icon, timer.desatRunning and 1 or 0)
     elseif timer.trackCooldown == false then
 
         if ItemCooldownChanged(btn.cooldown, false) then btn.cooldown:Clear() end

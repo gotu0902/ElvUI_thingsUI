@@ -302,16 +302,64 @@ function M.IsActive(timer)
     return true
 end
 
+local function StartTimer(tid, now)
+    lastCastStart[tid] = now
+    local timer = M.GetByID(tid)
+    local dur = timer and M.GetDuration(timer)
+    if dur and dur > 0 then
+        C_Timer.After(dur + 0.1, function()
+            if lastCastStart[tid] == now then
+                lastCastStart[tid] = nil
+                FireHosts()
+            end
+        end)
+    end
+end
+
+-- timers that start when the CDM shows their aura turning on
+local auraTimers, auraUp, auraHooked = {}, {}, false
+local function OnAuraState(c, on)
+    if on ~= nil or not auraTimers[1] then return end
+    local a = c.isActive
+    if issecret and issecret(a) then return end
+    a = a and true or false
+    local CI, started = ns.CDMIcons, false
+    for i = 1, #auraTimers do
+        local w = auraTimers[i]
+        if CI.ChildMatches(c, w.ids) then
+            if a and not auraUp[w.id] then
+                StartTimer(w.id, GetTime())
+                started = true
+            end
+            auraUp[w.id] = a
+        end
+    end
+    if started then FireHosts() end
+end
+
+function M.IsAuraTimer(timer)
+    return timer and timer.kind == "spell" and timer.trigger == "aura" or false
+end
+
 function M.Rebuild()
     wipe(triggerMap)
     wipe(durationCache)
     wipe(trackedItems)
+    wipe(auraTimers)
+    local watch
     for _, timer in ipairs(M.GetTimers()) do
         if M.IsActive(timer) then
-            for _, sid in ipairs(M.GetAllTriggerSpellIDs(timer)) do
-                local t = triggerMap[sid]
-                if not t then t = {}; triggerMap[sid] = t end
-                t[#t + 1] = timer.id
+            if M.IsAuraTimer(timer) then
+                local ids = {}
+                watch = watch or {}
+                for _, sid in ipairs(M.GetAllTriggerSpellIDs(timer)) do ids[sid] = true; watch[sid] = true end
+                auraTimers[#auraTimers + 1] = { id = timer.id, ids = ids }
+            else
+                for _, sid in ipairs(M.GetAllTriggerSpellIDs(timer)) do
+                    local t = triggerMap[sid]
+                    if not t then t = {}; triggerMap[sid] = t end
+                    t[#t + 1] = timer.id
+                end
             end
 
             if timer.kind == "item" and timer.itemID then
@@ -329,6 +377,14 @@ function M.Rebuild()
             if M.IsActive(timer) and timer.glowReadyInCombat then wantGlow = true; break end
         end
         ns.TimersRender.SetGlowActive(wantGlow and InCombatLockdown())
+    end
+    local CI = ns.CDMIcons
+    if watch and CI and CI.WatchBuffFrames then
+        if not auraHooked then
+            auraHooked = true
+            CI.OnAuraState(OnAuraState)
+        end
+        CI.WatchBuffFrames(watch)
     end
 end
 
@@ -389,23 +445,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2, spellID)
         local ids = triggerMap[spellID]
         if ids then
             local now = GetTime()
-            for i = 1, #ids do
-                local tid = ids[i]
-                lastCastStart[tid] = now
-                local timer
-                for _, t in ipairs(M.GetTimers()) do
-                    if t.id == tid then timer = t; break end
-                end
-                local dur = timer and M.GetDuration(timer)
-                if dur and dur > 0 then
-                    C_Timer.After(dur + 0.1, function()
-                        if lastCastStart[tid] == now then
-                            lastCastStart[tid] = nil
-                            FireHosts()
-                        end
-                    end)
-                end
-            end
+            for i = 1, #ids do StartTimer(ids[i], now) end
             FireHosts()   -- relayout: a buff just started
         end
     elseif event == "PLAYER_TOTEM_UPDATE" then

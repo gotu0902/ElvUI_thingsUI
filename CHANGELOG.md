@@ -79,6 +79,7 @@
 - Mini Meter: your own row works in combat (tooltip, spell list, popout), Reset on New Instance asks, Reset When M+ Starts, swap options, nicknames stay in combat
 - Visibility: Only As Tank / Healer / DPS everywhere, Timers got Visibility
 - Anchor To lists your Groups (Icons, Bars, Text) and Aura Combo Bars, and two frames anchored to each other fall back to the screen instead of throwing an error
+- Timers: Starts When > Its Aura Appears, for passive procs with a lockout (cheat deaths like Purgatory): the timer starts when the Cooldown Manager shows the aura and runs the time you set. Desaturate While Running
 - Standalone Timers: Frame Strata / Level, Anchor Point and offsets for the duration text. Buff Bars: Background Color
 - Spell pickers show tooltips, ElvUI Party Frames in Anchor To, Account Settings > ElvUI Private imports everything
 - New commands: /tui icons, /tui aura <spellID> [watch], /tui prof all, /tui prof spec

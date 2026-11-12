@@ -120,10 +120,40 @@ local function TimerTab(t, id, order, Rebuild)
             end,
         },
         styleHeader = { order = 10, type = "header", name = "Behaviour" },
+        trigger = {
+            order = 10.5, type = "select", name = "Starts When", width = 1.2,
+            hidden = function() return t.kind ~= "spell" end,
+            values = { cast = "You Cast It", aura = "Its Aura Appears" },
+            sorting = { "cast", "aura" },
+            get = function() return t.trigger or "cast" end,
+            set = function(_, v)
+                t.trigger = (v == "aura") and "aura" or nil
+                if v == "aura" then t.durationAuto = false end
+                T.Update(); NotifyChange()
+            end,
+        },
+        triggerNote = {
+            order = 10.6, type = "description", fontSize = "medium", width = "full",
+            hidden = function() return not T.IsAuraTimer(t) end,
+            name = function()
+                local CI, ids = ns.CDMIcons, {}
+                for _, sid in ipairs(T.GetAllTriggerSpellIDs(t)) do ids[sid] = true end
+                if CI and CI.AuraUp and CI.AuraUp(ids) == nil then
+                    return "|cFFFF3030Not in the Cooldown Manager's Tracked Buffs or Bars: add it there, that is what starts the timer.|r\n"
+                end
+                return "Starts when the Cooldown Manager shows the aura. Set the time it should run under Duration.\n"
+            end,
+        },
         showCDTimer = {
             order = 11, type = "toggle", name = "Show Buff Swipe", width = 1.2,
                         get = function() return t.showCDTimer end,
             set = function(_, v) t.showCDTimer = v; T.Update() end,
+        },
+        desatRunning = {
+            order = 11.2, type = "toggle", name = "Desaturate While Running", width = 1.3,
+            hidden = function() return not t.showCDTimer end,
+            get = function() return t.desatRunning end,
+            set = function(_, v) t.desatRunning = v or nil; T.Update() end,
         },
         trackCooldown = {
             order = 11.5, type = "toggle", name = "Show Cooldown", width = 1.2,
@@ -479,7 +509,7 @@ function TUI:TimersOptions()
                 args = {
                     desc = {
                         order = 0.5, type = "description", width = "full",
-                        name = "A timer starts when YOU cast the spell or use the item, and runs its duration as a static icon.\n",
+                        name = "A timer starts when YOU cast the spell or use the item, or when a spell's aura appears, and runs its duration as a static icon.\n",
                     },
                     addSpell = {
                         order = 1, type = "input", name = "Add Spell (ID or name)", width = 1.2,
