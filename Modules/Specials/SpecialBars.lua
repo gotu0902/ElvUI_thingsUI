@@ -5,6 +5,7 @@ local E = ns.E
 ns.SpecialBars = ns.SpecialBars or {}
 local SB = ns.SpecialBars
 local specialBarState = SB.specialBarState
+local condBars = {}
 
 local function GetOrCreateWrapper(barKey)
     local name    = "TUI_SpecialBar_" .. barKey
@@ -159,6 +160,7 @@ local function ReleaseBar(barKey)
         wrapper:Hide()
     end
     specialBarState[barKey] = nil
+    condBars[barKey] = nil
 
     local moverName = "TUI_SpecialBarMover_" .. barKey
     if E and E.CreatedMovers and E.CreatedMovers[moverName] and E.DisableMover then
@@ -268,6 +270,46 @@ local function CooldownText(cd)
 end
 SB.CooldownText = CooldownText
 
+-- a totem bar's fill color and name; While Missing a buff both can change
+local function ApplyCond(wrapper, db)
+    local fx = wrapper.totemFX
+    if not fx then return end
+    local miss = db.condBuff and not ns.AuraUp(db.condBuff, "HELPFUL") or false
+    local c
+    if miss and db.condColorOn then c = db.condColor or { r = 1, g = 0.3, b = 0.3 }
+    elseif db.useClassColor then c = E:ClassColor(E.myclass, true)
+    else c = db.customColor or { r = 0.2, g = 0.6, b = 1 } end
+    fx.fill:SetVertexColor(c.r, c.g, c.b)
+    local text = miss and db.condText and db.condText ~= "" and db.condText or nil
+    if not text and db.showName then
+        text = db.spellName or (C_Spell.GetSpellName and C_Spell.GetSpellName(db.spellID)) or "Bar"
+    end
+    fx.name:SetText(text or "")
+    fx.name:SetShown(text and true or false)
+end
+
+local function CondRefresh()
+    for key in pairs(condBars) do
+        local st = specialBarState[key]
+        local w = st and st.wrapper
+        if w and w.totemFX and w.totemFX:IsShown() then ApplyCond(w, SB.GetBarDB(key)) end
+    end
+end
+do
+    local ev = CreateFrame("Frame")
+    ev:RegisterEvent("PLAYER_REGEN_ENABLED")
+    ev:RegisterUnitEvent("UNIT_AURA", "player")
+    ev:SetScript("OnEvent", function(_, event)
+        -- in combat the CDM's own signal drives it
+        if event == "UNIT_AURA" and InCombatLockdown() then return end
+        if next(condBars) then CondRefresh() end
+    end)
+    -- CDMIcons loads after this file
+    C_Timer.After(0, function()
+        ns.CDMIcons.OnAuraState(function() if next(condBars) then CondRefresh() end end)
+    end)
+end
+
 local function RenderTotemBar(wrapper, db, w, h, start, dur)
     local fx = wrapper.totemFX
     if not start then
@@ -331,13 +373,6 @@ local function RenderTotemBar(wrapper, db, w, h, start, dur)
     local areaW = math.max(1, w - left - 1)
     local frac = math.min(1, remaining / dur)
     fx.fill:SetTexture(LSM:Fetch("statusbar", db.statusBarTexture))
-    if db.useClassColor then
-        local c = E:ClassColor(E.myclass, true)
-        fx.fill:SetVertexColor(c.r, c.g, c.b)
-    else
-        local c = db.customColor or { r = 0.2, g = 0.6, b = 1 }
-        fx.fill:SetVertexColor(c.r, c.g, c.b)
-    end
     fx.fill:ClearAllPoints()
     local rev = db.reverseFill and true or false
     if rev then
@@ -353,17 +388,12 @@ local function RenderTotemBar(wrapper, db, w, h, start, dur)
     fx.slide:Play()
 
     local font = LSM:Fetch("font", db.font or "Expressway")
-    if db.showName then
-        E:SetFont(fx.name, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
-        ns.TextColor(fx.name, db.nameColor)
-        fx.name:ClearAllPoints()
-        fx.name:SetPoint(db.namePoint or "LEFT", fx, db.namePoint or "LEFT",
-            (db.nameXOffset or 2) + left, db.nameYOffset or 0)
-        fx.name:SetText(db.spellName or (C_Spell.GetSpellName and C_Spell.GetSpellName(db.spellID)) or "Bar")
-        fx.name:Show()
-    else
-        fx.name:Hide()
-    end
+    E:SetFont(fx.name, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
+    ns.TextColor(fx.name, db.nameColor)
+    fx.name:ClearAllPoints()
+    fx.name:SetPoint(db.namePoint or "LEFT", fx, db.namePoint or "LEFT",
+        (db.nameXOffset or 2) + left, db.nameYOffset or 0)
+    ApplyCond(wrapper, db)
     if db.showDuration then
         fx.cdText:ClearAllPoints()
         fx.cdText:SetAllPoints(fx)
@@ -552,6 +582,7 @@ local function UpdateBarSlot(barKey)
     local state = specialBarState[barKey]
     if not state then state = {}; specialBarState[barKey] = state end
     state.wrapper = wrapper
+    condBars[barKey] = (db.totemTimer and db.condBuff) and true or nil
 
     local test = ns.CustomGroups and ns.CustomGroups.testMode
     if test then

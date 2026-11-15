@@ -60,6 +60,7 @@
 - Aura Type reads Auto, no more empty Icon/Bar 1-3 slots, and an aura you talented out of goes away (rows and Bar Setup close up)
 - Frame Level next to Frame Strata, Custom Icon, sample text in the previews
 - Pixel Glow's Bordered Stroke works without Show Border: a stroke only while it glows (Groups too)
+- Aura Bars, Totem / No Aura Timer: While Missing This Buff changes the bar's color and/or its text (a Death and Decay bar that turns red when you step out of it)
 - Aura Bars: Fill By Stacks (Groups - Bars too), list split like Aura Icons', Move Up / Down in Bar Setup per spec
 - Aura Bars: Show In > Bar Setup works on any bar. Other specs' bar with the same number stays Standalone, and Bar Order says why a bar sits out
 - Position in Row is the icon's real place in Essential/Utility (1, 2, 3 = the first three)

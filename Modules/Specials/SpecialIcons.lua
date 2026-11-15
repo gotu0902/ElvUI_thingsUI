@@ -774,9 +774,10 @@ do
         if event == "UNIT_AURA" and InCombatLockdown() then return end
         if next(missingOf) or SB.AnyGroupedMissing() then Queue() end
     end)
-    if ns.CDMIcons and ns.CDMIcons.OnAuraState then
+    -- CDMIcons loads after this file
+    C_Timer.After(0, function()
         ns.CDMIcons.OnAuraState(function() if next(missingOf) or SB.AnyGroupedMissing() then Queue() end end)
-    end
+    end)
     ns.Visibility.OnChange(function() if next(missingOf) or SB.AnyGroupedMissing() then Queue() end end)
 end
 
@@ -943,7 +944,7 @@ do
     ev:RegisterEvent("SPELL_UPDATE_COOLDOWN")
     ev:SetScript("OnEvent", Queue)
     -- the icon's own aura coming and going (a buff frame of the CDM, or out of combat a scan)
-    if ns.CDMIcons and ns.CDMIcons.OnAuraState then ns.CDMIcons.OnAuraState(Queue) end
+    C_Timer.After(0, function() ns.CDMIcons.OnAuraState(Queue) end)
     local auras = CreateFrame("Frame")
     auras:RegisterUnitEvent("UNIT_AURA", "player", "target")
     auras:RegisterEvent("PLAYER_TARGET_CHANGED")

@@ -924,6 +924,70 @@ function TUI:SpecialBarOptions(barKey, ctx)
             QueueUpdate()
         end,
     }
+    local function noTimer() return not (db().spellID and db().totemTimer) end
+    local function noCond() return noTimer() or not db().condBuff end
+    commonArgs.condBuff = {
+        order = 3.3, type = "select", dialogControl = "TUI_SpellDropdown", name = "While Missing This Buff", width = "double",
+        hidden = noTimer,
+        values = function()
+            local vals = ns.AuraPick("spec", ESpec() or CurSpecID())
+            local id = db().condBuff
+            if id and not vals[tostring(id)] then
+                vals[tostring(id)] = ("|T%d:14:14|t %s"):format(C_Spell.GetSpellTexture(id) or 0, C_Spell.GetSpellName(id) or id)
+            end
+            vals["0"] = "None"
+            return vals
+        end,
+        sorting = function()
+            local list = select(2, ns.AuraPick("spec", ESpec() or CurSpecID()))
+            local id = db().condBuff
+            local out, has = { "0" }, false
+            for _, k in ipairs(list) do out[#out + 1] = k; if k == tostring(id) then has = true end end
+            if id and not has then table.insert(out, 2, tostring(id)) end
+            return out
+        end,
+        get = function() return tostring(db().condBuff or 0) end,
+        set = function(_, v)
+            local id = tonumber(v)
+            db().condBuff = (id and id > 0) and id or nil
+            QueueUpdate()
+        end,
+    }
+    commonArgs.condBuffID = {
+        order = 3.31, type = "input", name = "...or by ID",
+        hidden = noTimer,
+        get = function() return "" end,
+        set = function(_, v)
+            local id = tonumber(v)
+            if id and C_Spell.GetSpellName(id) then db().condBuff = id; QueueUpdate() end
+        end,
+    }
+    commonArgs.condNote = {
+        order = 3.32, type = "description", width = "full",
+        hidden = function() return noCond() or select(2, ns.AuraUp(db().condBuff, "HELPFUL")) end,
+        name = "|cFFFFD200In combat this follows the buff through Blizzard's Cooldown Manager: add it to Tracked Buffs or Bars. Out of combat it works anyway.|r",
+    }
+    commonArgs.condColorOn = {
+        order = 3.33, type = "toggle", name = "Change Color",
+        hidden = noCond,
+        get = function() return db().condColorOn end,
+        set = function(_, v) db().condColorOn = v or nil; QueueUpdate() end,
+    }
+    commonArgs.condColor = {
+        order = 3.34, type = "color", name = "Color",
+        hidden = noCond, disabled = function() return not db().condColorOn end,
+        get = function()
+            local c = db().condColor or { r = 1, g = 0.3, b = 0.3 }
+            return c.r, c.g, c.b
+        end,
+        set = function(_, r, g, b) db().condColor = { r = r, g = g, b = b }; QueueUpdate() end,
+    }
+    commonArgs.condText = {
+        order = 3.35, type = "input", name = "Text Instead of Name",
+        hidden = noCond,
+        get = function() return db().condText or "" end,
+        set = function(_, v) db().condText = (v ~= "") and v or nil; QueueUpdate() end,
+    }
     local function BarSetupOn()
         local bsdb = E.db.thingsUI and E.db.thingsUI.barSetup
         return (bsdb and bsdb.enabled and bsdb.setups) and true or false
