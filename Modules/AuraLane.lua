@@ -144,10 +144,12 @@ function A.Entries(group)
                 -- nil = both sides: a buff on you and your debuff on the target
                 local kind = idb.auraKind or A.LearnedKind(idb)
                 if not kind then unresolved[idb] = spells else unresolved[idb] = nil end
+                -- Always: drawn on its own grid slot, not in the flow
+                local pin = idb.groupAlways and idb.spellID or nil
                 if kind ~= "HARMFUL" then
                     out[#out + 1] = {
                         key = ("TUIAura%d_si_%s"):format(group.id or 0, ikey),
-                        def = { spells = spells, max = 1, iconDB = idb },
+                        def = { spells = spells, max = 1, iconDB = idb, pin = pin, previewSkip = pin and true or nil },
                         rank = rank,
                     }
                 end
@@ -155,7 +157,7 @@ function A.Entries(group)
                     out[#out + 1] = {
                         key = ("TUIAura%d_siT_%s"):format(group.id or 0, ikey),
                         def = { spells = spells, max = 1, iconDB = idb, kind = "HARMFUL", unit = "target",
-                            previewSkip = kind ~= "HARMFUL" },
+                            pin = pin, previewSkip = (pin or kind ~= "HARMFUL") and true or nil },
                         rank = rank + 1,
                     }
                 end
@@ -220,6 +222,13 @@ end
 local function LaneVisOKT(lane)
     if not lane.unitT then return false end
     return SideVisOK(lane.unitT, lane.pureHarmfulT, lane.hasHarmfulT)
+end
+
+local function PinsVis(lane, off)
+    if not lane.pins then return end
+    for _, p in pairs(lane.pins) do
+        p.c:SetShown((not off and p.on and SideVisOK(p.unit, p.harm, p.harm)) and true or false)
+    end
 end
 
 local durFormatter
@@ -750,6 +759,7 @@ function Teardown(groupID)
     lane.container:Hide()
     if lane.containerT then lane.containerT:Hide() end
     GhostOff(lane)
+    PinsVis(lane, true)
     lane.tail:Hide()
     lane._syncSig = nil
 end
@@ -785,6 +795,7 @@ function A.Sync(group, frame)
             lane.container:Hide()
             if lane.containerT then lane.containerT:Hide() end
             if lane.ghost then lane.ghost:Hide() end
+            PinsVis(lane, true)
             lane._syncSig = nil
         end
         return
@@ -806,7 +817,14 @@ function A.Sync(group, frame)
 
     local entries = A.Entries(group)
     WatchSides()
-    if #entries == 0 then
+    local pins
+    for i = #entries, 1, -1 do
+        if entries[i].def.pin then
+            pins = pins or {}
+            pins[#pins + 1] = table.remove(entries, i)
+        end
+    end
+    if #entries == 0 and not pins then
         local lane = lanes[group.id]
         if lane then
             for key, owner in pairs(lane.keys) do
@@ -816,6 +834,7 @@ function A.Sync(group, frame)
             lane.container:Hide()
             if lane.containerT then lane.containerT:Hide() end
             GhostOff(lane)
+            PinsVis(lane, true)
             lane._syncSig = nil
         end
         return
@@ -908,10 +927,15 @@ function A.Sync(group, frame)
         tostring(S.center), tostring(S.horizontal), tostring(S.alongSign), tostring(S.crossSign),
         tostring(group.maxIcons), tostring(sortMode), tostring(frame:GetFrameStrata()) }
     for _, e in ipairs(entries) do sigParts[#sigParts + 1] = e.key .. ":" .. DefSig(e.def) end
+    for _, e in ipairs(pins or {}) do
+        sigParts[#sigParts + 1] = e.key .. ":" .. DefSig(e.def)
+            .. (ns.CustomGroups.PinButton(group.id, e.def.pin) and "+" or "-")
+    end
     local syncSig = table.concat(sigParts, "|")
     if lane._syncSig == syncSig then
         lane.container:SetShown(LaneVisOK(lane))
         if lane.containerT then lane.containerT:SetShown(LaneVisOKT(lane)) end
+        PinsVis(lane)
         return
     end
     lane._syncSig = syncSig
@@ -1021,6 +1045,36 @@ function A.Sync(group, frame)
         ApplyEntry(lane, group, entry, i, cT)
         wanted[entry.key] = true
     end
+    if lane.pins then for _, p in pairs(lane.pins) do p.on = nil end end
+    for _, entry in ipairs(pins or {}) do
+        local btn = ns.CustomGroups.PinButton(group.id, entry.def.pin)
+        if btn then
+            lane.pins = lane.pins or {}
+            local p = lane.pins[entry.key]
+            if not p then
+                p = { c = CreateFrame("AuraContainer", nil, btn, "CustomAuraContainerTemplate") }
+                lane.pins[entry.key] = p
+            end
+            local c = p.c
+            c:SetParent(btn)
+            c:ClearAllPoints()
+            c:SetSize(S.iw, S.ih)
+            c:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, 0)
+            c:SetFrameStrata(btn:GetFrameStrata() or "MEDIUM")
+            c:SetFrameLevel(btn:GetFrameLevel() + 12)
+            ApplyFlowTo(c, S, { entry }, "TOPLEFT", FLOW_RIGHT, FLOW_DOWN)
+            ApplyEntry(lane, group, entry, 1, c)
+            local u = entry.def.unit or "player"
+            if p.unit ~= u then
+                c:SetUnit(u)
+                p.unit = u
+                if c.UpdateAllAuras then c:UpdateAllAuras() end
+            end
+            p.harm = entry.def.kind == "HARMFUL"
+            p.on = true
+            wanted[entry.key] = true
+        end
+    end
     for key, owner in pairs(lane.keys) do
         if not wanted[key] then
             if owner == true then owner = lane.container end
@@ -1073,6 +1127,7 @@ function A.Sync(group, frame)
     end
     lane.container:SetShown(LaneVisOK(lane))
     if cT then cT:SetShown(split and LaneVisOKT(lane) or false) end
+    PinsVis(lane)
 end
 
 function A.Release(groupID)
@@ -1084,6 +1139,9 @@ function A.ReparseAll()
         if lane.container.UpdateAllAuras then lane.container:UpdateAllAuras() end
         if lane.containerT and lane.containerT.UpdateAllAuras then lane.containerT:UpdateAllAuras() end
         if lane.unitG and lane.ghost.UpdateAllAuras then lane.ghost:UpdateAllAuras() end
+        for _, p in pairs(lane.pins or {}) do
+            if p.on and p.c.UpdateAllAuras then p.c:UpdateAllAuras() end
+        end
     end
 end
 
@@ -1092,6 +1150,7 @@ local function RefreshHelpfulVis()
         for _, lane in pairs(lanes) do
             lane.container:SetShown(LaneVisOK(lane))
             if lane.containerT then lane.containerT:SetShown(LaneVisOKT(lane)) end
+            PinsVis(lane)
         end
     end
     if ns.SpecialAura and ns.SpecialAura.RefreshVisibility then ns.SpecialAura.RefreshVisibility() end

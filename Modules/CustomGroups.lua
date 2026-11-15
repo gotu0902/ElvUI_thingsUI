@@ -433,19 +433,20 @@ local function FindTotemIconDB(sid, groupID)
     end
 end
 
--- an Only When Missing aura: just its icon, shown while the aura is down
+-- an Only When Missing or Always aura: just its icon (Always: grey, the aura draws on top)
 local function UpdateMissingIcon(btn)
     local sid = btn._id
+    local always = btn._type == "always"
     local SBm = ns.SpecialBars
     local idb
     for i = 1, ((SBm and SBm.GetIconCount and SBm.GetIconCount()) or 0) do
         local d = SBm.GetIconDB("icon" .. i)
-        if d and d.spellID == sid and d.showMissing then idb = d break end
+        if d and d.spellID == sid and ((always and d.groupAlways) or (not always and d.showMissing)) then idb = d break end
     end
     if btn.icon then
         local tex = (idb and idb.customIcon) or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid))
         if tex then btn.icon:SetTexture(tex) end
-        btn.icon:SetDesaturated((idb and idb.missingDesat and not M.testMode) and true or false)
+        btn.icon:SetDesaturated((not M.testMode and (always or (idb and idb.missingDesat))) and true or false)
     end
     if btn.cooldown then btn.cooldown:Clear() end
     if btn.count then btn.count:SetText("") end
@@ -488,7 +489,7 @@ local function UpdateIcon(btn)
     elseif btn._type == "trinket" then UpdateTrinketIcon(btn)
     elseif btn._type == "timer" then UpdateTimerIcon(btn)
     elseif btn._type == "totem" then UpdateTotemIcon(btn)
-    elseif btn._type == "missing" then UpdateMissingIcon(btn)
+    elseif btn._type == "missing" or btn._type == "always" then UpdateMissingIcon(btn)
     else UpdateSpellIcon(btn) end
     ApplyGroupBorder(btn)
 end
@@ -502,11 +503,13 @@ local function CreateIcon(gs, group, kind, id)
     if kind == "trinket" then gs.trinketIcons = gs.trinketIcons or {} end
     if kind == "totem" then gs.totemIcons = gs.totemIcons or {} end
     if kind == "missing" then gs.missingIcons = gs.missingIcons or {} end
+    if kind == "always" then gs.alwaysIcons = gs.alwaysIcons or {} end
     local pool = (kind == "item") and gs.itemIcons
               or (kind == "timer") and gs.timerIcons
               or (kind == "trinket") and gs.trinketIcons
               or (kind == "totem") and gs.totemIcons
               or (kind == "missing") and gs.missingIcons
+              or (kind == "always") and gs.alwaysIcons
               or gs.spellIcons
     if pool[id] then pool[id]._group = group; return pool[id] end
 
@@ -597,6 +600,15 @@ local function CreateIcon(gs, group, kind, id)
     return btn
 end
 
+-- the grid button of an Always aura, while it has a slot
+function M.PinButton(id, sid)
+    local gs = groupState[id]
+    if not (gs and gs.alwaysIcons) then return nil end
+    for _, e in ipairs(gs.shown) do
+        if e.kind == "always" and e.id == sid then return gs.alwaysIcons[sid] end
+    end
+end
+
 -- /tui lane: what a group's grid holds right now ({ kind, id })
 function M.GridEntries(id)
     local gs = groupState[id]
@@ -649,6 +661,7 @@ local function HideGroupIcons(gs)
     if gs.trinketIcons then for _, b in pairs(gs.trinketIcons) do b:Hide() end end
     if gs.totemIcons then for _, b in pairs(gs.totemIcons) do b:Hide() end end
     if gs.missingIcons then for _, b in pairs(gs.missingIcons) do b:Hide() end end
+    if gs.alwaysIcons then for _, b in pairs(gs.alwaysIcons) do b:Hide() end end
     if gs.testIcons then for _, b in pairs(gs.testIcons) do b:Hide() end end
 end
 
@@ -955,6 +968,16 @@ local function CollectScopeInto(group, scope, root, shown)
                 if (active or M.testMode) and not _seen["t" .. idb.spellID] then
                     _seen["t" .. idb.spellID] = true
                     list[#list + 1] = { kind = "totem", id = idb.spellID, li = idb.customGroupOrder or 20000 }
+                end
+            elseif idb and idb.enabled and idb.spellID and idb.customGroup == group.id and idb.groupAlways
+                and not idb.showMissing and SBm.SpellLearned(idb.spellID) then
+                -- Always: a slot that stays, its aura draws on top of it
+                local vis
+                if M.testMode then vis = ns.Visibility.PreviewShown(idb.visibility)
+                else vis = ns.Visibility.Shown(idb.visibility) end
+                if vis and not _seen["m" .. idb.spellID] then
+                    _seen["m" .. idb.spellID] = true
+                    list[#list + 1] = { kind = "always", id = idb.spellID, li = idb.customGroupOrder or 20000 }
                 end
             elseif idb and idb.enabled and idb.spellID and idb.customGroup == group.id and idb.showMissing
                 and SBm.SpellLearned(idb.spellID) then

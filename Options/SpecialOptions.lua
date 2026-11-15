@@ -1723,24 +1723,24 @@ function TUI:SpecialIconOptions(keyArg, ctx)
                             disabled = function() return onTop() end,
                             values = function()
                                 local t = { active = "While Active", always = "Always (idle greyed)", missing = "Only When Missing" }
-                                -- a group's auras come and go in its own lane
-                                if isGrouped() then t.always = nil end
                                 if inRow() then t.active = nil end
                                 return t
                             end,
                             sorting = function()
-                                if isGrouped() then return { "active", "missing" } end
                                 if inRow() then return { "always", "missing" } end
                                 return { "active", "always", "missing" }
                             end,
                             get = function()
                                 if get("showMissing") then return "missing" end
+                                -- in a group it is a setting of its own: a fixed slot there
+                                if isGrouped() then return get("groupAlways") and "always" or "active" end
                                 if inRow() or get("desaturateWhenInactive") then return "always" end
                                 return "active"
                             end,
                             set = function(_, v)
                                 db().showMissing = (v == "missing") or nil
-                                set("desaturateWhenInactive", v == "always")
+                                if isGrouped() then set("groupAlways", (v == "always") or nil)
+                                else set("desaturateWhenInactive", v == "always") end
                                 if ns.CustomGroups and ns.CustomGroups.QueueLayout then ns.CustomGroups.QueueLayout() end
                             end },
                         missingDesat = { order = 6.05, type = "toggle", name = "Desaturate",
@@ -2068,8 +2068,8 @@ function TUI:SpecialIconOptions(keyArg, ctx)
         },
         visibilityGroup = {
             order = 25, type = "group", name = "Visibility",
-            -- in a group only an Only When Missing icon is its own (a slot in the grid)
-            hidden = function() return styleMode or (isGrouped() and not get("showMissing")) end,
+            -- in a group only an icon with a slot of its own in the grid has them
+            hidden = function() return styleMode or (isGrouped() and not (get("showMissing") or get("groupAlways"))) end,
             args = ns.VisibilityArgs(function()
                 local d = db()
                 d.visibility = d.visibility or {}

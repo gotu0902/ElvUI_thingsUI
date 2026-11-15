@@ -445,8 +445,90 @@ local function SpecCapture(P, M)
     print("|cFF8080FFthingsUI|r: swap spec now; the report follows 8 s after the swap.")
 end
 
+-- /tui prof fight: armed, then every frame over 33 ms in a boss fight, and who spent it
+local SLOW_MS = 33
+local fight, fightFrame
+local function FightReport(c)
+    if c.slow == 0 then
+        print(("|cFF8080FFthingsUI|r fight %s: %.0f s, no frame over %d ms."):format(c.name or "", c.time, SLOW_MS))
+        return
+    end
+    print(("|cFF8080FFthingsUI|r fight %s: %.0f s, %d frames over %d ms; of their %.0f ms the addons took %.0f ms (%.0f%%)"):format(
+        c.name or "", c.time, c.slow, SLOW_MS, c.slowMs, c.slowAddons, 100 * c.slowAddons / c.slowMs))
+    local rows = {}
+    for name, t in pairs(c.addons) do rows[#rows + 1] = { name = name, total = t.total, worst = t.worst } end
+    table.sort(rows, function(a, b) return a.total > b.total end)
+    for i = 1, math.min(8, #rows) do
+        print(("  %-26s %7.1f ms in those frames | worst %6.1f ms"):format(rows[i].name, rows[i].total, rows[i].worst))
+    end
+    table.sort(c.frames, function(a, b) return a.len > b.len end)
+    local parts = {}
+    for i = 1, math.min(6, #c.frames) do
+        local fr = c.frames[i]
+        parts[#parts + 1] = ("%.0f (%.0f, %s %.0f)"):format(fr.len, fr.addons, fr.top or "-", fr.topMs or 0)
+    end
+    print("  longest frames, ms (of it addons, the biggest one): " .. table.concat(parts, "; "))
+end
+
+local function FightCapture(P, M)
+    fightFrame = fightFrame or CreateFrame("Frame")
+    if fight then
+        fightFrame:SetScript("OnUpdate", nil)
+        fightFrame:UnregisterAllEvents()
+        if fight.cur then FightReport(fight.cur) end
+        fight = nil
+        print("|cFF8080FFthingsUI|r: fight profiling off.")
+        return
+    end
+    local names = {}
+    for i = 1, C_AddOns.GetNumAddOns() do
+        local name = C_AddOns.GetAddOnInfo(i)
+        if name and C_AddOns.IsAddOnLoaded(i) then names[#names + 1] = name end
+    end
+    fight = {}
+    local function OnUpdate(_, elapsed)
+        local c = fight.cur
+        local ms = elapsed * 1000
+        c.time = c.time + elapsed
+        if ms < SLOW_MS then return end
+        local all = P.GetOverallMetric(M.LastTime)
+        local top, topMs = nil, 0
+        for _, n in ipairs(names) do
+            local v = P.GetAddOnMetric(n, M.LastTime)
+            if v > 0.5 then
+                local t = c.addons[n]
+                if not t then t = { total = 0, worst = 0 }; c.addons[n] = t end
+                t.total = t.total + v
+                if v > t.worst then t.worst = v end
+                if v > topMs then top, topMs = n, v end
+            end
+        end
+        c.slow, c.slowMs, c.slowAddons = c.slow + 1, c.slowMs + ms, c.slowAddons + all
+        if #c.frames < 200 then c.frames[#c.frames + 1] = { len = ms, addons = all, top = top, topMs = topMs } end
+    end
+    fightFrame:RegisterEvent("ENCOUNTER_START")
+    fightFrame:RegisterEvent("ENCOUNTER_END")
+    fightFrame:SetScript("OnEvent", function(_, event, _, name)
+        if event == "ENCOUNTER_START" then
+            fight.cur = { name = name, time = 0, slow = 0, slowMs = 0, slowAddons = 0, addons = {}, frames = {} }
+            fightFrame:SetScript("OnUpdate", OnUpdate)
+        elseif fight.cur then
+            fightFrame:SetScript("OnUpdate", nil)
+            FightReport(fight.cur)
+            fight.cur = nil
+        end
+    end)
+    print("|cFF8080FFthingsUI|r: fight profiling on, a report follows each boss. /tui prof fight again turns it off.")
+end
+
 ns.SlashCommand("prof", function(arg)
     local sub = strlower(strtrim(arg or ""))
+    if sub == "fight" then
+        local P, M = C_AddOnProfiler, Enum.AddOnProfilerMetric
+        if P and P.IsEnabled and P.IsEnabled() and M then FightCapture(P, M)
+        else print("|cFF8080FFthingsUI|r: the addon profiler is not available.") end
+        return
+    end
     if sub == "spec" then
         local P, M = C_AddOnProfiler, Enum.AddOnProfilerMetric
         if P and P.IsEnabled and P.IsEnabled() and M then SpecCapture(P, M)

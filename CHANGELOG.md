@@ -55,7 +55,7 @@
 - Cooldown Settings stays closed once you close it; an overflowed icon takes its new row's text
 ### Aura Icons & Aura Bars
 - Aura Icons measure like CDM icons (size, zoom, border outside), existing ones keep their look
-- Show: While Active, Always (idle greyed) or Only When Missing (also in groups; in combat through the CDM)
+- Show: While Active, Always (idle greyed) or Only When Missing, in groups too: Always keeps a fixed slot there and the aura draws on it. Only When Missing works in combat through the CDM
 - When You Can't Cast It for the spell behind the aura (in a row, or on Always / Only When Missing)
 - Aura Type reads Auto, no more empty Icon/Bar 1-3 slots, and an aura you talented out of goes away (rows and Bar Setup close up)
 - Frame Level next to Frame Strata, Custom Icon, sample text in the previews
@@ -82,7 +82,7 @@
 - Timers: Starts When > Its Aura Appears, for passive procs with a lockout (cheat deaths like Purgatory): the timer starts when the Cooldown Manager shows the aura and runs the time you set. Desaturate While Running
 - Standalone Timers: Frame Strata / Level, Anchor Point and offsets for the duration text. Buff Bars: Background Color
 - Spell pickers show tooltips, ElvUI Party Frames in Anchor To, Account Settings > ElvUI Private imports everything
-- New commands: /tui icons, /tui aura <spellID> [watch], /tui prof all, /tui prof spec
+- New commands: /tui icons, /tui aura <spellID> [watch], /tui prof all, /tui prof spec, /tui prof fight (the slow frames of a boss fight and which addons spent them)
 ### Performance
 - Raids and spec swaps: far fewer rebuilds of Buff Bars, Bar Setup, Groups, CDM text and the player frame; group members' spec changes are ignored
 - Stealth and form changes: hidden CDM icons no longer flash back, and the bar stack only rebuilds when the width changes
