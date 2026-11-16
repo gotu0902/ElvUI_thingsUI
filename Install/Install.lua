@@ -410,7 +410,9 @@ end
 
 
 -- ElvUI's aura filters + Aura Indicator: merged into the account's, the user's own stay
+-- (retail spell IDs: not on Forever)
 function ns.ImportElvFilters()
+    if ns.FOREVER then return false end
     local s = ns.InstallStrings and ns.InstallStrings.ELV_FILTERS
     local D = E:GetModule("Distributor", true)
     return (s and s ~= "" and D and D.ImportProfile and D:ImportProfile(s)) and true or false
@@ -598,7 +600,8 @@ ns.installTable = {
         function()
             local f = PIF()
             f.SubTitle:SetText("Account Settings")
-            f.Desc1:SetText("|cFFFFFFFFPrivate|r (per character: fonts, skins, chat bubbles) \n |cFFFFFFFFGlobal|r (datatext panels, aura filters and Aura Indicators).")
+            f.Desc1:SetText("|cFFFFFFFFPrivate|r (per character: fonts, skins, chat bubbles) \n |cFFFFFFFFGlobal|r ("
+                .. (ns.FOREVER and "datatext panels)." or "datatext panels, aura filters and Aura Indicators)."))
             f.Desc2:SetText("Spec Profiles: ElvUI and BigWigs use FHT on healer specs (and Augmentation), NHT on the rest.")
             f.Desc3:SetText("Applies on the reload at the end.")
             f.Option1:Show(); f.Option1:Enable(); f.Option1:SetText("Private + Global")
