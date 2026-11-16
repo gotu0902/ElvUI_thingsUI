@@ -856,6 +856,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
     end
 
     local commonArgs = {}
+    local timerTab = {}
     if not styleMode then
     commonArgs = CommonHeader("bars")
     commonArgs.spellSelect = {
@@ -888,31 +889,32 @@ function TUI:SpecialBarOptions(barKey, ctx)
         set = function(_, v) if not v and not ESpec() then SB.ReleaseBar(barKey) end; db().enabled = v; QueueUpdate() end,
         hidden = function() return not db().spellID end,
     }
-    commonArgs.totemTimer = {
+    local T = {}
+    T.totemTimer = {
         order = 3.2, type = "toggle", name = "Totem / No Aura Timer",
         hidden = function() return not db().spellID end,
         get = function() return db().totemTimer end,
         set = function(_, v) db().totemTimer = v and true or nil; QueueUpdate() end,
     }
-    commonArgs.totemTicks = {
+    T.totemTicks = {
         order = 3.25, type = "toggle", name = "Ticks",
         hidden = function() return not db().spellID end,
         get = function() return db().totemTicks end,
         set = function(_, v) db().totemTicks = v and true or nil; QueueUpdate() end,
     }
-    commonArgs.totemTickThickness = {
+    T.totemTickThickness = {
         order = 3.26, type = "range", name = "Tick Thickness", min = 1, max = 6, step = 1,
         hidden = function() return not (db().spellID and db().totemTicks) end,
         get = function() return db().totemTickThickness or 2 end,
         set = function(_, v) db().totemTickThickness = v; QueueUpdate() end,
     }
-    commonArgs.totemTickLength = {
+    T.totemTickLength = {
         order = 3.27, type = "range", name = "Tick Length", min = 2, max = 60, step = 1,
         hidden = function() return not (db().spellID and db().totemTicks) end,
         get = function() return db().totemTickLength or 20 end,
         set = function(_, v) db().totemTickLength = v; QueueUpdate() end,
     }
-    commonArgs.totemTickColor = {
+    T.totemTickColor = {
         order = 3.28, type = "color", name = "Tick Color", hasAlpha = true,
         hidden = function() return not (db().spellID and db().totemTicks) end,
         get = function()
@@ -926,8 +928,8 @@ function TUI:SpecialBarOptions(barKey, ctx)
     }
     local function noTimer() return not (db().spellID and db().totemTimer) end
     local function noCond() return noTimer() or not db().condBuff end
-    commonArgs.condBuff = {
-        order = 3.3, type = "select", dialogControl = "TUI_SpellDropdown", name = "While Missing This Buff", width = "double",
+    T.condBuff = {
+        order = 3.3, type = "select", dialogControl = "TUI_SpellDropdown", name = "Buff", width = "double",
         hidden = noTimer,
         values = function()
             local vals = ns.AuraPick("spec", ESpec() or CurSpecID())
@@ -953,7 +955,7 @@ function TUI:SpecialBarOptions(barKey, ctx)
             QueueUpdate()
         end,
     }
-    commonArgs.condBuffID = {
+    T.condBuffID = {
         order = 3.31, type = "input", name = "...or by ID",
         hidden = noTimer,
         get = function() return "" end,
@@ -962,18 +964,13 @@ function TUI:SpecialBarOptions(barKey, ctx)
             if id and C_Spell.GetSpellName(id) then db().condBuff = id; QueueUpdate() end
         end,
     }
-    commonArgs.condNote = {
-        order = 3.32, type = "description", width = "full",
-        hidden = function() return noCond() or select(2, ns.AuraUp(db().condBuff, "HELPFUL")) end,
-        name = "|cFFFFD200In combat this follows the buff through Blizzard's Cooldown Manager: add it to Tracked Buffs or Bars. Out of combat it works anyway.|r",
-    }
-    commonArgs.condColorOn = {
+    T.condColorOn = {
         order = 3.33, type = "toggle", name = "Change Color",
         hidden = noCond,
         get = function() return db().condColorOn end,
         set = function(_, v) db().condColorOn = v or nil; QueueUpdate() end,
     }
-    commonArgs.condColor = {
+    T.condColor = {
         order = 3.34, type = "color", name = "Color",
         hidden = noCond, disabled = function() return not db().condColorOn end,
         get = function()
@@ -982,11 +979,25 @@ function TUI:SpecialBarOptions(barKey, ctx)
         end,
         set = function(_, r, g, b) db().condColor = { r = r, g = g, b = b }; QueueUpdate() end,
     }
-    commonArgs.condText = {
+    T.condText = {
         order = 3.35, type = "input", name = "Text Instead of Name",
         hidden = noCond,
         get = function() return db().condText or "" end,
         set = function(_, v) db().condText = (v ~= "") and v or nil; QueueUpdate() end,
+    }
+    timerTab.timerBlock = {
+        order = 10, type = "group", inline = true, name = "Timer",
+        args = { totemTimer = T.totemTimer },
+    }
+    timerTab.condBlock = {
+        order = 11, type = "group", inline = true, name = "While Missing a Buff", hidden = noTimer,
+        args = { condBuff = T.condBuff, condBuffID = T.condBuffID,
+            condColorOn = T.condColorOn, condColor = T.condColor, condText = T.condText },
+    }
+    timerTab.tickBlock = {
+        order = 12, type = "group", inline = true, name = "Ticks",
+        args = { totemTicks = T.totemTicks, totemTickThickness = T.totemTickThickness,
+            totemTickLength = T.totemTickLength, totemTickColor = T.totemTickColor },
     }
     local function BarSetupOn()
         local bsdb = E.db.thingsUI and E.db.thingsUI.barSetup
@@ -1352,6 +1363,11 @@ function TUI:SpecialBarOptions(barKey, ctx)
                     },
                 },
             }),
+        },
+        timerGroup = {
+            order = 25, type = "group", name = "Timer & Ticks",
+            hidden = function() return styleMode or not db().spellID end,
+            args = merge(timerTab),
         },
         visibilityGroup = {
             order = 35, type = "group", name = "Visibility",

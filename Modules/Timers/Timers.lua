@@ -153,6 +153,12 @@ local function IsCastTimeLine(text)
     return text:sub(#castPre + 1, n):match("^[%d%.,]+$") ~= nil
 end
 
+-- "Recharging: 17 sec" / "Cooldown remaining: 5 sec": time left on the spell, no duration
+local function IsTimeLeftLine(text)
+    if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) then return false end
+    return text:match("^[^%d]*:%s*%d") ~= nil
+end
+
 local function TooltipDuration(timer)
     local data
     if timer.kind == "item" and timer.itemID and C_TooltipInfo and C_TooltipInfo.GetItemByID then
@@ -164,7 +170,8 @@ local function TooltipDuration(timer)
     if not data or not data.lines then return end
     local best
     for _, line in ipairs(data.lines) do
-        local d = not IsCastTimeLine(line.leftText) and ParseDurationFromText(line.leftText)
+        local t = line.leftText
+        local d = not IsCastTimeLine(t) and not IsTimeLeftLine(t) and ParseDurationFromText(t)
         if d and d > 0 and (not best or d > best) then best = d end
     end
     return best

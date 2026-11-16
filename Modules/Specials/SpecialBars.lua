@@ -5,7 +5,6 @@ local E = ns.E
 ns.SpecialBars = ns.SpecialBars or {}
 local SB = ns.SpecialBars
 local specialBarState = SB.specialBarState
-local condBars = {}
 
 local function GetOrCreateWrapper(barKey)
     local name    = "TUI_SpecialBar_" .. barKey
@@ -160,7 +159,6 @@ local function ReleaseBar(barKey)
         wrapper:Hide()
     end
     specialBarState[barKey] = nil
-    condBars[barKey] = nil
 
     local moverName = "TUI_SpecialBarMover_" .. barKey
     if E and E.CreatedMovers and E.CreatedMovers[moverName] and E.DisableMover then
@@ -270,44 +268,214 @@ local function CooldownText(cd)
 end
 SB.CooldownText = CooldownText
 
--- a totem bar's fill color and name; While Missing a buff both can change
-local function ApplyCond(wrapper, db)
-    local fx = wrapper.totemFX
-    if not fx then return end
-    local miss = db.condBuff and not ns.AuraUp(db.condBuff, "HELPFUL") or false
-    local c
-    if miss and db.condColorOn then c = db.condColor or { r = 1, g = 0.3, b = 0.3 }
-    elseif db.useClassColor then c = E:ClassColor(E.myclass, true)
-    else c = db.customColor or { r = 0.2, g = 0.6, b = 1 } end
-    fx.fill:SetVertexColor(c.r, c.g, c.b)
-    local text = miss and db.condText and db.condText ~= "" and db.condText or nil
-    if not text and db.showName then
-        text = db.spellName or (C_Spell.GetSpellName and C_Spell.GetSpellName(db.spellID)) or "Bar"
-    end
-    fx.name:SetText(text or "")
-    fx.name:SetShown(text and true or false)
+local function NormalColor(db)
+    if db.useClassColor then return E:ClassColor(E.myclass, true) end
+    return db.customColor or { r = 0.2, g = 0.6, b = 1 }
 end
 
-local function CondRefresh()
-    for key in pairs(condBars) do
-        local st = specialBarState[key]
-        local w = st and st.wrapper
-        if w and w.totemFX and w.totemFX:IsShown() then ApplyCond(w, SB.GetBarDB(key)) end
-    end
+local function EnsureTotemFX(wrapper)
+    local fx = wrapper.totemFX
+    if fx then return fx end
+    fx = CreateFrame("Frame", nil, wrapper, "BackdropTemplate")
+    fx:SetAllPoints(wrapper)
+    fx:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
+    fx:SetBackdropColor(0, 0, 0, 0.6)
+    fx:SetBackdropBorderColor(0, 0, 0, 1)
+    fx.iconBD = CreateFrame("Frame", nil, fx, "BackdropTemplate")
+    fx.iconBD:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
+    fx.iconBD:SetBackdropColor(0, 0, 0, 1)
+    fx.iconBD:SetBackdropBorderColor(0, 0, 0, 1)
+    fx.icon = fx.iconBD:CreateTexture(nil, "ARTWORK")
+    fx.fill = fx:CreateTexture(nil, "ARTWORK")
+    fx.slide = fx.fill:CreateAnimationGroup()
+    fx.anim = fx.slide:CreateAnimation("Scale")
+    fx.anim:SetOrigin("LEFT", 0, 0)
+    fx.anim:SetScaleFrom(1, 1)
+    fx.anim:SetScaleTo(0, 1)
+    fx.slide:SetScript("OnFinished", function() fx.fill:Hide() end)
+    fx.top = CreateFrame("Frame", nil, fx)
+    fx.top:SetAllPoints(fx)
+    fx.name = fx.top:CreateFontString(nil, "OVERLAY")
+    fx.cdText = CreateFrame("Cooldown", nil, fx, "CooldownFrameTemplate")
+    fx.cdText:SetDrawSwipe(false)
+    fx.cdText:SetDrawEdge(false)
+    fx.cdText:SetDrawBling(false)
+    fx.cdText:SetHideCountdownNumbers(false)
+    fx:Hide()
+    wrapper.totemFX = fx
+    return fx
 end
+
+-- While Missing a Buff. A buff on you can't be read in combat, so the bar draws its MISSING
+-- look itself (color, text) and the game draws the normal bar over it while the buff is up:
+-- two aura frames, a cover for the whole bar and the fill clipped to the time left
+local CAN_COND = C_DurationUtil and C_DurationUtil.CreateDuration and Enum.StatusBarTimerDirection
+    and Enum.StatusBarInterpolation and true or false
+local COND_KEY = "TUICond"
+local COND_BG = { r = 0.03, g = 0.03, b = 0.03 }
+local condPending = false
 do
     local ev = CreateFrame("Frame")
     ev:RegisterEvent("PLAYER_REGEN_ENABLED")
-    ev:RegisterUnitEvent("UNIT_AURA", "player")
-    ev:SetScript("OnEvent", function(_, event)
-        -- in combat the CDM's own signal drives it
-        if event == "UNIT_AURA" and InCombatLockdown() then return end
-        if next(condBars) then CondRefresh() end
+    ev:SetScript("OnEvent", function()
+        if not condPending then return end
+        condPending = false
+        TUI:QueueSpecialBarsUpdate()
     end)
-    -- CDMIcons loads after this file
-    C_Timer.After(0, function()
-        ns.CDMIcons.OnAuraState(function() if next(condBars) then CondRefresh() end end)
-    end)
+end
+
+local function CondOff(wrapper, fx)
+    wrapper._tuiTickLevel = nil
+    if not (fx and fx._cond) then return end
+    fx._cond = nil
+    fx.drv:Hide()
+    fx.cover:Hide()
+    fx.clip:Hide()
+    fx.condText:Hide()
+end
+
+local function CondLook(button, t, look)
+    -- the layout only places a frame, its size is ours to set
+    button:SetSize(look.w, look.h)
+    t:SetTexture(look.tex)
+    t:SetVertexColor(look.c.r, look.c.g, look.c.b)
+end
+
+-- one aura frame for the buff, drawn as a plain colored block; false = retry out of combat
+local function CondLayer(fx, field, parent, id, look, pt, anchor, ox, oy)
+    local c = fx[field]
+    if not c then
+        c = CreateFrame("AuraContainer", nil, parent, "CustomAuraContainerTemplate")
+        c._tex = {}
+        fx[field] = c
+    end
+    c._look = look
+    c:ClearAllPoints()
+    c:SetSize(look.w, look.h)
+    c:SetPoint(pt, anchor, pt, ox, oy)
+    c:SetFlowLayoutAxis(AnchorUtil.FlowLayoutAxis.Horizontal)
+    c:SetFlowLayoutAnchorPoint(pt)
+    c:SetFlowLayoutGrowthDirection(pt == "TOPRIGHT" and AnchorUtil.FlowDirection.Left or AnchorUtil.FlowDirection.Right,
+        AnchorUtil.FlowDirection.Down)
+    if c.SetFlowLayoutPadding then c:SetFlowLayoutPadding(0, 0, 0, 0) end
+    -- this ID alone: the bar's own spell shares its name
+    local filter = "HELPFUL|INCLUDE_NAME_PLATE_ONLY"
+    local cf = { includeSpellIDs = { [id] = true } }
+    local layout = { elementWidth = look.w, elementHeight = look.h, elementSpacing = 0, lineSpacing = 0 }
+    if c:HasAuraGroup(COND_KEY) then
+        ns.SetAuraGroupCap(c, COND_KEY, 1)
+        c:SetAuraGroupFilterString(COND_KEY, filter)
+        c:SetAuraGroupCandidateFilters(COND_KEY, cf)
+        c:SetAuraGroupLayout(COND_KEY, layout)
+    else
+        c:AddAuraGroup(COND_KEY, filter, {
+            maxFrameCount = 1,
+            candidateFilters = cf,
+            layout = layout,
+            initializeFrame = function(button)
+                button:SetMouseMotionEnabled(false)
+                local t = button:CreateTexture(nil, "ARTWORK")
+                t:SetAllPoints(button)
+                c._tex[button] = t
+                CondLook(button, t, c._look)
+            end,
+        })
+    end
+    local ok = true
+    for button, t in pairs(c._tex) do
+        -- a frame showing a secret aura denies access, also just outside combat
+        if not pcall(CondLook, button, t, look) then ok = false end
+    end
+    if not c._unit then c:SetUnit("player"); c._unit = "player" end
+    if c.UpdateAllAuras then c:UpdateAllAuras() end
+    c:Show()
+    return ok
+end
+
+-- our own frames (any time) and, out of combat, the aura frames for the buff
+local function CondPrepare(wrapper, db, w, h)
+    local fx = wrapper.totemFX
+    if not (db.condBuff and CAN_COND) then CondOff(wrapper, fx) return end
+    fx = EnsureTotemFX(wrapper)
+    if not fx.drv then
+        fx.drv = CreateFrame("StatusBar", nil, fx)
+        fx.drv:SetMinMaxValues(0, 1)
+        fx.dur = C_DurationUtil.CreateDuration()
+        fx.mid = CreateFrame("Frame", nil, fx)
+        fx.mid:SetAllPoints(fx)
+        fx.condText = fx.mid:CreateFontString(nil, "OVERLAY")
+        -- off the wrapper: an aura frame refuses a parent chain that takes input
+        fx.cover = CreateFrame("Frame", nil, UIParent)
+        fx.clip = CreateFrame("Frame", nil, UIParent)
+        fx.clip:SetClipsChildren(true)
+        fx.cover:Hide()
+        fx.clip:Hide()
+        fx:HookScript("OnHide", function() fx.cover:Hide(); fx.clip:Hide() end)
+        fx:HookScript("OnShow", function()
+            if fx._cond then fx.cover:Show(); fx.clip:Show() end
+        end)
+    end
+    fx._cond = true
+
+    local LSM = ns.LSM
+    local left = (db.iconEnabled and (h + (db.iconSpacing or 1)) or 0) + 1
+    local areaW, barH = math.max(1, w - left - 1), math.max(1, h - 2)
+    local rev = db.reverseFill and true or false
+    local tex = LSM:Fetch("statusbar", db.statusBarTexture)
+    local lvl = wrapper:GetFrameLevel() + 2
+    local strata = wrapper:GetFrameStrata() or "MEDIUM"
+    local d = fx.drv
+    d:SetFrameLevel(lvl + 1)
+    d:ClearAllPoints()
+    d:SetPoint("TOPLEFT", fx, "TOPLEFT", left, -1)
+    d:SetPoint("BOTTOMRIGHT", fx, "BOTTOMRIGHT", -1, 1)
+    d:SetStatusBarTexture(tex)
+    d:SetReverseFill(rev)
+    local mc = db.condColorOn and (db.condColor or { r = 1, g = 0.3, b = 0.3 }) or NormalColor(db)
+    d:SetStatusBarColor(mc.r, mc.g, mc.b)
+
+    fx.mid:SetFrameLevel(lvl + 2)
+    local ct = fx.condText
+    if db.condText and db.condText ~= "" then
+        E:SetFont(ct, LSM:Fetch("font", db.font or "Expressway"), db.fontSize or 12, db.fontOutline or "OUTLINE")
+        ns.TextColor(ct, db.nameColor)
+        ct:ClearAllPoints()
+        ct:SetPoint(db.namePoint or "LEFT", fx, db.namePoint or "LEFT", (db.nameXOffset or 2) + left, db.nameYOffset or 0)
+        ct:SetText(db.condText)
+        ct:Show()
+    else
+        ct:Hide()
+    end
+
+    local cover, clip = fx.cover, fx.clip
+    cover:SetFrameStrata(strata)
+    cover:SetFrameLevel(lvl + 3)
+    cover:ClearAllPoints()
+    cover:SetPoint("TOPLEFT", d, "TOPLEFT", -1, 1)
+    cover:SetPoint("BOTTOMRIGHT", d, "BOTTOMRIGHT", 1, -1)
+    clip:SetFrameStrata(strata)
+    clip:SetFrameLevel(lvl + 6)
+    -- the game's fill lands a pixel inside the bar's start: both reach one further out
+    local one = (ns.Pixel.Size and ns.Pixel.Size(fx)) or 1
+    local st = d:GetStatusBarTexture()
+    clip:ClearAllPoints()
+    clip:SetPoint("TOPLEFT", st, "TOPLEFT", rev and 0 or -one, 0)
+    clip:SetPoint("BOTTOMRIGHT", st, "BOTTOMRIGHT", rev and one or 0, 0)
+    -- ticks ride over the game's fill
+    wrapper._tuiTickLevel = lvl + 9
+
+    local nc = NormalColor(db)
+    local sig = table.concat({ db.condBuff, areaW, barH, one, tostring(rev), tostring(tex), nc.r, nc.g, nc.b }, "|")
+    if fx._condSig == sig then return end
+    if InCombatLockdown() then condPending = true return end
+    fx._condSig = sig
+    local pt = rev and "TOPRIGHT" or "TOPLEFT"
+    -- the cover hides the missing look, a pixel over each edge
+    local a = CondLayer(fx, "condBG", cover, db.condBuff,
+        { tex = E.media.blankTex, c = COND_BG, w = areaW + 2, h = barH + 2 }, pt, cover, 0, 0)
+    local b = CondLayer(fx, "condC", clip, db.condBuff,
+        { tex = tex, c = nc, w = areaW + one, h = barH }, pt, d, rev and one or -one, 0)
+    if not (a and b) then fx._condSig = nil; condPending = true end
 end
 
 local function RenderTotemBar(wrapper, db, w, h, start, dur)
@@ -321,33 +489,11 @@ local function RenderTotemBar(wrapper, db, w, h, start, dur)
         if fx then fx:Hide() end
         return
     end
-    if not fx then
-        fx = CreateFrame("Frame", nil, wrapper, "BackdropTemplate")
-        fx:SetAllPoints(wrapper)
-        fx:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
-        fx:SetBackdropColor(0, 0, 0, 0.6)
-        fx:SetBackdropBorderColor(0, 0, 0, 1)
-        fx.iconBD = CreateFrame("Frame", nil, fx, "BackdropTemplate")
-        fx.iconBD:SetBackdrop({ bgFile = E.media.blankTex, edgeFile = E.media.blankTex, edgeSize = 1 })
-        fx.iconBD:SetBackdropColor(0, 0, 0, 1)
-        fx.iconBD:SetBackdropBorderColor(0, 0, 0, 1)
-        fx.icon = fx.iconBD:CreateTexture(nil, "ARTWORK")
-        fx.fill = fx:CreateTexture(nil, "ARTWORK")
-        fx.slide = fx.fill:CreateAnimationGroup()
-        fx.anim = fx.slide:CreateAnimation("Scale")
-        fx.anim:SetOrigin("LEFT", 0, 0)
-        fx.anim:SetScaleFrom(1, 1)
-        fx.anim:SetScaleTo(0, 1)
-        fx.slide:SetScript("OnFinished", function() fx.fill:Hide() end)
-        fx.name = fx:CreateFontString(nil, "OVERLAY")
-        fx.cdText = CreateFrame("Cooldown", nil, fx, "CooldownFrameTemplate")
-        fx.cdText:SetDrawSwipe(false)
-        fx.cdText:SetDrawEdge(false)
-        fx.cdText:SetDrawBling(false)
-        fx.cdText:SetHideCountdownNumbers(false)
-        wrapper.totemFX = fx
-    end
-    fx:SetFrameLevel(wrapper:GetFrameLevel() + 2)
+    fx = EnsureTotemFX(wrapper)
+    local lvl = wrapper:GetFrameLevel() + 2
+    fx:SetFrameLevel(lvl)
+    fx.top:SetFrameLevel(lvl + 10)
+    fx.cdText:SetFrameLevel(lvl + 11)
 
     local LSM = ns.LSM
     local off = 0
@@ -372,28 +518,50 @@ local function RenderTotemBar(wrapper, db, w, h, start, dur)
     local left = off + 1
     local areaW = math.max(1, w - left - 1)
     local frac = math.min(1, remaining / dur)
-    fx.fill:SetTexture(LSM:Fetch("statusbar", db.statusBarTexture))
-    fx.fill:ClearAllPoints()
     local rev = db.reverseFill and true or false
-    if rev then
-        fx.fill:SetPoint("TOPRIGHT", fx, "TOPRIGHT", -1, -1)
-    else
-        fx.fill:SetPoint("TOPLEFT", fx, "TOPLEFT", left, -1)
-    end
-    fx.anim:SetOrigin(rev and "RIGHT" or "LEFT", 0, 0)
-    fx.fill:SetSize(areaW * frac, math.max(1, h - 2))
     fx.slide:Stop()
-    fx.anim:SetDuration(remaining)
-    fx.fill:Show()
-    fx.slide:Play()
+    if fx._cond then
+        -- the missing look runs on the game's clock, the clip follows its edge
+        fx.fill:Hide()
+        fx.dur:SetTimeFromStart(start, dur)
+        fx.drv:SetTimerDuration(fx.dur, Enum.StatusBarInterpolation.Immediate, Enum.StatusBarTimerDirection.RemainingTime)
+        fx.drv:Show()
+        -- the buff ends a moment before the bar goes: no missing text in that gap
+        local stamp = start + dur
+        fx._condEnd = stamp
+        C_Timer.After(math.max(0, remaining - 0.5), function()
+            if fx._condEnd == stamp then fx.condText:Hide() end
+        end)
+    else
+        fx.fill:SetTexture(LSM:Fetch("statusbar", db.statusBarTexture))
+        local c = NormalColor(db)
+        fx.fill:SetVertexColor(c.r, c.g, c.b)
+        fx.fill:ClearAllPoints()
+        if rev then
+            fx.fill:SetPoint("TOPRIGHT", fx, "TOPRIGHT", -1, -1)
+        else
+            fx.fill:SetPoint("TOPLEFT", fx, "TOPLEFT", left, -1)
+        end
+        fx.anim:SetOrigin(rev and "RIGHT" or "LEFT", 0, 0)
+        fx.fill:SetSize(areaW * frac, math.max(1, h - 2))
+        fx.anim:SetDuration(remaining)
+        fx.fill:Show()
+        fx.slide:Play()
+    end
 
     local font = LSM:Fetch("font", db.font or "Expressway")
-    E:SetFont(fx.name, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
-    ns.TextColor(fx.name, db.nameColor)
-    fx.name:ClearAllPoints()
-    fx.name:SetPoint(db.namePoint or "LEFT", fx, db.namePoint or "LEFT",
-        (db.nameXOffset or 2) + left, db.nameYOffset or 0)
-    ApplyCond(wrapper, db)
+    -- a missing text takes the name's place
+    if db.showName and not (fx._cond and db.condText and db.condText ~= "") then
+        E:SetFont(fx.name, font, db.fontSize or 12, db.fontOutline or "OUTLINE")
+        ns.TextColor(fx.name, db.nameColor)
+        fx.name:ClearAllPoints()
+        fx.name:SetPoint(db.namePoint or "LEFT", fx, db.namePoint or "LEFT",
+            (db.nameXOffset or 2) + left, db.nameYOffset or 0)
+        fx.name:SetText(db.spellName or (C_Spell.GetSpellName and C_Spell.GetSpellName(db.spellID)) or "Bar")
+        fx.name:Show()
+    else
+        fx.name:Hide()
+    end
     if db.showDuration then
         fx.cdText:ClearAllPoints()
         fx.cdText:SetAllPoints(fx)
@@ -411,6 +579,11 @@ local function RenderTotemBar(wrapper, db, w, h, start, dur)
         fx.cdText:Hide()
     end
     fx:Show()
+    if fx._cond then
+        local vis = fx:IsVisible()
+        fx.cover:SetShown(vis)
+        fx.clip:SetShown(vis)
+    end
 end
 
 local function IsManagedByBarSetup(barKey)
@@ -582,7 +755,6 @@ local function UpdateBarSlot(barKey)
     local state = specialBarState[barKey]
     if not state then state = {}; specialBarState[barKey] = state end
     state.wrapper = wrapper
-    condBars[barKey] = (db.totemTimer and db.condBuff) and true or nil
 
     local test = ns.CustomGroups and ns.CustomGroups.testMode
     if test then
@@ -603,7 +775,9 @@ local function UpdateBarSlot(barKey)
 
     PaintStackLines(wrapper, db, effectiveWidth, effectiveHeight, test, db.showBackdrop or managedByBS)
     if ns.SpecialAura then
-        ns.SpecialAura.AttachBar(wrapper, barKey, db, effectiveWidth, effectiveHeight)
+        -- a timer bar is the whole bar: no aura bar under it
+        if db.totemTimer and not test then ns.SpecialAura.Detach(wrapper, barKey)
+        else ns.SpecialAura.AttachBar(wrapper, barKey, db, effectiveWidth, effectiveHeight) end
     end
 
     local TM = ns.Timers
@@ -614,6 +788,7 @@ local function UpdateBarSlot(barKey)
             TM.AddTotemCallback(SB.OnTotemChange)
         end
         if db.totemTimer then
+            CondPrepare(wrapper, db, effectiveWidth, effectiveHeight)
             RenderTotemBar(wrapper, db, effectiveWidth, effectiveHeight, TM.GetTotemState(db.spellID))
         elseif wrapper.totemFX then
             wrapper.totemFX:Hide()
