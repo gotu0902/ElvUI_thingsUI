@@ -109,7 +109,7 @@ function TUI:ShareOptions()
                 args = {
                     accountDesc = {
                         order = 1, type = "description", width = "full",
-                        name = "Standalone pieces of the full setup.\n|cFFFFFFFFPrivate|r = per character (fonts, skins, chat bubbles) - |cFFFFFFFFGlobal|r = account (datatext panels) - |cFFFFFFFFCooldown Manager|r = Blizzard's layouts for this class.\n",
+                        name = "Standalone pieces of the full setup.\n|cFFFFFFFFPrivate|r = per character (fonts, skins, chat bubbles) - |cFFFFFFFFGlobal|r = account (datatext panels) - |cFFFFFFFFAura Filters|r = account (unit frame filters, Aura Indicators per class) - |cFFFFFFFFCooldown Manager|r = Blizzard's layouts for this class.\n",
                     },
                     importPrivate = {
                         order = 2, type = "execute", width = 1.13, name = "ElvUI Private",
@@ -130,6 +130,13 @@ function TUI:ShareOptions()
                             if not s or s == "" then print("|cFF8080FFthingsUI|r: global string not set yet.") return end
                             if D and D.ImportProfile and D:ImportProfile(s) then E:StaticPopup_Show("IMPORT_RL")
                             else print("|cFF8080FFthingsUI|r: global import failed.") end
+                        end,
+                    },
+                    importFilters = {
+                        order = 4, type = "execute", width = 1.13, name = "ElvUI Aura Filters",
+                        confirm = function() return "Import the aura filters and Aura Indicators? They merge into yours: same names are replaced, your other ones stay." end,
+                        func = function()
+                            if not ns.ImportElvFilters() then print("|cFF8080FFthingsUI|r: aura filter import failed.") end
                         end,
                     },
                     importCDM = {

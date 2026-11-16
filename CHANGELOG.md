@@ -7,6 +7,7 @@
 - Forever's own racials, potions, healthstones, interrupts, spell lists and Aura Collections, plus a new Drink collection (every drink buff)
 - One spec per class: per-spec settings sit on the class, the role rule uses your group role, Delve is gone from places
 - Installer: retail CDM layouts stay out, Character Setup gives NHT. A Quick Setup now counts as a finished install
+- Installer: ElvUI aura filters and Aura Indicators (healer classes) come with the account settings, also alone in Import - Export - Install
 ### New: Aura Combo Bars
 - A bar of minibars that color in while their auras are up: one per buff or debuff, or a count minibar that fills one step per aura (Withering Bolt: 3 DoTs up = 3 colored)
 - Color When: Any / All / None Is Up, or How Many. Auras from the spec's list, an ID or name, or a linked Aura Collection. An aura can show here and in Aura Icons, Aura Bars or Groups too: the menu says where else it shows, with links

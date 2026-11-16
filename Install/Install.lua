@@ -409,12 +409,20 @@ function ns.EnsureDetailsProfile()
 end
 
 
+-- ElvUI's aura filters + Aura Indicator: merged into the account's, the user's own stay
+function ns.ImportElvFilters()
+    local s = ns.InstallStrings and ns.InstallStrings.ELV_FILTERS
+    local D = E:GetModule("Distributor", true)
+    return (s and s ~= "" and D and D.ImportProfile and D:ImportProfile(s)) and true or false
+end
+
 function ns.ImportElvExtras()
     local strs = ns.InstallStrings or {}
     local D = E:GetModule("Distributor", true)
     local okP = strs.ELV_PRIVATE and strs.ELV_PRIVATE ~= "" and ns.ImportElvPrivate(strs.ELV_PRIVATE)
     local okG = strs.ELV_GLOBAL and strs.ELV_GLOBAL ~= "" and D and D.ImportProfile and D:ImportProfile(strs.ELV_GLOBAL) or false
-    return okP or false, okG or false
+    local okF = ns.ImportElvFilters()
+    return okP or false, okG or false, okF
 end
 
 -- spec profiles, Cooldown Manager, then BigWigs (its popups wait for the user)
@@ -590,7 +598,7 @@ ns.installTable = {
         function()
             local f = PIF()
             f.SubTitle:SetText("Account Settings")
-            f.Desc1:SetText("|cFFFFFFFFPrivate|r (per character: fonts, skins, chat bubbles) \n |cFFFFFFFFGlobal|r (datatext panels).")
+            f.Desc1:SetText("|cFFFFFFFFPrivate|r (per character: fonts, skins, chat bubbles) \n |cFFFFFFFFGlobal|r (datatext panels, aura filters and Aura Indicators).")
             f.Desc2:SetText("Spec Profiles: ElvUI and BigWigs use FHT on healer specs (and Augmentation), NHT on the rest.")
             f.Desc3:SetText("Applies on the reload at the end.")
             f.Option1:Show(); f.Option1:Enable(); f.Option1:SetText("Private + Global")
